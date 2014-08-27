@@ -1,0 +1,3 @@
+#!/bin/bash
+
+@GCFC_PYTHON_PATH@ @GCFC_SCRIPT@ --pre-commit @GCFC_GIT_PATH@ @GCFC_CLANGFORMAT_PATH@
