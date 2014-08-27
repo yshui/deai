@@ -6,9 +6,13 @@ import subprocess
 import sys
 
 
+Git='git'
+ClangFormat='clang-format'
+
+
 def getGitHead():
-    if subprocess.Popen(['git', 'rev-parse', '--verify', 'HEAD'],
-        stdout=subprocess.PIPE).returncode:
+    if subprocess.Popen([Git, 'rev-parse', '--verify', 'HEAD'],
+                        stdout=subprocess.PIPE).returncode:
         return '4b825dc642cb6eb9a060e54bf8d69288fbee4904'
     else:
         return 'HEAD'
@@ -17,7 +21,7 @@ def getGitHead():
 def getEditedFiles():
     Head = getGitHead()
     DiffIndex = subprocess.Popen(
-        ['git', 'diff-index', '--diff-filter=ACMR', '--name-only', Head],
+        [Git, 'diff-index', '--diff-filter=ACMR', '--name-only', Head],
         stdout=subprocess.PIPE)
     DiffIndexRet = DiffIndex.stdout.read()
     return DiffIndexRet.split('\n')
@@ -31,16 +35,14 @@ def isFormattable(File):
     return False
 
 
-def formatFile(File, InPlace):
+def formatFile(FileName, InPlace):
     if InPlace:
-        ClangFormat = subprocess.Popen(
-            ['clang-format', '-style=file', '-i', File],
-            stdout=subprocess.PIPE)
+        subprocess.Popen([ClangFormat, '-style=file', '-i', FileName])
+        return ""
     else:
-        ClangFormat = subprocess.Popen(
-            ['clang-format', '-style=file', File],
-            stdout=subprocess.PIPE)
-        return ClangFormat.stdout.read()
+        ClangFormatRet = subprocess.Popen(
+            [ClangFormat, '-style=file', FileName], stdout=subprocess.PIPE)
+        return ClangFormatRet.stdout.read()
 
 
 def requiresFormat(FileName, FormatContent):
@@ -52,18 +54,37 @@ def requiresFormat(FileName, FormatContent):
     return True
 
 
+def printUsageAndExit():
+    print("Usage: " + sys.argv[0] + " [--pre-commit|--cmake] " +
+          "[<path/to/git>] [<path/to/clang-format]")
+    sys.exit(1)
+
+
+def parseExecPathOption(Option):
+    if "git" in Option:
+        Git = Option
+    elif "clang-format" in Option:
+        ClangFormat = Option
+    else:
+        printUsageAndExit()
+
+
 if __name__ == "__main__":
-    if not 2 == len(sys.argv):
-        print("Usage: " + sys.argv[0] + " [--pre-commit|--cmake]")
-        sys.exit(1)
+    if 2 > len(sys.argv):
+        printUsageAndExit()
 
     if "--pre-commit" == sys.argv[1]:
         InPlace = False
     elif "--cmake" == sys.argv[1]:
         InPlace = True
     else:
-        print("Usage: " + sys.argv[0] + " [--pre-commit|--cmake]")
-        sys.exit(1)
+        printUsageAndExit()
+
+    if 3 == len(sys.argv):
+        parseProgramOption(sys.argv[2])
+
+    if 4 == len(sys.argv):
+        parseProgramOption(sys.argv[3])
 
     EditedFiles = getEditedFiles()
     FormatResults = {}
@@ -78,7 +99,8 @@ if __name__ == "__main__":
             print("'" + FileName + "' has been formatted")
         else:
             if requiresFormat(FileName, Result[1]):
-                print("'" + FileName + "' must be formatted, run 'make format'")
+                print("'" + FileName +
+                      "' must be formatted, run the cmake target 'format'")
                 ReturnCode = 1
 
     sys.exit(ReturnCode)
