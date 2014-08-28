@@ -39,7 +39,6 @@ def isFormattable(File):
 
 def formatFile(FileName, InPlace):
     if InPlace:
-        print("Formatting: " + FileName)
         subprocess.Popen([ClangFormat, '-style=file', '-i', FileName])
         return ""
     else:

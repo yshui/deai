@@ -59,7 +59,7 @@ else()
 	endif()
 endif()
 
-set(GCFC_SCRIPT ${CMAKE_CURRENT_SOURCE_DIR}/git-clang-format-cmake.py)
+set(GCFC_SCRIPT ${CMAKE_CURRENT_SOURCE_DIR}/git-cmake-format.py)
 
 configure_file(
 	${CMAKE_CURRENT_SOURCE_DIR}/git-pre-commit-hook
