@@ -3,13 +3,11 @@
 This project aims to provide a quick and easy way to integrate clang-format into
 your CMake project hosted in a git repository, it consists of three elements.
 
-* `CMakeLists.txt`
-> * Provides the custom `format` target
-* `git-pre-commit-hook`
-> * Blocks commits of unformatted C/C++ files
-* `git-cmake-format.py`
-> * Is called by the `format` target or the `pre-commit` hook
-> * Queries git for edited files, then block the commit or formats the sources
+* `CMakeLists.txt` provides the custom `format` target
+* `git-pre-commit-hook` blocks commits of unformatted C/C++ files
+* `git-cmake-format.py` is called by the `format` target or the `pre-commit`
+  hook, it queries git for edited files, then block the commit or formats the
+  sources
 
 
 ## Dependencies
