@@ -73,19 +73,11 @@ if __name__ == "__main__":
     else:
         printUsageAndExit()
 
-    if 3 <= len(sys.argv):
-        if "git" in sys.argv[2]:
-            Git = sys.argv[2]
-        elif "clang-format" in sys.argv[2]:
-            ClangFormat = sys.argv[2]
-        else:
-            printUsageAndExit()
-
-    if 4 <= len(sys.argv):
-        if "git" in sys.argv[3]:
-            Git = sys.argv[3]
-        elif "clang-format" in sys.argv[3]:
-            ClangFormat = sys.argv[3]
+    for arg in sys.argv[2:]:
+        if "git" in arg:
+            Git = arg
+        elif "clang-format" in arg:
+            ClangFormat = arg
         else:
             printUsageAndExit()
 
