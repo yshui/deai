@@ -14,9 +14,9 @@ your CMake project hosted in a git repository, it consists of three elements.
 
 There are three dependencies:
 
-* git
-* python
-* clang-format
+* `git`
+* `python` 2.7+
+* `clang-format`
 
 ## Usage
 
@@ -42,7 +42,7 @@ installed at `/path/to/your/project/.git/hooks/pre-commit`.
 ### Options
 
 It is possible to specify the path to any of the executables this project
-depends upon using the following CMake variable.
+depends upon using the following CMake variables.
 
 * `GCF_GIT_PATH:STRING=/path/to/git`
 * `GCF_PYTHON_PATH:STRING=/path/to/python`
