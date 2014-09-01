@@ -60,6 +60,9 @@ else()
 endif()
 
 set(GCF_SCRIPT ${CMAKE_CURRENT_SOURCE_DIR}/git-cmake-format.py)
+string(REGEX REPLACE "\\\\" "/" GCF_GIT_PATH ${GCF_GIT_PATH})
+string(REGEX REPLACE "\\\\" "/" GCF_PYTHON_PATH ${GCF_PYTHON_PATH})
+string(REGEX REPLACE "\\\\" "/" GCF_CLANGFORMAT_PATH ${GCF_CLANGFORMAT_PATH})
 
 configure_file(
 	${CMAKE_CURRENT_SOURCE_DIR}/git-pre-commit-hook

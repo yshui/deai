@@ -62,15 +62,6 @@ def printUsageAndExit():
     sys.exit(1)
 
 
-def parseExecutablePathOption(Option):
-    if "git" in Option:
-        Git = Option
-    elif "clang-format" in Option:
-        ClangFormat = Option
-    else:
-        printUsageAndExit()
-
-
 if __name__ == "__main__":
     if 2 > len(sys.argv):
         printUsageAndExit()
@@ -82,11 +73,13 @@ if __name__ == "__main__":
     else:
         printUsageAndExit()
 
-    if 3 == len(sys.argv):
-        parseExecutablePathOption(sys.argv[2])
-
-    if 4 == len(sys.argv):
-        parseExecutablePathOption(sys.argv[3])
+    for arg in sys.argv[2:]:
+        if "git" in arg:
+            Git = arg
+        elif "clang-format" in arg:
+            ClangFormat = arg
+        else:
+            printUsageAndExit()
 
     EditedFiles = getEditedFiles()
     FormatResults = {}
