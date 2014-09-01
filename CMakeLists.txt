@@ -46,7 +46,7 @@ if("${GCF_CLANGFORMAT_PATH}" STREQUAL "NOTSET")
 	find_program(FIND_CLANGFORMAT clang-format)
 	if("${FIND_CLANGFORMAT}" STREQUAL "FIND_CLANGFORMAT-NOTFOUND")
 		message(FATAL_ERROR
-		   	"Could not find 'python' please set GCF_CLANGFORMAT_PATH:STRING")
+			"Could not find 'clang-format' please set GCF_CLANGFORMAT_PATH:STRING")
 	else()
 		set(GCF_CLANGFORMAT_PATH ${FIND_CLANGFORMAT})
 		message(STATUS "Found: ${GCF_CLANGFORMAT_PATH}")
