@@ -9,7 +9,6 @@ your CMake project hosted in a git repository, it consists of three elements.
   hook, it queries git for edited files, then block the commit or formats the
   sources
 
-
 ## Dependencies
 
 There are three dependencies:
@@ -46,5 +45,9 @@ depends upon using the following CMake variables.
 
 * `GCF_GIT_PATH:STRING=/path/to/git`
 * `GCF_PYTHON_PATH:STRING=/path/to/python`
-* `GCF_CLANGFORMAT_PATH:STRING=/path/to/clang-format`
-* `GCF_CLANGFORMAT_STYLE:STRING=file`
+* `GCF_CLANGFORMAT_PATH:STRING=/path/to/clang-format` defaults to `clang-format`
+
+It is also possible to set the `-style=` command line argument for
+`clang-format` with the following options, the default is `file`
+
+* `GCF_CLANGFORMAT_STYLE:STRING=WebKit`
