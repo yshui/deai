@@ -7,6 +7,8 @@ set(GCF_PYTHON_PATH "NOTSET"
    	CACHE STRING "Absolute path to the python executable")
 set(GCF_CLANGFORMAT_PATH "NOTSET"
    	CACHE STRING "Absolute path to the clang-format executable")
+set(GCF_CLANGFORMAT_STYLE "file"
+	CACHE STRING "Paremter pass to clang-format -style=<here>")
 
 if("${GCF_GIT_PATH}" STREQUAL "NOTSET")
 	find_program(FIND_GIT git)
@@ -69,5 +71,5 @@ configure_file(
 	${CMAKE_SOURCE_DIR}/.git/hooks/pre-commit)
 
 add_custom_target(format
-	${GCF_SCRIPT} --cmake ${GCF_GIT_PATH} ${GCF_CLANGFORMAT_PATH}
+	${GCF_SCRIPT} --cmake ${GCF_GIT_PATH} ${GCF_CLANGFORMAT_PATH} -style=${GCF_CLANGFORMAT_STYLE}
 	WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})

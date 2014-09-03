@@ -8,6 +8,7 @@ import sys
 
 Git='git'
 ClangFormat='clang-format'
+Style='-style=file'
 
 
 def getGitHead():
@@ -39,11 +40,11 @@ def isFormattable(File):
 
 def formatFile(FileName, InPlace):
     if InPlace:
-        subprocess.Popen([ClangFormat, '-style=file', '-i', FileName])
+        subprocess.Popen([ClangFormat, Style, '-i', FileName])
         return ""
     else:
         ClangFormatRet = subprocess.Popen(
-            [ClangFormat, '-style=file', FileName], stdout=subprocess.PIPE)
+            [ClangFormat, Style, FileName], stdout=subprocess.PIPE)
         return ClangFormatRet.stdout.read()
 
 
@@ -78,6 +79,8 @@ if __name__ == "__main__":
             Git = arg
         elif "clang-format" in arg:
             ClangFormat = arg
+        elif "-style=" in arg:
+            Style = arg
         else:
             printUsageAndExit()
 

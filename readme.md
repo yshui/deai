@@ -47,3 +47,4 @@ depends upon using the following CMake variables.
 * `GCF_GIT_PATH:STRING=/path/to/git`
 * `GCF_PYTHON_PATH:STRING=/path/to/python`
 * `GCF_CLANGFORMAT_PATH:STRING=/path/to/clang-format`
+* `GCF_CLANGFORMAT_STYLE:STRING=file`
