@@ -40,21 +40,21 @@ def isFormattable(File):
     return False
 
 
-def formatFile(FileName, InPlace):
-    if InPlace:
-        subprocess.Popen([ClangFormat, Style, '-i', FileName])
-        return ""
-    else:
-        ClangFormatRet = subprocess.Popen(
+def formatFile(FileName):
+    subprocess.Popen([ClangFormat, Style, '-i', FileName])
+    return
+
+
+def requiresFormat(FileName):
+    ClangFormatRet = subprocess.Popen(
             [ClangFormat, Style, FileName], stdout=subprocess.PIPE)
-        return ClangFormatRet.stdout.read()
+    FormattedContent = ClangFormatRet.stdout.read()
 
-
-def requiresFormat(FileName, FormatContent):
     File = open(FileName)
-    Content = File.read()
+    FileContent = File.read()
     File.close()
-    if FormatContent == Content:
+
+    if FormattedContent == FileContent:
         return False
     return True
 
@@ -87,19 +87,22 @@ if __name__ == "__main__":
             printUsageAndExit()
 
     EditedFiles = getEditedFiles(InPlace)
-    FormatResults = {}
-    for FileName in EditedFiles:
-        if isFormattable(FileName):
-            FormatResults[FileName] = formatFile(FileName, InPlace)
 
     ReturnCode = 0
-    if not InPlace:
-        for Result in FormatResults.items():
-            FileName = Result[0]
-            if requiresFormat(FileName, Result[1]):
-                print("'" + FileName +
-                      "' must be formatted, run the cmake target 'format'")
-                ReturnCode = 1
+
+    if InPlace:
+        for FileName in EditedFiles:
+            if isFormattable(FileName):
+                formatFile(FileName)
+        sys.exit(ReturnCode)
+
+    for FileName in EditedFiles:
+        if not isFormattable(FileName):
+            continue
+        if requiresFormat(FileName):
+            print("'" + FileName +
+                  "' must be formatted, run the cmake target 'format'")
+            ReturnCode = 1
 
     if 1 == ReturnCode:
         subprocess.Popen([Git, "reset", "HEAD", "--", "."])
