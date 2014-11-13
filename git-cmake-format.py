@@ -21,11 +21,13 @@ def getGitHead():
         return 'HEAD'
 
 
-def getEditedFiles():
+def getEditedFiles(InPlace):
     Head = getGitHead()
-    DiffIndex = subprocess.Popen(
-        [Git, 'diff-index', '--diff-filter=ACMR', '--name-only', Head],
-        stdout=subprocess.PIPE)
+    GitArgs = [Git, 'diff-index']
+    if not InPlace:
+        GitArgs.append('--cached')
+    GitArgs.extend(['--diff-filter=ACMR', '--name-only', Head])
+    DiffIndex = subprocess.Popen(GitArgs, stdout=subprocess.PIPE)
     DiffIndexRet = DiffIndex.stdout.read()
     return DiffIndexRet.split('\n')
 
@@ -84,7 +86,7 @@ if __name__ == "__main__":
         else:
             printUsageAndExit()
 
-    EditedFiles = getEditedFiles()
+    EditedFiles = getEditedFiles(InPlace)
     FormatResults = {}
     for FileName in EditedFiles:
         if isFormattable(FileName):
