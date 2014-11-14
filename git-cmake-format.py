@@ -46,13 +46,15 @@ def formatFile(FileName):
 
 
 def requiresFormat(FileName):
+    GitShowRet = subprocess.Popen([Git, "show", ":" + FileName],
+            stdout=subprocess.PIPE)
     ClangFormatRet = subprocess.Popen(
-            [ClangFormat, Style, FileName], stdout=subprocess.PIPE)
+            [ClangFormat, Style], stdin=GitShowRet.stdout, stdout=subprocess.PIPE)
     FormattedContent = ClangFormatRet.stdout.read()
 
-    File = open(FileName)
-    FileContent = File.read()
-    File.close()
+
+    FileContent = subprocess.Popen([Git, "show", ":" + FileName],
+            stdout=subprocess.PIPE).stdout.read()
 
     if FormattedContent == FileContent:
         return False
