@@ -34,11 +34,7 @@ def getEditedFiles(InPlace):
     DiffIndex = subprocess.Popen(GitArgs, stdout=subprocess.PIPE)
     DiffIndexRet = DiffIndex.stdout.read().strip()
 
-    files = DiffIndexRet.split('\n')
-    root = getGitRoot()
-
-    return [os.path.join(root, x) for x in files]
-
+    return DiffIndexRet.split('\n')
 
 def isFormattable(File):
     Extension = os.path.splitext(File)[1]
@@ -48,8 +44,8 @@ def isFormattable(File):
     return False
 
 
-def formatFile(FileName):
-    subprocess.Popen([ClangFormat, Style, '-i', FileName])
+def formatFile(FileName, GitRoot):
+    subprocess.Popen([ClangFormat, Style, '-i', os.path.join(GitRoot,FileName)])
     return
 
 
@@ -101,9 +97,10 @@ if __name__ == "__main__":
     ReturnCode = 0
 
     if InPlace:
+        GitRoot = getGitRoot()
         for FileName in EditedFiles:
             if isFormattable(FileName):
-                formatFile(FileName)
+                formatFile(FileName,GitRoot)
         sys.exit(ReturnCode)
 
     for FileName in EditedFiles:
