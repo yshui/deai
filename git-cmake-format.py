@@ -1,4 +1,4 @@
-#!/usr/bin/python
+#!/usr/bin/python2
 
 
 import os
@@ -20,6 +20,10 @@ def getGitHead():
     else:
         return 'HEAD'
 
+def getGitRoot():
+    RevParse = subprocess.Popen([Git, 'rev-parse', '--show-toplevel'],
+        stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    return RevParse.stdout.read().strip()
 
 def getEditedFiles(InPlace):
     Head = getGitHead()
@@ -28,8 +32,12 @@ def getEditedFiles(InPlace):
         GitArgs.append('--cached')
     GitArgs.extend(['--diff-filter=ACMR', '--name-only', Head])
     DiffIndex = subprocess.Popen(GitArgs, stdout=subprocess.PIPE)
-    DiffIndexRet = DiffIndex.stdout.read()
-    return DiffIndexRet.split('\n')
+    DiffIndexRet = DiffIndex.stdout.read().strip()
+
+    files = DiffIndexRet.split('\n')
+    root = getGitRoot()
+
+    return [os.path.join(root, x) for x in files]
 
 
 def isFormattable(File):
