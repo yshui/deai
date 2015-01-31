@@ -80,5 +80,5 @@ configure_file(
   ${GCF_GIT_ROOT}/.git/hooks/pre-commit)
 
 add_custom_target(format ALL
-	${GCF_SCRIPT} --cmake ${GCF_GIT_PATH} ${GCF_CLANGFORMAT_PATH} -style=${GCF_CLANGFORMAT_STYLE}
+	${GCF_SCRIPT} --cmake ${GCF_GIT_PATH} ${GCF_CLANGFORMAT_PATH} -style=${GCF_CLANGFORMAT_STYLE} -ignore=${GCF_IGNORE_LIST}
 	WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
