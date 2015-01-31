@@ -27,8 +27,20 @@ else()
 	endif()
 endif()
 
+# find out current git root
+execute_process(COMMAND git rev-parse --show-toplevel
+                WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+                OUTPUT_VARIABLE GCF_GIT_ROOT
+                OUTPUT_STRIP_TRAILING_WHITESPACE)
+if(NOT GCF_GIT_ROOT)
+  message(WARNING "Not in a git repository")
+else()
+  message(STATUS "Found git root: ${GCF_GIT_ROOT}")
+endif()
+
+
 if("${GCF_PYTHON_PATH}" STREQUAL "NOTSET")
-	find_program(FIND_PYTHON python)
+	find_program(FIND_PYTHON python2)
 	if("${FIND_PYTHON}" STREQUAL "FIND_PYTHON-NOTFOUND")
 		message(FATAL_ERROR
 		   	"Could not find 'python' please set GCF_PYTHON_PATH:STRING")
@@ -68,7 +80,7 @@ string(REGEX REPLACE "\\\\" "/" GCF_CLANGFORMAT_PATH ${GCF_CLANGFORMAT_PATH})
 
 configure_file(
 	${CMAKE_CURRENT_SOURCE_DIR}/git-pre-commit-hook
-	${CMAKE_SOURCE_DIR}/.git/hooks/pre-commit)
+  ${GCF_GIT_ROOT}/.git/hooks/pre-commit)
 
 add_custom_target(format ALL
 	${GCF_SCRIPT} --cmake ${GCF_GIT_PATH} ${GCF_CLANGFORMAT_PATH} -style=${GCF_CLANGFORMAT_STYLE}

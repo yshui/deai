@@ -1,4 +1,4 @@
-#!/usr/bin/python
+#!/usr/bin/python2
 
 
 import os
@@ -20,6 +20,10 @@ def getGitHead():
     else:
         return 'HEAD'
 
+def getGitRoot():
+    RevParse = subprocess.Popen([Git, 'rev-parse', '--show-toplevel'],
+        stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    return RevParse.stdout.read().strip()
 
 def getEditedFiles(InPlace):
     Head = getGitHead()
@@ -28,9 +32,9 @@ def getEditedFiles(InPlace):
         GitArgs.append('--cached')
     GitArgs.extend(['--diff-filter=ACMR', '--name-only', Head])
     DiffIndex = subprocess.Popen(GitArgs, stdout=subprocess.PIPE)
-    DiffIndexRet = DiffIndex.stdout.read()
-    return DiffIndexRet.split('\n')
+    DiffIndexRet = DiffIndex.stdout.read().strip()
 
+    return DiffIndexRet.split('\n')
 
 def isFormattable(File):
     Extension = os.path.splitext(File)[1]
@@ -40,8 +44,8 @@ def isFormattable(File):
     return False
 
 
-def formatFile(FileName):
-    subprocess.Popen([ClangFormat, Style, '-i', FileName])
+def formatFile(FileName, GitRoot):
+    subprocess.Popen([ClangFormat, Style, '-i', os.path.join(GitRoot,FileName)])
     return
 
 
@@ -93,9 +97,10 @@ if __name__ == "__main__":
     ReturnCode = 0
 
     if InPlace:
+        GitRoot = getGitRoot()
         for FileName in EditedFiles:
             if isFormattable(FileName):
-                formatFile(FileName)
+                formatFile(FileName,GitRoot)
         sys.exit(ReturnCode)
 
     for FileName in EditedFiles:
