@@ -9,6 +9,7 @@ import sys
 Git='git'
 ClangFormat='clang-format'
 Style='-style=file'
+IgnoreList=[]
 
 
 def getGitHead():
@@ -37,6 +38,9 @@ def getEditedFiles(InPlace):
     return DiffIndexRet.split('\n')
 
 def isFormattable(File):
+    for Dir in IgnoreList:
+        if '' != os.path.commonprefix([os.path.relpath(File), os.path.relpath(Dir)]):
+            return False
     Extension = os.path.splitext(File)[1]
     for Ext in ['.h', '.cpp', '.hpp', '.c', '.cc', '.hh', '.cxx', '.hxx']:
         if Ext == Extension:
@@ -89,6 +93,8 @@ if __name__ == "__main__":
             ClangFormat = arg
         elif "-style=" in arg:
             Style = arg
+        elif "-ignore=" in arg:
+            IgnoreList = arg.strip("-ignore=").split(";")
         else:
             printUsageAndExit()
 

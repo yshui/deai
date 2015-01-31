@@ -9,6 +9,8 @@ set(GCF_CLANGFORMAT_PATH "NOTSET"
    	CACHE STRING "Absolute path to the clang-format executable")
 set(GCF_CLANGFORMAT_STYLE "file"
 	CACHE STRING "Paremter pass to clang-format -style=<here>")
+set(GCF_IGNORE_LIST ""
+  CACHE STRING "Semi colon separeted list of directories to ignore")
 
 if("${GCF_GIT_PATH}" STREQUAL "NOTSET")
 	find_program(FIND_GIT git)
