@@ -1,16 +1,12 @@
 project(git-clang-format-cmake)
 cmake_minimum_required(VERSION 2.8)
 
-set(GCF_GIT_PATH "NOTSET"
-  CACHE STRING "Absolute path to the git executable")
-set(GCF_PYTHON_PATH "NOTSET"
-  CACHE STRING "Absolute path to the python executable")
-set(GCF_CLANGFORMAT_PATH "NOTSET"
-  CACHE STRING "Absolute path to the clang-format executable")
-set(GCF_CLANGFORMAT_STYLE "file"
-	CACHE STRING "Paremter pass to clang-format -style=<here>")
-set(GCF_IGNORE_LIST ""
-  CACHE STRING "Semi colon separeted list of directories to ignore")
+set(GCF_GIT_PATH "NOTSET" CACHE STRING "Absolute path to the git executable")
+set(GCF_PYTHON_NAME "python" CACHE STRING "Name of the python executable, eg. python2")
+set(GCF_PYTHON_PATH "NOTSET" CACHE STRING "Absolute path to the python executable")
+set(GCF_CLANGFORMAT_PATH "NOTSET" CACHE STRING "Absolute path to the clang-format executable")
+set(GCF_CLANGFORMAT_STYLE "file" CACHE STRING "Paremter pass to clang-format -style=<here>")
+set(GCF_IGNORE_LIST "" CACHE STRING "Semi colon separeted list of directories to ignore")
 
 if("${GCF_GIT_PATH}" STREQUAL "NOTSET")
 	find_program(FIND_GIT git)
@@ -29,9 +25,9 @@ else()
 endif()
 
 if("${GCF_PYTHON_PATH}" STREQUAL "NOTSET")
-	find_program(FIND_PYTHON python)
+	find_program(FIND_PYTHON ${GCF_PYTHON_NAME})
 	if("${FIND_PYTHON}" STREQUAL "FIND_PYTHON-NOTFOUND")
-		message(FATAL_ERROR "Could not find 'python' please set GCF_PYTHON_PATH:STRING")
+		message(FATAL_ERROR "Could not find '${GCF_PYTHON_NAME}' please set GCF_PYTHON_PATH:STRING")
 	else()
 		set(GCF_PYTHON_PATH ${FIND_PYTHON})
 		message(STATUS "Found: ${GCF_PYTHON_PATH}")
@@ -80,5 +76,5 @@ configure_file(
   ${GCF_GIT_ROOT}/.git/hooks/pre-commit)
 
 add_custom_target(format ALL
-	${GCF_SCRIPT} --cmake ${GCF_GIT_PATH} ${GCF_CLANGFORMAT_PATH} -style=${GCF_CLANGFORMAT_STYLE} -ignore=${GCF_IGNORE_LIST}
+	${GCF_PYTHON_PATH} ${GCF_SCRIPT} --cmake ${GCF_GIT_PATH} ${GCF_CLANGFORMAT_PATH} -style=${GCF_CLANGFORMAT_STYLE} -ignore=${GCF_IGNORE_LIST}
 	WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
