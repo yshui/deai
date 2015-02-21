@@ -34,6 +34,7 @@ def getEditedFiles(InPlace):
     GitArgs.extend(['--diff-filter=ACMR', '--name-only', Head])
     DiffIndex = subprocess.Popen(GitArgs, stdout=subprocess.PIPE)
     DiffIndexRet = DiffIndex.stdout.read().strip()
+    DiffIndexRet = DiffIndexRet.decode()
 
     return DiffIndexRet.split('\n')
 
