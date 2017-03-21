@@ -1,19 +1,33 @@
 #pragma once
 
-#include <ffi.h>
 #include <deai.h>
 #include <errno.h>
 
-typedef void (*init_fn_t)(struct di_module *);
+typedef void (*init_fn_t)(struct deai *);
 
-struct di_module *di_module_lookup(struct deai *, const char *);
-struct di_module *di_modules(struct deai *);
-struct di_module *di_module_next(struct di_module *pm);
+struct di_module *di_find_module(struct deai *, const char *);
+struct di_module *di_get_modules(struct deai *);
+struct di_module *di_next_module(struct di_module *pm);
 
-struct di_fn *di_module_function_lookup(struct di_module *, const char *);
-struct di_fn *di_module_functions(struct di_module *);
-struct di_fn *di_module_function_next(struct di_fn *);
+struct di_method *di_find_method(struct di_object *, const char *);
+struct di_method *di_get_methods(struct di_object *);
+struct di_method *di_next_method(struct di_method *);
 
-struct di_module *di_module_new(const char *name);
+struct di_module *di_new_module(const char *name, size_t);
+void di_free_module(struct di_module *);
+void di_free_object(struct di_object *);
 int di_register_module(struct deai *, struct di_module *);
-int di_module_register_function(struct di_module *, ffi_cif *, void (*)(void), const char *);
+int di_register_method(struct di_object *, struct di_method *);
+int di_register_typed_method(struct di_object *, struct di_typed_method *);
+struct di_typed_method *
+di_create_typed_method(void (*fn)(void), const char *name, di_type_t rtype,
+                       unsigned int nargs, ...);
+struct di_untyped_method *
+di_create_untyped_method(di_callbale_t fn, const char *name, void *user_data);
+
+#define di_new_module_with_type(name, type) (type *)di_new_module(name, sizeof(type))
+
+int di_call_callable(struct di_callable *c, di_type_t *rtype, void **ret,
+                     unsigned int nargs, const di_type_t *atypes,
+                     const void *const *args);
+int di_call_callable_v(struct di_callable *c, di_type_t *rtype, void **ret, ...);

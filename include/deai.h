@@ -3,9 +3,6 @@
 #include <stdlib.h>
 
 struct deai;
-struct di_module;
-struct di_evsrc;
-struct di_evsrc_reg;
 
 typedef enum di_type {
 	DI_TYPE_VOID = 0,
@@ -19,29 +16,56 @@ typedef enum di_type {
 	DI_TYPE_INT64,
 	DI_TYPE_FLOAT,
 	DI_TYPE_DOUBLE,
-	DI_TYPE_POINTER,       //Generic pointer
-	DI_TYPE_EVENT_SOURCE,  //struct di_evsrc*
-	DI_TYPE_STRING,        //char*
+	DI_TYPE_POINTER,        // Generic pointer
+	DI_TYPE_OBJECT,
+	DI_TYPE_STRING,        // utf-8 string
+	DI_TYPE_ARRAY,
+	DI_TYPE_CALLABLE,
 	DI_LAST_TYPE
 } di_type_t;
 
-struct di_fn {
+typedef void (*di_fn_t)(void);
+typedef int (*di_callbale_t)(di_type_t *rtype, void **ret, unsigned int nargs,
+                             const di_type_t *atypes, const void *const *args,
+                             void *user_data);
+
+struct di_callable {
+	di_callbale_t fn_ptr;
+};
+struct di_typed_method;
+struct di_untyped_method;
+struct di_method {
+	struct di_callable;
 	const char *name;
-	unsigned int nargs;
-	di_type_t rtype;
-	const di_type_t *atypes;
-	const void (*fn_ptr)(void);
+};
+struct di_signal;
+struct di_callable;
+struct di_object {
+	struct di_method *fn;
+	struct di_signal *evd;
 };
 
-struct di_event_desc {
+struct di_array {
+	di_type_t elem_type;
+	size_t length;
+	void *arr;
+};
+
+struct di_module {
+	struct di_object;
 	const char *name;
-	unsigned int nargs;
-	const di_type_t *types;
+	struct deai *di;
+	char padding[56];
+};
+
+struct di_listener_data {
+	struct di_object *obj;
+	void *user_data;
 };
 
 #define MAX_ERRNO 4095
 
-static inline void * ERR_PTR(long err) {
+static inline void *ERR_PTR(long err) {
 	return (void *)err;
 }
 
@@ -61,14 +85,8 @@ static inline bool IS_ERR_OR_NULL(const void *ptr) {
 	return unlikely(!ptr) || IS_ERR_VALUE((unsigned long)ptr);
 }
 
-typedef int (*di_closure)(struct di_fn *fn, void *ret, void **args, void *user_data);
+typedef int (*di_closure)(struct di_typed_method *fn, void *ret, void **args, void *user_data);
 
-struct di_evsrc *di_event_source_new(void);
-int di_event_source_add_listener(struct di_evsrc *, const char *ev_name, struct di_fn *f);
-int di_event_source_emit(struct di_evsrc *, const struct di_event_desc *, void **ev_data);
-
-struct di_evsrc *di_core_event_source(struct deai *);
-struct di_evsrc *di_module_event_source(struct di_module *);
-
-int
-di_event_source_registry_add_event(struct di_evsrc_reg *, const struct di_event_desc *);
+int di_add_listener(struct di_object *, const char *name, void *ud, di_fn_t *f);
+int di_emit_signal(struct di_object *, const char *name, void **args);
+int di_register_signal(struct di_object *, const char *name, int nargs, ...);

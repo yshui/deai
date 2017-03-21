@@ -1,40 +1,71 @@
-#include <errno.h>
-#include <assert.h>
+#include "event.h"
 #include "di_internal.h"
 #include "utils.h"
+#include <ev.h>
+#include <plugin.h>
+struct di_ioev {
+	struct di_object;
+	ev_io evh;
+	struct ev_loop *loop;
+};
 
-int di_event_source_add_listener(struct di_evsrc *e, const char *ev_name,
-				    struct di_fn *f) {
-	struct di_listener *l = tmalloc(struct di_listener, 1);
-	if (!l)
-		return -ENOMEM;
+struct di_evmodule {
+	struct di_module;
+	struct ev_loop *loop;
+};
 
-	l->f = (void *)f;
-
-	struct di_evsrc_sub *sub = NULL;
-	HASH_FIND_STR(e->sub, ev_name, sub);
-	if (!sub) {
-		sub = tmalloc(struct di_evsrc_sub, 1);
-		sub->name = strdup(ev_name);
-		INIT_LIST_HEAD(&sub->listeners);
-		HASH_ADD_KEYPTR(hh, e->sub, sub->name, strlen(sub->name), sub);
-	}
-	list_add(&l->siblings, &sub->listeners);
-	return 0;
+static void di_ioev_callback(EV_P_ ev_io *w, int revents) {
+	auto ev = container_of(w, struct di_ioev, evh);
+	if (revents & EV_READ)
+		di_emit_signal((void *)ev, "read", NULL);
+	if (revents & EV_WRITE)
+		di_emit_signal((void *)ev, "write", NULL);
 }
 
-int di_event_source_emit(struct di_evsrc *e, const struct di_event_desc *evd,
-			    void **ev_data) {
-	struct di_evsrc_sub *sub = NULL;
-	HASH_FIND_STR(e->sub, evd->name, sub);
-	if (!sub)
-		return 0;
+static void di_start_ioev(struct di_object *obj) {
+	struct di_ioev *ev = (void *)obj;
+	ev_io_start(ev->loop, &ev->evh);
+}
 
-	struct di_listener *l;
-	void **tmp_ev_data = tmalloc(void *, evd->nargs);
-	list_for_each_entry(l, &sub->listeners, siblings) {
-		memcpy(tmp_ev_data, ev_data, sizeof(void *)*evd->nargs);
-		ffi_call(&l->f->cif, l->f->fn_ptr, NULL, tmp_ev_data);
+static void di_ioev_dtor(struct di_object *obj) {
+	struct di_ioev *ev = (void *)obj;
+	ev_io_stop(ev->loop, &ev->evh);
+}
+static struct di_object *di_create_ioev(struct di_object *obj, int32_t fd, int32_t t) {
+	struct di_evmodule *em = (void *)obj;
+	struct di_ioev *ret = tmalloc(struct di_ioev, 1);
+
+	unsigned int flags = 0;
+	if (t & IOEV_READ)
+		flags |= EV_READ;
+	if (t & IOEV_WRITE)
+		flags |= EV_WRITE;
+
+	ev_io_init(&ret->evh, di_ioev_callback, fd, flags);
+	ret->loop = em->loop;
+
+	auto startfn =
+	    di_create_typed_method((di_fn_t)di_start_ioev, "start", DI_TYPE_VOID, 0);
+	di_register_method((void *)ret, (void *)startfn);
+
+	auto dtor =
+	    di_create_typed_method((di_fn_t)di_ioev_dtor, "__dtor", DI_TYPE_VOID, 0);
+	di_register_typed_method((void *)ret, dtor);
+
+	di_register_signal((void *)ret, "read", 0);
+	di_register_signal((void *)ret, "write", 0);
+	return (void *)ret;
+}
+struct di_module *di_init_event_module(struct deai *di) {
+	auto em = di_new_module_with_type("event", struct di_evmodule);
+
+	auto fn = di_create_typed_method((di_fn_t)di_create_ioev, "fdevent",
+	                       DI_TYPE_OBJECT, 2, DI_TYPE_INT32, DI_TYPE_INT32);
+
+	if (di_register_typed_method((void *)em, (void *)fn) != 0) {
+		free(fn);
+		di_free_module((void *)em);
 	}
-	return 0;
+	em->loop = di->loop;
+	return (void *)em;
 }

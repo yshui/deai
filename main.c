@@ -11,31 +11,21 @@
 #include <plugin.h>
 
 #include "di_internal.h"
+#include "event.h"
 #include "utils.h"
 #include "uthash.h"
-
-const struct di_event_desc di_ev_new_module = {
-	.name = "new-module",
-	.nargs = 1,
-	.types = (di_type_t[1]){ DI_TYPE_STRING },
-};
-const struct di_event_desc di_ev_new_fn = {
-	.name = "new-function",
-	.nargs = 1,
-	.types = (di_type_t[1]){ DI_TYPE_STRING },
-};
-const struct di_event_desc di_ev_startup = {
-	.name = "startup",
-	.nargs = 0,
-	.types = NULL,
-};
+#include "log.h"
 
 void load_plugin(struct deai *p, int fd, const char *fname) {
 	void *handle;
-	int dirsave = open(".", O_RDONLY|O_DIRECTORY);
+	char *buf = malloc(strlen(fname)+3);
+	buf[0] = '.';
+	buf[1] = '/';
+	strcpy(buf+2, fname);
 
 	fchdir(fd);
-	handle = dlopen(fname, RTLD_NOW);
+	handle = dlopen(buf, RTLD_NOW);
+	free(buf);
 
 	if (!handle) {
 		fprintf(stderr, "Failed to load %s: %s", fname, dlerror());
@@ -44,19 +34,28 @@ void load_plugin(struct deai *p, int fd, const char *fname) {
 
 	init_fn_t init_fn = dlsym(handle, "di_plugin_init");
 	if (!init_fn) {
-		fprintf(stderr, "%s doesn't have a di_plugin_init function");
+		fprintf(stderr, "%s doesn't have a di_plugin_init function", fname);
 		return;
 	}
 
-	struct di_module *pm = tmalloc(struct di_module, 1);
-	pm->di = p;
-	init_fn(pm);
+	init_fn(p);
 }
 
 int main(int argc, const char * const *argv) {
 	struct deai *p = tmalloc(struct deai, 1);
 	p->m = NULL;
 	p->loop = EV_DEFAULT;
+
+	// Register deai signals
+	di_register_signal((void *)p, "new-module", 1, DI_TYPE_STRING);
+	di_register_signal((void *)p, "startup", 0);
+
+	// (1) Initialize builtin modules first
+	auto evm = di_init_event_module(p);
+	di_register_module(p, evm);
+
+	auto lm = di_init_log(10);
+	di_register_module(p, lm);
 
 	const char *plugin_dir = "./";
 	if (argc > 2) {
@@ -65,10 +64,11 @@ int main(int argc, const char * const *argv) {
 	} else if (argc == 2)
 		plugin_dir = argv[1];
 
+	// (2) Load external plugins
 	int dirfd = open(plugin_dir, O_DIRECTORY|O_RDONLY);
 	DIR *dir = fdopendir(dirfd);
 	struct dirent *dent;
-	while(dent = readdir(dir)) {
+	while((dent = readdir(dir))) {
 		bool is_reg = dent->d_type == DT_REG;
 		if (dent->d_type == DT_UNKNOWN || dent->d_type == DT_LNK) {
 			struct stat buf;
@@ -90,6 +90,19 @@ int main(int argc, const char * const *argv) {
 	}
 	closedir(dir);
 
-	di_event_source_emit(&p->core_ev, &di_ev_startup, NULL);
+	// (3) Signal startup finish
+	di_emit_signal((void *)p, "startup", NULL);
+
+	// (4) Start mainloop
 	ev_run(p->loop, 0);
+
+	// (5) Exit
+	struct di_module_internal *pm = p->m;
+	while(pm) {
+		auto next_pm = pm->hh.next;
+		HASH_DEL(p->m, pm);
+		di_free_module((void *)pm);
+		pm = next_pm;
+	}
+	di_free_object((void *)p);
 }
