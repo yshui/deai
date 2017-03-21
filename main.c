@@ -10,27 +10,27 @@
 
 #include <plugin.h>
 
-#include "piped_internal.h"
+#include "di_internal.h"
 #include "utils.h"
 #include "uthash.h"
 
-const struct piped_event_desc piped_ev_new_module = {
+const struct di_event_desc di_ev_new_module = {
 	.name = "new-module",
 	.nargs = 1,
-	.types = (piped_type_t[1]){ PIPED_TYPE_STRING },
+	.types = (di_type_t[1]){ DI_TYPE_STRING },
 };
-const struct piped_event_desc piped_ev_new_fn = {
+const struct di_event_desc di_ev_new_fn = {
 	.name = "new-function",
 	.nargs = 1,
-	.types = (piped_type_t[1]){ PIPED_TYPE_STRING },
+	.types = (di_type_t[1]){ DI_TYPE_STRING },
 };
-const struct piped_event_desc piped_ev_startup = {
+const struct di_event_desc di_ev_startup = {
 	.name = "startup",
 	.nargs = 0,
 	.types = NULL,
 };
 
-void load_plugin(struct piped *p, int fd, const char *fname) {
+void load_plugin(struct deai *p, int fd, const char *fname) {
 	void *handle;
 	int dirsave = open(".", O_RDONLY|O_DIRECTORY);
 
@@ -42,19 +42,19 @@ void load_plugin(struct piped *p, int fd, const char *fname) {
 		return;
 	}
 
-	init_fn_t init_fn = dlsym(handle, "piped_plugin_init");
+	init_fn_t init_fn = dlsym(handle, "di_plugin_init");
 	if (!init_fn) {
-		fprintf(stderr, "%s doesn't have a piped_plugin_init function");
+		fprintf(stderr, "%s doesn't have a di_plugin_init function");
 		return;
 	}
 
-	struct piped_module *pm = tmalloc(struct piped_module, 1);
-	pm->piped = p;
+	struct di_module *pm = tmalloc(struct di_module, 1);
+	pm->di = p;
 	init_fn(pm);
 }
 
 int main(int argc, const char * const *argv) {
-	struct piped *p = tmalloc(struct piped, 1);
+	struct deai *p = tmalloc(struct deai, 1);
 	p->m = NULL;
 	p->loop = EV_DEFAULT;
 
@@ -90,6 +90,6 @@ int main(int argc, const char * const *argv) {
 	}
 	closedir(dir);
 
-	piped_event_source_emit(&p->core_ev, &piped_ev_startup, NULL);
+	di_event_source_emit(&p->core_ev, &di_ev_startup, NULL);
 	ev_run(p->loop, 0);
 }

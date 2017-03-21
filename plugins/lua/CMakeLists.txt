@@ -4,9 +4,9 @@ set(SRC
 main.c
 )
 
-add_library(piped_lua SHARED ${SRC})
-target_link_libraries(piped_lua ${LUA_LIBRARIES})
-target_include_directories(piped_lua PRIVATE ${LUA_INCLUDE_DIRS})
-target_compile_options(piped_lua PUBLIC ${LUA_CFLAGS_OTHER})
+add_library(di_lua SHARED ${SRC})
+target_link_libraries(di_lua ${LUA_LIBRARIES})
+target_include_directories(di_lua PRIVATE ${LUA_INCLUDE_DIRS})
+target_compile_options(di_lua PUBLIC ${LUA_CFLAGS_OTHER})
 
-set_target_properties(piped_lua PROPERTIES PREFIX "")
+set_target_properties(di_lua PROPERTIES PREFIX "")
