@@ -14,6 +14,7 @@
 #include "event.h"
 #include "utils.h"
 #include "uthash.h"
+#include "script.h"
 #include "log.h"
 
 void load_plugin(struct deai *p, int fd, const char *fname) {
@@ -51,17 +52,14 @@ int main(int argc, const char * const *argv) {
 	di_register_signal((void *)p, "startup", 0);
 
 	// (1) Initialize builtin modules first
-	auto evm = di_init_event_module(p);
-	di_register_module(p, evm);
-
-	auto lm = di_init_log(10);
-	di_register_module(p, lm);
+	di_init_event_module(p);
+	di_init_log(p, 10);
 
 	const char *plugin_dir = "./";
-	if (argc > 2) {
-		printf("Usage: %s [plugin dir]\n", argv[0]);
+	if (argc > 3) {
+		printf("Usage: %s [plugin dir] [config]\n", argv[0]);
 		exit(1);
-	} else if (argc == 2)
+	} else if (argc >= 2)
 		plugin_dir = argv[1];
 
 	// (2) Load external plugins
@@ -93,6 +91,26 @@ int main(int argc, const char * const *argv) {
 	// (3) Signal startup finish
 	di_emit_signal((void *)p, "startup", NULL);
 
+	// (4) Load config script
+	if (argc >= 3) {
+		int fd = open(argv[2], O_RDONLY);
+		if (fd < 0)
+			goto run;
+
+		struct stat buf;
+		int ret = fstat(fd, &buf);
+		if (ret != 0)
+			goto run;
+
+		char *sbuf = malloc(buf.st_size+1);
+		if (!sbuf)
+			goto run;
+		read(fd, sbuf, buf.st_size);
+		sbuf[buf.st_size] = '\0';
+		parse_script(p, sbuf);
+	}
+
+run:
 	// (4) Start mainloop
 	ev_run(p->loop, 0);
 
@@ -101,7 +119,7 @@ int main(int argc, const char * const *argv) {
 	while(pm) {
 		auto next_pm = pm->hh.next;
 		HASH_DEL(p->m, pm);
-		di_free_module((void *)pm);
+		di_free_object((void *)pm);
 		pm = next_pm;
 	}
 	di_free_object((void *)p);

@@ -27,6 +27,8 @@ struct di_method_internal {
 	struct di_callable;
 
 	const char *name;
+	bool typed;
+	void (*free)(void *);
 	UT_hash_handle hh;
 };
 
@@ -34,10 +36,11 @@ struct di_typed_method {
 	struct di_method_internal;
 
 	struct di_object *this;
+	di_fn_t real_fn_ptr;
+
 	unsigned int nargs;
 	di_type_t rtype;
 	ffi_cif cif;
-	di_fn_t real_fn_ptr;
 	di_type_t atypes[];
 };
 
@@ -50,7 +53,8 @@ struct di_untyped_method {
 };
 
 struct di_listener {
-	di_fn_t f;
+	di_fn_t typed_f;
+	void (*f)(struct di_signal *, void **);
 	void *ud;
 	struct list_head siblings;
 };
@@ -65,12 +69,19 @@ struct di_module_internal {
 static_assert(sizeof(struct di_module_internal) == sizeof(struct di_module),
               "di_module size mismatch");
 
+static ffi_type ffi_type_di_array = {
+    .size = 0,
+    .alignment = 0,
+    .type = FFI_TYPE_STRUCT,
+    .elements =
+        (ffi_type *[]){&ffi_type_uint64, &ffi_type_pointer, &ffi_type_uint8, NULL},
+};
 static inline ffi_type *di_type_to_ffi(di_type_t in) {
 	ffi_type *const type_map[DI_LAST_TYPE] = {
-	    &ffi_type_void,    &ffi_type_uint8,  &ffi_type_uint16, &ffi_type_uint32,
-	    &ffi_type_uint64,  &ffi_type_sint8,  &ffi_type_sint16, &ffi_type_sint32,
-	    &ffi_type_sint64,  &ffi_type_float,  &ffi_type_double, &ffi_type_pointer,
-	    &ffi_type_pointer, &ffi_type_pointer};
+	    &ffi_type_void,     &ffi_type_sint,    &ffi_type_uint,
+	    &ffi_type_uint64,   &ffi_type_sint64,  &ffi_type_double,
+	    &ffi_type_pointer,  &ffi_type_pointer, &ffi_type_pointer,
+	    &ffi_type_di_array, &ffi_type_pointer};
 
 	return type_map[in];
 }
@@ -80,10 +91,7 @@ static inline ffi_status di_ffi_prep_cif(ffi_cif *cif, unsigned int nargs,
 	ffi_type *ffi_rtype = di_type_to_ffi(rtype);
 	ffi_type **ffi_atypes = NULL;
 	if (nargs) {
-		ffi_atypes = calloc(nargs, sizeof(void *));
-		if (!ffi_atypes)
-			return FFI_BAD_TYPEDEF;
-
+		ffi_atypes = calloc(nargs, sizeof(ffi_type *));
 		for (int i = 0; i < nargs; i++)
 			ffi_atypes[i] = di_type_to_ffi(atypes[i]);
 	}

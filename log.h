@@ -1,4 +1,4 @@
 #pragma once
 #include <log.h>
 
-struct di_module *di_init_log(int log_level);
+void di_init_log(struct deai *di, int log_level);

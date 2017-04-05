@@ -1,26 +1,22 @@
 #pragma once
 #include <stdbool.h>
+#include <stdint.h>
 #include <stdlib.h>
 
 struct deai;
 
 typedef enum di_type {
 	DI_TYPE_VOID = 0,
-	DI_TYPE_UINT8,
-	DI_TYPE_UINT16,
-	DI_TYPE_UINT32,
-	DI_TYPE_UINT64,
-	DI_TYPE_INT8,
-	DI_TYPE_INT16,
-	DI_TYPE_INT32,
-	DI_TYPE_INT64,
-	DI_TYPE_FLOAT,
-	DI_TYPE_DOUBLE,
-	DI_TYPE_POINTER,        // Generic pointer
-	DI_TYPE_OBJECT,
-	DI_TYPE_STRING,        // utf-8 string
-	DI_TYPE_ARRAY,
-	DI_TYPE_CALLABLE,
+	DI_TYPE_NINT,            // native int
+	DI_TYPE_NUINT,           // native unsigned int
+	DI_TYPE_UINT,            // uint64_t
+	DI_TYPE_INT,             // int64_t
+	DI_TYPE_FLOAT,           // platform dependent, double
+	DI_TYPE_POINTER,         // Generic pointer, void *
+	DI_TYPE_OBJECT,          // pointer to di_object
+	DI_TYPE_STRING,          // utf-8 string, const char *
+	DI_TYPE_ARRAY,           // struct di_array
+	DI_TYPE_CALLABLE,        // pointer to di_callable
 	DI_LAST_TYPE
 } di_type_t;
 
@@ -39,16 +35,19 @@ struct di_method {
 	const char *name;
 };
 struct di_signal;
+struct di_listener;
 struct di_callable;
 struct di_object {
 	struct di_method *fn;
 	struct di_signal *evd;
+
+	uint64_t ref_count;
 };
 
 struct di_array {
-	di_type_t elem_type;
-	size_t length;
+	uint64_t length;
 	void *arr;
+	uint8_t elem_type;
 };
 
 struct di_module {
@@ -85,8 +84,45 @@ static inline bool IS_ERR_OR_NULL(const void *ptr) {
 	return unlikely(!ptr) || IS_ERR_VALUE((unsigned long)ptr);
 }
 
-typedef int (*di_closure)(struct di_typed_method *fn, void *ret, void **args, void *user_data);
+typedef int (*di_closure)(struct di_typed_method *fn, void *ret, void **args,
+                          void *user_data);
 
-int di_add_listener(struct di_object *, const char *name, void *ud, di_fn_t *f);
+struct di_listener *
+di_add_typed_listener(struct di_object *, const char *name, void *ud, di_fn_t f);
+struct di_listener *
+di_add_untyped_listener(struct di_object *obj, const char *name, void *ud,
+                        void (*f)(struct di_signal *, void **));
+
+void di_init_object(struct di_object *obj);
+void di_ref_object(struct di_object *);
+void di_unref_object(struct di_object *);
+
+/**
+ * Remove a listener from signal
+ *
+ * Returns the user_data passed to add_listener if succeed, otherwise
+ * returns an error code.
+ */
+void *di_remove_listener(struct di_object *o, const char *name, struct di_listener *l);
 int di_emit_signal(struct di_object *, const char *name, void **args);
+int di_emit_signal_v(struct di_object *obj, const char *name, ...);
 int di_register_signal(struct di_object *, const char *name, int nargs, ...);
+const di_type_t *
+di_get_signal_arg_types(struct di_signal *sig, unsigned int *nargs);
+static inline size_t di_sizeof_type(di_type_t t) {
+	switch (t) {
+	case DI_TYPE_VOID:
+	case DI_TYPE_CALLABLE:
+	case DI_LAST_TYPE:
+	default: return 0;
+	case DI_TYPE_FLOAT: return sizeof(double);
+	case DI_TYPE_ARRAY: return sizeof(struct di_array);
+	case DI_TYPE_UINT:
+	case DI_TYPE_INT: return 8;
+	case DI_TYPE_NUINT: return sizeof(unsigned int);
+	case DI_TYPE_NINT: return sizeof(int);
+	case DI_TYPE_STRING:
+	case DI_TYPE_OBJECT:
+	case DI_TYPE_POINTER: return sizeof(void *);
+	}
+}

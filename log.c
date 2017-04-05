@@ -34,14 +34,15 @@ di_log_va(struct di_object *o, int log_level, const char *fmt, ...) {
 	return ret;
 }
 
-struct di_module *di_init_log(int log_level) {
+void di_init_log(struct deai *di, int log_level) {
 	auto l = di_new_module_with_type("log", struct di_log);
 	if (!l)
-		return NULL;
+		return;
 	l->log_level = log_level;
 
-	auto fn = di_create_typed_method((di_fn_t)di_log, "log", DI_TYPE_INT32, 2,
-	                                 DI_TYPE_INT32, DI_TYPE_STRING);
+	auto fn = di_create_typed_method((di_fn_t)di_log, "log", DI_TYPE_NINT, 2,
+	                                 DI_TYPE_NINT, DI_TYPE_STRING);
 	di_register_typed_method((void *)l, (void *)fn);
-	return (void *)l;
+	di_register_module(di, (void *)l);
+	di_unref_object((void *)l);
 }

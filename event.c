@@ -9,6 +9,12 @@ struct di_ioev {
 	struct ev_loop *loop;
 };
 
+struct di_timer {
+	struct di_object;
+	ev_timer evt;
+	struct ev_loop *loop;
+};
+
 struct di_evmodule {
 	struct di_module;
 	struct ev_loop *loop;
@@ -22,6 +28,11 @@ static void di_ioev_callback(EV_P_ ev_io *w, int revents) {
 		di_emit_signal((void *)ev, "write", NULL);
 }
 
+static void di_timer_callback(EV_P_ ev_timer *t, int revents) {
+	auto d = container_of(t, struct di_timer, evt);
+	di_emit_signal_v((void *)d, "elapsed", ev_now(EV_A));
+}
+
 static void di_start_ioev(struct di_object *obj) {
 	struct di_ioev *ev = (void *)obj;
 	ev_io_start(ev->loop, &ev->evh);
@@ -31,9 +42,10 @@ static void di_ioev_dtor(struct di_object *obj) {
 	struct di_ioev *ev = (void *)obj;
 	ev_io_stop(ev->loop, &ev->evh);
 }
-static struct di_object *di_create_ioev(struct di_object *obj, int32_t fd, int32_t t) {
+static struct di_object *di_create_ioev(struct di_object *obj, int fd, int t) {
 	struct di_evmodule *em = (void *)obj;
 	struct di_ioev *ret = tmalloc(struct di_ioev, 1);
+	di_init_object((void *)ret);
 
 	unsigned int flags = 0;
 	if (t & IOEV_READ)
@@ -52,20 +64,41 @@ static struct di_object *di_create_ioev(struct di_object *obj, int32_t fd, int32
 	    di_create_typed_method((di_fn_t)di_ioev_dtor, "__dtor", DI_TYPE_VOID, 0);
 	di_register_typed_method((void *)ret, dtor);
 
-	di_register_signal((void *)ret, "read", 0);
-	di_register_signal((void *)ret, "write", 0);
+	if (t & IOEV_READ)
+		di_register_signal((void *)ret, "read", 0);
+	if (t & IOEV_WRITE)
+		di_register_signal((void *)ret, "write", 0);
 	return (void *)ret;
 }
-struct di_module *di_init_event_module(struct deai *di) {
+static struct di_object *di_create_timer(struct di_object *obj, uint64_t timeout) {
+	struct di_evmodule *em = (void *)obj;
+	struct di_timer *ret = tmalloc(struct di_timer, 1);
+	di_init_object((void *)ret);
+
+	ev_timer_init(&ret->evt, di_timer_callback, timeout, 0);
+	di_register_signal((void *)ret, "elapsed", 1, DI_TYPE_FLOAT);
+	ev_timer_start(em->loop, &ret->evt);
+	return (void *)ret;
+}
+void di_init_event_module(struct deai *di) {
 	auto em = di_new_module_with_type("event", struct di_evmodule);
 
 	auto fn = di_create_typed_method((di_fn_t)di_create_ioev, "fdevent",
-	                       DI_TYPE_OBJECT, 2, DI_TYPE_INT32, DI_TYPE_INT32);
+	                       DI_TYPE_OBJECT, 2, DI_TYPE_NINT, DI_TYPE_NINT);
 
-	if (di_register_typed_method((void *)em, (void *)fn) != 0) {
-		free(fn);
-		di_free_module((void *)em);
-	}
+	auto tfn = di_create_typed_method((di_fn_t)di_create_timer, "timer",
+	                       DI_TYPE_OBJECT, 1, DI_TYPE_UINT);
+
+	if (di_register_typed_method((void *)em, (void *)fn) != 0)
+		goto out;
+	fn = NULL;
+	if (di_register_typed_method((void *)em, (void *)tfn) != 0)
+		goto out;
+	tfn = NULL;
 	em->loop = di->loop;
-	return (void *)em;
+	di_register_module(di, (void *)em);
+out:
+	free(fn);
+	free(tfn);
+	di_unref_object((void *)em);
 }

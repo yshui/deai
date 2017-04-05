@@ -27,6 +27,7 @@ set(SRC
 	plugin.c
 	event.c
 	log.c
+	script.c
 )
 
 add_executable(deai ${SRC})
