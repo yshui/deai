@@ -1,6 +1,8 @@
+#define _GNU_SOURCE
 #include <assert.h>
 #include <plugin.h>
 #include <stdarg.h>
+#include <stdio.h>
 
 #include "di_internal.h"
 #include "utils.h"
@@ -10,6 +12,9 @@
 struct di_object_internal {
 	struct di_method_internal *fn;
 	struct di_signal *sd;
+
+	uint64_t ref_count;
+	uint8_t destroyed;
 };
 
 PUBLIC struct di_module *di_find_module(struct deai *p, const char *mod_name) {
@@ -48,15 +53,57 @@ PUBLIC struct di_method *di_next_method(struct di_method *fn) {
 	return ((struct di_method_internal *)fn)->hh.next;
 }
 
-PUBLIC void di_init_object(struct di_object *obj) {
+PUBLIC struct di_object *di_new_object(size_t sz) {
+	if (sz < sizeof(struct di_object))
+		return NULL;
+
+	struct di_object *obj = calloc(1, sz);
 	obj->evd = NULL;
 	obj->fn = NULL;
 	obj->ref_count = 1;
 	di_register_signal((void *)obj, "new-method", 1, DI_TYPE_STRING);
+	return obj;
+}
+
+static void di_free_error(struct di_object *o) {
+	struct di_error *e = (void *)o;
+	free(e->msg);
+}
+
+static const char *di_get_error_msg(struct di_object *o) {
+	struct di_error *e = (void *)o;
+	return e->msg;
+}
+
+PUBLIC struct di_object *di_new_error(const char *errmsg) {
+	struct di_error *err = di_new_object_with_type(struct di_error);
+	err->msg = strdup(errmsg);
+
+	struct di_typed_method *dtor =
+	    di_create_typed_method((void *)di_free_error, "__dtor", DI_TYPE_VOID, 0);
+	di_register_typed_method((void *)err, dtor);
+
+	struct di_typed_method *errm = di_create_typed_method(
+	    (void *)di_get_error_msg, "__error_msg", DI_TYPE_STRING, 0);
+	di_register_typed_method((void *)err, errm);
+	return (void *)err;
 }
 
 static void di_free_module(struct di_module *_m) {
 	struct di_module_internal *m = (void *)_m;
+	struct di_method_internal *mdtor =
+	    (void *)di_find_method((void *)m, "__module_dtor");
+	if (mdtor) {
+		di_type_t rtype;
+		void *ret;
+		auto status =
+		    di_call_callable_v((void *)mdtor, &rtype, &ret, DI_LAST_TYPE);
+
+		// TODO check status
+		// assert(rtype == DI_TYPE_VOID);
+		(void)status;
+	}
+	// fprintf(stderr, "Free module %s\n", m->name);
 	free(m->name);
 }
 
@@ -64,16 +111,12 @@ PUBLIC struct di_module *di_new_module(const char *name, size_t size) {
 	if (size < sizeof(struct di_module))
 		return NULL;
 
-	struct di_module_internal *pm = calloc(1, size);
-	di_init_object((void *)pm);
-
+	struct di_module_internal *pm = (void *)di_new_object(size);
 	pm->name = strdup(name);
 
 	struct di_typed_method *dtor = di_create_typed_method(
-	    (di_fn_t)di_free_module, "__dtor", DI_TYPE_VOID, 1, DI_TYPE_OBJECT);
+	    (di_fn_t)di_free_module, "__dtor", DI_TYPE_VOID, 0);
 	di_register_typed_method((void *)pm, dtor);
-
-	di_ref_object((void *)pm);
 
 	return (void *)pm;
 }
@@ -134,13 +177,15 @@ static inline void di_va_arg_with_di_type(va_list ap, di_type_t t, void *buf) {
 	default: assert(0);
 	}
 
-	memcpy(buf, src, di_sizeof_type(t));
+	// if buf == NULL, the caller just want to pop the value
+	if (buf)
+		memcpy(buf, src, di_sizeof_type(t));
 }
 
 // va_args version of di_call_callable
 PUBLIC int
 di_call_callable_v(struct di_callable *c, di_type_t *rtype, void **ret, ...) {
-	va_list ap;
+	va_list ap, ap2;
 	void **args = NULL;
 	di_type_t *ats = NULL;
 
@@ -152,8 +197,8 @@ di_call_callable_v(struct di_callable *c, di_type_t *rtype, void **ret, ...) {
 		di_va_arg_with_di_type(ap, t, NULL);
 		t = va_arg(ap, di_type_t);
 	}
-	va_end(ap);
 
+	va_end(ap);
 	if (nargs > 0) {
 		args = alloca(sizeof(void *) * nargs);
 		ats = alloca(sizeof(di_type_t) * nargs);
@@ -161,7 +206,7 @@ di_call_callable_v(struct di_callable *c, di_type_t *rtype, void **ret, ...) {
 		for (unsigned int i = 0; i < nargs; i++) {
 			ats[i] = va_arg(ap, di_type_t);
 			args[i] = alloca(di_sizeof_type(ats[i]));
-			di_va_arg_with_di_type(ap, t, args[i]);
+			di_va_arg_with_di_type(ap, ats[i], args[i]);
 		}
 		va_end(ap);
 	}
@@ -180,8 +225,17 @@ static void di_free_signal(struct di_signal *sig) {
 	free(sig);
 }
 
-PUBLIC void di_free_object(struct di_object *_obj) {
+// Must be called holding external references. i.e.
+// __dtor shouldn't cause the reference count to drop to 0
+PUBLIC void di_destroy_object(struct di_object *_obj) {
 	struct di_object_internal *obj = (void *)_obj;
+	assert(obj->destroyed != 2);
+
+	if (obj->destroyed)
+		return;
+
+	obj->destroyed = 2;
+
 	struct di_method_internal *fn = (void *)di_find_method(_obj, "__dtor");
 	if (fn) {
 		di_type_t rtype;
@@ -211,7 +265,8 @@ PUBLIC void di_free_object(struct di_object *_obj) {
 		di_free_signal(sig);
 		sig = next_sig;
 	}
-	free(obj);
+
+	obj->destroyed = 1;
 }
 
 PUBLIC void di_ref_object(struct di_object *obj) {
@@ -221,8 +276,10 @@ PUBLIC void di_ref_object(struct di_object *obj) {
 PUBLIC void di_unref_object(struct di_object *obj) {
 	assert(obj->ref_count > 0);
 	obj->ref_count--;
-	if (obj->ref_count == 0)
-		di_free_object(obj);
+	if (obj->ref_count == 0) {
+		di_destroy_object(obj);
+		free(obj);
+	}
 }
 
 PUBLIC int di_register_module(struct deai *p, struct di_module *_m) {
@@ -328,6 +385,12 @@ di_create_untyped_method(di_callbale_t fn, const char *name, void *user_data) {
 	return gfn;
 }
 
+PUBLIC int di_unregister_method(struct di_object *obj, struct di_method *f) {
+	struct di_object_internal *o = (void *)obj;
+	struct di_method_internal *m = (void *)f;
+	HASH_DEL(o->fn, m);
+}
+
 PUBLIC int di_register_method(struct di_object *_obj, struct di_method *f) {
 	struct di_object_internal *obj = (void *)_obj;
 	struct di_method_internal *old_f;
@@ -398,7 +461,7 @@ PUBLIC int di_register_signal(struct di_object *r, const char *name, int nargs, 
 static void di_typed_listener_trampoline(struct di_signal *sig, void **ev_data) {
 	struct di_listener_data *ld = *(struct di_listener_data **)ev_data[0];
 	struct di_listener *l = ld->user_data;
-	ld->user_data = l->ud;
+	ld->user_data = l->ud2;
 	ffi_call(&sig->cif, l->typed_f, NULL, ev_data);
 	ld->user_data = l;
 }
@@ -413,17 +476,43 @@ PUBLIC struct di_listener *
 di_add_untyped_listener(struct di_object *obj, const char *name, void *ud,
                         void (*f)(struct di_signal *, void **)) {
 	struct di_signal *evd = NULL;
+	struct di_method *m;
+	di_type_t rtype;
+	void *ret;
 	HASH_FIND_STR(obj->evd, name, evd);
-	if (!evd)
-		return ERR_PTR(-ENOENT);
+	if (!evd) {
+		m = di_find_method(obj, "__add_listener");
+		if (m == NULL)
+			return ERR_PTR(-ENOENT);
+
+		di_call_callable_v((void *)m, &rtype, &ret, DI_TYPE_STRING, name, DI_LAST_TYPE);
+		free(ret);
+		HASH_FIND_STR(obj->evd, name, evd);
+		if (!evd)
+			return ERR_PTR(-ENOENT);
+	}
 
 	struct di_listener *l = tmalloc(struct di_listener, 1);
 	if (!l)
 		return ERR_PTR(-ENOMEM);
 
+	if (list_empty(&evd->listeners)) {
+		char *buf;
+		asprintf(&buf, "__add_listener_%s", name);
+		m = di_find_method(obj, buf);
+		free(buf);
+		if (m) {
+			di_call_callable_v((void *)m, &rtype, &ret, DI_LAST_TYPE);
+			free(ret);
+		}
+	}
+
 	l->f = f;
 	l->ud = ud;
 	list_add(&l->siblings, &evd->listeners);
+
+	// Object shouldn't be freed when it has listener
+	di_ref_object(obj);
 	return l;
 }
 
@@ -435,6 +524,7 @@ di_add_typed_listener(struct di_object *obj, const char *name, void *ud, di_fn_t
 		return l;
 
 	l->ud = l;
+	l->ud2 = ud;
 	l->typed_f = f;
 	return l;
 }
@@ -454,6 +544,20 @@ di_remove_listener(struct di_object *o, const char *name, struct di_listener *l)
 del:
 	list_del(&l->siblings);
 
+	if (list_empty(&evd->listeners)) {
+		char *buf;
+		asprintf(&buf, "__del_listener_%s", name);
+		auto m = di_find_method(o, buf);
+		free(buf);
+		if (m) {
+			di_type_t rtype;
+			void *ret;
+			di_call_callable_v((void *)m, &rtype, &ret, DI_LAST_TYPE);
+			free(ret);
+		}
+	}
+	di_unref_object(o);
+
 	void *tmp = l->ud;
 	free(l);
 	return tmp;
@@ -463,6 +567,11 @@ static int
 _di_emit_signal(struct di_object *obj, struct di_signal *evd, void **ev_data) {
 	struct di_listener *l, *nl;
 	struct di_listener_data ld;
+
+	// Hold a reference to prevent object from being freed during
+	// signal emission
+	assert(obj->ref_count > 0);
+	di_ref_object(obj);
 	void *arg0 = &ld;
 	ev_data[0] = &arg0;
 	ld.obj = obj;
@@ -472,6 +581,8 @@ _di_emit_signal(struct di_object *obj, struct di_signal *evd, void **ev_data) {
 		ld.user_data = l->ud;
 		l->f(evd, ev_data);
 	}
+
+	di_unref_object(obj);
 	return 0;
 }
 

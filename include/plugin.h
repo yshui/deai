@@ -26,7 +26,6 @@ di_create_typed_method(di_fn_t fn, const char *name, di_type_t rtype,
 struct di_untyped_method *
 di_create_untyped_method(di_callbale_t fn, const char *name, void *user_data);
 
-#define di_new_module_with_type(name, type) (type *)di_new_module(name, sizeof(type))
 
 int di_call_callable(struct di_callable *c, di_type_t *rtype, void **ret,
                      unsigned int nargs, const di_type_t *atypes,

@@ -11,11 +11,11 @@
 #include <plugin.h>
 
 #include "di_internal.h"
-#include "event.h"
+#include "event_internal.h"
 #include "utils.h"
 #include "uthash.h"
 #include "script.h"
-#include "log.h"
+#include "log_internal.h"
 
 void load_plugin(struct deai *p, int fd, const char *fname) {
 	void *handle;
@@ -42,8 +42,13 @@ void load_plugin(struct deai *p, int fd, const char *fname) {
 	init_fn(p);
 }
 
+// TODO:
+// deai:
+//  setenv, getenv
+// log:
+//  set_log_level, set_log_target
 int main(int argc, const char * const *argv) {
-	struct deai *p = tmalloc(struct deai, 1);
+	struct deai *p = di_new_object_with_type(struct deai);
 	p->m = NULL;
 	p->loop = EV_DEFAULT;
 
@@ -108,6 +113,7 @@ int main(int argc, const char * const *argv) {
 		read(fd, sbuf, buf.st_size);
 		sbuf[buf.st_size] = '\0';
 		parse_script(p, sbuf);
+		free(sbuf);
 	}
 
 run:
@@ -119,8 +125,9 @@ run:
 	while(pm) {
 		auto next_pm = pm->hh.next;
 		HASH_DEL(p->m, pm);
-		di_free_object((void *)pm);
+		//printf("%s:%d\n",pm->name, pm->ref_count);
+		di_unref_object((void *)pm);
 		pm = next_pm;
 	}
-	di_free_object((void *)p);
+	di_unref_object((void *)p);
 }

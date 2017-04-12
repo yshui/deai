@@ -42,6 +42,10 @@ struct di_object {
 	struct di_signal *evd;
 
 	uint64_t ref_count;
+
+	// If a object is destroyed, it's just a placeholder
+	// waiting for its ref count to drop to 0
+	uint8_t destroyed; // 1 -> destroyed, 2 -> destroying
 };
 
 struct di_array {
@@ -93,7 +97,8 @@ struct di_listener *
 di_add_untyped_listener(struct di_object *obj, const char *name, void *ud,
                         void (*f)(struct di_signal *, void **));
 
-void di_init_object(struct di_object *obj);
+struct di_object *di_new_object(size_t sz);
+void di_destroy_object(struct di_object *);
 void di_ref_object(struct di_object *);
 void di_unref_object(struct di_object *);
 
@@ -109,6 +114,14 @@ int di_emit_signal_v(struct di_object *obj, const char *name, ...);
 int di_register_signal(struct di_object *, const char *name, int nargs, ...);
 const di_type_t *
 di_get_signal_arg_types(struct di_signal *sig, unsigned int *nargs);
+struct di_object *di_new_error(const char *errmsg);
+
+#define cleanup(func) __attribute__((cleanup(func)))
+#define module_cleanup cleanup(di_cleanup_modulep)
+#define object_cleanup cleanup(di_cleanup_objectp)
+
+#define di_new_module_with_type(name, type) (type *)di_new_module(name, sizeof(type))
+#define di_new_object_with_type(type) (type *)di_new_object(sizeof(type))
 static inline size_t di_sizeof_type(di_type_t t) {
 	switch (t) {
 	case DI_TYPE_VOID:
@@ -125,4 +138,18 @@ static inline size_t di_sizeof_type(di_type_t t) {
 	case DI_TYPE_OBJECT:
 	case DI_TYPE_POINTER: return sizeof(void *);
 	}
+}
+
+static inline void di_cleanup_modulep(struct di_module **ptr) {
+	struct di_module *m = *ptr;
+	if (m)
+		di_unref_object((void *)m);
+	*ptr = NULL;
+}
+
+static inline void di_cleanup_objectp(struct di_object **ptr) {
+	struct di_object *o = *ptr;
+	if (o)
+		di_unref_object(o);
+	*ptr = NULL;
 }

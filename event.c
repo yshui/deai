@@ -1,4 +1,4 @@
-#include "event.h"
+#include "event_internal.h"
 #include "di_internal.h"
 #include "utils.h"
 #include <ev.h>
@@ -42,10 +42,14 @@ static void di_ioev_dtor(struct di_object *obj) {
 	struct di_ioev *ev = (void *)obj;
 	ev_io_stop(ev->loop, &ev->evh);
 }
+
+static void di_timer_dtor(struct di_object *obj) {
+	struct di_timer *ev = (void *)obj;
+	ev_timer_stop(ev->loop, &ev->evt);
+}
 static struct di_object *di_create_ioev(struct di_object *obj, int fd, int t) {
 	struct di_evmodule *em = (void *)obj;
-	struct di_ioev *ret = tmalloc(struct di_ioev, 1);
-	di_init_object((void *)ret);
+	auto ret = di_new_object_with_type(struct di_ioev);
 
 	unsigned int flags = 0;
 	if (t & IOEV_READ)
@@ -58,7 +62,7 @@ static struct di_object *di_create_ioev(struct di_object *obj, int fd, int t) {
 
 	auto startfn =
 	    di_create_typed_method((di_fn_t)di_start_ioev, "start", DI_TYPE_VOID, 0);
-	di_register_method((void *)ret, (void *)startfn);
+	di_register_typed_method((void *)ret, (void *)startfn);
 
 	auto dtor =
 	    di_create_typed_method((di_fn_t)di_ioev_dtor, "__dtor", DI_TYPE_VOID, 0);
@@ -72,8 +76,12 @@ static struct di_object *di_create_ioev(struct di_object *obj, int fd, int t) {
 }
 static struct di_object *di_create_timer(struct di_object *obj, uint64_t timeout) {
 	struct di_evmodule *em = (void *)obj;
-	struct di_timer *ret = tmalloc(struct di_timer, 1);
-	di_init_object((void *)ret);
+	auto ret = di_new_object_with_type(struct di_timer);
+	ret->loop = em->loop;
+
+	auto dtor =
+	    di_create_typed_method((di_fn_t)di_timer_dtor, "__dtor", DI_TYPE_VOID, 0);
+	di_register_typed_method((void *)ret, dtor);
 
 	ev_timer_init(&ret->evt, di_timer_callback, timeout, 0);
 	di_register_signal((void *)ret, "elapsed", 1, DI_TYPE_FLOAT);

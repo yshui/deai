@@ -4,7 +4,7 @@
 #include <stdio.h>
 
 #include "di_internal.h"
-#include "log.h"
+#include "log_internal.h"
 #include "utils.h"
 
 struct di_log {

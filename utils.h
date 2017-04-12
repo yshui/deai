@@ -1,10 +1,10 @@
 #pragma once
 
 #include <string.h>
+#include <stdbool.h>
 
 #define tmalloc(type, nmem) (type *)calloc(nmem, sizeof(type))
 #define auto __auto_type
-#define cleanup(func) __attribute__((cleanup(func)))
 
 /**
  * container_of - cast a member of a structure out to the containing structure
@@ -28,10 +28,3 @@
 
 #define PUBLIC __attribute__((visibility("default")))
 
-static inline bool di_type_check(unsigned int nargs, di_type_t *atypes,
-                                 unsigned int npars, di_type_t *ptypes) {
-	if (nargs != npars)
-		return false;
-
-	return memcmp(atypes, ptypes, nargs * sizeof(di_type_t)) == 0;
-}

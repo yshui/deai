@@ -55,7 +55,7 @@ struct di_untyped_method {
 struct di_listener {
 	di_fn_t typed_f;
 	void (*f)(struct di_signal *, void **);
-	void *ud;
+	void *ud, *ud2;
 	struct list_head siblings;
 };
 
@@ -64,6 +64,11 @@ struct di_module_internal {
 	char *name;
 	struct deai *di;
 	UT_hash_handle hh;
+};
+
+struct di_error {
+	struct di_object;
+	char *msg;
 };
 
 static_assert(sizeof(struct di_module_internal) == sizeof(struct di_module),

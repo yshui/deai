@@ -305,8 +305,10 @@ static int parse_call(struct deai *di, const char *buf, const char **next_buf) {
 	int ret = -1, i;
 	char *mod = parse_identifier(buf, &buf);
 	if (!mod) {
-		if (*buf == '\0')
-			return 0;
+		if (*buf == '\0') {
+			ret = 0;
+			goto out;
+		}
 		di_log_va(log, DI_LOG_ERROR, "Invalid module name\n");
 		goto out;
 	}
@@ -361,6 +363,8 @@ static int parse_call(struct deai *di, const char *buf, const char **next_buf) {
 	}
 
 	di_call_callable((void *)mt, &rtype, &retd, nargs, atypes, (const void * const *)args);
+	if (rtype == DI_TYPE_OBJECT && *(void **)retd != NULL)
+		di_unref_object(*(void **)retd);
 	free(retd);
 out4:
 	di_unref_object((void *)m);

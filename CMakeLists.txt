@@ -20,6 +20,10 @@ macro(cflag_check_and_apply tgt flag)
 	endif()
 endmacro()
 
+cflag_check_and_apply(DI_CFLAGS -fvisibility=hidden)
+cflag_check_and_apply(DI_CFLAGS -fms-extensions REQUIRED)
+cflag_check_and_apply(DI_CFLAGS -Wno-microsoft-anon-tag)
+
 add_subdirectory(plugins)
 
 set(SRC
@@ -31,8 +35,6 @@ set(SRC
 )
 
 add_executable(deai ${SRC})
-cflag_check_and_apply(DI_CFLAGS -fvisibility=hidden)
-cflag_check_and_apply(DI_CFLAGS -fms-extensions REQUIRED)
 #cflag_check_and_apply(DI_CFLAGS -fplan9-extensions)
 
 target_include_directories(deai PUBLIC "include")
