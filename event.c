@@ -2,7 +2,7 @@
 #include "di_internal.h"
 #include "utils.h"
 #include <ev.h>
-#include <plugin.h>
+#include <deai.h>
 struct di_ioev {
 	struct di_object;
 	ev_io evh;
@@ -93,20 +93,11 @@ void di_init_event_module(struct deai *di) {
 
 	auto fn = di_create_typed_method((di_fn_t)di_create_ioev, "fdevent",
 	                       DI_TYPE_OBJECT, 2, DI_TYPE_NINT, DI_TYPE_NINT);
+	di_register_typed_method((void *)em, (void *)fn);
 
-	auto tfn = di_create_typed_method((di_fn_t)di_create_timer, "timer",
+	fn = di_create_typed_method((di_fn_t)di_create_timer, "timer",
 	                       DI_TYPE_OBJECT, 1, DI_TYPE_UINT);
-
-	if (di_register_typed_method((void *)em, (void *)fn) != 0)
-		goto out;
-	fn = NULL;
-	if (di_register_typed_method((void *)em, (void *)tfn) != 0)
-		goto out;
-	tfn = NULL;
+	di_register_typed_method((void *)em, (void *)fn);
 	em->loop = di->loop;
 	di_register_module(di, (void *)em);
-out:
-	free(fn);
-	free(tfn);
-	di_unref_object((void *)em);
 }

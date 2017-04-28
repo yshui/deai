@@ -1,9 +1,7 @@
 #include <ctype.h>
 #include <deai.h>
-#include <plugin.h>
 #include <stdint.h>
 #include <string.h>
-#include <plugin.h>
 #include <limits.h>
 
 #include "log.h"
@@ -169,14 +167,14 @@ static struct di_value **parse_value_list(const char *buf, const char **next_buf
 		if (v->t > DI_LAST_TYPE)
 			break;
 
-		while(isspace(*buf))
+		while(isblank(*buf))
 			buf++;
 
-		if (*buf == '\0')
+		if (*buf == '\0' || *buf == '\r' || *buf == '\n')
 			break;
 		if (*buf != ',') {
-			free(arr[arr_len]);
-			arr[arr_len] = error("Missing delimiter");
+			free(arr[arr_len-1]);
+			arr[arr_len-1] = error("Missing delimiter");
 			break;
 		}
 		buf++;
@@ -313,18 +311,19 @@ static int parse_call(struct deai *di, const char *buf, const char **next_buf) {
 		goto out;
 	}
 
-	if (*buf != '.') {
-		di_log_va(log, DI_LOG_ERROR, "Module name not followed by a dot\n");
-		free(mod);
-		goto out;
-	}
-	buf++;
-	char *method = parse_identifier(buf, &buf);
+	char *method;
+	if (*buf == '.') {
+		buf++;
+		method = parse_identifier(buf, &buf);
 
-	if (!method) {
-		di_log_va(log, DI_LOG_ERROR, "Invalid method name\n");
-		free(mod);
-		goto out;
+		if (!method) {
+			di_log_va(log, DI_LOG_ERROR, "Invalid method name\n");
+			free(mod);
+			goto out;
+		}
+	} else {
+		method = mod;
+		mod = NULL;
 	}
 
 	auto vl = parse_value_list(buf, &buf);
@@ -351,11 +350,18 @@ static int parse_call(struct deai *di, const char *buf, const char **next_buf) {
 	void *retd;
 
 	ret = 1;
-	struct di_module *m = di_find_module(di, mod);
-	if (!m) {
-		di_log_va(log, DI_LOG_ERROR, "Module %s not found\n", mod);
-		goto out3;
+	struct di_module *m;
+	if (mod) {
+		m = di_find_module(di, mod);
+		if (!m) {
+			di_log_va(log, DI_LOG_ERROR, "Module %s not found\n", mod);
+			goto out3;
+		}
+	} else {
+		m = (void *)di;
+		di_ref_object((void *)m);
 	}
+
 	struct di_method *mt = di_find_method((void *)m, method);
 	if (!mt) {
 		di_log_va(log, DI_LOG_ERROR, "Method %s not found in module %s\n", method, mod);

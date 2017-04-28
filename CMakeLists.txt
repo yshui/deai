@@ -24,6 +24,9 @@ cflag_check_and_apply(DI_CFLAGS -fvisibility=hidden)
 cflag_check_and_apply(DI_CFLAGS -fms-extensions REQUIRED)
 cflag_check_and_apply(DI_CFLAGS -Wno-microsoft-anon-tag)
 
+
+set(DI_PLUGIN_INSTALL_DIR "lib/deai" CACHE FILEPATH "Install path for plugins.")
+
 add_subdirectory(plugins)
 
 set(SRC
@@ -32,6 +35,7 @@ set(SRC
 	event.c
 	log.c
 	script.c
+	helper.c
 )
 
 add_executable(deai ${SRC})
@@ -45,6 +49,7 @@ target_compile_options(deai PUBLIC ${LIBFFI_CFLAGS_OTHER})
 target_compile_options(deai PRIVATE ${DI_CFLAGS})
 
 set_target_properties(deai PROPERTIES LINK_FLAGS "-rdynamic")
+set_target_properties(deai PROPERTIES PUBLIC_HEADER "include/deai.h;include/object.h;include/event.h;include/log.h")
 
 find_path(LIBEV_INCLUDE_DIR ev.h)
 find_library(LIBEV_LIBRARY NAMES ev)
@@ -53,3 +58,8 @@ target_include_directories(deai PRIVATE ${LIBEV_INCLUDE_DIR})
 target_link_libraries(deai ${LIBEV_LIBRARY})
 
 target_link_libraries(deai dl)
+
+install(TARGETS deai
+	RUNTIME DESTINATION bin
+	PUBLIC_HEADER DESTINATION "include/deai"
+)

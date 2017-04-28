@@ -7,3 +7,4 @@ cmake_install.cmake
 piped
 init.di
 test.lua
+install_manifest.txt

@@ -1,6 +1,6 @@
 #define _GNU_SOURCE
 #include <assert.h>
-#include <plugin.h>
+#include <deai.h>
 #include <stdarg.h>
 #include <stdio.h>
 
@@ -282,6 +282,7 @@ PUBLIC void di_unref_object(struct di_object *obj) {
 	}
 }
 
+// Register a module. This method consume the reference
 PUBLIC int di_register_module(struct deai *p, struct di_module *_m) {
 	struct di_module_internal *m = (void *)_m;
 	struct di_module_internal *old_m = NULL;
@@ -289,7 +290,6 @@ PUBLIC int di_register_module(struct deai *p, struct di_module *_m) {
 	if (old_m)
 		return -EEXIST;
 	HASH_ADD_KEYPTR(hh, p->m, m->name, strlen(m->name), m);
-	di_ref_object((void *)m);
 
 	di_emit_signal_v((void *)p, "new-module", m->name);
 	return 0;
@@ -578,6 +578,13 @@ _di_emit_signal(struct di_object *obj, struct di_signal *evd, void **ev_data) {
 
 	list_for_each_entry_safe(l, nl, &evd->listeners, siblings) {
 		// Allow remove listener from listener
+		for (int i = 0; i < evd->nargs; i++) {
+			// Hold reference for each object passed into the handlers
+			if (evd->types[i] != DI_TYPE_OBJECT)
+				continue;
+			struct di_object *o = *(void **)ev_data[i+1];
+			di_ref_object(o);
+		}
 		ld.user_data = l->ud;
 		l->f(evd, ev_data);
 	}

@@ -2,7 +2,8 @@ pkg_check_modules(XCB xcb REQUIRED)
 pkg_check_modules(XCB_XI xcb-xinput REQUIRED)
 
 set(SRC
-main.c
+xorg.c
+xinput.c
 )
 
 add_library(di_xorg SHARED ${SRC})
@@ -11,3 +12,7 @@ target_include_directories(di_xorg PRIVATE ${XCB_INCLUDE_DIRS} ${XCB_XI_INCLUDE_
 target_compile_options(di_xorg PRIVATE ${DI_XORG_CFLAGS} ${DI_CFLAGS})
 
 set_target_properties(di_xorg PROPERTIES PREFIX "")
+
+install(TARGETS di_xorg
+	LIBRARY DESTINATION ${DI_PLUGIN_INSTALL_DIR}
+)

@@ -1,5 +1,4 @@
 #include <deai.h>
-#include <plugin.h>
 #include <stdarg.h>
 #include <stdio.h>
 
@@ -44,5 +43,4 @@ void di_init_log(struct deai *di, int log_level) {
 	                                 DI_TYPE_NINT, DI_TYPE_STRING);
 	di_register_typed_method((void *)l, (void *)fn);
 	di_register_module(di, (void *)l);
-	di_unref_object((void *)l);
 }
