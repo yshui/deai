@@ -1,0 +1,15 @@
+# Possible modules:
+
+Must have:
+
+* backlight
+* battery
+* hotkeys
+* dbus
+
+Probably:
+
+* audio
+* xorg.window
+* menu, tray icons
+* wifi
