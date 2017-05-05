@@ -1,3 +1,9 @@
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
+
+/* Copyright (c) 2017, Yuxuan Shui <yshuiv7@gmail.com> */
+
 #pragma once
 #include <stdbool.h>
 #include <stdint.h>
@@ -45,18 +51,6 @@ struct di_method *di_next_method(struct di_method *);
 struct di_module *di_new_module(const char *name, size_t);
 int di_register_module(struct deai *, struct di_module *);
 
-#define cleanup(func) __attribute__((cleanup(func)))
-#define module_cleanup cleanup(di_cleanup_modulep)
-#define object_cleanup cleanup(di_cleanup_objectp)
-#define define_trivial_cleanup(type, name) \
-static inline void name(type **ptr) { \
-	free(*ptr); \
-	*ptr = NULL; \
-}
-#define define_trivial_cleanup_t(type) \
-	define_trivial_cleanup(type, free_##type##p)
-
-#define with_cleanup_t(type) cleanup(free_##type##p) type*
 
 #define di_new_module_with_type(name, type) (type *)di_new_module(name, sizeof(type))
 #define di_new_object_with_type(type) (type *)di_new_object(sizeof(type))

@@ -1,3 +1,9 @@
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
+
+/* Copyright (c) 2017, Yuxuan Shui <yshuiv7@gmail.com> */
+
 #define _GNU_SOURCE
 #include <deai.h>
 #include <helper.h>
@@ -6,7 +12,7 @@
 
 #include "utils.h"
 
-PUBLIC int di_set(struct di_object *o, const char *prop, di_type_t type, void *val) {
+PUBLIC int di_setv(struct di_object *o, const char *prop, di_type_t type, void *val) {
 	char *buf;
 	void *ret;
 	di_type_t rtype;
@@ -35,7 +41,7 @@ PUBLIC int di_set(struct di_object *o, const char *prop, di_type_t type, void *v
 	return -ENOENT;
 }
 
-PUBLIC int di_get(struct di_object *o, const char *prop, di_type_t *type, void **ret) {
+PUBLIC int di_getv(struct di_object *o, const char *prop, di_type_t *type, void **ret) {
 	char *buf;
 	asprintf(&buf, "__get_%s", prop);
 
@@ -48,7 +54,7 @@ PUBLIC int di_get(struct di_object *o, const char *prop, di_type_t *type, void *
 
 	m = di_find_method(o, "__get");
 	if (m) {
-		int cret = di_call_callable_v((void *)m, type, ret, 1, DI_TYPE_STRING, prop);
+		int cret = di_call_callable_v((void *)m, type, ret, DI_TYPE_STRING, prop, DI_LAST_TYPE);
 		return cret;
 	}
 

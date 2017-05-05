@@ -1,11 +1,15 @@
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
+
+/* Copyright (c) 2017, Yuxuan Shui <yshuiv7@gmail.com> */
+
 #pragma once
 
 #include "list.h"
 
 struct di_xorg {
 	struct di_module;
-
-	struct list_head connections;
 };
 
 struct di_xorg_connection {
@@ -13,10 +17,12 @@ struct di_xorg_connection {
 	struct di_xorg *x;
 	xcb_connection_t *c;
 	int dflt_scrn;
-	struct di_listener *l;
+	struct di_object *xcb_fd;
+	struct di_listener *xcb_fdlistener;
 	struct di_xorg_ext *xi;
 
-	struct list_head siblings;
+	// TODO
+	// atom cache
 };
 
 struct di_xorg_ext {

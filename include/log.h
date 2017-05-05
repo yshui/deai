@@ -1,3 +1,9 @@
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
+
+/* Copyright (c) 2017, Yuxuan Shui <yshuiv7@gmail.com> */
+
 #pragma once
 #include <object.h>
 
@@ -9,5 +15,3 @@ enum di_log_level {
 };
 
 int di_log_va(struct di_object *o, int log_level, const char *fmt, ...);
-
-#define di_get_log(v) object_cleanup struct di_object *log = (void *)di_find_module((v), "log")

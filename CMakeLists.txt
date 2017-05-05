@@ -21,11 +21,14 @@ macro(cflag_check_and_apply tgt flag)
 endmacro()
 
 cflag_check_and_apply(DI_CFLAGS -fvisibility=hidden)
+cflag_check_and_apply(DI_CFLAGS -fno-strict-aliasing)
 cflag_check_and_apply(DI_CFLAGS -fms-extensions REQUIRED)
 cflag_check_and_apply(DI_CFLAGS -Wno-microsoft-anon-tag)
+cflag_check_and_apply(DI_CFLAGS -Wall)
 
 
 set(DI_PLUGIN_INSTALL_DIR "lib/deai" CACHE FILEPATH "Install path for plugins.")
+configure_file(config.h.in config.h)
 
 add_subdirectory(plugins)
 
@@ -34,7 +37,6 @@ set(SRC
 	plugin.c
 	event.c
 	log.c
-	script.c
 	helper.c
 )
 

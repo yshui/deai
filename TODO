@@ -1,3 +1,9 @@
+# Fixes
+
+* Figure out how to properly shutdown, e.g.
+  how to free all the objects while listeners are still attached, etc.
+  [done]
+
 # Possible modules:
 
 Must have:
@@ -6,6 +12,7 @@ Must have:
 * battery
 * hotkeys
 * dbus
+* inotify
 
 Probably:
 

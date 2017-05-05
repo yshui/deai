@@ -1,3 +1,9 @@
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
+
+/* Copyright (c) 2017, Yuxuan Shui <yshuiv7@gmail.com> */
+
 #define _GNU_SOURCE
 #include <assert.h>
 #include <deai.h>
@@ -8,6 +14,7 @@
 #include "utils.h"
 
 #define PUBLIC __attribute__((visibility("default")))
+#define cleanup(func) __attribute__((cleanup(func)))
 
 struct di_object_internal {
 	struct di_method_internal *fn;
@@ -136,6 +143,7 @@ PUBLIC void di_call_typed_method(struct di_typed_method *fn, void *ret, ...) {
 PUBLIC int di_call_callable(struct di_callable *c, di_type_t *rtype, void **ret,
                             unsigned int nargs, const di_type_t *atypes,
                             const void *const *args) {
+	*ret = NULL;
 	return c->fn_ptr(rtype, ret, nargs, atypes, args, c);
 }
 
@@ -185,7 +193,7 @@ static inline void di_va_arg_with_di_type(va_list ap, di_type_t t, void *buf) {
 // va_args version of di_call_callable
 PUBLIC int
 di_call_callable_v(struct di_callable *c, di_type_t *rtype, void **ret, ...) {
-	va_list ap, ap2;
+	va_list ap;
 	void **args = NULL;
 	di_type_t *ats = NULL;
 
@@ -258,6 +266,9 @@ PUBLIC void di_destroy_object(struct di_object *_obj) {
 		fn = (void *)next_fn;
 	}
 
+	// XXX user_data attached to listeners might leak if destroy
+	// object is called actively (before all refs are gone,
+	// e.g. during program shut down).
 	auto sig = obj->sd;
 	while (sig) {
 		auto next_sig = sig->hh.next;
@@ -295,35 +306,135 @@ PUBLIC int di_register_module(struct deai *p, struct di_module *_m) {
 	return 0;
 }
 
+PUBLIC size_t di_min_return_size(size_t in) {
+	if (in < sizeof(ffi_arg))
+		return sizeof(ffi_arg);
+	return in;
+}
+
+static inline bool is_integer(di_type_t t) {
+	return t == DI_TYPE_INT || t == DI_TYPE_NINT || t == DI_TYPE_UINT ||
+	       t == DI_TYPE_NUINT;
+}
+
+static inline int integer_conversion(di_type_t inty, const void *inp,
+                                     di_type_t outty, const void **outp) {
+
+#define convert_case(srct, dstt, dstmax, dstmin)                                    \
+	case di_typeof((srct)0):                                                    \
+		do {                                                                \
+			srct tmp = *(srct *)(inp);                                  \
+			if (tmp > (dstmax) || tmp < (dstmin))                       \
+				return -ERANGE;                                     \
+			dstt *tmp2 = malloc(sizeof(dstt));                          \
+			*tmp2 = tmp;                                                \
+			*outp = tmp2;                                               \
+		} while (0);                                                        \
+		break
+
+#define convert_switch(s1, s2, s3, ...)                                             \
+	switch (inty) {                                                             \
+		convert_case(s1, __VA_ARGS__);                                      \
+		convert_case(s2, __VA_ARGS__);                                      \
+		convert_case(s3, __VA_ARGS__);                                      \
+	default: assert(0);                                                         \
+	}
+
+	assert(inty != outty);
+
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wpragmas"
+#pragma GCC diagnostic ignored "-Wtautological-constant-out-of-range-compare"
+	switch (outty) {
+	case DI_TYPE_INT:
+		convert_switch(unsigned int, int, uint64_t, int64_t, INT64_MAX,
+		               INT64_MIN);
+		break;
+	case DI_TYPE_NINT:
+		convert_switch(unsigned int, uint64_t, int64_t, int, INT_MAX, INT_MIN);
+		break;
+	case DI_TYPE_UINT:
+		convert_switch(unsigned int, int, int64_t, uint64_t, UINT64_MAX, 0);
+		break;
+	case DI_TYPE_NUINT:
+		convert_switch(int, int64_t, uint64_t, unsigned int, UINT_MAX, 0);
+		break;
+	default: assert(0);
+	}
+#pragma GCC diagnostic pop
+
+#undef convert_case
+#undef convert_switch
+	return 0;
+}
+
 static int
 di_typed_trampoline(di_type_t *rt, void **ret, unsigned int nargs,
                     const di_type_t *ats, const void *const *args, void *ud) {
 	struct di_typed_method *fn = ud;
 
-	if (nargs != fn->nargs)
+	if (nargs + 1 != fn->nargs)
 		return -EINVAL;
 
 	assert(nargs == 0 || args != NULL);
 
-	// TODO type check
-	(void)ats;
+	const void **xargs = calloc(nargs + 1, sizeof(void *));
+	int rc = 0;
+	xargs[0] = &fn->this;
+	for (int i = 0; i < nargs; i++) {
+		if (ats[i] == fn->atypes[i + 1]) {
+			xargs[i + 1] = args[i];
+			continue;
+		}
 
-	void **xargs = alloca(sizeof(void *) * (nargs + 1));
-	if (args)
-		memcpy(xargs + 1, args, nargs * sizeof(void *));
-	xargs[0] = alloca(sizeof(void *));
-	*(void **)xargs[0] = fn->this;
+		// Type check and implicit conversion
+		// conversion between all types of integers are allowed
+		// as long as there's no overflow
+		if (is_integer(ats[i])) {
+			if (is_integer(fn->atypes[i + 1])) {
+				rc = integer_conversion(ats[i], args[i],
+				                        fn->atypes[i + 1],
+				                        xargs + i + 1);
+				if (rc)
+					goto out;
+			} else if (fn->atypes[i + 1] == DI_TYPE_FLOAT) {
+				double *res = malloc(sizeof(double));
+#define convert_case(srct)                                                          \
+	case di_typeof((srct)0): *res = *(srct *)args[i]; break;
+				switch (ats[i]) {
+					convert_case(unsigned int);
+					convert_case(int);
+					convert_case(uint64_t);
+					convert_case(int64_t);
+				default: assert(0);
+				}
+#undef convert_case
+				xargs[i + 1] = res;
+			} else {
+				rc = -EINVAL;
+				goto out;
+			}
+		} else {
+			rc = -EINVAL;
+			goto out;
+		}
+	}
 
 	if (fn->rtype != DI_TYPE_VOID)
-		*ret = malloc(sizeof(void *));
+		*ret = malloc(di_min_return_size(di_sizeof_type(fn->rtype)));
 	else
 		*ret = NULL;
 
-	ffi_call(&fn->cif, fn->real_fn_ptr, *ret, xargs);
-
+	ffi_call(&fn->cif, fn->real_fn_ptr, *ret, (void *)xargs);
 	*rt = fn->rtype;
 
-	return 0;
+out:
+	for (int i = 0; i < nargs; i++)
+		if (xargs[i + 1] != args[i])
+			free((void *)xargs[i + 1]);
+	free(xargs);
+
+	return rc;
 }
 
 static int
@@ -343,7 +454,7 @@ PUBLIC struct di_typed_method *
 di_create_typed_method(void (*fn)(void), const char *name, di_type_t rtype,
                        unsigned int nargs, ...) {
 	auto f = (struct di_typed_method *)calloc(
-	    1, sizeof(struct di_typed_method) + sizeof(void *) * (1 + nargs));
+	    1, sizeof(struct di_typed_method) + sizeof(di_type_t) * (1 + nargs));
 	if (!f)
 		return NULL;
 
@@ -361,7 +472,7 @@ di_create_typed_method(void (*fn)(void), const char *name, di_type_t rtype,
 	va_end(ap);
 
 	f->atypes[0] = DI_TYPE_OBJECT;
-	f->nargs = nargs;
+	f->nargs = nargs + 1;
 
 	ffi_status ret = di_ffi_prep_cif(&f->cif, nargs + 1, f->rtype, f->atypes);
 
@@ -385,7 +496,7 @@ di_create_untyped_method(di_callbale_t fn, const char *name, void *user_data) {
 	return gfn;
 }
 
-PUBLIC int di_unregister_method(struct di_object *obj, struct di_method *f) {
+PUBLIC void di_unregister_method(struct di_object *obj, struct di_method *f) {
 	struct di_object_internal *o = (void *)obj;
 	struct di_method_internal *m = (void *)f;
 	HASH_DEL(o->fn, m);
@@ -485,8 +596,9 @@ di_add_untyped_listener(struct di_object *obj, const char *name, void *ud,
 		if (m == NULL)
 			return ERR_PTR(-ENOENT);
 
-		di_call_callable_v((void *)m, &rtype, &ret, DI_TYPE_STRING, name, DI_LAST_TYPE);
-		free(ret);
+		di_call_callable_v((void *)m, &rtype, &ret, DI_TYPE_STRING, name,
+		                   DI_LAST_TYPE);
+		di_free_value(rtype, ret);
 		HASH_FIND_STR(obj->evd, name, evd);
 		if (!evd)
 			return ERR_PTR(-ENOENT);
@@ -503,7 +615,7 @@ di_add_untyped_listener(struct di_object *obj, const char *name, void *ud,
 		free(buf);
 		if (m) {
 			di_call_callable_v((void *)m, &rtype, &ret, DI_LAST_TYPE);
-			free(ret);
+			di_free_value(rtype, ret);
 		}
 	}
 
@@ -553,7 +665,7 @@ del:
 			di_type_t rtype;
 			void *ret;
 			di_call_callable_v((void *)m, &rtype, &ret, DI_LAST_TYPE);
-			free(ret);
+			di_free_value(rtype, ret);
 		}
 	}
 	di_unref_object(o);
@@ -576,15 +688,8 @@ _di_emit_signal(struct di_object *obj, struct di_signal *evd, void **ev_data) {
 	ev_data[0] = &arg0;
 	ld.obj = obj;
 
+	// Allow remove listener from listener
 	list_for_each_entry_safe(l, nl, &evd->listeners, siblings) {
-		// Allow remove listener from listener
-		for (int i = 0; i < evd->nargs; i++) {
-			// Hold reference for each object passed into the handlers
-			if (evd->types[i] != DI_TYPE_OBJECT)
-				continue;
-			struct di_object *o = *(void **)ev_data[i+1];
-			di_ref_object(o);
-		}
 		ld.user_data = l->ud;
 		l->f(evd, ev_data);
 	}
@@ -599,8 +704,9 @@ PUBLIC int di_emit_signal(struct di_object *obj, const char *name, void **data) 
 	if (!evd)
 		return -ENOENT;
 
-	void **tmp_data = alloca(sizeof(void *) * evd->nargs + 1);
-	memcpy(tmp_data + 1, data, sizeof(void *) * evd->nargs);
+	void **tmp_data = alloca(sizeof(void *) * (evd->nargs + 1));
+	if (evd->nargs)
+		memcpy(tmp_data + 1, data, sizeof(void *) * evd->nargs);
 	return _di_emit_signal(obj, evd, tmp_data);
 }
 
@@ -612,7 +718,7 @@ PUBLIC int di_emit_signal_v(struct di_object *obj, const char *name, ...) {
 	if (!evd)
 		return -ENOENT;
 
-	void **tmp_data = alloca(sizeof(void *) * evd->nargs + 1);
+	void **tmp_data = alloca(sizeof(void *) * (evd->nargs + 1));
 	va_start(ap, name);
 	for (unsigned int i = 0; i < evd->nargs; i++) {
 		assert(di_sizeof_type(evd->types[i + 1]) != 0);
@@ -622,4 +728,25 @@ PUBLIC int di_emit_signal_v(struct di_object *obj, const char *name, ...) {
 	va_end(ap);
 
 	return _di_emit_signal(obj, evd, tmp_data);
+}
+
+#define free_switch(t, v)                                                           \
+	switch (t) {                                                                \
+	case DI_TYPE_ARRAY: di_free_array(*(struct di_array *)(v)); break;          \
+	case DI_TYPE_STRING: free(*(char **)(v)); break;                            \
+	case DI_TYPE_OBJECT: di_unref_object(*(struct di_object **)(v)); break;     \
+	default: break;                                                             \
+	}
+
+PUBLIC void di_free_array(struct di_array arr) {
+	size_t step = di_sizeof_type(arr.elem_type);
+	const di_type_t et = arr.elem_type;
+	for (int i = 0; i < arr.length; i++)
+		free_switch(et, arr.arr + step * i);
+	free(arr.arr);
+}
+
+PUBLIC void di_free_value(di_type_t t, void *ret) {
+	free_switch(t, ret);
+	free(ret);
 }

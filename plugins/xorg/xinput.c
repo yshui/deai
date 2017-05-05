@@ -1,7 +1,14 @@
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
+
+/* Copyright (c) 2017, Yuxuan Shui <yshuiv7@gmail.com> */
+
 #include <deai.h>
 #include <helper.h>
 #include <log.h>
 
+#include <assert.h>
 #include <ctype.h>
 #include <stdio.h>
 #include <xcb/xinput.h>
@@ -14,6 +21,10 @@ struct di_xorg_xinput {
 
 	xcb_input_event_mask_t ec;
 	char mask[4];
+
+	// XI_LASTEVENT is not defined in xcb,
+	// but should be 26
+	unsigned int listener_count[27];
 };
 
 struct di_xorg_xinput_device {
@@ -27,31 +38,58 @@ struct di_xorg_xinput_device {
 #define clear_mask(a, m) (a)[(m) >> 3] &= ~(1 << ((m)&7))
 #define get_mask(a, m) (a)[(m) >> 3] & (1 << ((m)&7))
 
-static void di_xorg_listen_for_new_device(struct di_xorg_xinput *xi) {
-	di_get_log(xi->dc->x->di);
+static void di_xorg_xi_start_listen_for_event(struct di_xorg_xinput *xi, int ev) {
+	di_getm(xi->dc->x->di, log);
+	if (ev > 26) {
+		di_log_va(logm, DI_LOG_ERROR, "invalid xi event number %d", ev);
+		return;
+	}
+
+	xi->listener_count[ev]++;
+	if (xi->listener_count[ev] > 1)
+		return;
+
 	auto scrn = screen_of_display(xi->dc->c, xi->dc->dflt_scrn);
-	set_mask(xi->mask, XCB_INPUT_HIERARCHY);
+	set_mask(xi->mask, ev);
 	auto cookie =
 	    xcb_input_xi_select_events_checked(xi->dc->c, scrn->root, 1, &xi->ec);
 	auto e = xcb_request_check(xi->dc->c, cookie);
 	if (e)
-		di_log_va(log, DI_LOG_ERROR, "select events failed\n");
+		di_log_va(logm, DI_LOG_ERROR, "select events failed\n");
 }
 
-static void di_xorg_stop_listen_for_new_device(struct di_xorg_xinput *xi) {
-	di_get_log(xi->dc->x->di);
+static void di_xorg_xi_stop_listen_for_event(struct di_xorg_xinput *xi, int ev) {
+	di_getm(xi->dc->x->di, log);
+	if (ev > 26) {
+		di_log_va(logm, DI_LOG_ERROR, "invalid xi event number %d", ev);
+		return;
+	}
+
+	assert(xi->listener_count[ev] > 0);
+	xi->listener_count[ev]--;
+	if (xi->listener_count[ev] > 0)
+		return;
+
 	auto scrn = screen_of_display(xi->dc->c, xi->dc->dflt_scrn);
-	clear_mask(xi->mask, XCB_INPUT_HIERARCHY);
+	clear_mask(xi->mask, ev);
 	auto cookie =
 	    xcb_input_xi_select_events_checked(xi->dc->c, scrn->root, 1, &xi->ec);
 	auto e = xcb_request_check(xi->dc->c, cookie);
 	if (e)
-		di_log_va(log, DI_LOG_ERROR, "select events failed\n");
+		di_log_va(logm, DI_LOG_ERROR, "select events failed\n");
+}
+
+static void di_xorg_xi_start_listen_for_hierarchy(struct di_xorg_xinput *xi) {
+	di_xorg_xi_start_listen_for_event(xi, XCB_INPUT_HIERARCHY);
+}
+
+static void di_xorg_xi_stop_listen_for_hierarchy(struct di_xorg_xinput *xi) {
+	di_xorg_xi_stop_listen_for_event(xi, XCB_INPUT_HIERARCHY);
 }
 
 static void di_xorg_free_xinput(struct di_xorg_ext *x) {
 	// clear event mask when free
-	di_get_log(x->dc->x->di);
+	di_getm(x->dc->x->di, log);
 	struct di_xorg_xinput *xi = (void *)x;
 	memset(xi->mask, 0, xi->ec.mask_len * 4);
 	auto scrn = screen_of_display(xi->dc->c, xi->dc->dflt_scrn);
@@ -61,7 +99,7 @@ static void di_xorg_free_xinput(struct di_xorg_ext *x) {
 	    xcb_input_xi_select_events_checked(xi->dc->c, scrn->root, 1, &xi->ec);
 	auto e = xcb_request_check(xi->dc->c, cookie);
 	if (e)
-		di_log_va(log, DI_LOG_ERROR, "select events failed\n");
+		di_log_va(logm, DI_LOG_ERROR, "select events failed\n");
 }
 
 define_trivial_cleanup_t(xcb_input_xi_query_device_reply_t);
@@ -150,11 +188,12 @@ static char *di_xorg_xinput_get_device_type(struct di_xorg_xinput_device *dev) {
 	with_cleanup_t(xcb_get_atom_name_reply_t) ar = xcb_get_atom_name_reply(
 	    dev->dc->c, xcb_get_atom_name(dev->dc->c, di.data->device_type), NULL);
 	if (!ar) {
-		//fprintf(stderr, "%d\n", di.data->device_type);
+		// fprintf(stderr, "%d\n", di.data->device_type);
 		return strdup("unknown");
 	}
 
-	char *ret = strndup(xcb_get_atom_name_name(ar), xcb_get_atom_name_name_length(ar));
+	char *ret =
+	    strndup(xcb_get_atom_name_name(ar), xcb_get_atom_name_name_length(ar));
 	for (int i = 0; ret[i]; i++)
 		ret[i] = tolower(ret[i]);
 	return ret;
@@ -251,6 +290,7 @@ static int di_xorg_xinput_set_prop(di_type_t *rtype, void **ret, unsigned int na
 
 		if (prop->type == XCB_ATOM_INTEGER ||
 		    prop->type == XCB_ATOM_CARDINAL) {
+			assert(atypes[i] != DI_TYPE_FLOAT);
 			switch (prop->format) {
 			case 8:
 				*(int8_t *)curr = i64;
@@ -268,6 +308,7 @@ static int di_xorg_xinput_set_prop(di_type_t *rtype, void **ret, unsigned int na
 		} else if (prop->type == float_atom->atom) {
 			if (prop->format == 32)
 				return -EINVAL;
+			assert(atypes[i] != DI_TYPE_STRING);
 			*(float *)curr = f;
 			item[i - 1].data32 = curr;
 		} else if (prop->type == XCB_ATOM_ATOM) {
@@ -352,20 +393,23 @@ static struct di_array di_xorg_get_all_devices(struct di_xorg_xinput *xi) {
 
 static void
 di_xorg_handle_xinput_event(struct di_xorg_xinput *xi, xcb_ge_generic_event_t *ev) {
-	di_get_log(xi->dc->x->di);
+	// di_getm(xi->dc->x->di, log);
 	if (ev->event_type == XCB_INPUT_HIERARCHY) {
 		xcb_input_hierarchy_event_t *hev = (void *)ev;
 		auto hevi = xcb_input_hierarchy_infos_iterator(hev);
 		for (; hevi.rem; xcb_input_hierarchy_info_next(&hevi)) {
 			auto info = hevi.data;
+			auto obj =
+			    di_xorg_make_object_for_devid(xi->dc, info->deviceid);
 			// di_log_va(log, DI_LOG_DEBUG, "hierarchy change %u %u\n",
 			// info->deviceid, info->flags);
-			if (info->flags & XCB_INPUT_HIERARCHY_MASK_SLAVE_ADDED) {
-				auto obj = di_xorg_make_object_for_devid(
-				    xi->dc, info->deviceid);
+			if (info->flags & XCB_INPUT_HIERARCHY_MASK_SLAVE_ADDED)
 				di_emit_signal_v((void *)xi, "new-device", obj);
-				di_unref_object(obj);
-			}
+			if (info->flags & XCB_INPUT_HIERARCHY_MASK_DEVICE_ENABLED)
+				di_emit_signal_v((void *)xi, "device-enabled", obj);
+			if (info->flags & XCB_INPUT_HIERARCHY_MASK_DEVICE_DISABLED)
+				di_emit_signal_v((void *)xi, "device-disabled", obj);
+			di_unref_object(obj);
 		}
 	}
 }
@@ -393,6 +437,9 @@ struct di_object *di_xorg_get_xinput(struct di_object *o) {
 	xi->handle_event = (void *)di_xorg_handle_xinput_event;
 	dc->xi = (void *)xi;
 	xi->dc = dc;
+	xi->e = &dc->xi;
+
+	di_ref_object((void *)dc);
 
 	free(r);
 
@@ -402,12 +449,29 @@ struct di_object *di_xorg_get_xinput(struct di_object *o) {
 	                                 DI_TYPE_VOID, 0);
 	di_register_typed_method((void *)xi, tm);
 
-	tm = di_create_typed_method((di_fn_t)di_xorg_listen_for_new_device,
+	tm = di_create_typed_method((di_fn_t)di_xorg_xi_start_listen_for_hierarchy,
 	                            "__add_listener_new-device", DI_TYPE_VOID, 0);
 	di_register_typed_method((void *)xi, tm);
 
-	tm = di_create_typed_method((di_fn_t)di_xorg_stop_listen_for_new_device,
+	tm = di_create_typed_method((di_fn_t)di_xorg_xi_stop_listen_for_hierarchy,
 	                            "__del_listener_new-device", DI_TYPE_VOID, 0);
+	di_register_typed_method((void *)xi, tm);
+
+	tm = di_create_typed_method((di_fn_t)di_xorg_xi_start_listen_for_hierarchy,
+	                            "__add_listener_device-enabled", DI_TYPE_VOID, 0);
+	di_register_typed_method((void *)xi, tm);
+
+	tm = di_create_typed_method((di_fn_t)di_xorg_xi_stop_listen_for_hierarchy,
+	                            "__del_listener_device-enabled", DI_TYPE_VOID, 0);
+	di_register_typed_method((void *)xi, tm);
+	tm = di_create_typed_method((di_fn_t)di_xorg_xi_start_listen_for_hierarchy,
+	                            "__add_listener_device-disabled", DI_TYPE_VOID,
+	                            0);
+	di_register_typed_method((void *)xi, tm);
+
+	tm = di_create_typed_method((di_fn_t)di_xorg_xi_stop_listen_for_hierarchy,
+	                            "__del_listener_device-disabled", DI_TYPE_VOID,
+	                            0);
 	di_register_typed_method((void *)xi, tm);
 
 	tm = di_create_typed_method((di_fn_t)di_xorg_get_all_devices,
@@ -415,5 +479,7 @@ struct di_object *di_xorg_get_xinput(struct di_object *o) {
 	di_register_typed_method((void *)xi, tm);
 
 	di_register_signal((void *)xi, "new-device", 1, DI_TYPE_OBJECT);
+	di_register_signal((void *)xi, "device-enabled", 1, DI_TYPE_OBJECT);
+	di_register_signal((void *)xi, "device-disabled", 1, DI_TYPE_OBJECT);
 	return (void *)dc->xi;
 }

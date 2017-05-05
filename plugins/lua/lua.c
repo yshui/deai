@@ -1,12 +1,19 @@
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
+
+/* Copyright (c) 2017, Yuxuan Shui <yshuiv7@gmail.com> */
+
+#include <deai.h>
+#include <helper.h>
+#include <log.h>
+
 #include <assert.h>
 #include <lauxlib.h>
 #include <lua.h>
 #include <lualib.h>
 #include <stdio.h>
 #include <string.h>
-
-#include <deai.h>
-#include <log.h>
 
 #include "list.h"
 
@@ -15,29 +22,39 @@
 
 #define DI_LUA_REGISTRY_SCRIPT_OBJECT_KEY "__deai.di_lua.script_object"
 
-#define di_lua_set_env(L, s) \
-	lua_pushliteral((L), DI_LUA_REGISTRY_SCRIPT_OBJECT_KEY); \
-	lua_pushlightuserdata((L), (s)); \
-	lua_rawset((L), LUA_REGISTRYINDEX);
+#define di_lua_get_env(L, s)                                                        \
+	do {                                                                        \
+		lua_pushliteral((L), DI_LUA_REGISTRY_SCRIPT_OBJECT_KEY);            \
+		lua_rawget((L), LUA_REGISTRYINDEX);                                 \
+		(s) = lua_touserdata((L), -1);                                      \
+		lua_pop(L, 1);                                                      \
+	} while (0)
 
-#define di_lua_unset_env(L, s) \
-	lua_pushliteral((L), DI_LUA_REGISTRY_SCRIPT_OBJECT_KEY); \
-	lua_pushnil((L)); \
-	lua_rawset((L), LUA_REGISTRYINDEX);
+#define di_lua_xchg_env(L, s)                                                       \
+	do {                                                                        \
+		void *tmp;                                                          \
+		di_lua_get_env(L, tmp);                                             \
+		lua_pushliteral((L), DI_LUA_REGISTRY_SCRIPT_OBJECT_KEY);            \
+		lua_pushlightuserdata((L), (s));                                    \
+		lua_rawset((L), LUA_REGISTRYINDEX);                                 \
+		s = tmp;                                                            \
+	} while (0)
 
 struct di_lua_module {
 	struct di_module;
 	lua_State *L;
-	struct di_object *log;
-	struct di_lua_object *ldi;
+	struct di_listener *shutdown_listener;
 
 	struct list_head scripts;
+	struct list_head ldi;
 };
 
 struct di_lua_listener {
 	struct di_listener *l;
 	struct di_object *o;
 	char *signame;
+	int fnref;
+	struct di_lua_script *s;
 	struct list_head sibling;
 };
 
@@ -62,8 +79,7 @@ struct di_lua_script {
 
 struct di_lua_listener_data {
 	lua_State *L;
-	struct di_lua_script *s;
-	int r;
+	struct di_lua_listener *ll;
 };
 
 static int di_lua_pushany(lua_State *L, di_type_t t, void *d);
@@ -77,18 +93,20 @@ static int di_lua_errfunc(lua_State *L) {
 	lua_pushliteral(L, DI_LUA_REGISTRY_SCRIPT_OBJECT_KEY);
 	lua_rawget(L, LUA_REGISTRYINDEX);
 	struct di_lua_script *o = lua_touserdata(L, -1);
+	di_getm(o->m->di, log);
 
 	if (!luaL_dostring(L, "return debug.traceback(\"error while running "
 	                      "function!\", 3)")) {
 		auto trace = lua_tostring(L, -1);
-		di_log_va(o->m->log, DI_LOG_ERROR,
-		          "Failed to run lua script %s: %s\n%s\n", o->path, err, trace);
+		di_log_va(logm, DI_LOG_ERROR,
+		          "Failed to run lua script %s: %s\n%s\n", o->path, err,
+		          trace);
 	} else {
 		auto err2 = luaL_tolstring(L, -1, NULL);
-		di_log_va(o->m->log, DI_LOG_ERROR,
-		          "Failed to run lua script %s: %s\n", o->path, err);
-		di_log_va(o->m->log, DI_LOG_ERROR,
-		          "Failed to generate stack trace %s\n", err2);
+		di_log_va(logm, DI_LOG_ERROR, "Failed to run lua script %s: %s\n",
+		          o->path, err);
+		di_log_va(logm, DI_LOG_ERROR, "Failed to generate stack trace %s\n",
+		          err2);
 	}
 	return 1;
 }
@@ -96,13 +114,17 @@ static int di_lua_errfunc(lua_State *L) {
 static inline void _remove_listener(lua_State *L, struct di_lua_listener *ll) {
 	struct di_lua_listener_data *ud =
 	    di_remove_listener(ll->o, ll->signame, ll->l);
+
+	struct di_lua_script *s = ll->s;
+
 	list_del(&ll->sibling);
-	luaL_unref(L, LUA_REGISTRYINDEX, ud->r);
+	luaL_unref(L, LUA_REGISTRYINDEX, ll->fnref);
 	free(ll->signame);
 	free(ll);
 
-	di_unref_object((void *)ud->s);
-	free(ud);
+	if (!IS_ERR_OR_NULL(ud))
+		free(ud);
+	di_unref_object((void *)s);
 }
 
 static void di_lua_clear_listener(struct di_lua_script *s) {
@@ -115,9 +137,9 @@ static void di_lua_clear_listener(struct di_lua_script *s) {
 static void di_lua_free_script(struct di_lua_script *s) {
 	// fprintf(stderr, "free lua script %p, %s\n", s->m ,s->path);
 	di_lua_clear_listener(s);
-	//assert(list_empty(&s->objects));
+	// assert(list_empty(&s->objects));
 	struct di_lua_object *lo, *nlo;
-	int cnt = 0;
+	// int cnt = 0;
 	list_for_each_entry_safe(lo, nlo, &s->objects, sibling) {
 		di_unref_object(lo->o);
 		list_del(&lo->sibling);
@@ -153,11 +175,15 @@ static struct di_object *di_lua_load_script(struct di_object *obj, const char *p
 	s->m = m;
 	list_add(&s->sibling, &m->scripts);
 
+	di_getm(m->di, log);
 	lua_pushcfunction(m->L, di_lua_errfunc);
+
+	INIT_LIST_HEAD(&s->listeners);
+	INIT_LIST_HEAD(&s->objects);
 
 	if (luaL_loadfile(m->L, path)) {
 		const char *err = lua_tostring(m->L, -1);
-		di_log_va(m->log, DI_LOG_ERROR, "Failed to load lua script %s: %s\n",
+		di_log_va(logm, DI_LOG_ERROR, "Failed to load lua script %s: %s\n",
 		          path, err);
 		di_unref_object((void *)s);
 		lua_pop(m->L, 2);
@@ -165,13 +191,13 @@ static struct di_object *di_lua_load_script(struct di_object *obj, const char *p
 	}
 
 	s->path = strdup(path);
-	INIT_LIST_HEAD(&s->listeners);
-	INIT_LIST_HEAD(&s->objects);
 
 	int ret;
-	di_lua_set_env(m->L, s);
+	// load_script might be called by lua script,
+	// so preserve the current set script object.
+	di_lua_xchg_env(m->L, s);
 	ret = lua_pcall(m->L, 0, 0, -2);
-	di_lua_unset_env(m->L, s);
+	di_lua_xchg_env(m->L, s);
 
 	if (ret != 0) {
 		// destroy the object to remove any listener that
@@ -198,10 +224,10 @@ di_lua_table_to_array(lua_State *L, int index, int nelem, struct di_array *ret) 
 	ret->elem_type = t;
 	lua_pop(L, 1);
 
-	size_t sz = di_sizeof_type(ret->elem_type);
+	size_t sz = di_sizeof_type(t);
 	assert(sz != 0);
 	ret->arr = calloc(nelem, sz);
-	memcpy(ret->arr, ret, sz);
+	memcpy(ret->arr, retd, sz);
 	free(retd);
 
 	for (int i = 2; i <= nelem; i++) {
@@ -210,9 +236,10 @@ di_lua_table_to_array(lua_State *L, int index, int nelem, struct di_array *ret) 
 
 		retd = di_lua_type_to_di(L, -1, &t);
 		lua_pop(L, 1);
-		memcpy(ret->arr + sz * (i - 1), ret, sz);
+		memcpy(ret->arr + sz * (i - 1), retd, sz);
 		free(retd);
 	}
+	ret->length = nelem;
 	return 0;
 }
 
@@ -261,7 +288,7 @@ static int di_lua_checkarray(lua_State *L, int index) {
 
 	di_type_t t0;
 	void *ret = di_lua_type_to_di(L, -1, &t0);
-	free(ret);
+	di_free_value(t0, ret);
 	// Pop 2 value, top of stack is the key
 	lua_pop(L, 2);
 
@@ -276,7 +303,7 @@ static int di_lua_checkarray(lua_State *L, int index) {
 
 		di_type_t t;
 		ret = di_lua_type_to_di(L, -1, &t);
-		free(ret);
+		di_free_value(t, ret);
 		// pop 2 value
 		lua_pop(L, 2);
 		if (t != t0) {
@@ -303,7 +330,7 @@ static void *di_lua_type_to_di(lua_State *L, int i, di_type_t *t) {
 		*(t2 *)__ret = gfn(L, i);                                           \
 		return __ret;                                                       \
 	} while (0)
-
+#define tostringdup(L, i) strdup(lua_tostring(L, i))
 	int nelem;
 	void *ret;
 	switch (lua_type(L, i)) {
@@ -315,7 +342,7 @@ static void *di_lua_type_to_di(lua_State *L, int i, di_type_t *t) {
 			ret_arg(i, DI_TYPE_INT, int64_t, lua_tointeger);
 		else
 			ret_arg(i, DI_TYPE_FLOAT, double, lua_tonumber);
-	case LUA_TSTRING: ret_arg(i, DI_TYPE_STRING, const char *, lua_tostring);
+	case LUA_TSTRING: ret_arg(i, DI_TYPE_STRING, const char *, tostringdup);
 	case LUA_TUSERDATA:
 		if (!di_lua_isobject(L, i))
 			goto type_error;
@@ -332,6 +359,7 @@ static void *di_lua_type_to_di(lua_State *L, int i, di_type_t *t) {
 	default: *t = DI_LAST_TYPE; return NULL;
 	}
 #undef ret_arg
+#undef tostringdup
 }
 
 static int _di_lua_method_handler(lua_State *L, struct di_method *m) {
@@ -356,19 +384,20 @@ static int _di_lua_method_handler(lua_State *L, struct di_method *m) {
 
 	if (nret == 0) {
 		nret = di_lua_pushany(L, rtype, ret);
-		free(ret);
+		di_free_value(rtype, ret);
 	} else
 		argi = -1;
 
 err:
 	for (int i = 0; i < nargs; i++)
-		free(args[i]);
+		di_free_value(atypes[i], args[i]);
 	free(args);
 	free(atypes);
 	if (argi > 0)
 		return luaL_argerror(L, argi, "Unhandled lua type");
 	else if (argi != 0)
-		return luaL_error(L, "Failed to call function %s %d %s", m->name, argi, strerror(-nret));
+		return luaL_error(L, "Failed to call function %s %d %s", m->name,
+		                  argi, strerror(-nret));
 	else
 		return nret;
 }
@@ -386,29 +415,23 @@ static void di_lua_general_callback(struct di_signal *sig, void **data) {
 
 	// ud might be freed during pcall
 	lua_State *L = ud->L;
-	struct di_lua_script *s = ud->s;
+	struct di_lua_script *s = ud->ll->s;
+	// Prevent script object from being freed during pcall
+	di_ref_object((void *)s);
 
 	lua_pushcfunction(L, di_lua_errfunc);
 
-	di_lua_set_env(L, s);
+	di_lua_xchg_env(L, s);
 
 	// Get the function
-	lua_rawgeti(L, LUA_REGISTRYINDEX, ud->r);
+	lua_rawgeti(L, LUA_REGISTRYINDEX, ud->ll->fnref);
 	// Push arguments
-	for (unsigned int i = 1; i <= nargs; i++) {
+	for (unsigned int i = 1; i <= nargs; i++)
 		di_lua_pushany(L, ts[i - 1], data[i]);
-		if (ts[i - 1] == DI_TYPE_OBJECT) {
-			// hold reference
-			struct di_object *o = *(void **)data[i];
-			di_ref_object(o);
-		}
-	}
 
-	// Prevent script object from being freed during pcall
-	di_ref_object((void *)s);
-	lua_pcall(L, nargs, 0, -nargs-2);
+	lua_pcall(L, nargs, 0, -nargs - 2);
 
-	di_lua_unset_env(L, s);
+	di_lua_xchg_env(L, s);
 
 	di_unref_object((void *)s);
 }
@@ -422,24 +445,23 @@ static int di_lua_add_listener(lua_State *L) {
 	if (lua_type(L, -1) != LUA_TFUNCTION)
 		return luaL_argerror(L, 2, "not a function");
 
-	auto ud = tmalloc(struct di_lua_listener_data, 1);
-	ud->r = luaL_ref(L, LUA_REGISTRYINDEX);
-	ud->L = L;
+	auto ll = tmalloc(struct di_lua_listener, 1);
+	ll->signame = strdup(signame);
+	ll->o = o;
+	ll->fnref = luaL_ref(L, LUA_REGISTRYINDEX);
 
 	lua_pushliteral(L, DI_LUA_REGISTRY_SCRIPT_OBJECT_KEY);
 	lua_rawget(L, LUA_REGISTRYINDEX);
-	ud->s = lua_touserdata(L, -1);
+	ll->s = lua_touserdata(L, -1);
 
-	struct di_listener *l =
-	    di_add_untyped_listener(o, signame, ud, di_lua_general_callback);
+	auto ud = tmalloc(struct di_lua_listener_data, 1);
+	ud->L = L;
+	ud->ll = ll;
+	ll->l = di_add_untyped_listener(o, signame, ud, di_lua_general_callback);
 
-	auto ll = tmalloc(struct di_lua_listener, 1);
-	ll->l = l;
-	ll->signame = strdup(signame);
-	ll->o = o;
-	list_add(&ll->sibling, &ud->s->listeners);
+	list_add(&ll->sibling, &ll->s->listeners);
 
-	di_ref_object((void *)ud->s);
+	di_ref_object((void *)ll->s);
 
 	lua_pushlightuserdata(L, ll);
 
@@ -462,7 +484,7 @@ static int di_lua_call_method(lua_State *L) {
 	const char *name = luaL_checklstring(L, 1, NULL);
 	struct di_method *m = di_find_method(o, name);
 	if (!m)
-		return 0;
+		return luaL_error(L, "method %s not found", name);
 
 	lua_remove(L, 1);
 	return _di_lua_method_handler(L, m);
@@ -497,8 +519,9 @@ static void di_lua_create_metatable_for_object(lua_State *L, const luaL_Reg *reg
 	lua_setmetatable(L, -2);
 }
 
-static struct di_lua_object *di_lua_pushobject(lua_State *L, struct di_object *o, const luaL_Reg *reg) {
-	struct di_lua_script *s;
+static struct di_lua_object *
+di_lua_pushobject(lua_State *L, struct di_object *o, const luaL_Reg *reg) {
+	// struct di_lua_script *s;
 	void **ptr;
 	struct di_lua_object *lo;
 	ptr = lua_newuserdata(L, sizeof(void *));
@@ -506,16 +529,18 @@ static struct di_lua_object *di_lua_pushobject(lua_State *L, struct di_object *o
 	lo = tmalloc(struct di_lua_object, 1);
 	assert(o);
 	lo->o = o;
+	di_ref_object(o);
 
 	*ptr = lo;
 	di_lua_create_metatable_for_object(L, reg);
 	return lo;
 }
 
+// d is not freed by this function
 static int di_lua_pushany(lua_State *L, di_type_t t, void *d) {
 	lua_Integer i;
 	lua_Number n;
-	void **ptr;
+	// void **ptr;
 	struct di_lua_object *lo;
 	struct di_lua_script *s;
 	struct di_array *arr;
@@ -537,14 +562,16 @@ static int di_lua_pushany(lua_State *L, di_type_t t, void *d) {
 		lo = di_lua_pushobject(L, *(void **)d, di_lua_methods);
 		list_add(&lo->sibling, &s->objects);
 		return 1;
-	case DI_TYPE_STRING: lua_pushstring(L, *(const char **)d); return 1;
+	case DI_TYPE_STRING:
+		lua_pushstring(L, *(const char **)d);
+		return 1;
 	case DI_TYPE_ARRAY:
 		arr = (struct di_array *)d;
 		lua_createtable(L, arr->length, 0);
 		for (int i = 0; i < arr->length; i++) {
 			int step = di_sizeof_type(arr->elem_type);
-			di_lua_pushany(L, arr->elem_type, arr->arr+step*i);
-			lua_rawseti(L, -2, i+1);
+			di_lua_pushany(L, arr->elem_type, arr->arr + step * i);
+			lua_rawseti(L, -2, i + 1);
 		}
 		return 1;
 	case DI_TYPE_CALLABLE:
@@ -561,40 +588,13 @@ pushnumber:
 	return 1;
 }
 
-static int di_lua_module_getter(lua_State *L) {
-	if (lua_gettop(L) != 2)
-		return luaL_error(L, "wrong number of arguments to __index");
-
-	const char *key = luaL_checkstring(L, 2);
-	struct deai *di = (void *)di_lua_checkobject(L, 1);
-
-	struct di_module *dm = di_find_module(di, key);
-	if (!dm)
-		return luaL_error(L, "no such module: %s", key);
-
-	struct di_lua_script *s;
-	lua_pushliteral(L, DI_LUA_REGISTRY_SCRIPT_OBJECT_KEY);
-	lua_rawget(L, LUA_REGISTRYINDEX);
-	s = lua_touserdata(L, -1);
-	lua_pop(L, 1);
-
-	struct di_lua_object *lo = di_lua_pushobject(L, (void *)dm, di_lua_methods);
-	list_add(&lo->sibling, &s->objects);
-
-	return 1;
-}
-
-const luaL_Reg di_lua_di_methods[] = {
-    {"__index", di_lua_module_getter}, {0, 0},
-};
-
 int di_lua_emit_signal(lua_State *L) {
 	struct di_object *o = lua_touserdata(L, lua_upvalueindex(1));
 	const char *signame = luaL_checkstring(L, 1);
 	int top = lua_gettop(L);
 
-	void **args = alloca(sizeof(void *) * (top - 1));
-	di_type_t *atypes = alloca(sizeof(di_type_t) * (top - 1));
+	void **args = tmalloc(void *, top-1);
+	di_type_t *atypes = tmalloc(di_type_t, top - 1);
 
 	for (int i = 2; i <= top; i++)
 		args[i - 2] = di_lua_type_to_di(L, i, &atypes[i - 2]);
@@ -602,7 +602,9 @@ int di_lua_emit_signal(lua_State *L) {
 	int ret = di_emit_signal(o, signame, args);
 
 	for (int i = 0; i < top - 1; i++)
-		free(args[i]);
+		di_free_value(atypes[i], args[i]);
+	free(atypes);
+	free(args);
 
 	if (ret != 0)
 		return luaL_error(L, "Failed to emit signal %s", signame);
@@ -629,7 +631,7 @@ static int di_lua_getter(lua_State *L) {
 		return 1;
 	} else if (strcmp(key, "call") == 0) {
 		lua_pushlightuserdata(L, ud);
-		lua_pushcclosure(L, di_lua_add_listener, 1);
+		lua_pushcclosure(L, di_lua_call_method, 1);
 		return 1;
 	} else if (strcmp(key, "emit") == 0) {
 		lua_pushlightuserdata(L, ud);
@@ -643,27 +645,16 @@ static int di_lua_getter(lua_State *L) {
 	struct di_method *m = di_find_method(ud, key);
 	if (!m) {
 		// look for getter
-		const size_t bsz = strlen(key) + 7;
-		char *buf = malloc(bsz);
-		snprintf(buf, bsz, "__get_%s", key);
-		m = di_find_method(ud, buf);
-		free(buf);
-
-		if (!m)
+		di_type_t rt;
+		void *ret;
+		int rc = di_getv(ud, key, &rt, &ret);
+		if (rc != 0)
 			return luaL_error(L, "neither a method or a property with "
 			                     "name %s can be found",
 			                  key);
-
-		di_type_t rt;
-		void *ret;
-		int status = di_call_callable_v((void *)m, &rt, &ret, DI_LAST_TYPE);
-		if (status != 0) {
-			lua_pushnil(L);
-			return 1;
-		}
-		status = di_lua_pushany(L, rt, ret);
-		free(ret);
-		return status;
+		rc = di_lua_pushany(L, rt, ret);
+		di_free_value(rt, ret);
+		return rc;
 	}
 
 	lua_pushlightuserdata(L, m);
@@ -701,25 +692,25 @@ static int di_lua_setter(lua_State *L) {
 	return luaL_error(L, "property %s doesn't exist", key);
 }
 
-static void di_lua_dtor(struct di_lua_module *obj) {
-	lua_close(obj->L);
-	di_unref_object((void *)obj->log);
-
+static void di_lua_shutdown(struct di_listener_data *ld) {
+	struct di_lua_module *obj = ld->user_data;
 	struct di_lua_script *s, *ns;
 	list_for_each_entry_safe(s, ns, &obj->scripts, sibling) {
+		// Holding ref to s because lua_script_dtor might
+		// cause it to drop to 0
 		di_ref_object((void *)s);
 		di_destroy_object((void *)s);
 		di_unref_object((void *)s);
 	}
 }
 
-PUBLIC int di_plugin_init(struct deai *di) {
-	struct di_object *log = (void *)di_find_module(di, "log");
-	if (!log)
-		return -1;
+static void di_lua_dtor(struct di_lua_module *obj) {
+	lua_close(obj->L);
+	di_remove_listener((void *)obj->di, "shutdown", obj->shutdown_listener);
+}
 
+PUBLIC int di_plugin_init(struct deai *di) {
 	auto m = di_new_module_with_type("lua", struct di_lua_module);
-	m->log = log;
 
 	auto fn = di_create_typed_method((di_fn_t)di_lua_load_script, "load_script",
 	                                 DI_TYPE_OBJECT, 1, DI_TYPE_STRING);
@@ -738,13 +729,21 @@ PUBLIC int di_plugin_init(struct deai *di) {
 	m->L = luaL_newstate();
 	luaL_openlibs(m->L);
 
-	struct di_lua_object *lo = di_lua_pushobject(m->L, (void *)di, di_lua_di_methods);
+	struct di_lua_object *lo =
+	    di_lua_pushobject(m->L, (void *)di, di_lua_methods);
 	lua_setglobal(m->L, "di");
-	m->ldi = lo;
+
+	// make di_lua_gc happy
+	INIT_LIST_HEAD(&m->ldi);
+	list_add(&lo->sibling, &m->ldi);
 
 	INIT_LIST_HEAD(&m->scripts);
 
 	di_register_module(di, (void *)m);
+
+	m->shutdown_listener = di_add_typed_listener((void *)di, "shutdown", m,
+	                                             (di_fn_t)di_lua_shutdown);
+	m->di = di;
 
 out:
 	free(fn);

@@ -1,3 +1,9 @@
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
+
+/* Copyright (c) 2017, Yuxuan Shui <yshuiv7@gmail.com> */
+
 #pragma once
 
 // XXX merge into deai.h
@@ -104,6 +110,10 @@ int di_emit_signal_v(struct di_object *obj, const char *name, ...);
 int di_register_signal(struct di_object *, const char *name, int nargs, ...);
 const di_type_t *di_get_signal_arg_types(struct di_signal *sig, unsigned int *nargs);
 struct di_object *di_new_error(const char *errmsg);
+void di_free_array(struct di_array);
+void di_free_value(di_type_t, void *);
+
+size_t di_min_return_size(size_t);
 
 static inline size_t di_sizeof_type(di_type_t t) {
 	switch (t) {
@@ -146,7 +156,9 @@ static inline size_t di_sizeof_type(di_type_t t) {
 #define di_set_return(v)                                                            \
 	do {                                                                        \
 		*rtype = di_typeof(v);                                              \
-		typeof(v) *retv = calloc(1, sizeof(v));                             \
+		typeof(v) *retv;                                                    \
+		if (!*ret)                                                          \
+			*ret = calloc(1, di_min_return_size(sizeof(v)));            \
+		retv = *(typeof(v) **)ret;                                          \
 		*retv = v;                                                          \
-		*ret = retv;                                                        \
 	} while (0);
