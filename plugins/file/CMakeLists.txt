@@ -1,6 +1,5 @@
 set(SRC
 file.c
-inotify.c
 )
 
 add_library(di_file SHARED ${SRC})
