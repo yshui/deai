@@ -16,7 +16,6 @@
 #define PUBLIC __attribute__((visibility("default")))
 #define cleanup(func) __attribute__((cleanup(func)))
 
-const static struct di_object nil;
 const void *null_ptr = NULL;
 
 struct di_object_internal {
@@ -379,14 +378,6 @@ static inline int integer_conversion(di_type_t inty, const void *inp,
 	return 0;
 }
 
-PUBLIC struct di_object *di_get_nil(void) {
-	return (void *)&nil;
-}
-
-PUBLIC bool di_is_nil(struct di_object *o) {
-	return o == &nil;
-}
-
 static int
 di_typed_trampoline(di_type_t *rt, void **ret, unsigned int nargs,
                     const di_type_t *ats, const void *const *args, void *ud) {
@@ -436,7 +427,7 @@ di_typed_trampoline(di_type_t *rt, void **ret, unsigned int nargs,
 		} else if (ats[i] == DI_TYPE_NIL) {
 			struct di_array *arr;
 			switch (fn->atypes[i + 1]) {
-			case DI_TYPE_OBJECT: xargs[i + 1] = &nil; break;
+			case DI_TYPE_OBJECT: xargs[i + 1] = &null_ptr; break;
 			case DI_TYPE_STRING:
 			case DI_TYPE_POINTER: xargs[i + 1] = &null_ptr; break;
 			case DI_TYPE_ARRAY:
@@ -463,8 +454,7 @@ di_typed_trampoline(di_type_t *rt, void **ret, unsigned int nargs,
 
 out:
 	for (int i = 0; i < nargs; i++)
-		if (xargs[i + 1] != args[i] && xargs[i + 1] != &nil &&
-		    xargs[i + 1] != &null_ptr)
+		if (xargs[i + 1] != args[i] && xargs[i + 1] != &null_ptr)
 			free((void *)xargs[i + 1]);
 	free(xargs);
 
@@ -772,11 +762,14 @@ PUBLIC int di_emit_signal_v(struct di_object *obj, const char *name, ...) {
 	return _di_emit_signal(obj, evd, tmp_data);
 }
 
+#define chknull(v) if ((*(void **)(v)) != NULL)
 #define free_switch(t, v)                                                           \
 	switch (t) {                                                                \
 	case DI_TYPE_ARRAY: di_free_array(*(struct di_array *)(v)); break;          \
-	case DI_TYPE_STRING: free(*(char **)(v)); break;                            \
-	case DI_TYPE_OBJECT: di_unref_object(*(struct di_object **)(v)); break;     \
+	case DI_TYPE_STRING: chknull(v) free(*(char **)(v)); break;                 \
+	case DI_TYPE_OBJECT:                                                        \
+		chknull(v) di_unref_object(*(struct di_object **)(v));              \
+		break;                                                              \
 	default: break;                                                             \
 	}
 

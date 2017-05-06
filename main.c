@@ -22,6 +22,7 @@
 #include "di_internal.h"
 #include "event_internal.h"
 #include "log_internal.h"
+#include "env.h"
 #include "uthash.h"
 #include "utils.h"
 
@@ -112,11 +113,6 @@ static void di_sighandler(struct ev_loop *l, ev_signal *w, int revents) {
 	ev_break(l, EVBREAK_ALL);
 }
 
-// TODO:
-// deai:
-//  setenv, getenv
-// log:
-//  set_log_level, set_log_target
 int main(int argc, const char *const *argv) {
 	struct di_module_internal *pm;
 	struct deai *p = di_new_object_with_type(struct deai);
@@ -130,7 +126,8 @@ int main(int argc, const char *const *argv) {
 
 	// (1) Initialize builtin modules first
 	di_init_event_module(p);
-	di_init_log(p, 10);
+	di_init_log(p);
+	di_init_env(p);
 
 	if (argc < 2) {
 		printf("Usage: %s <module>.<method> <arg1> <arg2> ...\n", argv[0]);

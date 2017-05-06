@@ -38,6 +38,7 @@ set(SRC
 	event.c
 	log.c
 	helper.c
+	env.c
 )
 
 add_executable(deai ${SRC})

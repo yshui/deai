@@ -544,9 +544,17 @@ di_lua_pushobject(lua_State *L, struct di_object *o, const luaL_Reg *reg) {
 
 // d is not freed by this function
 static int di_lua_pushany(lua_State *L, di_type_t t, void *d) {
+	// Check for nil
+	if (t == DI_TYPE_OBJECT || t == DI_TYPE_STRING || t == DI_TYPE_POINTER) {
+		void *ptr = *(void **)d;
+		if (ptr == NULL) {
+			lua_pushnil(L);
+			return 1;
+		}
+	}
+
 	lua_Integer i;
 	lua_Number n;
-	// void **ptr;
 	struct di_lua_object *lo;
 	struct di_lua_script *s;
 	struct di_array *arr;
@@ -681,21 +689,16 @@ static int di_lua_setter(lua_State *L) {
 
 	struct di_object *ud = di_lua_checkobject(L, 1);
 	const char *key = luaL_checkstring(L, 2);
+	di_type_t vt;
 
-	const size_t bsz = strlen(key) + 7;
-	char *buf = malloc(bsz);
-	snprintf(buf, bsz, "__set_%s", key);
-	struct di_method *m = di_find_method(ud, buf);
-	free(buf);
+	void *val = di_lua_type_to_di(L, 3, &vt);
 
-	if (m) {
-		// remove key and table
-		lua_remove(L, 1);
-		lua_remove(L, 1);
-		return _di_lua_method_handler(L, m);
-	}
+	int ret = di_setv(ud, key, vt, val);
 
-	return luaL_error(L, "property %s doesn't exist", key);
+	di_free_value(vt, val);
+	if (ret != 0)
+		return luaL_error(L, "property %s can't be set", key);
+	return 0;
 }
 
 static void di_lua_shutdown(struct di_listener_data *ld) {

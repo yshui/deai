@@ -13,6 +13,9 @@
 #include "utils.h"
 
 PUBLIC int di_setv(struct di_object *o, const char *prop, di_type_t type, void *val) {
+	if (!prop)
+		return -EINVAL;
+
 	char *buf;
 	void *ret;
 	di_type_t rtype;
@@ -42,6 +45,9 @@ PUBLIC int di_setv(struct di_object *o, const char *prop, di_type_t type, void *
 }
 
 PUBLIC int di_getv(struct di_object *o, const char *prop, di_type_t *type, void **ret) {
+	if (!prop)
+		return -EINVAL;
+
 	char *buf;
 	asprintf(&buf, "__get_%s", prop);
 
