@@ -79,7 +79,7 @@ static void di_free_error(struct di_object *o) {
 
 static const char *di_get_error_msg(struct di_object *o) {
 	struct di_error *e = (void *)o;
-	return e->msg;
+	return strdup(e->msg);
 }
 
 PUBLIC struct di_object *di_new_error(const char *errmsg) {
@@ -91,7 +91,7 @@ PUBLIC struct di_object *di_new_error(const char *errmsg) {
 	di_register_typed_method((void *)err, dtor);
 
 	struct di_typed_method *errm = di_create_typed_method(
-	    (void *)di_get_error_msg, "__error_msg", DI_TYPE_STRING, 0);
+	    (void *)di_get_error_msg, "__get_error_msg", DI_TYPE_STRING, 0);
 	di_register_typed_method((void *)err, errm);
 	return (void *)err;
 }

@@ -150,21 +150,26 @@ static void di_xorg_set_resource(struct di_xorg_connection *xc, const char *rdb)
 	(void)e;
 }
 
-static struct di_object *di_xorg_connect(struct di_xorg *x) {
+static struct di_object *di_xorg_connect_to(struct di_xorg *x, const char *displayname) {
+	int scrn;
+	auto c = xcb_connect(displayname, &scrn);
+	if (xcb_connection_has_error(c)) {
+		xcb_disconnect(c);
+		return di_new_error("Cannot connect to the display");
+	}
+
+	di_getm(x->di, event);
+
 	struct di_xorg_connection *dc =
 	    di_new_object_with_type(struct di_xorg_connection);
-	dc->c = xcb_connect(NULL, &dc->dflt_scrn);
+	dc->c = c;
+	dc->dflt_scrn = scrn;
 
-	struct di_module *evm = di_find_module(x->di, "event");
-	if (!evm)
-		return NULL;
-
-	di_call(evm, "fdevent", dc->xcb_fd, xcb_get_file_descriptor(dc->c), IOEV_READ);
+	di_call(eventm, "fdevent", dc->xcb_fd, xcb_get_file_descriptor(dc->c), IOEV_READ);
 	dc->xcb_fdlistener =
 	    di_add_typed_listener(dc->xcb_fd, "read", dc, (di_fn_t)di_xorg_ioev);
 
 	di_call0(dc->xcb_fd, "start");
-	di_unref_object((void *)evm);
 
 	di_register_typed_method(
 	    (void *)dc, di_create_typed_method((di_fn_t)di_xorg_get_xinput,
@@ -185,6 +190,10 @@ static struct di_object *di_xorg_connect(struct di_xorg *x) {
 	dc->x = x;
 	return (void *)dc;
 }
+
+static struct di_object *di_xorg_connect(struct di_xorg *x) {
+	return di_xorg_connect_to(x, NULL);
+}
 PUBLIC int di_plugin_init(struct deai *di) {
 	auto x = di_new_module_with_type("xorg", struct di_xorg);
 	x->di = di;
@@ -192,6 +201,10 @@ PUBLIC int di_plugin_init(struct deai *di) {
 	di_register_typed_method(
 	    (void *)x, di_create_typed_method((di_fn_t)di_xorg_connect, "connect",
 	                                      DI_TYPE_OBJECT, 0));
+
+	di_register_typed_method(
+	    (void *)x, di_create_typed_method((di_fn_t)di_xorg_connect_to, "connect_to",
+	                                      DI_TYPE_OBJECT, 1, DI_TYPE_STRING));
 
 	di_register_module(di, (void *)x);
 	return 0;

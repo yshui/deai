@@ -648,10 +648,10 @@ static int di_lua_getter(lua_State *L) {
 		di_type_t rt;
 		void *ret;
 		int rc = di_getv(ud, key, &rt, &ret);
-		if (rc != 0)
-			return luaL_error(L, "neither a method or a property with "
-			                     "name %s can be found",
-			                  key);
+		if (rc != 0) {
+			lua_pushnil(L);
+			return 1;
+		}
 		rc = di_lua_pushany(L, rt, ret);
 		di_free_value(rt, ret);
 		return rc;
