@@ -127,17 +127,6 @@ xcb_input_get_device_info(xcb_connection_t *c, xcb_input_device_id_t deviceid,
 	return ret;
 }
 
-static int xcb_intern_atom_checked(xcb_connection_t *c, const char *str,
-                                   xcb_generic_error_t **e) {
-	auto r = xcb_intern_atom_reply(c, xcb_intern_atom(c, 0, strlen(str), str), e);
-	if (r) {
-		auto ret = r->atom;
-		free(r);
-		return ret;
-	}
-	return -1;
-}
-
 static char *di_xorg_xinput_get_device_name(struct di_xorg_xinput_device *dev) {
 	with_cleanup_t(xcb_input_xi_query_device_reply_t) rr;
 	auto info = xcb_input_get_device_info(dev->dc->c, dev->deviceid, &rr);
@@ -173,8 +162,6 @@ const char *possible_types[] = {
 };
 #endif
 
-define_trivial_cleanup_t(xcb_get_atom_name_reply_t);
-
 static char *di_xorg_xinput_get_device_type(struct di_xorg_xinput_device *dev) {
 	with_cleanup_t(xcb_input_list_input_devices_reply_t) r =
 	    xcb_input_list_input_devices_reply(
@@ -185,15 +172,14 @@ static char *di_xorg_xinput_get_device_type(struct di_xorg_xinput_device *dev) {
 		if (di.data->device_id == dev->deviceid)
 			break;
 
-	with_cleanup_t(xcb_get_atom_name_reply_t) ar = xcb_get_atom_name_reply(
-	    dev->dc->c, xcb_get_atom_name(dev->dc->c, di.data->device_type), NULL);
-	if (!ar) {
+	const char *dname = di_xorg_get_atom_name(dev->dc, di.data->device_type);
+	if (!dname) {
 		// fprintf(stderr, "%d\n", di.data->device_type);
 		return strdup("unknown");
 	}
 
-	char *ret =
-	    strndup(xcb_get_atom_name_name(ar), xcb_get_atom_name_name_length(ar));
+	char *ret = strdup(dname);
+
 	for (int i = 0; ret[i]; i++)
 		ret[i] = tolower(ret[i]);
 	return ret;
@@ -204,7 +190,6 @@ static int di_xorg_xinput_get_device_id(struct di_object *o) {
 	return dev->deviceid;
 }
 
-define_trivial_cleanup_t(xcb_intern_atom_reply_t);
 define_trivial_cleanup_t(xcb_input_xi_get_property_reply_t);
 define_trivial_cleanup_t(char);
 define_trivial_cleanup_t(xcb_input_xi_change_property_items_t);
@@ -224,21 +209,20 @@ static int di_xorg_xinput_set_prop(di_type_t *rtype, void **ret, unsigned int na
 		return -EINVAL;
 
 	const char *key = *(const char **)args[0];
-	with_cleanup_t(xcb_intern_atom_reply_t) prop_atom = xcb_intern_atom_reply(
-	    dev->dc->c, xcb_intern_atom(dev->dc->c, 0, strlen(key), key), NULL);
-	if (!prop_atom) {
+	xcb_generic_error_t *e;
+	auto prop_atom = di_xorg_intern_atom(dev->dc, key, &e);
+	if (e) {
 		di_set_return(-EINVAL);
 		return 0;
 	}
 
-	with_cleanup_t(xcb_intern_atom_reply_t) float_atom = xcb_intern_atom_reply(
-	    dev->dc->c, xcb_intern_atom(dev->dc->c, 0, 5, "FLOAT"), NULL);
+	auto float_atom = di_xorg_intern_atom(dev->dc, "FLOAT", &e);
 
 	with_cleanup_t(xcb_input_xi_get_property_reply_t) prop =
 	    xcb_input_xi_get_property_reply(
 	        dev->dc->c,
 	        xcb_input_xi_get_property(dev->dc->c, dev->deviceid, 0,
-	                                  prop_atom->atom, XCB_ATOM_ANY, 0, 0),
+	                                  prop_atom, XCB_ATOM_ANY, 0, 0),
 	        NULL);
 
 	if (prop->type == XCB_ATOM_NONE) {
@@ -254,7 +238,6 @@ static int di_xorg_xinput_set_prop(di_type_t *rtype, void **ret, unsigned int na
 		int64_t i64;
 		float f;
 		const char *str;
-		xcb_intern_atom_reply_t *ir;
 		void *curr = data + step * (i - 1);
 
 		switch (atypes[i]) {
@@ -270,20 +253,18 @@ static int di_xorg_xinput_set_prop(di_type_t *rtype, void **ret, unsigned int na
 			break;
 		case DI_TYPE_FLOAT:
 			f = *(float *)args[i];
-			if (prop->type != float_atom->atom)
+			if (prop->type != float_atom)
 				return -EINVAL;
 			break;
 		case DI_TYPE_STRING:
 			if (prop->type != XCB_ATOM_ATOM)
 				return -EINVAL;
 			str = *(const char **)args[i];
-			ir = xcb_intern_atom_reply(
-			    dev->dc->c,
-			    xcb_intern_atom(dev->dc->c, 0, strlen(str), str), NULL);
-			if (!ir)
-				return -EINVAL;
-			i64 = ir->atom;
-			free(ir);
+			i64 = di_xorg_intern_atom(dev->dc, str, &e);
+			if (e) {
+				di_set_return(-EINVAL);
+				return 0;
+			}
 			break;
 		default: return -EINVAL;
 		}
@@ -305,7 +286,7 @@ static int di_xorg_xinput_set_prop(di_type_t *rtype, void **ret, unsigned int na
 				item[i - 1].data32 = curr;
 				break;
 			}
-		} else if (prop->type == float_atom->atom) {
+		} else if (prop->type == float_atom) {
 			if (prop->format == 32)
 				return -EINVAL;
 			assert(atypes[i] != DI_TYPE_STRING);
@@ -323,7 +304,7 @@ static int di_xorg_xinput_set_prop(di_type_t *rtype, void **ret, unsigned int na
 	    dev->dc->c,
 	    xcb_input_xi_change_property_aux_checked(
 	        dev->dc->c, dev->deviceid, XCB_PROP_MODE_REPLACE, prop->format,
-	        prop_atom->atom, prop->type, nargs - 1, item));
+	        prop_atom, prop->type, nargs - 1, item));
 
 	if (err)
 		di_set_return(-EBADE);

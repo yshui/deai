@@ -12,6 +12,8 @@ struct di_xorg {
 	struct di_module;
 };
 
+struct di_atom_entry;
+
 struct di_xorg_connection {
 	struct di_object;
 	struct di_xorg *x;
@@ -21,8 +23,7 @@ struct di_xorg_connection {
 	struct di_listener *xcb_fdlistener;
 	struct di_xorg_ext *xi;
 
-	// TODO
-	// atom cache
+	struct di_atom_entry *a_byatom, *a_byname;
 };
 
 struct di_xorg_ext {
@@ -65,3 +66,5 @@ static inline bool xorg_has_extension(xcb_connection_t *c, const char *name) {
 }
 
 void di_xorg_free_sub(struct di_xorg_ext *x);
+const char *di_xorg_get_atom_name(struct di_xorg_connection *xc, xcb_atom_t atom);
+xcb_atom_t di_xorg_intern_atom(struct di_xorg_connection *xc, const char *name, xcb_generic_error_t **e);

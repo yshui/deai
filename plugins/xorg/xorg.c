@@ -18,6 +18,13 @@
 #include "xinput.h"
 #include "xorg.h"
 
+struct di_atom_entry {
+	char *name;
+	xcb_atom_t atom;
+
+	UT_hash_handle hh, hh2;
+};
+
 static void di_xorg_ioev(struct di_listener_data *l) {
 	struct di_xorg_connection *dc = (void *)l->user_data;
 	//di_get_log(dc->x->di);
@@ -37,6 +44,50 @@ static void di_xorg_ioev(struct di_listener_data *l) {
 	}
 }
 
+const char *di_xorg_get_atom_name(struct di_xorg_connection *xc, xcb_atom_t atom) {
+	struct di_atom_entry *ae = NULL;
+	HASH_FIND(hh, xc->a_byatom, &atom, sizeof(atom), ae);
+	if (ae)
+		return ae->name;
+
+	auto r = xcb_get_atom_name_reply(xc->c, xcb_get_atom_name(xc->c, atom), NULL);
+	if (!r)
+		return NULL;
+
+	ae = tmalloc(struct di_atom_entry, 1);
+	ae->name = strndup(xcb_get_atom_name_name(r), xcb_get_atom_name_name_length(r));
+	ae->atom = atom;
+	free(r);
+
+	HASH_ADD(hh, xc->a_byatom, atom, sizeof(xcb_atom_t), ae);
+	HASH_ADD_KEYPTR(hh2, xc->a_byname, ae->name, strlen(ae->name), ae);
+
+	return ae->name;
+}
+
+xcb_atom_t di_xorg_intern_atom(struct di_xorg_connection *xc, const char *name, xcb_generic_error_t **e) {
+	struct di_atom_entry *ae = NULL;
+	*e = NULL;
+
+	HASH_FIND(hh2, xc->a_byname, name, strlen(name), ae);
+	if (ae)
+		return ae->atom;
+
+	auto r = xcb_intern_atom_reply(xc->c, xcb_intern_atom(xc->c, 0, strlen(name), name), e);
+	if (!r)
+		return 0;
+
+	ae = tmalloc(struct di_atom_entry, 1);
+	ae->atom = r->atom;
+	ae->name = strdup(name);
+	free(r);
+
+	HASH_ADD(hh, xc->a_byatom, atom, sizeof(xcb_atom_t), ae);
+	HASH_ADD_KEYPTR(hh2, xc->a_byname, ae->name, strlen(ae->name), ae);
+
+	return ae->atom;
+}
+
 void di_xorg_free_sub(struct di_xorg_ext *x) {
 	di_unref_object((void *)x->dc);
 	*(x->e) = NULL;
@@ -49,6 +100,14 @@ static void di_xorg_free_connection(struct di_xorg_connection *xc) {
 	di_unref_object(xc->xcb_fd);
 	xc->x = NULL;
 	xcb_disconnect(xc->c);
+
+	struct di_atom_entry *ae, *tae;
+	HASH_ITER(hh, xc->a_byatom, ae, tae) {
+		HASH_DEL(xc->a_byatom, ae);
+		HASH_DELETE(hh2, xc->a_byname, ae);
+		free(ae->name);
+		free(ae);
+	}
 }
 
 static struct di_object *di_xorg_connect(struct di_xorg *x) {
