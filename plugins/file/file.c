@@ -78,6 +78,9 @@ static int di_file_ioev(struct di_listener_data *d) {
 }
 
 static int di_file_add_watch(struct di_file_watch *fw, const char *path) {
+	if (!path)
+		return -EINVAL;
+
 	int ret = inotify_add_watch(fw->fd, path, IN_ALL_EVENTS);
 	if (ret >= 0) {
 		auto we = tmalloc(struct di_file_watch_entry, 1);
@@ -92,7 +95,7 @@ static int di_file_add_watch(struct di_file_watch *fw, const char *path) {
 }
 
 static void di_file_add_many_watch(struct di_file_watch *fw, struct di_array paths) {
-	if (paths.elem_type != DI_TYPE_STRING)
+	if (paths.length > 0 && paths.elem_type != DI_TYPE_STRING)
 		return;
 	const char **arr = paths.arr;
 	for (int i = 0; i < paths.length; i++)
@@ -100,6 +103,9 @@ static void di_file_add_many_watch(struct di_file_watch *fw, struct di_array pat
 }
 
 static int di_file_rm_watch(struct di_file_watch *fw, const char *path) {
+	if (!path)
+		return -EINVAL;
+
 	struct di_file_watch_entry *we = NULL;
 	HASH_FIND(hh2, fw->byname, path, strlen(path), we);
 	if (!we)
@@ -129,7 +135,7 @@ static void di_file_watch_dtor(struct di_file_watch *fw) {
 }
 
 static struct di_object *di_file_new_watch(struct di_file *f, struct di_array paths) {
-	if (paths.elem_type != DI_TYPE_STRING)
+	if (paths.length > 0 && paths.elem_type != DI_TYPE_STRING)
 		return di_new_error("Argument needs to be an array of strings");
 
 	auto ifd = inotify_init1(IN_NONBLOCK | IN_CLOEXEC);

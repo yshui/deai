@@ -22,6 +22,7 @@ typedef enum di_type {
 	DI_TYPE_STRING,          // utf-8 string, const char *
 	DI_TYPE_ARRAY,           // struct di_array
 	DI_TYPE_CALLABLE,        // pointer to di_callable
+	DI_TYPE_NIL,
 	DI_LAST_TYPE
 } di_type_t;
 
@@ -93,6 +94,8 @@ di_add_untyped_listener(struct di_object *obj, const char *name, void *ud,
                         void (*f)(struct di_signal *, void **));
 
 struct di_object *di_new_object(size_t sz);
+struct di_object *di_get_nil(void);
+bool di_is_nil(struct di_object *);
 void di_destroy_object(struct di_object *);
 void di_ref_object(struct di_object *);
 void di_unref_object(struct di_object *);
@@ -109,7 +112,7 @@ int di_emit_signal(struct di_object *, const char *name, void **args);
 int di_emit_signal_v(struct di_object *obj, const char *name, ...);
 int di_register_signal(struct di_object *, const char *name, int nargs, ...);
 const di_type_t *di_get_signal_arg_types(struct di_signal *sig, unsigned int *nargs);
-struct di_object *di_new_error(const char *errmsg);
+struct di_object *di_new_error(const char *fmt, ...);
 void di_free_array(struct di_array);
 void di_free_value(di_type_t, void *);
 
@@ -120,6 +123,7 @@ static inline size_t di_sizeof_type(di_type_t t) {
 	case DI_TYPE_VOID:
 	case DI_TYPE_CALLABLE:
 	case DI_LAST_TYPE:
+	case DI_TYPE_NIL:
 	default: return 0;
 	case DI_TYPE_FLOAT: return sizeof(double);
 	case DI_TYPE_ARRAY: return sizeof(struct di_array);

@@ -164,6 +164,9 @@ static struct di_object *di_lua_load_script(struct di_object *obj, const char *p
 	 *    reflect only external references. Also script object will
 	 *    become defunct
 	 */
+	if (!path)
+		return di_new_error("Path is null");
+
 	auto s = di_new_object_with_type(struct di_lua_script);
 	auto fn = di_create_typed_method((void *)di_lua_free_script, "__dtor",
 	                                 DI_TYPE_VOID, 0);
@@ -187,7 +190,7 @@ static struct di_object *di_lua_load_script(struct di_object *obj, const char *p
 		          path, err);
 		di_unref_object((void *)s);
 		lua_pop(m->L, 2);
-		return NULL;
+		return di_new_error("Failed to load lua script %s: %s\n", path, err);
 	}
 
 	s->path = strdup(path);
@@ -207,7 +210,7 @@ static struct di_object *di_lua_load_script(struct di_object *obj, const char *p
 
 		// Pop error handling function
 		lua_pop(m->L, 1);
-		s = NULL;
+		return di_new_error("Failed to run the lua script");
 	}
 	return (void *)s;
 }
@@ -355,6 +358,9 @@ static void *di_lua_type_to_di(lua_State *L, int i, di_type_t *t) {
 		ret = calloc(1, sizeof(struct di_array));
 		di_lua_table_to_array(L, i, nelem, ret);
 		return ret;
+	case LUA_TNIL:
+		*t = DI_TYPE_NIL;
+		return NULL;
 	type_error:
 	default: *t = DI_LAST_TYPE; return NULL;
 	}
@@ -371,7 +377,7 @@ static int _di_lua_method_handler(lua_State *L, struct di_method *m) {
 	// Translate lua arguments
 	for (int i = 1; i <= nargs; i++) {
 		args[i - 1] = di_lua_type_to_di(L, i, atypes + i - 1);
-		if (!args[i - 1] || atypes[i - 1] >= DI_LAST_TYPE) {
+		if (atypes[i - 1] >= DI_LAST_TYPE) {
 			argi = i;
 			goto err;
 		}

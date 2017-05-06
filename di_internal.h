@@ -95,6 +95,7 @@ static inline ffi_type *di_type_to_ffi(di_type_t in) {
 	    &ffi_type_pointer,  &ffi_type_pointer, &ffi_type_pointer,
 	    &ffi_type_di_array, &ffi_type_pointer};
 
+	assert(in < DI_TYPE_NIL);
 	return type_map[in];
 }
 

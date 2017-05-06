@@ -26,6 +26,9 @@
 #include "utils.h"
 
 static void load_plugin(struct deai *p, const char *sopath) {
+	if (!sopath)
+		return;
+
 	void *handle = dlopen(sopath, RTLD_NOW);
 
 	if (!handle) {
@@ -43,7 +46,9 @@ static void load_plugin(struct deai *p, const char *sopath) {
 }
 
 static int load_plugin_dir(struct deai *di, const char *path) {
-	// (2) Load external plugins
+	if (!path)
+		return -1;
+
 	char rpath[PATH_MAX];
 	realpath(path, rpath);
 
@@ -79,6 +84,9 @@ static int load_plugin_dir(struct deai *di, const char *path) {
 }
 
 int di_chdir(struct di_object *p, const char *dir) {
+	if (!dir)
+		return -EINVAL;
+
 	int ret = chdir(dir);
 	if (ret != 0)
 		ret = -errno;

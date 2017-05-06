@@ -22,6 +22,8 @@ static int di_log(struct di_object *o, int log_level, const char *str) {
 	struct di_log *l = (void *)o;
 	if (log_level > l->log_level)
 		return 0;
+	if (!str)
+		str = "(nil)";
 	return fputs(str, stderr);
 }
 

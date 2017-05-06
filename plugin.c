@@ -16,6 +16,9 @@
 #define PUBLIC __attribute__((visibility("default")))
 #define cleanup(func) __attribute__((cleanup(func)))
 
+const static struct di_object nil;
+const void *null_ptr = NULL;
+
 struct di_object_internal {
 	struct di_method_internal *fn;
 	struct di_signal *sd;
@@ -82,9 +85,17 @@ static const char *di_get_error_msg(struct di_object *o) {
 	return strdup(e->msg);
 }
 
-PUBLIC struct di_object *di_new_error(const char *errmsg) {
+PUBLIC struct di_object *di_new_error(const char *fmt, ...) {
+	va_list ap;
+	va_start(ap, fmt);
+
+	char *errmsg;
+	int ret = asprintf(&errmsg, fmt, ap);
+	if (ret < 0)
+		errmsg = strdup(fmt);
+
 	struct di_error *err = di_new_object_with_type(struct di_error);
-	err->msg = strdup(errmsg);
+	err->msg = errmsg;
 
 	struct di_typed_method *dtor =
 	    di_create_typed_method((void *)di_free_error, "__dtor", DI_TYPE_VOID, 0);
@@ -368,6 +379,14 @@ static inline int integer_conversion(di_type_t inty, const void *inp,
 	return 0;
 }
 
+PUBLIC struct di_object *di_get_nil(void) {
+	return (void *)&nil;
+}
+
+PUBLIC bool di_is_nil(struct di_object *o) {
+	return o == &nil;
+}
+
 static int
 di_typed_trampoline(di_type_t *rt, void **ret, unsigned int nargs,
                     const di_type_t *ats, const void *const *args, void *ud) {
@@ -406,13 +425,27 @@ di_typed_trampoline(di_type_t *rt, void **ret, unsigned int nargs,
 					convert_case(int);
 					convert_case(uint64_t);
 					convert_case(int64_t);
-				default: assert(0);
+				default: rc = -EINVAL; goto out;
 				}
 #undef convert_case
 				xargs[i + 1] = res;
 			} else {
 				rc = -EINVAL;
 				goto out;
+			}
+		} else if (ats[i] == DI_TYPE_NIL) {
+			struct di_array *arr;
+			switch (fn->atypes[i + 1]) {
+			case DI_TYPE_OBJECT: xargs[i + 1] = &nil; break;
+			case DI_TYPE_STRING:
+			case DI_TYPE_POINTER: xargs[i + 1] = &null_ptr; break;
+			case DI_TYPE_ARRAY:
+				arr = tmalloc(struct di_array, 1);
+				arr->length = 0;
+				arr->elem_type = DI_TYPE_NIL;
+				xargs[i + 1] = arr;
+				break;
+			default: rc = -EINVAL; goto out;
 			}
 		} else {
 			rc = -EINVAL;
@@ -430,7 +463,8 @@ di_typed_trampoline(di_type_t *rt, void **ret, unsigned int nargs,
 
 out:
 	for (int i = 0; i < nargs; i++)
-		if (xargs[i + 1] != args[i])
+		if (xargs[i + 1] != args[i] && xargs[i + 1] != &nil &&
+		    xargs[i + 1] != &null_ptr)
 			free((void *)xargs[i + 1]);
 	free(xargs);
 
@@ -467,8 +501,13 @@ di_create_typed_method(void (*fn)(void), const char *name, di_type_t rtype,
 
 	va_list ap;
 	va_start(ap, nargs);
-	for (unsigned int i = 0; i < nargs; i++)
+	for (unsigned int i = 0; i < nargs; i++) {
 		f->atypes[i + 1] = va_arg(ap, di_type_t);
+		if (f->atypes[i + 1] == DI_TYPE_NIL) {
+			free(f);
+			return NULL;
+		}
+	}
 	va_end(ap);
 
 	f->atypes[0] = DI_TYPE_OBJECT;
@@ -553,8 +592,11 @@ PUBLIC int di_register_signal(struct di_object *r, const char *name, int nargs, 
 
 	va_list ap;
 	va_start(ap, nargs);
-	for (int i = 0; i < nargs; i++)
+	for (int i = 0; i < nargs; i++) {
 		evd->types[i + 1] = va_arg(ap, di_type_t);
+		if (evd->types[i + 1] == DI_TYPE_NIL)
+			return -EINVAL;
+	}
 	va_end(ap);
 	evd->types[0] = DI_TYPE_POINTER;
 
