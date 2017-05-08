@@ -553,6 +553,14 @@ static int di_lua_pushany(lua_State *L, di_type_t t, void *d) {
 		}
 	}
 
+	if (t == DI_TYPE_ARRAY) {
+		struct di_array *tmp = d;
+		if (tmp->elem_type == DI_TYPE_NIL) {
+			lua_pushnil(L);
+			return 1;
+		}
+	}
+
 	lua_Integer i;
 	lua_Number n;
 	struct di_lua_object *lo;
