@@ -1,9 +1,11 @@
 function apply_xi_settings(dev)
+    p = dev.props
     if dev.type == "touchpad" then
-        dev.set_prop("libinput Tapping Enabled", 1)
+        p["libinput Tapping Enabled"] = {1}
+        p["libinput Tapping Button Mapping Enabled"] = {0,1}
     end
     if dev.use == "pointer" then
-        dev.set_prop("libinput Natural Scrolling Enabled", 1)
+        p["libinput Natural Scrolling Enabled"] = {1}
     end
 end
 xc = di.xorg.connect()
@@ -17,4 +19,10 @@ devs = xi.devices;
 for i, v in ipairs(devs) do
     print(i, v.id, v.name, v.type, v.use)
     apply_xi_settings(v)
+
+    p = v.props
+    pid = p["Device Product ID"]
+    if pid ~= nil then
+        print(pid[1], pid[2])
+    end
 end
