@@ -71,6 +71,7 @@ const char *di_xorg_get_atom_name(struct di_xorg_connection *xc, xcb_atom_t atom
 
 xcb_atom_t di_xorg_intern_atom(struct di_xorg_connection *xc, const char *name,
                                xcb_generic_error_t **e) {
+	di_getm(xc->x->di, log);
 	struct di_atom_entry *ae = NULL;
 	*e = NULL;
 
@@ -80,8 +81,10 @@ xcb_atom_t di_xorg_intern_atom(struct di_xorg_connection *xc, const char *name,
 
 	auto r = xcb_intern_atom_reply(
 	    xc->c, xcb_intern_atom(xc->c, 0, strlen(name), name), e);
-	if (!r)
+	if (!r) {
+		di_log_va(logm, DI_LOG_ERROR, "Cannot intern atom");
 		return 0;
+	}
 
 	ae = tmalloc(struct di_atom_entry, 1);
 	ae->atom = r->atom;

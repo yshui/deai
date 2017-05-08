@@ -194,27 +194,13 @@ define_trivial_cleanup_t(xcb_input_xi_get_property_reply_t);
 define_trivial_cleanup_t(char);
 define_trivial_cleanup_t(xcb_input_xi_change_property_items_t);
 
-static int di_xorg_xinput_set_prop(di_type_t *rtype, void **ret, unsigned int nargs,
-                                   const di_type_t *atypes, const void *const *args,
-                                   void *user_data) {
-	struct di_xorg_xinput_device *dev = user_data;
-	di_set_return(0);
-
-	// At least 2 args, key and value
-	if (nargs < 2)
-		return -EINVAL;
-
-	// Key must be a string
-	if (atypes[0] != DI_TYPE_STRING)
-		return -EINVAL;
-
-	const char *key = *(const char **)args[0];
+static void di_xorg_xinput_set_prop(struct di_xorg_xinput_device *dev,
+                                    const char *key, struct di_array arr) {
+	di_getm(dev->dc->x->di, log);
 	xcb_generic_error_t *e;
 	auto prop_atom = di_xorg_intern_atom(dev->dc, key, &e);
-	if (e) {
-		di_set_return(-EINVAL);
-		return 0;
-	}
+	if (e)
+		return;
 
 	auto float_atom = di_xorg_intern_atom(dev->dc, "FLOAT", &e);
 
@@ -225,89 +211,102 @@ static int di_xorg_xinput_set_prop(di_type_t *rtype, void **ret, unsigned int na
 	        NULL);
 
 	if (prop->type == XCB_ATOM_NONE) {
-		di_set_return(-ENOENT);
-		return 0;
+		// non-existent property should be silently ignored
+		di_log_va(logm, DI_LOG_DEBUG, "setting non-existent property: %s\n",
+		          key);
+		return;
+	}
+
+	if ((prop->type == float_atom || prop->type == XCB_ATOM_ATOM) &&
+	    prop->format != 32) {
+		di_log_va(logm, DI_LOG_ERROR,
+		          "Xorg return invalid format for float/atom type: %d\n",
+		          prop->format);
+		return;
 	}
 
 	with_cleanup_t(xcb_input_xi_change_property_items_t) item =
-	    tmalloc(xcb_input_xi_change_property_items_t, nargs - 1);
+	    tmalloc(xcb_input_xi_change_property_items_t, arr.length);
 	int step = prop->format / 8;
-	with_cleanup_t(char) data = malloc(step * (nargs - 1));
-	for (int i = 1; i < nargs; i++) {
+	with_cleanup_t(char) data = malloc(step * (arr.length));
+	for (int i = 0; i < arr.length; i++) {
 		int64_t i64;
 		float f;
 		const char *str;
-		void *curr = data + step * (i - 1);
+		void *dst = data + step * i;
+		void *src = arr.arr + di_sizeof_type(arr.elem_type) * i;
 
-		switch (atypes[i]) {
+		switch (arr.elem_type) {
 		case DI_TYPE_INT:
 		case DI_TYPE_UINT:
-			i64 = *(int64_t *)args[i];
+			i64 = *(int64_t *)src;
 			f = i64;
 			break;
 		case DI_TYPE_NINT:
 		case DI_TYPE_NUINT:
-			i64 = *(int *)args[i];
+			i64 = *(int *)src;
 			f = i64;
 			break;
 		case DI_TYPE_FLOAT:
-			f = *(float *)args[i];
 			if (prop->type != float_atom)
-				return -EINVAL;
+				goto err;
+			f = *(float *)src;
 			break;
 		case DI_TYPE_STRING:
 			if (prop->type != XCB_ATOM_ATOM)
-				return -EINVAL;
-			str = *(const char **)args[i];
+				goto err;
+			str = *(const char **)src;
 			i64 = di_xorg_intern_atom(dev->dc, str, &e);
-			if (e) {
-				di_set_return(-EINVAL);
-				return 0;
-			}
+			if (e)
+				return;
 			break;
-		default: return -EINVAL;
+		default: goto err;
 		}
 
 		if (prop->type == XCB_ATOM_INTEGER ||
 		    prop->type == XCB_ATOM_CARDINAL) {
-			assert(atypes[i] != DI_TYPE_FLOAT);
+			if (arr.elem_type == DI_TYPE_FLOAT ||
+			    arr.elem_type == DI_TYPE_STRING)
+				goto err;
 			switch (prop->format) {
 			case 8:
-				*(int8_t *)curr = i64;
-				item[i - 1].data8 = curr;
+				*(int8_t *)dst = i64;
+				item[i].data8 = dst;
 				break;
 			case 16:
-				*(int16_t *)curr = i64;
-				item[i - 1].data16 = curr;
+				*(int16_t *)dst = i64;
+				item[i].data16 = dst;
 				break;
 			case 32:
-				*(int32_t *)curr = i64;
-				item[i - 1].data32 = curr;
+				*(int32_t *)dst = i64;
+				item[i].data32 = dst;
 				break;
 			}
 		} else if (prop->type == float_atom) {
-			if (prop->format != 32)
-				return -EINVAL;
-			assert(atypes[i] != DI_TYPE_STRING);
-			*(float *)curr = f;
-			item[i - 1].data32 = curr;
+			if (arr.elem_type == DI_TYPE_STRING)
+				goto err;
+			*(float *)dst = f;
+			item[i].data32 = dst;
 		} else if (prop->type == XCB_ATOM_ATOM) {
-			if (prop->format != 32)
-				return -EINVAL;
-			*(int32_t *)curr = i64;
-			item[i - 1].data32 = curr;
+			if (arr.elem_type != DI_TYPE_STRING)
+				goto err;
+			*(int32_t *)dst = i64;
+			item[i].data32 = dst;
 		}
 	}
 
 	auto err = xcb_request_check(
 	    dev->dc->c, xcb_input_xi_change_property_aux_checked(
 	                    dev->dc->c, dev->deviceid, XCB_PROP_MODE_REPLACE,
-	                    prop->format, prop_atom, prop->type, nargs - 1, item));
+	                    prop->format, prop_atom, prop->type, arr.length, item));
 
 	if (err)
-		di_set_return(-EBADE);
-
-	return 0;
+		di_log_va(logm, DI_LOG_ERROR, "Failed to set property '%s'\n", key);
+	(void)err;
+	return;
+err:
+	di_log_va(logm, DI_LOG_ERROR, "Try to set xinput property '%s' with wrong "
+	                              "type of data %d\n", key, arr.elem_type);
 }
 
 static struct di_array
@@ -382,8 +381,7 @@ di_xorg_xinput_get_prop(struct di_xorg_xinput_device *dev, const char *name) {
 			}
 		} else if (ret.elem_type == DI_TYPE_STRING) {
 			const char **tmp = curr;
-			*tmp =
-			    strdup(di_xorg_get_atom_name(dev->dc, read(32)));
+			*tmp = strdup(di_xorg_get_atom_name(dev->dc, read(32)));
 		} else {
 			// float
 			double *tmp = curr;
@@ -404,6 +402,11 @@ static struct di_object *di_xorg_xinput_props(struct di_xorg_xinput_device *dev)
 	    (void *)obj,
 	    di_create_typed_method((di_fn_t)di_xorg_xinput_get_prop, "__get",
 	                           DI_TYPE_ARRAY, 1, DI_TYPE_STRING));
+
+	di_register_typed_method(
+	    (void *)obj,
+	    di_create_typed_method((di_fn_t)di_xorg_xinput_set_prop, "__set",
+	                           DI_TYPE_VOID, 2, DI_TYPE_STRING, DI_TYPE_ARRAY));
 	return (void *)obj;
 }
 
@@ -429,9 +432,6 @@ di_xorg_make_object_for_devid(struct di_xorg_connection *dc, int deviceid) {
 	tm = di_create_typed_method((di_fn_t)di_xorg_xinput_get_device_type,
 	                            "__get_type", DI_TYPE_STRING, 0);
 	di_register_typed_method((void *)obj, tm);
-
-	auto m = di_create_untyped_method(di_xorg_xinput_set_prop, "set_prop", obj);
-	di_register_method((void *)obj, (void *)m);
 
 	di_register_typed_method(
 	    (void *)obj, di_create_typed_method((di_fn_t)di_xorg_xinput_props,
