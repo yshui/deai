@@ -27,6 +27,11 @@ struct deai {
 	struct di_object;
 	struct ev_loop *loop;
 	struct di_module_internal *m;
+
+	int argc;
+	char **argv;
+
+	char *proctitle, *proctitle_end;
 	bool quit;
 };
 

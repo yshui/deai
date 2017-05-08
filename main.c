@@ -20,9 +20,9 @@
 
 #include "config.h"
 #include "di_internal.h"
+#include "env.h"
 #include "event_internal.h"
 #include "log_internal.h"
-#include "env.h"
 #include "uthash.h"
 #include "utils.h"
 
@@ -113,7 +113,61 @@ static void di_sighandler(struct ev_loop *l, ev_signal *w, int revents) {
 	ev_break(l, EVBREAK_ALL);
 }
 
-int main(int argc, const char *const *argv) {
+static char *di_get_pr_name(struct deai *p) {
+	return strdup(p->argv[0]);
+}
+
+#ifdef HAVE_SETPROCTITLE
+static void setproctitle_init(int argc, char **argv, struct deai *p) {
+	// Copy argv and environ
+	p->argc = argc;
+	p->argv = calloc(argc, sizeof(void *));
+	for (int i = 0; i < argc; i++) {
+		// fprintf(stderr, "%p\n", argv[i]);
+		p->argv[i] = strdup(argv[i]);
+	}
+
+	p->proctitle = argv[0];
+
+	size_t envsz = 0;
+	for (; environ[envsz]; envsz++)
+		;
+	char **old_env = environ;
+	environ = calloc(envsz + 1, sizeof(void *));
+	for (int i = 0; i < envsz; i++) {
+		// fprintf(stderr, "%p %s %p\n", old_env[i], old_env[i],
+		//        old_env[i] + strlen(old_env[i]));
+		environ[i] = strdup(old_env[i]);
+	}
+	environ[envsz] = NULL;
+
+	// Available space extends until the end of the page
+	uintptr_t end = (uintptr_t)p->proctitle;
+	auto pgsz = getpagesize();
+	end = (end / pgsz + 1) * pgsz;
+	p->proctitle_end = (void *)end;
+	// fprintf(stderr, "%p, %lu\n", p->proctitle, p->proctitle_end -
+	// p->proctitle);
+}
+static void di_set_pr_name(struct deai *p, const char *name) {
+	if (name) {
+		memset(p->proctitle, 0, p->proctitle_end - p->proctitle);
+		auto nlen = strlen(name);
+
+		if (p->proctitle + nlen + 1 >= p->proctitle_end)
+			nlen = p->proctitle_end - p->proctitle - 1;
+		strncpy(p->proctitle, name, nlen);
+	}
+}
+#else
+// no-op
+static void setproctitle_init(int argc, struct deai *p) {
+}
+static void di_set_pr_name(struct deai *p, const char *name) {
+}
+#endif
+
+int main(int argc, char *argv[]) {
 	struct di_module_internal *pm;
 	struct deai *p = di_new_object_with_type(struct deai);
 	p->m = NULL;
@@ -152,6 +206,15 @@ int main(int argc, const char *const *argv) {
 	    di_create_typed_method((di_fn_t)di_quit, "quit", DI_TYPE_VOID, 0));
 
 	di_register_typed_method(
+	    (void *)p, di_create_typed_method((di_fn_t)di_get_pr_name,
+	                                      "__get_proctitle", DI_TYPE_STRING, 0));
+
+	di_register_typed_method(
+	    (void *)p,
+	    di_create_typed_method((di_fn_t)di_set_pr_name, "__set_proctitle",
+	                           DI_TYPE_VOID, 1, DI_TYPE_STRING));
+
+	di_register_typed_method(
 	    (void *)p, di_create_typed_method((di_fn_t)di_find_module, "__get",
 	                                      DI_TYPE_OBJECT, 1, DI_TYPE_STRING));
 
@@ -167,32 +230,16 @@ int main(int argc, const char *const *argv) {
 	ev_signal_init(&sigtermw, di_sighandler, SIGTERM);
 	ev_signal_start(p->loop, (void *)&sigtermw);
 
-	// (2) Load default plugins
-	int ret = load_plugin_dir(p, DI_PLUGIN_INSTALL_DIR);
-	if (ret != 0) {
-		fprintf(stderr, "Failed to load plugins\n");
-		exit(EXIT_FAILURE);
-	}
-
-	// (3) Parser commandline
+	// (2) Parse commandline
 	char *method = strchr(argv[1], '.');
 	if (!method) {
 		fprintf(stderr, "Malformed module.method name\n");
 		exit(EXIT_FAILURE);
 	}
-	*(method++) = '\0';
 
-	auto mod = di_find_module(p, argv[1]);
-	if (!mod) {
-		fprintf(stderr, "Module %s not found\n", argv[1]);
-		exit(EXIT_FAILURE);
-	}
+	auto modname = strndup(argv[1], method - argv[1]);
 
-	auto mt = di_find_method((void *)mod, method);
-	if (!mt) {
-		fprintf(stderr, "Method %s not found in %s\n", method, argv[1]);
-		exit(EXIT_FAILURE);
-	}
+	method = strdup(method + 1);
 
 	const void **di_args = calloc(argc - 2, sizeof(void *));
 	di_type_t *di_types = calloc(argc - 2, sizeof(di_type_t));
@@ -223,6 +270,30 @@ int main(int argc, const char *const *argv) {
 			exit(EXIT_FAILURE);
 		}
 	}
+
+	setproctitle_init(argc, argv, p);
+
+	// (3) Load default plugins
+	int ret = load_plugin_dir(p, DI_PLUGIN_INSTALL_DIR);
+	if (ret != 0) {
+		fprintf(stderr, "Failed to load plugins\n");
+		exit(EXIT_FAILURE);
+	}
+
+	auto mod = di_find_module(p, modname);
+	if (!mod) {
+		fprintf(stderr, "Module \"%s\" not found\n", modname);
+		exit(EXIT_FAILURE);
+	}
+
+	auto mt = di_find_method((void *)mod, method);
+	if (!mt) {
+		fprintf(stderr, "Method \"%s\" not found in module \"%s\"\n", method,
+		        modname);
+		exit(EXIT_FAILURE);
+	}
+	free(method);
+	free(modname);
 
 	di_type_t rtype;
 	void *retv;
@@ -257,5 +328,9 @@ int main(int argc, const char *const *argv) {
 		di_unref_object((void *)pm);
 		pm = next_pm;
 	}
+
+	for (int i = 0; i < p->argc; i++)
+		free(p->argv[i]);
+	free(p->argv);
 	di_unref_object((void *)p);
 }

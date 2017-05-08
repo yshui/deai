@@ -28,6 +28,9 @@ cflag_check_and_apply(DI_CFLAGS -Wall)
 
 
 set(DI_PLUGIN_INSTALL_DIR "lib/deai" CACHE FILEPATH "Install path for plugins.")
+if (${CMAKE_SYSTEM_NAME} STREQUAL "Linux")
+	set(HAVE_SETPROCTITLE true)
+endif()
 configure_file(config.h.in config.h)
 
 add_subdirectory(plugins)
