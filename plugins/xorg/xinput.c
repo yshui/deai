@@ -220,9 +220,8 @@ static int di_xorg_xinput_set_prop(di_type_t *rtype, void **ret, unsigned int na
 
 	with_cleanup_t(xcb_input_xi_get_property_reply_t) prop =
 	    xcb_input_xi_get_property_reply(
-	        dev->dc->c,
-	        xcb_input_xi_get_property(dev->dc->c, dev->deviceid, 0,
-	                                  prop_atom, XCB_ATOM_ANY, 0, 0),
+	        dev->dc->c, xcb_input_xi_get_property(dev->dc->c, dev->deviceid, 0,
+	                                              prop_atom, XCB_ATOM_ANY, 0, 0),
 	        NULL);
 
 	if (prop->type == XCB_ATOM_NONE) {
@@ -301,15 +300,111 @@ static int di_xorg_xinput_set_prop(di_type_t *rtype, void **ret, unsigned int na
 	}
 
 	auto err = xcb_request_check(
-	    dev->dc->c,
-	    xcb_input_xi_change_property_aux_checked(
-	        dev->dc->c, dev->deviceid, XCB_PROP_MODE_REPLACE, prop->format,
-	        prop_atom, prop->type, nargs - 1, item));
+	    dev->dc->c, xcb_input_xi_change_property_aux_checked(
+	                    dev->dc->c, dev->deviceid, XCB_PROP_MODE_REPLACE,
+	                    prop->format, prop_atom, prop->type, nargs - 1, item));
 
 	if (err)
 		di_set_return(-EBADE);
 
 	return 0;
+}
+
+static struct di_array
+di_xorg_xinput_get_prop(struct di_xorg_xinput_device *dev, const char *name) {
+	di_getm(dev->dc->x->di, log);
+	xcb_generic_error_t *e;
+	struct di_array ret = {0, NULL, DI_TYPE_NIL};
+	auto prop_atom = di_xorg_intern_atom(dev->dc, name, &e);
+
+	if (e)
+		return ret;
+
+	auto float_atom = di_xorg_intern_atom(dev->dc, "FLOAT", &e);
+
+	with_cleanup_t(xcb_input_xi_get_property_reply_t) prop =
+	    xcb_input_xi_get_property_reply(
+	        dev->dc->c, xcb_input_xi_get_property(dev->dc->c, dev->deviceid, 0,
+	                                              prop_atom, XCB_ATOM_ANY, 0, 0),
+	        NULL);
+
+	if (prop->type == XCB_ATOM_NONE)
+		return ret;
+
+	size_t plen = prop->bytes_after;
+	free(prop);
+
+	prop = xcb_input_xi_get_property_reply(
+	    dev->dc->c, xcb_input_xi_get_property(dev->dc->c, dev->deviceid, 0,
+	                                          prop_atom, XCB_ATOM_ANY, 0, plen),
+	    NULL);
+
+	if (prop->type == XCB_ATOM_NONE)
+		return ret;
+
+	if (prop->type == XCB_ATOM_INTEGER || prop->type == XCB_ATOM_CARDINAL)
+		ret.elem_type = DI_TYPE_INT;
+	else if (prop->type == XCB_ATOM_ATOM)
+		ret.elem_type = DI_TYPE_STRING;
+	else if (prop->type == float_atom)
+		ret.elem_type = DI_TYPE_FLOAT;
+	else {
+		di_log_va(logm, DI_LOG_WARN, "Unknown property type %d\n", prop->type);
+		return ret;
+	}
+
+	if (prop->format != 8 && prop->format != 16 && prop->format != 32) {
+		di_log_va(logm, DI_LOG_WARN, "Xorg returns invalid format %d\n",
+		          prop->format);
+		return ret;
+	}
+	if ((prop->type == float_atom || prop->type == XCB_ATOM_ATOM) &&
+	    prop->format != 32) {
+		di_log_va(logm, DI_LOG_WARN,
+		          "Xorg return invalid format for float/atom %d\n",
+		          prop->format);
+		return ret;
+	}
+
+	void *buf = xcb_input_xi_get_property_items(prop);
+	ret.length = prop->num_items;
+	ret.arr = calloc(ret.length, di_sizeof_type(ret.elem_type));
+	void *curr = ret.arr;
+#define read(n) ((uint##n##_t *)buf)[i]
+	for (int i = 0; i < prop->num_items; i++) {
+		if (ret.elem_type == DI_TYPE_INT) {
+			int64_t *tmp = curr;
+			switch (prop->format) {
+			case 8: *tmp = read(8); break;
+			case 16: *tmp = read(16); break;
+			case 32: *tmp = read(32); break;
+			default: __builtin_unreachable();
+			}
+		} else if (ret.elem_type == DI_TYPE_STRING) {
+			const char **tmp = curr;
+			*tmp =
+			    strdup(di_xorg_get_atom_name(dev->dc, read(32)));
+		} else {
+			// float
+			double *tmp = curr;
+			*tmp = ((float *)buf)[i];
+		}
+		curr += di_sizeof_type(ret.elem_type);
+	}
+#undef read
+	return ret;
+}
+
+static struct di_object *di_xorg_xinput_props(struct di_xorg_xinput_device *dev) {
+	auto obj = di_new_object_with_type(struct di_xorg_xinput_device);
+	obj->deviceid = dev->deviceid;
+	obj->dc = dev->dc;
+
+	di_register_typed_method(
+	    (void *)obj,
+	    di_create_typed_method((di_fn_t)di_xorg_xinput_get_prop, "__get",
+	                           DI_TYPE_ARRAY, 1, DI_TYPE_STRING));
+	return (void *)obj;
 }
 
 static struct di_object *
@@ -337,6 +432,10 @@ di_xorg_make_object_for_devid(struct di_xorg_connection *dc, int deviceid) {
 
 	auto m = di_create_untyped_method(di_xorg_xinput_set_prop, "set_prop", obj);
 	di_register_method((void *)obj, (void *)m);
+
+	di_register_typed_method(
+	    (void *)obj, di_create_typed_method((di_fn_t)di_xorg_xinput_props,
+	                                        "__get_props", DI_TYPE_OBJECT, 0));
 
 	// const char *ty;
 	// DI_GET((void *)obj, "name", ty);
