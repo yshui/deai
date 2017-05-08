@@ -287,13 +287,13 @@ static int di_xorg_xinput_set_prop(di_type_t *rtype, void **ret, unsigned int na
 				break;
 			}
 		} else if (prop->type == float_atom) {
-			if (prop->format == 32)
+			if (prop->format != 32)
 				return -EINVAL;
 			assert(atypes[i] != DI_TYPE_STRING);
 			*(float *)curr = f;
 			item[i - 1].data32 = curr;
 		} else if (prop->type == XCB_ATOM_ATOM) {
-			if (prop->format == 32)
+			if (prop->format != 32)
 				return -EINVAL;
 			*(int32_t *)curr = i64;
 			item[i - 1].data32 = curr;
