@@ -260,7 +260,10 @@ int main(int argc, char *argv[]) {
 
 	const void **di_args = calloc(argc - 2, sizeof(void *));
 	di_type_t *di_types = calloc(argc - 2, sizeof(di_type_t));
+	int nargs = 0;
 	for (int i = 2; i < argc; i++) {
+		if (strcmp(argv[i], "--") == 0)
+			break;
 		if (argv[i][1] != ':') {
 			fprintf(stderr, "Invalid argument: %s\n", argv[i]);
 			exit(EXIT_FAILURE);
@@ -268,24 +271,25 @@ int main(int argc, char *argv[]) {
 		}
 		switch (argv[i][0]) {
 		case 'i':        // Integer
-			di_args[i - 2] = malloc(sizeof(int64_t));
-			di_types[i - 2] = DI_TYPE_INT;
-			*(int64_t *)di_args[i - 2] = atoll(argv[i] + 2);
+			di_args[nargs] = malloc(sizeof(int64_t));
+			di_types[nargs] = DI_TYPE_INT;
+			*(int64_t *)di_args[nargs] = atoll(argv[i] + 2);
 			break;
 		case 's':        // String
-			di_args[i - 2] = malloc(sizeof(const char *));
-			di_types[i - 2] = DI_TYPE_STRING;
-			*(const char **)di_args[i - 2] = argv[i] + 2;
+			di_args[nargs] = malloc(sizeof(const char *));
+			di_types[nargs] = DI_TYPE_STRING;
+			*(const char **)di_args[nargs] = argv[i] + 2;
 			break;
 		case 'f':        // Float
-			di_types[i - 2] = DI_TYPE_FLOAT;
-			di_args[i - 2] = malloc(sizeof(double));
-			*(double *)di_args[i - 2] = atof(argv[i] + 2);
+			di_types[nargs] = DI_TYPE_FLOAT;
+			di_args[nargs] = malloc(sizeof(double));
+			*(double *)di_args[nargs] = atof(argv[i] + 2);
 			break;
 		default:
 			fprintf(stderr, "Invalid argument type: %s\n", argv[i]);
 			exit(EXIT_FAILURE);
 		}
+		nargs++;
 	}
 
 	setproctitle_init(argc, argv, p);
@@ -315,14 +319,14 @@ int main(int argc, char *argv[]) {
 	di_type_t rtype;
 	void *retv;
 	ret =
-	    di_call_callable((void *)mt, &rtype, &retv, argc - 2, di_types, di_args);
+	    di_call_callable((void *)mt, &rtype, &retv, nargs, di_types, di_args);
 	if (ret != 0) {
 		fprintf(stderr, "Failed to call init function\n");
 		exit(EXIT_FAILURE);
 	}
 
-	for (int i = 2; i < argc; i++)
-		free((void *)di_args[i - 2]);
+	for (int i = 0; i < nargs; i++)
+		free((void *)di_args[i]);
 	free(di_args);
 	free(di_types);
 	di_unref_object((void *)mod);
