@@ -167,6 +167,19 @@ static void di_set_pr_name(struct deai *p, const char *name) {
 }
 #endif
 
+static struct di_array di_get_argv(struct deai *p) {
+	struct di_array ret;
+	ret.length = p->argc;
+	ret.elem_type = DI_TYPE_STRING;
+	ret.arr = calloc(p->argc, sizeof(void *));
+
+	const char **arr = ret.arr;
+	for (int i = 0; i < p->argc; i++)
+		arr[i] = strdup(p->argv[i]);
+
+	return ret;
+}
+
 int main(int argc, char *argv[]) {
 	struct di_module_internal *pm;
 	struct deai *p = di_new_object_with_type(struct deai);
@@ -213,6 +226,10 @@ int main(int argc, char *argv[]) {
 	    (void *)p,
 	    di_create_typed_method((di_fn_t)di_set_pr_name, "__set_proctitle",
 	                           DI_TYPE_VOID, 1, DI_TYPE_STRING));
+
+	di_register_typed_method(
+	    (void *)p, di_create_typed_method((di_fn_t)di_get_argv, "__get_argv",
+	                                      DI_TYPE_ARRAY, 0));
 
 	di_register_typed_method(
 	    (void *)p, di_create_typed_method((di_fn_t)di_find_module, "__get",
