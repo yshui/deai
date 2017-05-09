@@ -7,6 +7,7 @@
 #pragma once
 
 #include <deai.h>
+#include <string.h>
 
 int di_setv(struct di_object *o, const char *prop, di_type_t type, void *val);
 int di_getv(struct di_object *o, const char *prop, di_type_t *type, void **val);
@@ -42,7 +43,8 @@ int di_getv(struct di_object *o, const char *prop, di_type_t *type, void **val);
 #define CONCAT(a, b) CONCAT1(a, b)
 
 #define VA_ARGS_LENGTH_(_0, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, N, ...) N
-#define VA_ARGS_LENGTH(...) VA_ARGS_LENGTH_(0, ##__VA_ARGS__, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0)
+#define VA_ARGS_LENGTH(...)                                                         \
+	VA_ARGS_LENGTH_(0, ##__VA_ARGS__, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0)
 
 #define LIST_APPLY_0(fn, ...)
 #define LIST_APPLY_1(fn, x, ...) fn(x)
@@ -116,5 +118,22 @@ int di_getv(struct di_object *o, const char *prop, di_type_t *type, void **val);
 		rc;                                                                 \
 	})
 
-// TODO
+static inline int di_register_r_property(struct di_object *obj, const char *name,
+                                         di_fn_t prop, di_type_t t) {
+	char *buf = malloc(strlen(name) + strlen("__get_") + 1);
+	if (!buf)
+		return -ENOMEM;
+
+	strcpy(buf, "__get_");
+	strcat(buf, name);
+
+	struct di_typed_method *mt = di_create_typed_method(prop, buf, t, 0);
+	free(buf);
+
+	if (!mt)
+		return -EINVAL;
+
+	return di_register_typed_method(obj, mt);
+}
+// TODO maybe
 // macro to generate c wrapper for di functions
