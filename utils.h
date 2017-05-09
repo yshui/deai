@@ -26,7 +26,7 @@
 	})
 
 #define define_trivial_cleanup(type, name)                                          \
-	static inline void name(type **ptr) {                                       \
+	static inline __attribute__((unused)) void name(type **ptr) {               \
 		free(*ptr);                                                         \
 		*ptr = NULL;                                                        \
 	}
