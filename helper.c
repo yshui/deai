@@ -8,6 +8,7 @@
 #include <deai.h>
 #include <helper.h>
 
+#include <assert.h>
 #include <stdio.h>
 
 #include "utils.h"
@@ -44,7 +45,8 @@ PUBLIC int di_setv(struct di_object *o, const char *prop, di_type_t type, void *
 	return -ENOENT;
 }
 
-PUBLIC int di_getv(struct di_object *o, const char *prop, di_type_t *type, void **ret) {
+PUBLIC int
+di_getv(struct di_object *o, const char *prop, di_type_t *type, void **ret) {
 	if (!prop)
 		return -EINVAL;
 
@@ -60,10 +62,40 @@ PUBLIC int di_getv(struct di_object *o, const char *prop, di_type_t *type, void 
 
 	m = di_find_method(o, "__get");
 	if (m) {
-		int cret = di_call_callable_v((void *)m, type, ret, DI_TYPE_STRING, prop, DI_LAST_TYPE);
+		int cret = di_call_callable_v((void *)m, type, ret, DI_TYPE_STRING,
+		                              prop, DI_LAST_TYPE);
 		return cret;
 	}
 
 	return -ENOENT;
+}
 
+struct _prop {
+	struct di_object *obj;
+	off_t offset;
+	di_type_t t;
+};
+
+static int
+offset_property(di_type_t *rtype, void **ret, unsigned int nargs,
+                const di_type_t *atypes, const void *const *args, void *ud) {
+	struct _prop *p = ud;
+	assert(di_sizeof_type(p->t) > 0);
+	if (nargs != 0)
+		return -EINVAL;
+	*ret = malloc(di_sizeof_type(p->t));
+	memcpy(*ret, ((char *)p->obj) + p->offset, di_sizeof_type(p->t));
+	*rtype = p->t;
+	return 0;
+}
+
+PUBLIC int di_register_field_getter(struct di_object *o, const char *fname,
+                                    off_t offset, di_type_t type) {
+	auto p = tmalloc(struct _prop, 1);
+	p->obj = o;
+	p->offset = offset;
+	p->t = type;
+
+	return di_register_method(
+	    o, (void *)di_create_untyped_method(offset_property, fname, p));
 }

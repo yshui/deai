@@ -9,8 +9,11 @@
 #include <deai.h>
 #include <string.h>
 
+#include <stddef.h>
+
 int di_setv(struct di_object *o, const char *prop, di_type_t type, void *val);
 int di_getv(struct di_object *o, const char *prop, di_type_t *type, void **val);
+int di_register_field_getter(struct di_object *o, const char *prop, off_t offset, di_type_t t);
 
 #define di_set(o, prop, v)                                                          \
 	({                                                                          \
@@ -60,6 +63,8 @@ int di_getv(struct di_object *o, const char *prop, di_type_t *type, void **val);
 #define LIST_APPLY_11(fn, x, ...) fn(x) LIST_APPLY_10(fn, __VA_ARGS__)
 #define LIST_APPLY_(N, fn, ...) CONCAT(LIST_APPLY_, N)(fn, __VA_ARGS__)
 #define LIST_APPLY(fn, ...) LIST_APPLY_(VA_ARGS_LENGTH(__VA_ARGS__), fn, __VA_ARGS__)
+
+#define STRINGIFY(x) #x
 
 #define di_type_pair(v) di_typeof(v), v,
 #define di_arg_list(...) LIST_APPLY(di_type_pair, __VA_ARGS__) DI_LAST_TYPE
@@ -118,6 +123,10 @@ int di_getv(struct di_object *o, const char *prop, di_type_t *type, void **val);
 		rc;                                                                 \
 	})
 
+#define di_field(o, name)                                                           \
+	di_register_field_getter(o, STRINGIFY(__get_##name),                        \
+	                         offsetof(typeof(*o), name), di_typeof(o->name))
+
 static inline int di_register_r_property(struct di_object *obj, const char *name,
                                          di_fn_t prop, di_type_t t) {
 	char *buf = malloc(strlen(name) + strlen("__get_") + 1);
@@ -135,5 +144,6 @@ static inline int di_register_r_property(struct di_object *obj, const char *name
 
 	return di_register_typed_method(obj, mt);
 }
+
 // TODO maybe
 // macro to generate c wrapper for di functions
