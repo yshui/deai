@@ -38,7 +38,7 @@ struct deai {
 struct di_method_internal {
 	struct di_callable;
 
-	const char *name;
+	char *name;
 	bool typed;
 	void (*free)(void *);
 	UT_hash_handle hh;

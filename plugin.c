@@ -468,8 +468,8 @@ di_untyped_trampoline(di_type_t *rt, void **ret, unsigned int nargs,
 	return gfn->real_fn_ptr(rt, ret, nargs, ats, args, gfn->user_data);
 }
 
-static void di_free_typed_method(void *m) {
-	struct di_typed_method *tm = m;
+static void di_free_typed_method(struct di_typed_method *tm) {
+	free(tm->name);
 	free(tm->cif.arg_types);
 	free(tm);
 }
@@ -485,9 +485,9 @@ di_create_typed_method(void (*fn)(void), const char *name, di_type_t rtype,
 	f->rtype = rtype;
 	f->fn_ptr = di_typed_trampoline;
 	f->real_fn_ptr = fn;
-	f->name = name;
+	f->name = strdup(name);
 
-	f->free = di_free_typed_method;
+	f->free = (void *)di_free_typed_method;
 
 	va_list ap;
 	va_start(ap, nargs);
@@ -513,14 +513,18 @@ di_create_typed_method(void (*fn)(void), const char *name, di_type_t rtype,
 	return (void *)f;
 }
 
+static void di_free_untyped_method(struct di_untyped_method *m) {
+	free(m->name);
+}
+
 PUBLIC struct di_untyped_method *
 di_create_untyped_method(di_callbale_t fn, const char *name, void *user_data) {
 	auto gfn = tmalloc(struct di_untyped_method, 1);
 	gfn->user_data = user_data;
 	gfn->real_fn_ptr = fn;
 	gfn->fn_ptr = di_untyped_trampoline;
-	gfn->name = name;
-	gfn->free = NULL;
+	gfn->name = strdup(name);
+	gfn->free = (void *)di_free_untyped_method;
 
 	return gfn;
 }
