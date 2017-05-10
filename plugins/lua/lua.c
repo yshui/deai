@@ -215,29 +215,25 @@ static struct di_object *di_lua_load_script(struct di_object *obj, const char *p
 
 static void *di_lua_type_to_di(lua_State *L, int i, di_type_t *t);
 
-static int
-di_lua_table_to_array(lua_State *L, int index, int nelem, struct di_array *ret) {
-	lua_pushinteger(L, 1);
-	lua_rawget(L, index);
+static int di_lua_table_to_array(lua_State *L, int index, int nelem, di_type_t elemt,
+                                 struct di_array *ret) {
+	ret->elem_type = elemt;
 
-	di_type_t t;
-	void *retd = di_lua_type_to_di(L, -1, &t);
-	ret->elem_type = t;
-	lua_pop(L, 1);
-
-	size_t sz = di_sizeof_type(t);
+	size_t sz = di_sizeof_type(elemt);
 	assert(sz != 0);
 	ret->arr = calloc(nelem, sz);
-	memcpy(ret->arr, retd, sz);
-	free(retd);
 
-	for (int i = 2; i <= nelem; i++) {
-		lua_pushinteger(L, i);
-		lua_rawget(L, index);
+	for (int i = 1; i <= nelem; i++) {
+		di_type_t t;
+		lua_rawgeti(L, index, i);
 
-		retd = di_lua_type_to_di(L, -1, &t);
+		void *retd = di_lua_type_to_di(L, -1, &t);
 		lua_pop(L, 1);
-		memcpy(ret->arr + sz * (i - 1), retd, sz);
+		if (t != elemt) {
+			assert(t == DI_TYPE_INT && elemt == DI_TYPE_FLOAT);
+			((double *)ret->arr)[i - 1] = *(int64_t *)retd;
+		} else
+			memcpy(ret->arr + sz * (i - 1), retd, sz);
 		free(retd);
 	}
 	ret->length = nelem;
@@ -275,7 +271,7 @@ static struct di_object *di_lua_checkobject(lua_State *L, int index) {
 	return di_lua_checklobject(L, index)->o;
 }
 
-static int di_lua_checkarray(lua_State *L, int index) {
+static int di_lua_checkarray(lua_State *L, int index, di_type_t *elemt) {
 	lua_pushnil(L);
 	if (lua_next(L, index) == 0)
 		// Empty array
@@ -284,33 +280,34 @@ static int di_lua_checkarray(lua_State *L, int index) {
 	int i = 1;
 
 	// get arr[1]
-	lua_pushinteger(L, i++);
-	lua_rawget(L, index);
+	lua_rawgeti(L, index, i++);
 
-	di_type_t t0;
-	void *ret = di_lua_type_to_di(L, -1, &t0);
-	di_free_value(t0, ret);
+	void *ret = di_lua_type_to_di(L, -1, elemt);
+	di_free_value(*elemt, ret);
 	// Pop 2 value, top of stack is the key
 	lua_pop(L, 2);
 
-	if (t0 == DI_TYPE_VOID || t0 >= DI_LAST_TYPE) {
+	if (*elemt == DI_TYPE_VOID || *elemt >= DI_LAST_TYPE) {
 		lua_pop(L, 1);
 		return -1;
 	}
 
 	while (lua_next(L, index) != 0) {
-		lua_pushinteger(L, i++);
-		lua_rawget(L, index);
+		lua_rawgeti(L, index, i++);
 
 		di_type_t t;
 		ret = di_lua_type_to_di(L, -1, &t);
 		di_free_value(t, ret);
 		// pop 2 value
 		lua_pop(L, 2);
-		if (t != t0) {
-			// pop 1 key
-			lua_pop(L, 1);
-			return -1;
+		if (t != *elemt) {
+			if (t == DI_TYPE_FLOAT && *elemt == DI_TYPE_INT)
+				*elemt = DI_TYPE_FLOAT;
+			else if (t != DI_TYPE_INT || *elemt != DI_TYPE_FLOAT) {
+				// pop 1 key
+				lua_pop(L, 1);
+				return -1;
+			}
 		}
 
 		if (i == INT_MAX) {
@@ -334,6 +331,7 @@ static void *di_lua_type_to_di(lua_State *L, int i, di_type_t *t) {
 #define tostringdup(L, i) strdup(lua_tostring(L, i))
 	int nelem;
 	void *ret;
+	di_type_t elemt;
 	switch (lua_type(L, i)) {
 	case LUA_TBOOLEAN:
 		ret_arg(i, DI_TYPE_NUINT, unsigned int, lua_toboolean);
@@ -350,11 +348,11 @@ static void *di_lua_type_to_di(lua_State *L, int i, di_type_t *t) {
 		ret_arg(i, DI_TYPE_OBJECT, void *, *(void **)lua_touserdata);
 	case LUA_TTABLE:
 		// Must be a array
-		if ((nelem = di_lua_checkarray(L, i)) < 0)
+		if ((nelem = di_lua_checkarray(L, i, &elemt)) < 0)
 			goto type_error;
 		*t = DI_TYPE_ARRAY;
 		ret = calloc(1, sizeof(struct di_array));
-		di_lua_table_to_array(L, i, nelem, ret);
+		di_lua_table_to_array(L, i, nelem, elemt, ret);
 		return ret;
 	case LUA_TNIL:
 		*t = DI_TYPE_NIL;
@@ -582,9 +580,7 @@ static int di_lua_pushany(lua_State *L, di_type_t t, void *d) {
 		lo = di_lua_pushobject(L, *(void **)d, di_lua_methods);
 		list_add(&lo->sibling, &s->objects);
 		return 1;
-	case DI_TYPE_STRING:
-		lua_pushstring(L, *(const char **)d);
-		return 1;
+	case DI_TYPE_STRING: lua_pushstring(L, *(const char **)d); return 1;
 	case DI_TYPE_ARRAY:
 		arr = (struct di_array *)d;
 		lua_createtable(L, arr->length, 0);
@@ -613,7 +609,7 @@ int di_lua_emit_signal(lua_State *L) {
 	const char *signame = luaL_checkstring(L, 1);
 	int top = lua_gettop(L);
 
-	void **args = tmalloc(void *, top-1);
+	void **args = tmalloc(void *, top - 1);
 	di_type_t *atypes = tmalloc(di_type_t, top - 1);
 
 	for (int i = 2; i <= top; i++)
