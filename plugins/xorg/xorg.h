@@ -6,13 +6,19 @@
 
 #pragma once
 
-#include "list.h"
+#include <deai.h>
+
+#include <xcb/xcb.h>
+
+#include "utils.h"
+#include "uthash.h"
 
 struct di_xorg {
 	struct di_module;
 };
 
 struct di_atom_entry;
+struct di_xorg_ext;
 
 struct di_xorg_connection {
 	struct di_object;
@@ -21,7 +27,7 @@ struct di_xorg_connection {
 	int dflt_scrn;
 	struct di_object *xcb_fd;
 	struct di_listener *xcb_fdlistener;
-	struct di_xorg_ext *xi;
+	struct di_xorg_ext *xext;
 
 	struct di_atom_entry *a_byatom, *a_byname;
 };
@@ -29,13 +35,14 @@ struct di_xorg_connection {
 struct di_xorg_ext {
 	struct di_object;
 	struct di_xorg_connection *dc;
-	struct di_xorg_ext **e;
 	const char *id;
+	const char *extname;
 
 	uint8_t opcode;
 
 	void (*free)(struct di_xorg_ext *);
 	void (*handle_event)(struct di_xorg_ext *, xcb_ge_generic_event_t *ev);
+	UT_hash_handle hh;
 };
 
 static inline xcb_screen_t *screen_of_display(xcb_connection_t *c, int screen) {
@@ -65,6 +72,5 @@ static inline bool xorg_has_extension(xcb_connection_t *c, const char *name) {
 	return false;
 }
 
-void di_xorg_free_sub(struct di_xorg_ext *x);
 const char *di_xorg_get_atom_name(struct di_xorg_connection *xc, xcb_atom_t atom);
 xcb_atom_t di_xorg_intern_atom(struct di_xorg_connection *xc, const char *name, xcb_generic_error_t **e);

@@ -5,5 +5,5 @@
 /* Copyright (c) 2017, Yuxuan Shui <yshuiv7@gmail.com> */
 
 #pragma once
-
-struct di_object *di_xorg_get_xinput(struct di_object *);
+#include "xorg.h"
+struct di_xorg_ext *di_xorg_new_xinput(struct di_xorg_connection *);

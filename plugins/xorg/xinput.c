@@ -494,13 +494,7 @@ di_xorg_handle_xinput_event(struct di_xorg_xinput *xi, xcb_ge_generic_event_t *e
 	}
 }
 
-struct di_object *di_xorg_get_xinput(struct di_object *o) {
-	auto dc = (struct di_xorg_connection *)o;
-	if (dc->xi) {
-		di_ref_object((void *)dc->xi);
-		return (void *)dc->xi;
-	}
-
+struct di_xorg_ext *di_xorg_new_xinput(struct di_xorg_connection *dc) {
 	char *extname = "XInputExtension";
 	if (!xorg_has_extension(dc->c, extname))
 		return NULL;
@@ -515,21 +509,17 @@ struct di_object *di_xorg_get_xinput(struct di_object *o) {
 	xi->ec.deviceid = 0;        // alldevice
 	xi->opcode = r->major_opcode;
 	xi->handle_event = (void *)di_xorg_handle_xinput_event;
-	dc->xi = (void *)xi;
 	xi->dc = dc;
-	xi->e = &dc->xi;
+	xi->extname = "xinput";
+	xi->free = di_xorg_free_xinput;
+
+	HASH_ADD_KEYPTR(hh, dc->xext, xi->extname, strlen(xi->extname), (struct di_xorg_ext *)xi);
 
 	di_ref_object((void *)dc);
 
 	free(r);
 
-	dc->xi->free = di_xorg_free_xinput;
-
-	auto tm = di_create_typed_method((di_fn_t)di_xorg_free_sub, "__dtor",
-	                                 DI_TYPE_VOID, 0);
-	di_register_typed_method((void *)xi, tm);
-
-	tm = di_create_typed_method((di_fn_t)di_xorg_xi_start_listen_for_hierarchy,
+	auto tm = di_create_typed_method((di_fn_t)di_xorg_xi_start_listen_for_hierarchy,
 	                            "__add_listener_new-device", DI_TYPE_VOID, 0);
 	di_register_typed_method((void *)xi, tm);
 
@@ -561,5 +551,5 @@ struct di_object *di_xorg_get_xinput(struct di_object *o) {
 	di_register_signal((void *)xi, "new-device", 1, DI_TYPE_OBJECT);
 	di_register_signal((void *)xi, "device-enabled", 1, DI_TYPE_OBJECT);
 	di_register_signal((void *)xi, "device-disabled", 1, DI_TYPE_OBJECT);
-	return (void *)dc->xi;
+	return (void *)xi;
 }

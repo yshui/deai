@@ -40,8 +40,10 @@ static void di_xorg_ioev(struct di_listener_data *l) {
 
 		if (ev->response_type == XCB_GE_GENERIC) {
 			auto gev = (xcb_ge_generic_event_t *)ev;
-			if (gev->extension == dc->xi->opcode)
-				dc->xi->handle_event(dc->xi, gev);
+			struct di_xorg_ext *ex, *tmp;
+			HASH_ITER(hh, dc->xext, ex, tmp)
+			if (gev->extension == ex->opcode)
+				ex->handle_event(ex, gev);
 		}
 		free(ev);
 	}
@@ -98,13 +100,14 @@ xcb_atom_t di_xorg_intern_atom(struct di_xorg_connection *xc, const char *name,
 }
 
 void di_xorg_free_sub(struct di_xorg_ext *x) {
+	HASH_DEL(x->dc->xext, x);
+	if (x->free)
+		x->free(x);
 	di_unref_object((void *)x->dc);
-	*(x->e) = NULL;
-	x->free(x);
 }
 
 static void di_xorg_free_connection(struct di_xorg_connection *xc) {
-	assert(!xc->xi);
+	assert(!xc->xext);
 	di_remove_listener(xc->xcb_fd, "read", xc->xcb_fdlistener);
 	di_unref_object(xc->xcb_fd);
 	xc->x = NULL;
@@ -153,7 +156,35 @@ static void di_xorg_set_resource(struct di_xorg_connection *xc, const char *rdb)
 	(void)e;
 }
 
-static struct di_object *di_xorg_connect_to(struct di_xorg *x, const char *displayname) {
+struct _xext {
+	const char *name;
+	struct di_xorg_ext *(*new)(struct di_xorg_connection *xc);
+} xext_reg[] = {
+    {"xinput", di_xorg_new_xinput}, {NULL, NULL},
+};
+
+static struct di_object *
+di_xorg_get_ext(struct di_xorg_connection *xc, const char *name) {
+	struct di_xorg_ext *ret;
+	HASH_FIND_STR(xc->xext, name, ret);
+	if (ret) {
+		di_ref_object((void *)ret);
+		return (void *)ret;
+	}
+	for (int i = 0; xext_reg[i].name; i++)
+		if (strcmp(xext_reg[i].name, name) == 0) {
+			auto ext = xext_reg[i].new(xc);
+			di_register_typed_method(
+			    (void *)ext,
+			    di_create_typed_method((di_fn_t)di_xorg_free_sub,
+			                           "__dtor", DI_TYPE_VOID, 0));
+			return (void *)ext;
+		}
+	return NULL;
+}
+
+static struct di_object *
+di_xorg_connect_to(struct di_xorg *x, const char *displayname) {
 	int scrn;
 	auto c = xcb_connect(displayname, &scrn);
 	if (xcb_connection_has_error(c)) {
@@ -168,23 +199,25 @@ static struct di_object *di_xorg_connect_to(struct di_xorg *x, const char *displ
 	dc->c = c;
 	dc->dflt_scrn = scrn;
 
-	di_call(eventm, "fdevent", dc->xcb_fd, xcb_get_file_descriptor(dc->c), IOEV_READ);
+	di_call(eventm, "fdevent", dc->xcb_fd, xcb_get_file_descriptor(dc->c),
+	        IOEV_READ);
 	dc->xcb_fdlistener =
 	    di_add_typed_listener(dc->xcb_fd, "read", dc, (di_fn_t)di_xorg_ioev);
 
 	di_call0(dc->xcb_fd, "start");
 
 	di_register_typed_method(
-	    (void *)dc, di_create_typed_method((di_fn_t)di_xorg_get_xinput,
-	                                       "__get_xinput", DI_TYPE_OBJECT, 0));
+	    (void *)dc, di_create_typed_method((di_fn_t)di_xorg_get_ext, "__get",
+	                                       DI_TYPE_OBJECT, 1, DI_TYPE_STRING));
 
 	di_register_typed_method(
 	    (void *)dc, di_create_typed_method((di_fn_t)di_xorg_get_resource,
 	                                       "__get_xrdb", DI_TYPE_STRING, 0));
 
 	di_register_typed_method(
-	    (void *)dc, di_create_typed_method((di_fn_t)di_xorg_set_resource,
-	                                       "__set_xrdb", DI_TYPE_VOID, 1, DI_TYPE_STRING));
+	    (void *)dc,
+	    di_create_typed_method((di_fn_t)di_xorg_set_resource, "__set_xrdb",
+	                           DI_TYPE_VOID, 1, DI_TYPE_STRING));
 
 	di_register_typed_method(
 	    (void *)dc, di_create_typed_method((di_fn_t)di_xorg_free_connection,
@@ -206,8 +239,9 @@ PUBLIC int di_plugin_init(struct deai *di) {
 	                                      DI_TYPE_OBJECT, 0));
 
 	di_register_typed_method(
-	    (void *)x, di_create_typed_method((di_fn_t)di_xorg_connect_to, "connect_to",
-	                                      DI_TYPE_OBJECT, 1, DI_TYPE_STRING));
+	    (void *)x,
+	    di_create_typed_method((di_fn_t)di_xorg_connect_to, "connect_to",
+	                           DI_TYPE_OBJECT, 1, DI_TYPE_STRING));
 
 	di_register_module(di, (void *)x);
 	return 0;
