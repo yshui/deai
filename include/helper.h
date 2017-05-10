@@ -13,7 +13,8 @@
 
 int di_setv(struct di_object *o, const char *prop, di_type_t type, void *val);
 int di_getv(struct di_object *o, const char *prop, di_type_t *type, void **val);
-int di_register_field_getter(struct di_object *o, const char *prop, off_t offset, di_type_t t);
+int di_register_field_getter(struct di_object *o, const char *prop, off_t offset,
+                             di_type_t t);
 
 #define di_set(o, prop, v)                                                          \
 	({                                                                          \
@@ -124,7 +125,7 @@ int di_register_field_getter(struct di_object *o, const char *prop, off_t offset
 	})
 
 #define di_field(o, name)                                                           \
-	di_register_field_getter(o, STRINGIFY(__get_##name),                        \
+	di_register_field_getter((struct di_object *)o, STRINGIFY(__get_##name),    \
 	                         offsetof(typeof(*o), name), di_typeof(o->name))
 
 static inline int di_register_r_property(struct di_object *obj, const char *name,
