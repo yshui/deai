@@ -128,6 +128,18 @@ int di_register_field_getter(struct di_object *o, const char *prop, off_t offset
 	di_register_field_getter((struct di_object *)o, STRINGIFY(__get_##name),    \
 	                         offsetof(typeof(*o), name), di_typeof(o->name))
 
+#define di_signal_handler(o, name, add, del)                                        \
+	do {                                                                        \
+		di_register_typed_method(                                           \
+		    (struct di_object *)o,                                          \
+		    di_create_typed_method((di_fn_t)add, "__add_listener_" name,    \
+		                           DI_TYPE_VOID, 0));                       \
+		di_register_typed_method(                                           \
+		    (struct di_object *)o,                                          \
+		    di_create_typed_method((di_fn_t)del, "__del_listener_" name,    \
+		                           DI_TYPE_VOID, 0));                       \
+	} while (0)
+
 static inline int di_register_r_property(struct di_object *obj, const char *name,
                                          di_fn_t prop, di_type_t t) {
 	char *buf = malloc(strlen(name) + strlen("__get_") + 1);

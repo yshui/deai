@@ -79,11 +79,11 @@ static void di_xorg_xi_stop_listen_for_event(struct di_xorg_xinput *xi, int ev) 
 		di_log_va(logm, DI_LOG_ERROR, "select events failed\n");
 }
 
-static void di_xorg_xi_start_listen_for_hierarchy(struct di_xorg_xinput *xi) {
+static void enable_hierarchy_event(struct di_xorg_xinput *xi) {
 	di_xorg_xi_start_listen_for_event(xi, XCB_INPUT_HIERARCHY);
 }
 
-static void di_xorg_xi_stop_listen_for_hierarchy(struct di_xorg_xinput *xi) {
+static void disable_hierarchy_event(struct di_xorg_xinput *xi) {
 	di_xorg_xi_stop_listen_for_event(xi, XCB_INPUT_HIERARCHY);
 }
 
@@ -306,7 +306,8 @@ static void di_xorg_xinput_set_prop(struct di_xorg_xinput_device *dev,
 	return;
 err:
 	di_log_va(logm, DI_LOG_ERROR, "Try to set xinput property '%s' with wrong "
-	                              "type of data %d\n", key, arr.elem_type);
+	                              "type of data %d\n",
+	          key, arr.elem_type);
 }
 
 static struct di_array
@@ -519,32 +520,14 @@ struct di_xorg_ext *di_xorg_new_xinput(struct di_xorg_connection *dc) {
 
 	free(r);
 
-	auto tm = di_create_typed_method((di_fn_t)di_xorg_xi_start_listen_for_hierarchy,
-	                            "__add_listener_new-device", DI_TYPE_VOID, 0);
-	di_register_typed_method((void *)xi, tm);
+	di_signal_handler(xi, "new-device", enable_hierarchy_event,
+	                  disable_hierarchy_event);
+	di_signal_handler(xi, "device-enabled", enable_hierarchy_event,
+	                  disable_hierarchy_event);
+	di_signal_handler(xi, "device-disabled", enable_hierarchy_event,
+	                  disable_hierarchy_event);
 
-	tm = di_create_typed_method((di_fn_t)di_xorg_xi_stop_listen_for_hierarchy,
-	                            "__del_listener_new-device", DI_TYPE_VOID, 0);
-	di_register_typed_method((void *)xi, tm);
-
-	tm = di_create_typed_method((di_fn_t)di_xorg_xi_start_listen_for_hierarchy,
-	                            "__add_listener_device-enabled", DI_TYPE_VOID, 0);
-	di_register_typed_method((void *)xi, tm);
-
-	tm = di_create_typed_method((di_fn_t)di_xorg_xi_stop_listen_for_hierarchy,
-	                            "__del_listener_device-enabled", DI_TYPE_VOID, 0);
-	di_register_typed_method((void *)xi, tm);
-	tm = di_create_typed_method((di_fn_t)di_xorg_xi_start_listen_for_hierarchy,
-	                            "__add_listener_device-disabled", DI_TYPE_VOID,
-	                            0);
-	di_register_typed_method((void *)xi, tm);
-
-	tm = di_create_typed_method((di_fn_t)di_xorg_xi_stop_listen_for_hierarchy,
-	                            "__del_listener_device-disabled", DI_TYPE_VOID,
-	                            0);
-	di_register_typed_method((void *)xi, tm);
-
-	tm = di_create_typed_method((di_fn_t)di_xorg_get_all_devices,
+	auto tm = di_create_typed_method((di_fn_t)di_xorg_get_all_devices,
 	                            "__get_devices", DI_TYPE_ARRAY, 0);
 	di_register_typed_method((void *)xi, tm);
 
