@@ -190,10 +190,7 @@ di_xorg_get_ext(struct di_xorg_connection *xc, const char *name) {
 	for (int i = 0; xext_reg[i].name; i++)
 		if (strcmp(xext_reg[i].name, name) == 0) {
 			auto ext = xext_reg[i].new(xc);
-			di_register_typed_method(
-			    (void *)ext,
-			    di_create_typed_method((di_fn_t)di_xorg_free_sub,
-			                           "__dtor", DI_TYPE_VOID, 0));
+			di_dtor(ext, di_xorg_free_sub);
 			return (void *)ext;
 		}
 	return NULL;
@@ -235,9 +232,7 @@ di_xorg_connect_to(struct di_xorg *x, const char *displayname) {
 	    di_create_typed_method((di_fn_t)di_xorg_set_resource, "__set_xrdb",
 	                           DI_TYPE_VOID, 1, DI_TYPE_STRING));
 
-	di_register_typed_method(
-	    (void *)dc, di_create_typed_method((di_fn_t)di_xorg_free_connection,
-	                                       "__dtor", DI_TYPE_VOID, 0));
+	di_dtor(dc, di_xorg_free_connection);
 
 	di_register_signal((void *)dc, "connection-error", 0);
 

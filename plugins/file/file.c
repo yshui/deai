@@ -158,9 +158,7 @@ static struct di_object *di_file_new_watch(struct di_file *f, struct di_array pa
 	    (void *)fw, di_create_typed_method((di_fn_t)di_file_rm_watch, "remove",
 	                                       DI_TYPE_NINT, 1, DI_TYPE_STRING));
 
-	di_register_typed_method(
-	    (void *)fw, di_create_typed_method((di_fn_t)di_file_watch_dtor, "__dtor",
-	                                       DI_TYPE_VOID, 0));
+	di_dtor(fw, di_file_watch_dtor);
 
 	di_register_signal((void *)fw, "moved-from", 3, DI_TYPE_STRING,
 	                   DI_TYPE_STRING, DI_TYPE_UINT);

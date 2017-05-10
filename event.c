@@ -8,6 +8,7 @@
 #include "event_internal.h"
 #include "utils.h"
 #include <deai.h>
+#include <helper.h>
 #include <ev.h>
 struct di_ioev {
 	struct di_object;
@@ -78,9 +79,7 @@ static struct di_object *di_create_ioev(struct di_object *obj, int fd, int t) {
 	    di_create_typed_method((di_fn_t)di_start_ioev, "start", DI_TYPE_VOID, 0);
 	di_register_typed_method((void *)ret, (void *)startfn);
 
-	auto dtor =
-	    di_create_typed_method((di_fn_t)di_ioev_dtor, "__dtor", DI_TYPE_VOID, 0);
-	di_register_typed_method((void *)ret, dtor);
+	di_dtor(ret, di_ioev_dtor);
 
 	if (t & IOEV_READ)
 		di_register_signal((void *)ret, "read", 0);
@@ -93,9 +92,7 @@ static struct di_object *di_create_timer(struct di_object *obj, uint64_t timeout
 	auto ret = di_new_object_with_type(struct di_timer);
 	ret->loop = em->loop;
 
-	di_register_typed_method((void *)ret,
-	                         di_create_typed_method((di_fn_t)di_timer_dtor,
-	                                                "__dtor", DI_TYPE_VOID, 0));
+	di_dtor(ret, di_timer_dtor);
 	di_register_typed_method((void *)ret,
 	                         di_create_typed_method((di_fn_t)di_timer_again,
 	                                                "start", DI_TYPE_VOID, 0));

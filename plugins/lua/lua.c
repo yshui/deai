@@ -168,9 +168,7 @@ static struct di_object *di_lua_load_script(struct di_object *obj, const char *p
 		return di_new_error("Path is null");
 
 	auto s = di_new_object_with_type(struct di_lua_script);
-	auto fn = di_create_typed_method((void *)di_lua_free_script, "__dtor",
-	                                 DI_TYPE_VOID, 0);
-	di_register_typed_method((void *)s, fn);
+	di_dtor(s, di_lua_free_script);
 
 	struct di_lua_module *m = (void *)obj;
 	// Don't hold ref. If lua module goes away first, script will become

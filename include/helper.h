@@ -140,6 +140,11 @@ int di_register_field_getter(struct di_object *o, const char *prop, off_t offset
 		                           DI_TYPE_VOID, 0));                       \
 	} while (0)
 
+#define di_dtor(o, dtor)                                                            \
+	di_register_typed_method(                                                   \
+	    (struct di_object *)o,                                                  \
+	    di_create_typed_method((di_fn_t)dtor, "__dtor", DI_TYPE_VOID, 0));
+
 static inline int di_register_r_property(struct di_object *obj, const char *name,
                                          di_fn_t prop, di_type_t t) {
 	char *buf = malloc(strlen(name) + strlen("__get_") + 1);

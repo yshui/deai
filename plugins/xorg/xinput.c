@@ -424,9 +424,7 @@ di_xorg_make_object_for_devid(struct di_xorg_connection *dc, int deviceid) {
 
 	di_ref_object((void *)dc);
 
-	di_register_typed_method(
-	    (void *)obj, di_create_typed_method((di_fn_t)free_xi_device_object,
-	                                        "__dtor", DI_TYPE_VOID, 0));
+	di_dtor(obj, free_xi_device_object);
 
 	auto tm = di_create_typed_method((di_fn_t)di_xorg_xinput_get_device_name,
 	                                 "__get_name", DI_TYPE_STRING, 0);
