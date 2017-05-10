@@ -250,7 +250,7 @@ static void di_xorg_xinput_set_prop(struct di_xorg_xinput_device *dev,
 		case DI_TYPE_FLOAT:
 			if (prop->type != float_atom)
 				goto err;
-			f = *(float *)src;
+			f = *(double *)src;
 			break;
 		case DI_TYPE_STRING:
 			if (prop->type != XCB_ATOM_ATOM)

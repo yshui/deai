@@ -16,6 +16,7 @@
 #include "uthash.h"
 #include "utils.h"
 
+#include "randr.h"
 #include "xinput.h"
 #include "xorg.h"
 
@@ -176,7 +177,7 @@ struct _xext {
 	const char *name;
 	struct di_xorg_ext *(*new)(struct di_xorg_connection *xc);
 } xext_reg[] = {
-    {"xinput", di_xorg_new_xinput}, {NULL, NULL},
+    {"xinput", di_xorg_new_xinput}, {"randr", di_xorg_new_randr}, {NULL, NULL},
 };
 
 static struct di_object *
@@ -194,6 +195,24 @@ di_xorg_get_ext(struct di_xorg_connection *xc, const char *name) {
 			return (void *)ext;
 		}
 	return NULL;
+}
+
+struct xscreen {
+	struct di_object;
+	uint64_t width, height;
+};
+static struct xscreen *
+get_screen(struct di_xorg_connection *dc) {
+	auto scrn = screen_of_display(dc->c, dc->dflt_scrn);
+
+	auto ret = di_new_object_with_type(struct xscreen);
+	ret->height = scrn->height_in_pixels;
+	ret->width = scrn->width_in_pixels;
+
+	di_field(ret, height);
+	di_field(ret, width);
+
+	return ret;
 }
 
 static struct di_object *
@@ -231,6 +250,10 @@ di_xorg_connect_to(struct di_xorg *x, const char *displayname) {
 	    (void *)dc,
 	    di_create_typed_method((di_fn_t)di_xorg_set_resource, "__set_xrdb",
 	                           DI_TYPE_VOID, 1, DI_TYPE_STRING));
+
+	di_register_typed_method(
+	    (void *)dc, di_create_typed_method((di_fn_t)get_screen,
+	                                       "__get_screen", DI_TYPE_OBJECT, 0));
 
 	di_dtor(dc, di_xorg_free_connection);
 

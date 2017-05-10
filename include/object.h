@@ -8,6 +8,8 @@
 
 // XXX merge into deai.h
 
+#include <stddef.h>
+#include <stdint.h>
 #include <errno.h>
 
 typedef enum di_type {
