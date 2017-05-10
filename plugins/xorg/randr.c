@@ -135,9 +135,12 @@ static struct di_object *di_xorg_rr_get_info(struct di_xorg_output *o) {
 	else if (info->rotation & XCB_RANDR_ROTATION_ROTATE_270)
 		ret->rotation = 3;
 
-	if (info->rotation & XCB_RANDR_ROTATION_REFLECT_X)
-		ret->reflection = 1;
-	else if (info->rotation & XCB_RANDR_ROTATION_REFLECT_Y)
+	if (info->rotation & XCB_RANDR_ROTATION_REFLECT_X) {
+		if (info->rotation & XCB_RANDR_ROTATION_REFLECT_Y)
+			ret->reflection = 3;
+		else
+			ret->reflection = 1;
+	} else if (info->rotation & XCB_RANDR_ROTATION_REFLECT_Y)
 		ret->reflection = 2;
 	else
 		ret->reflection = 0;
