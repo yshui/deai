@@ -517,6 +517,7 @@ static void di_free_untyped_method(struct di_untyped_method *m) {
 	free(m->name);
 	if (m->ud_free)
 		m->ud_free(m->user_data);
+	free(m);
 }
 
 PUBLIC struct di_untyped_method *
