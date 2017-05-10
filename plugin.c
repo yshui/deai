@@ -515,16 +515,19 @@ di_create_typed_method(void (*fn)(void), const char *name, di_type_t rtype,
 
 static void di_free_untyped_method(struct di_untyped_method *m) {
 	free(m->name);
+	if (m->ud_free)
+		m->ud_free(m->user_data);
 }
 
 PUBLIC struct di_untyped_method *
-di_create_untyped_method(di_callbale_t fn, const char *name, void *user_data) {
+di_create_untyped_method(di_callbale_t fn, const char *name, void *user_data, void (*user_data_free)(void *)) {
 	auto gfn = tmalloc(struct di_untyped_method, 1);
 	gfn->user_data = user_data;
 	gfn->real_fn_ptr = fn;
 	gfn->fn_ptr = di_untyped_trampoline;
 	gfn->name = strdup(name);
 	gfn->free = (void *)di_free_untyped_method;
+	gfn->ud_free = user_data_free;
 
 	return gfn;
 }

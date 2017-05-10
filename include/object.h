@@ -80,7 +80,8 @@ struct di_typed_method *
 di_create_typed_method(di_fn_t fn, const char *name, di_type_t rtype,
                        unsigned int nargs, ...);
 struct di_untyped_method *
-di_create_untyped_method(di_callbale_t fn, const char *name, void *user_data);
+di_create_untyped_method(di_callbale_t fn, const char *name, void *user_data,
+                         void (*user_data_free)(void *));
 
 int di_call_callable(struct di_callable *c, di_type_t *rtype, void **ret,
                      unsigned int nargs, const di_type_t *atypes,

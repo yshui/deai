@@ -89,6 +89,10 @@ offset_property(di_type_t *rtype, void **ret, unsigned int nargs,
 	return 0;
 }
 
+static void free_ud(void *ud) {
+	free(ud);
+}
+
 PUBLIC int di_register_field_getter(struct di_object *o, const char *fname,
                                     off_t offset, di_type_t type) {
 	auto p = tmalloc(struct _prop, 1);
@@ -97,5 +101,5 @@ PUBLIC int di_register_field_getter(struct di_object *o, const char *fname,
 	p->t = type;
 
 	return di_register_method(
-	    o, (void *)di_create_untyped_method(offset_property, fname, p));
+	    o, (void *)di_create_untyped_method(offset_property, fname, p, free_ud));
 }
