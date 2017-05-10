@@ -411,12 +411,22 @@ static struct di_object *di_xorg_xinput_props(struct di_xorg_xinput_device *dev)
 	return (void *)obj;
 }
 
+static void free_xi_device_object(struct di_xorg_xinput_device *dev) {
+	di_unref_object((void *)dev->dc);
+}
+
 static struct di_object *
 di_xorg_make_object_for_devid(struct di_xorg_connection *dc, int deviceid) {
 	auto obj = di_new_object_with_type(struct di_xorg_xinput_device);
 
 	obj->deviceid = deviceid;
 	obj->dc = dc;
+
+	di_ref_object((void *)dc);
+
+	di_register_typed_method(
+	    (void *)obj, di_create_typed_method((di_fn_t)free_xi_device_object,
+	                                        "__dtor", DI_TYPE_VOID, 0));
 
 	auto tm = di_create_typed_method((di_fn_t)di_xorg_xinput_get_device_name,
 	                                 "__get_name", DI_TYPE_STRING, 0);
@@ -514,7 +524,8 @@ struct di_xorg_ext *di_xorg_new_xinput(struct di_xorg_connection *dc) {
 	xi->extname = "xinput";
 	xi->free = di_xorg_free_xinput;
 
-	HASH_ADD_KEYPTR(hh, dc->xext, xi->extname, strlen(xi->extname), (struct di_xorg_ext *)xi);
+	HASH_ADD_KEYPTR(hh, dc->xext, xi->extname, strlen(xi->extname),
+	                (struct di_xorg_ext *)xi);
 
 	di_ref_object((void *)dc);
 
@@ -528,7 +539,7 @@ struct di_xorg_ext *di_xorg_new_xinput(struct di_xorg_connection *dc) {
 	                  disable_hierarchy_event);
 
 	auto tm = di_create_typed_method((di_fn_t)di_xorg_get_all_devices,
-	                            "__get_devices", DI_TYPE_ARRAY, 0);
+	                                 "__get_devices", DI_TYPE_ARRAY, 0);
 	di_register_typed_method((void *)xi, tm);
 
 	di_register_signal((void *)xi, "new-device", 1, DI_TYPE_OBJECT);

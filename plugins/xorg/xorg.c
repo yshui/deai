@@ -47,6 +47,20 @@ static void di_xorg_ioev(struct di_listener_data *l) {
 		}
 		free(ev);
 	}
+
+	if (xcb_connection_has_error(dc->c)) {
+		// remove the listeners to prevent busy loop
+		di_remove_listener(dc->xcb_fd, "read", dc->xcb_fdlistener);
+		di_unref_object((void *)dc->xcb_fd);
+
+		// don't close the xcb connection just yet
+		// all those destructors still need it even if it's dead
+
+		dc->xcb_fdlistener = NULL;
+		dc->xcb_fd = NULL;
+
+		di_emit_signal_v((void *)dc, "connection-error");
+	}
 }
 
 const char *di_xorg_get_atom_name(struct di_xorg_connection *xc, xcb_atom_t atom) {
@@ -108,10 +122,12 @@ void di_xorg_free_sub(struct di_xorg_ext *x) {
 
 static void di_xorg_free_connection(struct di_xorg_connection *xc) {
 	assert(!xc->xext);
-	di_remove_listener(xc->xcb_fd, "read", xc->xcb_fdlistener);
-	di_unref_object(xc->xcb_fd);
-	xc->x = NULL;
+	if (xc->xcb_fd) {
+		di_remove_listener(xc->xcb_fd, "read", xc->xcb_fdlistener);
+		di_unref_object(xc->xcb_fd);
+	}
 	xcb_disconnect(xc->c);
+	xc->x = NULL;
 
 	struct di_atom_entry *ae, *tae;
 	HASH_ITER(hh, xc->a_byatom, ae, tae) {
@@ -222,6 +238,8 @@ di_xorg_connect_to(struct di_xorg *x, const char *displayname) {
 	di_register_typed_method(
 	    (void *)dc, di_create_typed_method((di_fn_t)di_xorg_free_connection,
 	                                       "__dtor", DI_TYPE_VOID, 0));
+
+	di_register_signal((void *)dc, "connection-error", 0);
 
 	dc->x = x;
 	return (void *)dc;
