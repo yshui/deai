@@ -744,6 +744,10 @@ PUBLIC int di_plugin_init(struct deai *di) {
 	    di_lua_pushobject(m->L, (void *)di, di_lua_methods);
 	lua_setglobal(m->L, "di");
 
+	// Prevent the script from using os
+	lua_pushnil(m->L);
+	lua_setglobal(m->L, "os");
+
 	// make di_lua_gc happy
 	INIT_LIST_HEAD(&m->ldi);
 	list_add(&lo->sibling, &m->ldi);
