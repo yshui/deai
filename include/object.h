@@ -167,3 +167,5 @@ static inline size_t di_sizeof_type(di_type_t t) {
 		retv = *(typeof(v) **)ret;                                          \
 		*retv = v;                                                          \
 	} while (0);
+
+#define DI_ARRAY_NIL ((struct di_array){0, NULL, DI_TYPE_VOID})

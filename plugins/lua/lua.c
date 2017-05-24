@@ -141,10 +141,10 @@ static void di_lua_free_script(struct di_lua_script *s) {
 	struct di_lua_object *lo, *nlo;
 	// int cnt = 0;
 	list_for_each_entry_safe(lo, nlo, &s->objects, sibling) {
-		di_unref_object(lo->o);
+		// fprintf(stderr, "%d %p\n", ++cnt, lo);
+		di_unref_object(&lo->o);
 		list_del(&lo->sibling);
 		lo->o = NULL;
-		// fprintf(stderr, "%d %p\n", ++cnt, lo);
 		// don't free here, will handled by di_lua_gc
 	}
 	list_del(&s->sibling);
@@ -562,6 +562,7 @@ static int di_lua_pushany(lua_State *L, di_type_t t, void *d) {
 	struct di_lua_object *lo;
 	struct di_lua_script *s;
 	struct di_array *arr;
+	int step;
 	switch (t) {
 	case DI_TYPE_NUINT: i = *(unsigned int *)d; goto pushint;
 	case DI_TYPE_UINT: i = *(uint64_t *)d; goto pushint;
@@ -583,9 +584,9 @@ static int di_lua_pushany(lua_State *L, di_type_t t, void *d) {
 	case DI_TYPE_STRING: lua_pushstring(L, *(const char **)d); return 1;
 	case DI_TYPE_ARRAY:
 		arr = (struct di_array *)d;
+		step = di_sizeof_type(arr->elem_type);
 		lua_createtable(L, arr->length, 0);
 		for (int i = 0; i < arr->length; i++) {
-			int step = di_sizeof_type(arr->elem_type);
 			di_lua_pushany(L, arr->elem_type, arr->arr + step * i);
 			lua_rawseti(L, -2, i + 1);
 		}
