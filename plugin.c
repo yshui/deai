@@ -9,9 +9,16 @@
 #include <deai.h>
 #include <stdarg.h>
 #include <stdio.h>
+#include <sys/mman.h>
 
+#include "config.h"
 #include "di_internal.h"
 #include "utils.h"
+
+#ifdef DI_REFCOUNT_DEBUG
+#define UNW_LOCAL_ONLY
+#include <libunwind.h>
+#endif
 
 #define PUBLIC __attribute__((visibility("default")))
 #define cleanup(func) __attribute__((cleanup(func)))
@@ -44,7 +51,7 @@ PUBLIC struct di_module *di_next_module(struct di_module *pm) {
 	struct di_module *nm = m->hh.next;
 	if (nm)
 		di_ref_object((void *)nm);
-	di_unref_object((void *)m);
+	di_unref_object((void *)&m);
 	return nm;
 }
 
@@ -294,13 +301,28 @@ PUBLIC void di_ref_object(struct di_object *obj) {
 	obj->ref_count++;
 }
 
-PUBLIC void di_unref_object(struct di_object *obj) {
+#ifdef DI_REFCOUNT_DEBUG
+struct di_dead_object {
+	struct list_head sibling;
+	uint64_t ref_count;
+
+	void *stack_trace;
+};
+
+struct list_head dead_objects = LIST_HEAD_INIT(dead_objects);
+
+static_assert(sizeof(struct di_dead_object) <= sizeof(struct di_object), "dead_object too big");
+#endif
+
+PUBLIC void di_unref_object(struct di_object **objp) {
+	struct di_object *obj = *objp;
 	assert(obj->ref_count > 0);
 	obj->ref_count--;
 	if (obj->ref_count == 0) {
 		di_destroy_object(obj);
 		free(obj);
 	}
+	*objp = NULL;
 }
 
 // Register a module. This method consume the reference
@@ -708,7 +730,7 @@ del:
 			di_free_value(rtype, ret);
 		}
 	}
-	di_unref_object(o);
+	di_unref_object(&o);
 
 	void *tmp = l->ud;
 	free(l);
@@ -734,7 +756,7 @@ _di_emit_signal(struct di_object *obj, struct di_signal *evd, void **ev_data) {
 		l->f(evd, ev_data);
 	}
 
-	di_unref_object(obj);
+	di_unref_object(&obj);
 	return 0;
 }
 
@@ -776,7 +798,7 @@ PUBLIC int di_emit_signal_v(struct di_object *obj, const char *name, ...) {
 	case DI_TYPE_ARRAY: di_free_array(*(struct di_array *)(v)); break;          \
 	case DI_TYPE_STRING: chknull(v) free(*(char **)(v)); break;                 \
 	case DI_TYPE_OBJECT:                                                        \
-		chknull(v) di_unref_object(*(struct di_object **)(v));              \
+		chknull(v) di_unref_object((v));              \
 		break;                                                              \
 	default: break;                                                             \
 	}

@@ -131,7 +131,7 @@ static void di_file_watch_dtor(struct di_file_watch *fw) {
 	}
 
 	di_remove_listener(fw->fdev, "read", fw->fdev_listener);
-	di_unref_object(fw->fdev);
+	di_unref_object(&fw->fdev);
 }
 
 static struct di_object *di_file_new_watch(struct di_file *f, struct di_array paths) {

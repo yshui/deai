@@ -99,7 +99,7 @@ di_add_untyped_listener(struct di_object *obj, const char *name, void *ud,
 struct di_object *di_new_object(size_t sz);
 void di_destroy_object(struct di_object *);
 void di_ref_object(struct di_object *);
-void di_unref_object(struct di_object *);
+void di_unref_object(struct di_object **);
 
 /**
  * Remove a listener from signal

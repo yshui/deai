@@ -52,7 +52,7 @@ static void di_xorg_ioev(struct di_listener_data *l) {
 	if (xcb_connection_has_error(dc->c)) {
 		// remove the listeners to prevent busy loop
 		di_remove_listener(dc->xcb_fd, "read", dc->xcb_fdlistener);
-		di_unref_object((void *)dc->xcb_fd);
+		di_unref_object((void *)&dc->xcb_fd);
 
 		// don't close the xcb connection just yet
 		// all those destructors still need it even if it's dead
@@ -118,14 +118,14 @@ void di_xorg_free_sub(struct di_xorg_ext *x) {
 	HASH_DEL(x->dc->xext, x);
 	if (x->free)
 		x->free(x);
-	di_unref_object((void *)x->dc);
+	di_unref_object((void *)&x->dc);
 }
 
 static void di_xorg_free_connection(struct di_xorg_connection *xc) {
 	assert(!xc->xext);
 	if (xc->xcb_fd) {
 		di_remove_listener(xc->xcb_fd, "read", xc->xcb_fdlistener);
-		di_unref_object(xc->xcb_fd);
+		di_unref_object(&xc->xcb_fd);
 	}
 	xcb_disconnect(xc->c);
 	xc->x = NULL;

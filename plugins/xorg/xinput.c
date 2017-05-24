@@ -412,7 +412,7 @@ static struct di_object *di_xorg_xinput_props(struct di_xorg_xinput_device *dev)
 }
 
 static void free_xi_device_object(struct di_xorg_xinput_device *dev) {
-	di_unref_object((void *)dev->dc);
+	di_unref_object((void *)&dev->dc);
 }
 
 static struct di_object *
@@ -498,9 +498,10 @@ di_xorg_handle_xinput_event(struct di_xorg_xinput *xi, xcb_ge_generic_event_t *e
 				di_emit_signal_v((void *)xi, "device-enabled", obj);
 			if (info->flags & XCB_INPUT_HIERARCHY_MASK_DEVICE_DISABLED)
 				di_emit_signal_v((void *)xi, "device-disabled", obj);
-			di_unref_object(obj);
+			di_unref_object(&obj);
 		}
 	}
+	return 0;
 }
 
 struct di_xorg_ext *di_xorg_new_xinput(struct di_xorg_connection *dc) {

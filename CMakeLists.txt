@@ -28,8 +28,16 @@ cflag_check_and_apply(DI_CFLAGS -Wall)
 
 
 set(DI_PLUGIN_INSTALL_DIR "lib/deai" CACHE FILEPATH "Install path for plugins.")
+option(DI_REFCOUNT_DEBUG "enable reference count debugging" off)
 if (${CMAKE_SYSTEM_NAME} STREQUAL "Linux")
 	set(HAVE_SETPROCTITLE true)
+endif()
+
+if (${DI_REFCOUNT_DEBUG})
+	pkg_check_modules(UNW "libunwind" REQUIRED)
+else()
+	set(UNW_LIBRARIES "")
+	set(UNW_INCLUDE_DIRS "")
 endif()
 configure_file(config.h.in config.h)
 
@@ -49,8 +57,8 @@ add_executable(deai ${SRC})
 
 target_include_directories(deai PUBLIC "include")
 pkg_check_modules(LIBFFI libffi>=3.0 REQUIRED)
-target_link_libraries(deai ${LIBFFI_LIBRARIES})
-target_include_directories(deai PRIVATE ${LIBFFI_INCLUDE_DIRS})
+target_link_libraries(deai ${LIBFFI_LIBRARIES} ${UNW_LIBRARIES})
+target_include_directories(deai PRIVATE ${LIBFFI_INCLUDE_DIRS} ${UNW_INCLUDE_DIRS})
 target_compile_options(deai PUBLIC ${LIBFFI_CFLAGS_OTHER})
 target_compile_options(deai PRIVATE ${DI_CFLAGS})
 

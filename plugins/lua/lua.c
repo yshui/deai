@@ -124,7 +124,7 @@ static inline void _remove_listener(lua_State *L, struct di_lua_listener *ll) {
 
 	if (!IS_ERR_OR_NULL(ud))
 		free(ud);
-	di_unref_object((void *)s);
+	di_unref_object((void *)&s);
 }
 
 static void di_lua_clear_listener(struct di_lua_script *s) {
@@ -186,7 +186,7 @@ static struct di_object *di_lua_load_script(struct di_object *obj, const char *p
 		const char *err = lua_tostring(m->L, -1);
 		di_log_va(logm, DI_LOG_ERROR, "Failed to load lua script %s: %s\n",
 		          path, err);
-		di_unref_object((void *)s);
+		di_unref_object((void *)&s);
 		lua_pop(m->L, 2);
 		return di_new_error("Failed to load lua script %s: %s\n", path, err);
 	}
@@ -204,7 +204,7 @@ static struct di_object *di_lua_load_script(struct di_object *obj, const char *p
 		// destroy the object to remove any listener that
 		// might have been added
 		di_destroy_object((void *)s);
-		di_unref_object((void *)s);
+		di_unref_object((void *)&s);
 
 		// Pop error handling function
 		lua_pop(m->L, 1);
@@ -435,7 +435,7 @@ static void di_lua_general_callback(struct di_signal *sig, void **data) {
 
 	di_lua_xchg_env(L, s);
 
-	di_unref_object((void *)s);
+	di_unref_object((void *)&s);
 }
 
 static int di_lua_add_listener(lua_State *L) {
@@ -496,7 +496,7 @@ static int di_lua_gc(lua_State *L) {
 	struct di_lua_object *lo = di_lua_checklobject(L, 1);
 	// fprintf(stderr, "lua gc %p\n", lo);
 	if (lo->o) {
-		di_unref_object(lo->o);
+		di_unref_object(&lo->o);
 		list_del(&lo->sibling);
 	}
 	free(lo);
@@ -711,7 +711,7 @@ static void di_lua_shutdown(struct di_listener_data *ld) {
 		// cause it to drop to 0
 		di_ref_object((void *)s);
 		di_destroy_object((void *)s);
-		di_unref_object((void *)s);
+		di_unref_object((void *)&s);
 	}
 }
 

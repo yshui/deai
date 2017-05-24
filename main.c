@@ -329,14 +329,14 @@ int main(int argc, char *argv[]) {
 		free((void *)di_args[i]);
 	free(di_args);
 	free(di_types);
-	di_unref_object((void *)mod);
+	di_unref_object((void *)&mod);
 
 	// (4) Start mainloop
 	if (!p->quit)
 		ev_run(p->loop, 0);
 
 	if (rtype == DI_TYPE_OBJECT && *(void **)retv)
-		di_unref_object(*(struct di_object **)retv);
+		di_unref_object(retv);
 	free(retv);
 
 	// (5) Exit
@@ -346,12 +346,12 @@ int main(int argc, char *argv[]) {
 		auto next_pm = pm->hh.next;
 		HASH_DEL(p->m, pm);
 		// printf("%s:%d\n",pm->name, pm->ref_count);
-		di_unref_object((void *)pm);
+		di_unref_object((void *)&pm);
 		pm = next_pm;
 	}
 
 	for (int i = 0; i < p->argc; i++)
 		free(p->argv[i]);
 	free(p->argv);
-	di_unref_object((void *)p);
+	di_unref_object((void *)&p);
 }

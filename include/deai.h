@@ -58,13 +58,11 @@ int di_register_module(struct deai *, struct di_module *);
 static inline void di_cleanup_modulep(struct di_module **ptr) {
 	struct di_module *m = *ptr;
 	if (m)
-		di_unref_object((void *)m);
-	*ptr = NULL;
+		di_unref_object((void *)ptr);
 }
 
 static inline void di_cleanup_objectp(struct di_object **ptr) {
 	struct di_object *o = *ptr;
 	if (o)
-		di_unref_object(o);
-	*ptr = NULL;
+		di_unref_object(ptr);
 }
