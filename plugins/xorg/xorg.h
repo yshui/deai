@@ -41,7 +41,9 @@ struct di_xorg_ext {
 	uint8_t opcode;
 
 	void (*free)(struct di_xorg_ext *);
-	void (*handle_event)(struct di_xorg_ext *, xcb_ge_generic_event_t *ev);
+
+	// ret code: 0 = success, -1 = error, 1 = next
+	int (*handle_event)(struct di_xorg_ext *, xcb_generic_event_t *ev);
 	UT_hash_handle hh;
 };
 

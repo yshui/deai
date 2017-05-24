@@ -39,12 +39,11 @@ static void di_xorg_ioev(struct di_listener_data *l) {
 	while ((ev = xcb_poll_for_event(dc->c))) {
 		// handle event
 
-		if (ev->response_type == XCB_GE_GENERIC) {
-			auto gev = (xcb_ge_generic_event_t *)ev;
-			struct di_xorg_ext *ex, *tmp;
-			HASH_ITER(hh, dc->xext, ex, tmp)
-			if (gev->extension == ex->opcode)
-				ex->handle_event(ex, gev);
+		struct di_xorg_ext *ex, *tmp;
+		HASH_ITER(hh, dc->xext, ex, tmp) {
+			int status = ex->handle_event(ex, ev);
+			if (status != 1)
+				break;
 		}
 		free(ev);
 	}

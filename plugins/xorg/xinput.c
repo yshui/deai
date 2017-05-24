@@ -480,10 +480,17 @@ static struct di_array di_xorg_get_all_devices(struct di_xorg_xinput *xi) {
 	return ret;
 }
 
-static void
-di_xorg_handle_xinput_event(struct di_xorg_xinput *xi, xcb_ge_generic_event_t *ev) {
+static int
+handle_xinput_event(struct di_xorg_xinput *xi, xcb_generic_event_t *ev) {
+	if (ev->response_type != XCB_GE_GENERIC)
+		return 1;
+
+	xcb_ge_generic_event_t *gev = (void *)ev;
+	if (gev->extension != xi->opcode)
+		return 1;
+
 	// di_getm(xi->dc->x->di, log);
-	if (ev->event_type == XCB_INPUT_HIERARCHY) {
+	if (gev->event_type == XCB_INPUT_HIERARCHY) {
 		xcb_input_hierarchy_event_t *hev = (void *)ev;
 		auto hevi = xcb_input_hierarchy_infos_iterator(hev);
 		for (; hevi.rem; xcb_input_hierarchy_info_next(&hevi)) {
@@ -518,7 +525,7 @@ struct di_xorg_ext *di_xorg_new_xinput(struct di_xorg_connection *dc) {
 	xi->ec.mask_len = 1;        // 4 bytes unit
 	xi->ec.deviceid = 0;        // alldevice
 	xi->opcode = r->major_opcode;
-	xi->handle_event = (void *)di_xorg_handle_xinput_event;
+	xi->handle_event = (void *)handle_xinput_event;
 	xi->dc = dc;
 	xi->extname = "xinput";
 	xi->free = di_xorg_free_xinput;
