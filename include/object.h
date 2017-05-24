@@ -8,9 +8,9 @@
 
 // XXX merge into deai.h
 
+#include <errno.h>
 #include <stddef.h>
 #include <stdint.h>
-#include <errno.h>
 
 typedef enum di_type {
 	DI_TYPE_VOID = 0,
@@ -141,12 +141,12 @@ static inline size_t di_sizeof_type(di_type_t t) {
 // Workaround for _Generic limitations, see:
 // http://www.open-std.org/jtc1/sc22/wg14/www/docs/n1930.htm
 #define di_typeof(x)                                                                \
-	_Generic((x)+0, \
+	_Generic((x), \
+	struct di_array: DI_TYPE_ARRAY, \
 	int: DI_TYPE_NINT, \
 	unsigned int: DI_TYPE_NUINT, \
 	int64_t: DI_TYPE_INT, \
 	uint64_t: DI_TYPE_UINT, \
-	struct di_array: DI_TYPE_ARRAY, \
 	char *: DI_TYPE_STRING, \
 	const char *: DI_TYPE_STRING, \
 	struct di_object *: DI_TYPE_OBJECT, \

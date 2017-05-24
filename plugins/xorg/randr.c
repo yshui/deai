@@ -56,6 +56,8 @@ struct di_xorg_rr_info {
 define_trivial_cleanup_t(xcb_randr_get_screen_resources_reply_t);
 define_trivial_cleanup_t(xcb_randr_get_output_info_reply_t);
 define_trivial_cleanup_t(xcb_randr_get_crtc_info_reply_t);
+define_trivial_cleanup_t(xcb_randr_query_output_property_reply_t);
+define_trivial_cleanup_t(xcb_randr_get_output_property_reply_t);
 
 static struct di_object *
 make_object_for_view(struct di_xorg_randr *rr, xcb_randr_crtc_t cid);
@@ -128,6 +130,67 @@ static struct di_array get_view_rr(struct di_xorg_view *v) {
 	return ret;
 }
 
+static int get_output_backlight(struct di_xorg_output *o) {
+	xcb_generic_error_t *e;
+	auto bklatom = di_xorg_intern_atom(o->rr->dc, "Backlight", &e);
+	if (e) {
+		free(e);
+		return -1;
+	}
+	with_cleanup_t(xcb_randr_get_output_property_reply_t) r =
+	    xcb_randr_get_output_property_reply(
+	        o->rr->dc->c,
+	        xcb_randr_get_output_property(o->rr->dc->c, o->oid, bklatom,
+	                                      XCB_ATOM_ANY, 0, 4, 0, 0),
+	        NULL);
+
+	if (!r || r->type != XCB_ATOM_INTEGER || r->num_items != 1 || r->format != 32)
+		return -1;
+
+	return *(int32_t *)xcb_randr_get_output_property_data(r);
+}
+
+static void set_output_backlight(struct di_xorg_output *o, int bkl) {
+	xcb_generic_error_t *e;
+	auto bklatom = di_xorg_intern_atom(o->rr->dc, "Backlight", &e);
+	if (e) {
+		free(e);
+		return;
+	}
+
+	int32_t v = bkl;
+	e = xcb_request_check(o->rr->dc->c,
+	                      xcb_randr_change_output_property(
+	                          o->rr->dc->c, o->oid, bklatom, XCB_ATOM_INTEGER,
+	                          32, XCB_PROP_MODE_REPLACE, 1, (void *)&v));
+	if (e) {
+		di_getm(o->rr->dc->x->di, log);
+		di_log_va(logm, DI_LOG_ERROR, "Failed to set backlight");
+	}
+}
+
+static int get_output_max_backlight(struct di_xorg_output *o) {
+	xcb_generic_error_t *e;
+	auto bklatom = di_xorg_intern_atom(o->rr->dc, "Backlight", &e);
+	if (e) {
+		free(e);
+		return -1;
+	}
+
+	with_cleanup_t(xcb_randr_query_output_property_reply_t) r =
+	    xcb_randr_query_output_property_reply(
+	        o->rr->dc->c,
+	        xcb_randr_query_output_property(o->rr->dc->c, o->oid, bklatom), NULL);
+	if (!r)
+		return -1;
+
+	auto vv = xcb_randr_query_output_property_valid_values(r);
+	auto vvl = xcb_randr_query_output_property_valid_values_length(r);
+	if (vvl != 2)
+		return -1;
+	return vv[1];
+}
+
 static void output_dtor(struct di_xorg_output *o) {
 	di_unref_object((void *)&o->rr);
 }
@@ -137,10 +200,10 @@ make_object_for_output(struct di_xorg_randr *rr, xcb_randr_output_t oid) {
 	auto obj = di_new_object_with_type(struct di_xorg_output);
 	obj->rr = rr;
 	obj->oid = oid;
-	di_register_r_property((void *)obj, "view", (di_fn_t)get_output_view,
-	                       DI_TYPE_OBJECT);
-	di_register_r_property((void *)obj, "name", (di_fn_t)get_output_name,
-	                       DI_TYPE_STRING);
+	di_rprop(obj, "view", get_output_view);
+	di_rprop(obj, "name", get_output_name);
+	di_rwprop(obj, "backlight", get_output_backlight, set_output_backlight);
+	di_rprop(obj, "max_backlight", get_output_max_backlight);
 	di_dtor(obj, output_dtor);
 
 	di_ref_object((void *)rr);
@@ -173,11 +236,9 @@ make_object_for_view(struct di_xorg_randr *rr, xcb_randr_crtc_t cid) {
 	obj->rr = rr;
 	obj->cid = cid;
 
-	di_register_r_property((void *)obj, "outputs", (di_fn_t)get_view_outputs,
-	                       DI_TYPE_ARRAY);
-	di_register_r_property((void *)obj, "dimensions",
-	                       (di_fn_t)get_view_dimensions, DI_TYPE_ARRAY);
-	di_register_r_property((void *)obj, "rr", (di_fn_t)get_view_rr, DI_TYPE_ARRAY);
+	di_rprop(obj, "outputs", get_view_outputs);
+	di_rprop(obj, "dimensions", get_view_dimensions);
+	di_rprop(obj, "rr", get_view_rr);
 	di_dtor(obj, view_dtor);
 
 	di_ref_object((void *)rr);
@@ -310,7 +371,7 @@ struct di_xorg_ext *di_xorg_new_randr(struct di_xorg_connection *dc) {
 	HASH_ADD_KEYPTR(hh, dc->xext, rr->extname, strlen(rr->extname),
 	                (struct di_xorg_ext *)rr);
 
-	di_register_r_property((void *)rr, "outputs", (di_fn_t)rr_outputs, DI_TYPE_ARRAY);
+	di_rprop(rr, "outputs", rr_outputs);
 
 	di_register_signal((void *)rr, "output-change", 1, DI_TYPE_OBJECT);
 	di_register_signal((void *)rr, "view-change", 1, DI_TYPE_OBJECT);

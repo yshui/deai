@@ -145,8 +145,9 @@ int di_register_field_getter(struct di_object *o, const char *prop, off_t offset
 	    (struct di_object *)o,                                                  \
 	    di_create_typed_method((di_fn_t)dtor, "__dtor", DI_TYPE_VOID, 0));
 
-static inline int di_register_r_property(struct di_object *obj, const char *name,
-                                         di_fn_t prop, di_type_t t) {
+static inline int
+di_register_rw_property(struct di_object *obj, const char *name, di_fn_t prop_r,
+                        di_fn_t prop_w, di_type_t t) {
 	char *buf = malloc(strlen(name) + strlen("__get_") + 1);
 	if (!buf)
 		return -ENOMEM;
@@ -154,14 +155,31 @@ static inline int di_register_r_property(struct di_object *obj, const char *name
 	strcpy(buf, "__get_");
 	strcat(buf, name);
 
-	struct di_typed_method *mt = di_create_typed_method(prop, buf, t, 0);
-	free(buf);
-
+	struct di_typed_method *mt = di_create_typed_method(prop_r, buf, t, 0);
 	if (!mt)
 		return -EINVAL;
 
-	return di_register_typed_method(obj, mt);
+	int ret = di_register_typed_method(obj, mt);
+	if (ret)
+		return ret;
+
+	if (prop_w) {
+		strcpy(buf, "__set_");
+		strcat(buf, name);
+		mt = di_create_typed_method(prop_w, buf, DI_TYPE_VOID, 1, t);
+		if (!mt)
+			return -EINVAL;
+		ret = di_register_typed_method(obj, mt);
+	}
+	return ret;
 }
+
+#define di_rprop(o, name, prop_r)                                                   \
+	di_register_rw_property((void *)o, name, (di_fn_t)prop_r, NULL,           \
+	                        di_typeof((prop_r)(NULL)))
+#define di_rwprop(o, name, prop_r, prop_w)                                          \
+	di_register_rw_property((void *)o, name, (di_fn_t)prop_r,                 \
+	                        (di_fn_t)prop_w, di_typeof((prop_r)(NULL)))
 
 // TODO maybe
 // macro to generate c wrapper for di functions

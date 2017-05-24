@@ -699,8 +699,12 @@ static int di_lua_setter(lua_State *L) {
 	int ret = di_setv(ud, key, vt, val);
 
 	di_free_value(vt, val);
-	if (ret != 0)
-		return luaL_error(L, "property %s can't be set", key);
+	if (ret != 0) {
+		if (ret == -EINVAL)
+			return luaL_error(L, "property %s type mismatch", key);
+		if (ret == -ENOENT)
+			return luaL_error(L, "property %s doesn't exist or is read only", key);
+	}
 	return 0;
 }
 
