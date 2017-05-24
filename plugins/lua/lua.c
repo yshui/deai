@@ -721,6 +721,15 @@ static void di_lua_dtor(struct di_lua_module *obj) {
 	di_remove_listener((void *)obj->di, "shutdown", obj->shutdown_listener);
 }
 
+const char *allowed_os[] = {
+	"time",
+	"difftime",
+	"clock",
+	"tmpname",
+	"date",
+	NULL
+};
+
 PUBLIC int di_plugin_init(struct deai *di) {
 	auto m = di_new_module_with_type("lua", struct di_lua_module);
 
@@ -746,8 +755,16 @@ PUBLIC int di_plugin_init(struct deai *di) {
 	lua_setglobal(m->L, "di");
 
 	// Prevent the script from using os
-	lua_pushnil(m->L);
+	lua_getglobal(m->L, "os");
+	lua_createtable(m->L, 0, 0);
+	for (int i = 0; allowed_os[i]; i++) {
+		lua_pushstring(m->L, allowed_os[i]);
+		lua_pushstring(m->L, allowed_os[i]);
+		lua_rawget(m->L, -4);
+		lua_rawset(m->L, -3);
+	}
 	lua_setglobal(m->L, "os");
+	lua_pop(m->L, 1);
 
 	// make di_lua_gc happy
 	INIT_LIST_HEAD(&m->ldi);
