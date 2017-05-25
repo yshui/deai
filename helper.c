@@ -89,8 +89,9 @@ offset_property(di_type_t *rtype, void **ret, unsigned int nargs,
 	return 0;
 }
 
-static void free_ud(void *ud) {
-	free(ud);
+static void free_ud(void **ud) {
+	free(*ud);
+	*ud = NULL;
 }
 
 PUBLIC int di_register_field_getter(struct di_object *o, const char *fname,

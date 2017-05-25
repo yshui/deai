@@ -63,6 +63,12 @@ struct di_lua_object {
 	struct list_head sibling;
 };
 
+struct di_lua_table {
+	struct di_object;
+	int tref;
+	struct di_lua_script *s;
+};
+
 struct di_lua_script {
 	struct di_object;
 	char *path;
@@ -273,9 +279,11 @@ static struct di_object *di_lua_checkobject(lua_State *L, int index) {
 
 static int di_lua_checkarray(lua_State *L, int index, di_type_t *elemt) {
 	lua_pushnil(L);
-	if (lua_next(L, index) == 0)
+	if (lua_next(L, index) == 0) {
 		// Empty array
+		*elemt = DI_TYPE_VOID;
 		return 0;
+	}
 
 	int i = 1;
 
@@ -287,7 +295,8 @@ static int di_lua_checkarray(lua_State *L, int index, di_type_t *elemt) {
 	// Pop 2 value, top of stack is the key
 	lua_pop(L, 2);
 
-	if (*elemt == DI_TYPE_VOID || *elemt >= DI_LAST_TYPE) {
+	if (*elemt == DI_TYPE_VOID || *elemt >= DI_LAST_TYPE ||
+	    *elemt == DI_TYPE_NIL) {
 		lua_pop(L, 1);
 		return -1;
 	}
@@ -319,6 +328,36 @@ static int di_lua_checkarray(lua_State *L, int index, di_type_t *elemt) {
 	return i - 1;
 }
 
+static int di_lua_table_get(di_type_t *rt, void **ret, unsigned int nargs,
+                            const di_type_t *ats, const void *const *args, void *ud) {
+	struct di_lua_table *t = ud;
+	if (nargs != 1)
+		return -EINVAL;
+
+	if (ats[0] != DI_TYPE_STRING)
+		return -EINVAL;
+
+	const char *key = *(const char *const *)args[0];
+
+	struct di_lua_script *s = t->s;
+	lua_State *L = t->s->m->L;
+	di_lua_xchg_env(L, s);
+
+	lua_rawgeti(L, LUA_REGISTRYINDEX, t->tref);
+	lua_pushstring(L, key);
+	lua_gettable(L, -2);
+
+	*ret = di_lua_type_to_di(L, -1, rt);
+
+	di_lua_xchg_env(L, s);
+	return 0;
+}
+
+static void di_lua_table_dtor(struct di_lua_table *t) {
+	luaL_unref(t->s->m->L, LUA_REGISTRYINDEX, t->tref);
+	di_unref_object((void *)&t->s);
+}
+
 static void *di_lua_type_to_di(lua_State *L, int i, di_type_t *t) {
 #define ret_arg(i, ty, t2, gfn)                                                     \
 	do {                                                                        \
@@ -332,6 +371,8 @@ static void *di_lua_type_to_di(lua_State *L, int i, di_type_t *t) {
 	int nelem;
 	void *ret;
 	di_type_t elemt;
+	struct di_lua_table *o;
+	struct di_lua_script *s;
 	switch (lua_type(L, i)) {
 	case LUA_TBOOLEAN:
 		ret_arg(i, DI_TYPE_NUINT, unsigned int, lua_toboolean);
@@ -347,12 +388,28 @@ static void *di_lua_type_to_di(lua_State *L, int i, di_type_t *t) {
 			goto type_error;
 		ret_arg(i, DI_TYPE_OBJECT, void *, *(void **)lua_touserdata);
 	case LUA_TTABLE:
-		// Must be a array
 		if ((nelem = di_lua_checkarray(L, i, &elemt)) < 0)
-			goto type_error;
+			goto push_object;
 		*t = DI_TYPE_ARRAY;
 		ret = calloc(1, sizeof(struct di_array));
 		di_lua_table_to_array(L, i, nelem, elemt, ret);
+		return ret;
+	push_object:
+		lua_pushliteral(L, DI_LUA_REGISTRY_SCRIPT_OBJECT_KEY);
+		lua_rawget(L, LUA_REGISTRYINDEX);
+		s = lua_touserdata(L, -1);
+		lua_pop(L, 1);
+
+		o = di_new_object_with_type(struct di_lua_table);
+		o->tref = luaL_ref(L, LUA_REGISTRYINDEX);
+		o->s = s;
+		di_ref_object((void *)s);
+		di_register_method((void *)o, (void *)di_create_untyped_method(
+		                                  di_lua_table_get, "__get", o, NULL));
+		di_dtor(o, di_lua_table_dtor);
+		ret = tmalloc(void *, 1);
+		*t = DI_TYPE_OBJECT;
+		*(void **)ret = o;
 		return ret;
 	case LUA_TNIL:
 		*t = DI_TYPE_NIL;
@@ -703,7 +760,8 @@ static int di_lua_setter(lua_State *L) {
 		if (ret == -EINVAL)
 			return luaL_error(L, "property %s type mismatch", key);
 		if (ret == -ENOENT)
-			return luaL_error(L, "property %s doesn't exist or is read only", key);
+			return luaL_error(
+			    L, "property %s doesn't exist or is read only", key);
 	}
 	return 0;
 }
@@ -725,14 +783,7 @@ static void di_lua_dtor(struct di_lua_module *obj) {
 	di_remove_listener((void *)obj->di, "shutdown", obj->shutdown_listener);
 }
 
-const char *allowed_os[] = {
-	"time",
-	"difftime",
-	"clock",
-	"tmpname",
-	"date",
-	NULL
-};
+const char *allowed_os[] = {"time", "difftime", "clock", "tmpname", "date", NULL};
 
 PUBLIC int di_plugin_init(struct deai *di) {
 	auto m = di_new_module_with_type("lua", struct di_lua_module);

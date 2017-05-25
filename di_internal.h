@@ -62,7 +62,7 @@ struct di_untyped_method {
 
 	void *user_data;
 	di_callbale_t real_fn_ptr;
-	void (*ud_free)(void *);
+	void (*ud_free)(void **);
 };
 
 struct di_listener {

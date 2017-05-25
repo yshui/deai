@@ -180,6 +180,11 @@ static struct di_array di_get_argv(struct deai *p) {
 	return ret;
 }
 
+static struct di_object *di_identity(struct deai *p, struct di_object *o) {
+	di_ref_object((void *)o);
+	return o;
+}
+
 int main(int argc, char *argv[]) {
 	struct di_module_internal *pm;
 	struct deai *p = di_new_object_with_type(struct deai);
@@ -213,6 +218,10 @@ int main(int argc, char *argv[]) {
 	di_register_typed_method(
 	    (void *)p, di_create_typed_method((di_fn_t)di_chdir, "chdir",
 	                                      DI_TYPE_NINT, 1, DI_TYPE_STRING));
+
+	di_register_typed_method(
+	    (void *)p, di_create_typed_method((di_fn_t)di_identity, "identity",
+	                                      DI_TYPE_OBJECT, 1, DI_TYPE_OBJECT));
 
 	di_register_typed_method(
 	    (void *)p,
@@ -318,8 +327,7 @@ int main(int argc, char *argv[]) {
 
 	di_type_t rtype;
 	void *retv;
-	ret =
-	    di_call_callable((void *)mt, &rtype, &retv, nargs, di_types, di_args);
+	ret = di_call_callable((void *)mt, &rtype, &retv, nargs, di_types, di_args);
 	if (ret != 0) {
 		fprintf(stderr, "Failed to call init function\n");
 		exit(EXIT_FAILURE);
