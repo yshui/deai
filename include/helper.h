@@ -156,21 +156,27 @@ di_register_rw_property(struct di_object *obj, const char *name, di_fn_t prop_r,
 	strcat(buf, name);
 
 	struct di_typed_method *mt = di_create_typed_method(prop_r, buf, t, 0);
-	if (!mt)
+	if (!mt) {
+		free(buf);
 		return -EINVAL;
+	}
 
 	int ret = di_register_typed_method(obj, mt);
-	if (ret)
+	if (ret) {
+		free(buf);
 		return ret;
+	}
 
 	if (prop_w) {
 		strcpy(buf, "__set_");
 		strcat(buf, name);
 		mt = di_create_typed_method(prop_w, buf, DI_TYPE_VOID, 1, t);
+		free(buf);
 		if (!mt)
 			return -EINVAL;
 		ret = di_register_typed_method(obj, mt);
-	}
+	} else
+		free(buf);
 	return ret;
 }
 

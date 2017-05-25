@@ -46,7 +46,7 @@ struct di_xorg_view {
 	xcb_timestamp_t ts;
 };
 
-struct di_xorg_rr_info {
+struct di_xorg_view_config {
 	struct di_object;
 	int64_t x, y;
 	uint64_t width, height;
@@ -83,51 +83,46 @@ static struct di_object *get_output_view(struct di_xorg_output *o) {
 	return make_object_for_view(o->rr, r->crtc);
 }
 
-static struct di_array get_view_dimensions(struct di_xorg_view *v) {
+static struct di_object *get_view_config(struct di_xorg_view *v) {
 	with_cleanup_t(xcb_randr_get_crtc_info_reply_t) cr =
 	    xcb_randr_get_crtc_info_reply(
 	        v->rr->dc->c,
 	        xcb_randr_get_crtc_info(v->rr->dc->c, v->cid, v->rr->cts), NULL);
 	if (!cr || cr->status != 0)
-		return DI_ARRAY_NIL;
-	struct di_array ret = {4, NULL, DI_TYPE_NINT};
-	int *arr = ret.arr = tmalloc(int, 4);
-	arr[0] = cr->x;
-	arr[1] = cr->y;
-	arr[2] = cr->width;
-	arr[3] = cr->height;
-	return ret;
-}
+		return NULL;
 
-static struct di_array get_view_rr(struct di_xorg_view *v) {
-	with_cleanup_t(xcb_randr_get_crtc_info_reply_t) cr =
-	    xcb_randr_get_crtc_info_reply(
-	        v->rr->dc->c,
-	        xcb_randr_get_crtc_info(v->rr->dc->c, v->cid, v->rr->cts), NULL);
-	if (!cr || cr->status != 0)
-		return DI_ARRAY_NIL;
-	struct di_array ret = {2, NULL, DI_TYPE_NINT};
-	int *arr = ret.arr = tmalloc(int, 2);
+	auto ret = di_new_object_with_type(struct di_xorg_view_config);
+	ret->x = cr->x;
+	ret->y = cr->y;
+	ret->width = cr->width;
+	ret->height = cr->height;
+
 	if (cr->rotation & XCB_RANDR_ROTATION_ROTATE_0)
-		arr[0] = 0;
+		ret->rotation = 0;
 	else if (cr->rotation & XCB_RANDR_ROTATION_ROTATE_90)
-		arr[0] = 1;
+		ret->rotation = 1;
 	else if (cr->rotation & XCB_RANDR_ROTATION_ROTATE_180)
-		arr[0] = 2;
+		ret->rotation = 2;
 	else if (cr->rotation & XCB_RANDR_ROTATION_ROTATE_270)
-		arr[0] = 3;
+		ret->rotation = 3;
 
 	if (cr->rotation & XCB_RANDR_ROTATION_REFLECT_X) {
 		if (cr->rotation & XCB_RANDR_ROTATION_REFLECT_Y)
-			arr[1] = 3;
+			ret->reflection = 3;
 		else
-			arr[1] = 1;
+			ret->reflection = 1;
 	} else if (cr->rotation & XCB_RANDR_ROTATION_REFLECT_Y)
-		arr[1] = 2;
+		ret->reflection = 2;
 	else
-		arr[1] = 0;
+		ret->reflection = 0;
 
-	return ret;
+	di_field(ret, x);
+	di_field(ret, y);
+	di_field(ret, width);
+	di_field(ret, height);
+	di_field(ret, rotation);
+	di_field(ret, reflection);
+	return (void *)ret;
 }
 
 static int get_output_backlight(struct di_xorg_output *o) {
@@ -237,8 +232,7 @@ make_object_for_view(struct di_xorg_randr *rr, xcb_randr_crtc_t cid) {
 	obj->cid = cid;
 
 	di_rprop(obj, "outputs", get_view_outputs);
-	di_rprop(obj, "dimensions", get_view_dimensions);
-	di_rprop(obj, "rr", get_view_rr);
+	di_rprop(obj, "config", get_view_config);
 	di_dtor(obj, view_dtor);
 
 	di_ref_object((void *)rr);
