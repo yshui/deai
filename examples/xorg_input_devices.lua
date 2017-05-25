@@ -20,16 +20,16 @@ function MatMul( m1, m2 )
 end
 
 -- Get transformation matrix for touchscreen
--- @param info the output info corresponding to the touchscreen
+-- @param cfg view configuration (width, height, rotation, etc.)
 -- @param s the xorg screen
 -- @return an array of float with length 9, the transformation matrix
-function get_transform_matrix(info, s)
+function get_transform_matrix(cfg, s)
     -- move the origin to (0.5, 0.5)
     m1 = {{1, 0, -0.5},
         {0, 1, -0.5},
         {0, 0, 1}}
     -- rotation matrix
-    r = info.rotation*math.pi/2.0
+    r = cfg.rotation*math.pi/2.0
     m2 = {{math.cos(r), -math.sin(r), 0},
           {math.sin(r), math.cos(r), 0},
           {0, 0, 1}}
@@ -41,19 +41,19 @@ function get_transform_matrix(info, s)
     mrot = MatMul(m3, MatMul(m2, m1))
 
     mref = {{1,0,0},{0,1,0},{0,0,1}}
-    if (info.reflection&1) == 1 then
+    if (cfg.reflection&1) == 1 then
         -- reflect x
         t = {{-1,0,1},{0,1,0},{0,0,1}}
         mref = MatMul(t, mref)
     end
-    if (info.reflection&2) == 2 then
+    if (cfg.reflection&2) == 2 then
         -- reflect y
         t = {{1,0,0},{0,-1,1},{0,0,1}}
         mref = MatMul(t, mref)
     end
 
-    mtr = {{info.width/s.width, 0, info.x/s.width},
-        {0, info.height/s.height, info.y/s.height},
+    mtr = {{cfg.width/s.width, 0, cfg.x/s.width},
+        {0, cfg.height/s.height, cfg.y/s.height},
         {0, 0, 1}}
 
     M = MatMul(mtr, MatMul(mref, mrot))
@@ -66,6 +66,15 @@ function get_transform_matrix(info, s)
     return ret
 end
 
+function get_output(name)
+    os = xc.randr.outputs
+    for _, v in pairs(os) do
+        if v.name == name then
+            return v
+        end
+    end
+    return nil
+end
 -- connect to xorg
 xc = di.xorg.connect()
 -- alternatively:
@@ -85,10 +94,10 @@ function apply_xi_settings(dev)
 
     if dev.name == "ELAN Touchscreen" then
         -- assuming the touchscreen is eDP1
-        info = xc.randr.outputs.eDP1.info
+        o = get_output("eDP1")
         s = xc.screen
 
-        tr = get_transform_matrix(info, s)
+        tr = get_transform_matrix(o.view.config, s)
         print(unpack(tr))
         -- apply the transformation matrix to touchscreen
         p["Coordinate Transformation Matrix"] = tr
@@ -114,3 +123,16 @@ for i, v in ipairs(devs) do
     if v.type == "touchscreen" then
     end
 end
+for _, v in pairs(xc.randr.outputs) do
+    print("\t",v.name, v.view)
+end
+
+xc.randr.on("view-change", function(v)
+    print("affected output: ")
+    for _, v in pairs(v.outputs) do
+        print("\t",v.name)
+    end
+end)
+o = get_output("eDP1")
+o.backlight = o.max_backlight
+o = nil
