@@ -54,6 +54,7 @@ struct di_xorg_view_config {
 };
 
 define_trivial_cleanup_t(xcb_randr_get_screen_resources_reply_t);
+define_trivial_cleanup_t(xcb_randr_get_screen_resources_current_reply_t);
 define_trivial_cleanup_t(xcb_randr_get_output_info_reply_t);
 define_trivial_cleanup_t(xcb_randr_get_crtc_info_reply_t);
 define_trivial_cleanup_t(xcb_randr_query_output_property_reply_t);
@@ -314,18 +315,18 @@ static void disable_randr_event(struct di_xorg_randr *rr, uint16_t mask) {
 static struct di_array rr_outputs(struct di_xorg_randr *rr) {
 	struct di_array ret = DI_ARRAY_NIL;
 	auto scrn = screen_of_display(rr->dc->c, rr->dc->dflt_scrn);
-	with_cleanup_t(xcb_randr_get_screen_resources_reply_t) sr =
-	    xcb_randr_get_screen_resources_reply(
-	        rr->dc->c, xcb_randr_get_screen_resources(rr->dc->c, scrn->root),
+	with_cleanup_t(xcb_randr_get_screen_resources_current_reply_t) sr =
+	    xcb_randr_get_screen_resources_current_reply(
+	        rr->dc->c, xcb_randr_get_screen_resources_current(rr->dc->c, scrn->root),
 	        NULL);
 	if (!sr)
 		return ret;
 
 	fprintf(stderr, "%d\n", sr->config_timestamp);
 	fprintf(stderr, "%d\n", sr->timestamp);
-	ret.length = xcb_randr_get_screen_resources_outputs_length(sr);
+	ret.length = xcb_randr_get_screen_resources_current_outputs_length(sr);
 	ret.elem_type = DI_TYPE_OBJECT;
-	auto os = xcb_randr_get_screen_resources_outputs(sr);
+	auto os = xcb_randr_get_screen_resources_current_outputs(sr);
 	void **arr = ret.arr = tmalloc(void *, ret.length);
 	for (int i = 0; i < ret.length; i++)
 		arr[i] = make_object_for_output(rr, os[i]);
@@ -344,9 +345,9 @@ struct di_xorg_ext *di_xorg_new_randr(struct di_xorg_connection *dc) {
 		return NULL;
 
 	auto scrn = screen_of_display(dc->c, dc->dflt_scrn);
-	with_cleanup_t(xcb_randr_get_screen_resources_reply_t) sr =
-	    xcb_randr_get_screen_resources_reply(
-	        dc->c, xcb_randr_get_screen_resources(dc->c, scrn->root), NULL);
+	with_cleanup_t(xcb_randr_get_screen_resources_current_reply_t) sr =
+	    xcb_randr_get_screen_resources_current_reply(
+	        dc->c, xcb_randr_get_screen_resources_current(dc->c, scrn->root), NULL);
 	if (!sr)
 		return NULL;
 
