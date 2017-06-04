@@ -29,8 +29,7 @@ struct di_atom_entry {
 
 define_trivial_cleanup_t(xcb_generic_error_t);
 
-static void di_xorg_ioev(struct di_listener_data *l) {
-	struct di_xorg_connection *dc = (void *)l->user_data;
+static void di_xorg_ioev(struct di_xorg_connection *dc) {
 	// di_get_log(dc->x->di);
 	// di_log_va((void *)log, DI_LOG_DEBUG, "xcb ioev\n");
 
@@ -200,8 +199,7 @@ struct xscreen {
 	struct di_object;
 	uint64_t width, height;
 };
-static struct xscreen *
-get_screen(struct di_xorg_connection *dc) {
+static struct xscreen *get_screen(struct di_xorg_connection *dc) {
 	auto scrn = screen_of_display(dc->c, dc->dflt_scrn);
 
 	auto ret = di_new_object_with_type(struct xscreen);
@@ -232,8 +230,11 @@ di_xorg_connect_to(struct di_xorg *x, const char *displayname) {
 
 	di_call(eventm, "fdevent", dc->xcb_fd, xcb_get_file_descriptor(dc->c),
 	        IOEV_READ);
-	dc->xcb_fdlistener =
-	    di_add_typed_listener(dc->xcb_fd, "read", dc, (di_fn_t)di_xorg_ioev);
+
+	di_ref_object((void *)dc);
+	dc->xcb_fdlistener = di_add_typed_listener(dc->xcb_fd, "read", dc,
+	                                           (free_fn_t)di_cleanup_objectp,
+	                                           (di_fn_t)di_xorg_ioev);
 
 	di_call0(dc->xcb_fd, "start");
 
@@ -251,8 +252,8 @@ di_xorg_connect_to(struct di_xorg *x, const char *displayname) {
 	                           DI_TYPE_VOID, 1, DI_TYPE_STRING));
 
 	di_register_typed_method(
-	    (void *)dc, di_create_typed_method((di_fn_t)get_screen,
-	                                       "__get_screen", DI_TYPE_OBJECT, 0));
+	    (void *)dc, di_create_typed_method((di_fn_t)get_screen, "__get_screen",
+	                                       DI_TYPE_OBJECT, 0));
 
 	di_dtor(dc, di_xorg_free_connection);
 

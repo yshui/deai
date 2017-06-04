@@ -239,11 +239,24 @@ di_call_callable_v(struct di_callable *c, di_type_t *rtype, void **ret, ...) {
 	return di_call_callable(c, rtype, ret, nargs, ats, (const void *const *)args);
 }
 
-static void di_free_signal(struct di_signal *sig) {
+static void di_free_signal(struct di_object_internal *o, struct di_signal *sig) {
 	struct di_listener *l, *ln;
 	list_for_each_entry_safe(l, ln, &sig->listeners, siblings) {
 		list_del(&l->siblings);
+		if (l->ud_free)
+			l->ud_free(&l->ud);
 		free(l);
+	}
+
+	char *buf;
+	asprintf(&buf, "__del_listener_%s", sig->name);
+	auto m = di_find_method((void *)o, buf);
+	free(buf);
+	if (m) {
+		di_type_t rtype;
+		void *ret;
+		di_call_callable_v((void *)m, &rtype, &ret, DI_LAST_TYPE);
+		di_free_value(rtype, ret);
 	}
 	free(sig->name);
 	free(sig->cif.arg_types);
@@ -260,6 +273,14 @@ PUBLIC void di_destroy_object(struct di_object *_obj) {
 		return;
 
 	obj->destroyed = 2;
+
+	auto sig = obj->sd;
+	while (sig) {
+		auto next_sig = sig->hh.next;
+		HASH_DEL(obj->sd, sig);
+		di_free_signal(obj, sig);
+		sig = next_sig;
+	}
 
 	struct di_method_internal *fn = (void *)di_find_method(_obj, "__dtor");
 	if (fn) {
@@ -283,17 +304,6 @@ PUBLIC void di_destroy_object(struct di_object *_obj) {
 		fn = (void *)next_fn;
 	}
 
-	// XXX user_data attached to listeners might leak if destroy
-	// object is called actively (before all refs are gone,
-	// e.g. during program shut down).
-	auto sig = obj->sd;
-	while (sig) {
-		auto next_sig = sig->hh.next;
-		HASH_DEL(obj->sd, sig);
-		di_free_signal(sig);
-		sig = next_sig;
-	}
-
 	obj->destroyed = 1;
 }
 
@@ -311,7 +321,8 @@ struct di_dead_object {
 
 struct list_head dead_objects = LIST_HEAD_INIT(dead_objects);
 
-static_assert(sizeof(struct di_dead_object) <= sizeof(struct di_object), "dead_object too big");
+static_assert(sizeof(struct di_dead_object) <= sizeof(struct di_object),
+              "dead_object too big");
 #endif
 
 PUBLIC void di_unref_object(struct di_object **objp) {
@@ -543,14 +554,15 @@ static void di_free_untyped_method(struct di_untyped_method *m) {
 }
 
 PUBLIC struct di_untyped_method *
-di_create_untyped_method(di_callbale_t fn, const char *name, void *user_data, void (*user_data_free)(void **)) {
+di_create_untyped_method(di_callbale_t fn, const char *name, void *user_data,
+                         free_fn_t ud_free) {
 	auto gfn = tmalloc(struct di_untyped_method, 1);
 	gfn->user_data = user_data;
 	gfn->real_fn_ptr = fn;
 	gfn->fn_ptr = di_untyped_trampoline;
 	gfn->name = strdup(name);
 	gfn->free = (void *)di_free_untyped_method;
-	gfn->ud_free = user_data_free;
+	gfn->ud_free = ud_free;
 
 	return gfn;
 }
@@ -631,23 +643,32 @@ PUBLIC int di_register_signal(struct di_object *r, const char *name, int nargs, 
 	return 0;
 }
 
-static void di_typed_listener_trampoline(struct di_signal *sig, void **ev_data) {
-	struct di_listener_data *ld = *(struct di_listener_data **)ev_data[0];
-	struct di_listener *l = ld->user_data;
-	ld->user_data = l->ud2;
-	ffi_call(&sig->cif, l->typed_f, NULL, ev_data);
-	ld->user_data = l;
+struct di_typed_listener_data {
+	di_fn_t f;
+	void *ud;
+	free_fn_t ud_free;
+};
+
+static void di_typed_listener_trampoline(struct di_signal *sig,
+                                         struct di_listener *l, void **ev_data) {
+	struct di_typed_listener_data *tl = l->ud;
+	void **tmp_data = alloca(sizeof(void *) * (sig->nargs + 1));
+	if (ev_data)
+		memcpy(tmp_data + 1, ev_data, sizeof(void *) * sig->nargs);
+
+	tmp_data[0] = &tl->ud;
+	ffi_call(&sig->cif, tl->f, NULL, tmp_data);
 }
 
 PUBLIC const di_type_t *
 di_get_signal_arg_types(struct di_signal *sig, unsigned int *nargs) {
 	*nargs = sig->nargs;
-	return &sig->types[1];
+	return sig->types + 1;
 }
 
 PUBLIC struct di_listener *
 di_add_untyped_listener(struct di_object *obj, const char *name, void *ud,
-                        void (*f)(struct di_signal *, void **)) {
+                        free_fn_t ud_free, di_listener_fn_t f) {
 	struct di_signal *evd = NULL;
 	struct di_method *m;
 	di_type_t rtype;
@@ -683,6 +704,7 @@ di_add_untyped_listener(struct di_object *obj, const char *name, void *ud,
 
 	l->f = f;
 	l->ud = ud;
+	l->ud_free = ud_free;
 	list_add(&l->siblings, &evd->listeners);
 
 	// Object shouldn't be freed when it has listener
@@ -690,30 +712,40 @@ di_add_untyped_listener(struct di_object *obj, const char *name, void *ud,
 	return l;
 }
 
+static void typed_listener_data_free(void **ptr) {
+	struct di_typed_listener_data *tl = *ptr;
+	assert(tl);
+	tl->ud_free(&tl->ud);
+	free(tl);
+}
+
 PUBLIC struct di_listener *
-di_add_typed_listener(struct di_object *obj, const char *name, void *ud, di_fn_t f) {
-	auto l =
-	    di_add_untyped_listener(obj, name, NULL, di_typed_listener_trampoline);
+di_add_typed_listener(struct di_object *obj, const char *name, void *ud,
+                      free_fn_t ud_free, di_fn_t f) {
+	auto tl = tmalloc(struct di_typed_listener_data, 1);
+	tl->ud = ud;
+	tl->f = f;
+	tl->ud_free = ud_free;
+
+	auto l = di_add_untyped_listener(obj, name, tl, typed_listener_data_free,
+	                                 di_typed_listener_trampoline);
 	if (IS_ERR(l))
 		return l;
 
-	l->ud = l;
-	l->ud2 = ud;
-	l->typed_f = f;
 	return l;
 }
 
-PUBLIC void *
+PUBLIC int
 di_remove_listener(struct di_object *o, const char *name, struct di_listener *l) {
 	struct di_signal *evd = NULL;
 
 	HASH_FIND_STR(o->evd, name, evd);
 	if (!evd)
-		return ERR_PTR(-ENOENT);
+		return -ENOENT;
 
 	struct di_listener *p = NULL;
 	list_for_each_entry(p, &evd->listeners, siblings) if (p == l) goto del;
-	return ERR_PTR(-ENOENT);
+	return -ENOENT;
 
 del:
 	list_del(&l->siblings);
@@ -732,28 +764,28 @@ del:
 	}
 	di_unref_object(&o);
 
-	void *tmp = l->ud;
+	if (l->ud_free)
+		l->ud_free(&l->ud);
 	free(l);
-	return tmp;
+	return 0;
+}
+
+PUBLIC void *di_get_listener_user_data(struct di_listener *l) {
+	return l->ud;
 }
 
 static int
 _di_emit_signal(struct di_object *obj, struct di_signal *evd, void **ev_data) {
 	struct di_listener *l, *nl;
-	struct di_listener_data ld;
 
 	// Hold a reference to prevent object from being freed during
 	// signal emission
 	assert(obj->ref_count > 0);
 	di_ref_object(obj);
-	void *arg0 = &ld;
-	ev_data[0] = &arg0;
-	ld.obj = obj;
 
 	// Allow remove listener from listener
 	list_for_each_entry_safe(l, nl, &evd->listeners, siblings) {
-		ld.user_data = l->ud;
-		l->f(evd, ev_data);
+		l->f(evd, l, ev_data);
 	}
 
 	di_unref_object(&obj);
@@ -766,10 +798,7 @@ PUBLIC int di_emit_signal(struct di_object *obj, const char *name, void **data) 
 	if (!evd)
 		return -ENOENT;
 
-	void **tmp_data = alloca(sizeof(void *) * (evd->nargs + 1));
-	if (evd->nargs)
-		memcpy(tmp_data + 1, data, sizeof(void *) * evd->nargs);
-	return _di_emit_signal(obj, evd, tmp_data);
+	return _di_emit_signal(obj, evd, data);
 }
 
 PUBLIC int di_emit_signal_v(struct di_object *obj, const char *name, ...) {
@@ -780,12 +809,12 @@ PUBLIC int di_emit_signal_v(struct di_object *obj, const char *name, ...) {
 	if (!evd)
 		return -ENOENT;
 
-	void **tmp_data = alloca(sizeof(void *) * (evd->nargs + 1));
+	void **tmp_data = alloca(sizeof(void *) * evd->nargs);
 	va_start(ap, name);
 	for (unsigned int i = 0; i < evd->nargs; i++) {
 		assert(di_sizeof_type(evd->types[i + 1]) != 0);
-		tmp_data[i + 1] = alloca(di_sizeof_type(evd->types[i + 1]));
-		di_va_arg_with_di_type(ap, evd->types[i + 1], tmp_data[i + 1]);
+		tmp_data[i] = alloca(di_sizeof_type(evd->types[i + 1]));
+		di_va_arg_with_di_type(ap, evd->types[i + 1], tmp_data[i]);
 	}
 	va_end(ap);
 
@@ -797,9 +826,7 @@ PUBLIC int di_emit_signal_v(struct di_object *obj, const char *name, ...) {
 	switch (t) {                                                                \
 	case DI_TYPE_ARRAY: di_free_array(*(struct di_array *)(v)); break;          \
 	case DI_TYPE_STRING: chknull(v) free(*(char **)(v)); break;                 \
-	case DI_TYPE_OBJECT:                                                        \
-		chknull(v) di_unref_object((v));              \
-		break;                                                              \
+	case DI_TYPE_OBJECT: chknull(v) di_unref_object((v)); break;                \
 	default: break;                                                             \
 	}
 

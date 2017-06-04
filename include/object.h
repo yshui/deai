@@ -29,6 +29,7 @@ typedef enum di_type {
 } di_type_t;
 
 typedef void (*di_fn_t)(void);
+typedef void (*free_fn_t)(void **);
 typedef int (*di_callbale_t)(di_type_t *rtype, void **ret, unsigned int nargs,
                              const di_type_t *atypes, const void *const *args,
                              void *user_data);
@@ -75,6 +76,9 @@ struct di_listener_data {
 	void *user_data;
 };
 
+typedef void (*di_listener_fn_t)(struct di_signal *, struct di_listener *,
+                                 void **args);
+
 void di_free_object(struct di_object *);
 int di_register_method(struct di_object *, struct di_method *);
 int di_register_typed_method(struct di_object *, struct di_typed_method *);
@@ -90,11 +94,12 @@ int di_call_callable(struct di_callable *c, di_type_t *rtype, void **ret,
                      const void *const *args);
 int di_call_callable_v(struct di_callable *c, di_type_t *rtype, void **ret, ...);
 
-struct di_listener *
-di_add_typed_listener(struct di_object *, const char *name, void *ud, di_fn_t f);
+struct di_listener *di_add_typed_listener(struct di_object *, const char *name,
+                                          void *ud, free_fn_t ud_free, di_fn_t f);
 struct di_listener *
 di_add_untyped_listener(struct di_object *obj, const char *name, void *ud,
-                        void (*f)(struct di_signal *, void **));
+                        free_fn_t ud_free, di_listener_fn_t f);
+void *di_get_listener_user_data(struct di_listener *);
 
 struct di_object *di_new_object(size_t sz);
 void di_destroy_object(struct di_object *);
@@ -107,8 +112,7 @@ void di_unref_object(struct di_object **);
  * Returns the user_data passed to add_listener if succeed, otherwise
  * returns an error code.
  */
-void *
-di_remove_listener(struct di_object *o, const char *name, struct di_listener *l);
+int di_remove_listener(struct di_object *o, const char *name, struct di_listener *l);
 int di_emit_signal(struct di_object *, const char *name, void **args);
 int di_emit_signal_v(struct di_object *obj, const char *name, ...);
 int di_register_signal(struct di_object *, const char *name, int nargs, ...);

@@ -16,6 +16,7 @@
 #include <string.h>
 
 #include "list.h"
+#include "utils.h"
 
 #define tmalloc(type, nmem) (type *)calloc(nmem, sizeof(type))
 #define auto __auto_type
@@ -83,11 +84,6 @@ struct di_lua_script {
 	struct list_head sibling;
 };
 
-struct di_lua_listener_data {
-	lua_State *L;
-	struct di_lua_listener *ll;
-};
-
 static int di_lua_pushany(lua_State *L, di_type_t t, void *d);
 static int di_lua_getter(lua_State *L);
 static int di_lua_setter(lua_State *L);
@@ -117,32 +113,16 @@ static int di_lua_errfunc(lua_State *L) {
 	return 1;
 }
 
-static inline void _remove_listener(lua_State *L, struct di_lua_listener *ll) {
-	struct di_lua_listener_data *ud =
-	    di_remove_listener(ll->o, ll->signame, ll->l);
-
-	struct di_lua_script *s = ll->s;
-
-	list_del(&ll->sibling);
-	luaL_unref(L, LUA_REGISTRYINDEX, ll->fnref);
-	free(ll->signame);
-	free(ll);
-
-	if (!IS_ERR_OR_NULL(ud))
-		free(ud);
-	di_unref_object((void *)&s);
-}
-
 static void di_lua_clear_listener(struct di_lua_script *s) {
 	// Remove all listeners
 	struct di_lua_listener *ll, *nll;
 	list_for_each_entry_safe(ll, nll, &s->listeners, sibling)
-	    _remove_listener(s->m->L, ll);
+		di_remove_listener(ll->o, ll->signame, ll->l);
 }
 
 static void di_lua_free_script(struct di_lua_script *s) {
 	// fprintf(stderr, "free lua script %p, %s\n", s->m ,s->path);
-	di_lua_clear_listener(s);
+	// di_lua_clear_listener(s);
 	// assert(list_empty(&s->objects));
 	struct di_lua_object *lo, *nlo;
 	// int cnt = 0;
@@ -466,15 +446,15 @@ static int di_lua_method_handler(lua_State *L) {
 	return _di_lua_method_handler(L, m);
 }
 
-static void di_lua_general_callback(struct di_signal *sig, void **data) {
-	auto ld = *(struct di_listener_data **)data[0];
-	struct di_lua_listener_data *ud = ld->user_data;
+static void
+di_lua_general_callback(struct di_signal *sig, struct di_listener *l, void **data) {
+	struct di_lua_listener *ud = di_get_listener_user_data(l);
 	unsigned int nargs;
 	auto ts = di_get_signal_arg_types(sig, &nargs);
 
 	// ud might be freed during pcall
-	lua_State *L = ud->L;
-	struct di_lua_script *s = ud->ll->s;
+	lua_State *L = ud->s->m->L;
+	struct di_lua_script *s = ud->s;
 	// Prevent script object from being freed during pcall
 	di_ref_object((void *)s);
 
@@ -483,16 +463,26 @@ static void di_lua_general_callback(struct di_signal *sig, void **data) {
 	di_lua_xchg_env(L, s);
 
 	// Get the function
-	lua_rawgeti(L, LUA_REGISTRYINDEX, ud->ll->fnref);
+	lua_rawgeti(L, LUA_REGISTRYINDEX, ud->fnref);
 	// Push arguments
-	for (unsigned int i = 1; i <= nargs; i++)
-		di_lua_pushany(L, ts[i - 1], data[i]);
+	for (unsigned int i = 0; i < nargs; i++)
+		di_lua_pushany(L, ts[i], data[i]);
 
 	lua_pcall(L, nargs, 0, -nargs - 2);
 
 	di_lua_xchg_env(L, s);
 
 	di_unref_object((void *)&s);
+}
+
+static void free_lua_listener(struct di_lua_listener **l) {
+	auto ll = *l;
+
+	list_del(&ll->sibling);
+	luaL_unref(ll->s->m->L, LUA_REGISTRYINDEX, ll->fnref);
+	free(ll->signame);
+	di_unref_object((void *)&ll->s);
+	free(ll);
 }
 
 static int di_lua_add_listener(lua_State *L) {
@@ -511,12 +501,10 @@ static int di_lua_add_listener(lua_State *L) {
 
 	lua_pushliteral(L, DI_LUA_REGISTRY_SCRIPT_OBJECT_KEY);
 	lua_rawget(L, LUA_REGISTRYINDEX);
-	ll->s = lua_touserdata(L, -1);
+	di_lua_get_env(L, ll->s);
 
-	auto ud = tmalloc(struct di_lua_listener_data, 1);
-	ud->L = L;
-	ud->ll = ll;
-	ll->l = di_add_untyped_listener(o, signame, ud, di_lua_general_callback);
+	ll->l = di_add_untyped_listener(o, signame, ll, (free_fn_t)free_lua_listener,
+	                                di_lua_general_callback);
 
 	list_add(&ll->sibling, &ll->s->listeners);
 
@@ -534,7 +522,7 @@ static int di_lua_remove_listener(lua_State *L) {
 	if (ll == NULL)
 		return luaL_error(L, "Listener handle is NULL");
 
-	_remove_listener(L, ll);
+	di_remove_listener(ll->o, ll->signame, ll->l);
 	return 0;
 }
 
@@ -766,21 +754,15 @@ static int di_lua_setter(lua_State *L) {
 	return 0;
 }
 
-static void di_lua_shutdown(struct di_listener_data *ld) {
-	struct di_lua_module *obj = ld->user_data;
+static void di_lua_shutdown(struct di_lua_module *obj) {
 	struct di_lua_script *s, *ns;
-	list_for_each_entry_safe(s, ns, &obj->scripts, sibling) {
-		// Holding ref to s because lua_script_dtor might
-		// cause it to drop to 0
-		di_ref_object((void *)s);
-		di_destroy_object((void *)s);
-		di_unref_object((void *)&s);
-	}
+	list_for_each_entry_safe(s, ns, &obj->scripts, sibling)
+	    di_lua_clear_listener(s);
+	di_remove_listener((void *)obj->di, "shutdown", obj->shutdown_listener);
 }
 
 static void di_lua_dtor(struct di_lua_module *obj) {
 	lua_close(obj->L);
-	di_remove_listener((void *)obj->di, "shutdown", obj->shutdown_listener);
 }
 
 const char *allowed_os[] = {"time", "difftime", "clock", "tmpname", "date", NULL};
@@ -829,12 +811,11 @@ PUBLIC int di_plugin_init(struct deai *di) {
 
 	di_register_module(di, (void *)m);
 
+	di_ref_object((void *)m);
 	m->shutdown_listener = di_add_typed_listener((void *)di, "shutdown", m,
+	                                             (free_fn_t)di_cleanup_objectp,
 	                                             (di_fn_t)di_lua_shutdown);
 	m->di = di;
 
-out:
-	free(fn);
-	free(dtor);
 	return 0;
 }

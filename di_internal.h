@@ -62,13 +62,13 @@ struct di_untyped_method {
 
 	void *user_data;
 	di_callbale_t real_fn_ptr;
-	void (*ud_free)(void **);
+	free_fn_t ud_free;
 };
 
 struct di_listener {
-	di_fn_t typed_f;
-	void (*f)(struct di_signal *, void **);
-	void *ud, *ud2;
+	di_listener_fn_t f;
+	void *ud;
+	free_fn_t ud_free;
 	struct list_head siblings;
 };
 

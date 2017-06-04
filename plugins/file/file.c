@@ -35,10 +35,9 @@ struct di_file_watch {
 	struct di_file_watch_entry *byname, *bywd;
 };
 
-static int di_file_ioev(struct di_listener_data *d) {
+static int di_file_ioev(struct di_file_watch *o) {
 	char evbuf[sizeof(struct inotify_event) + NAME_MAX + 1];
 	struct inotify_event *ev = (void *)evbuf;
-	struct di_file_watch *o = d->user_data;
 	int ret = read(o->fd, evbuf, sizeof(evbuf));
 	int off = 0;
 	while (off < ret) {
@@ -174,8 +173,10 @@ static struct di_object *di_file_new_watch(struct di_file *f, struct di_array pa
 
 	di_getm(f->di, event);
 	di_call(eventm, "fdevent", fw->fdev, fw->fd, IOEV_READ);
-	fw->fdev_listener =
-	    di_add_typed_listener(fw->fdev, "read", fw, (di_fn_t)di_file_ioev);
+	di_ref_object((void *)fw);
+	fw->fdev_listener = di_add_typed_listener(fw->fdev, "read", fw,
+	                                          (free_fn_t)di_cleanup_objectp,
+	                                          (di_fn_t)di_file_ioev);
 
 	const char **arr = paths.arr;
 	for (int i = 0; i < paths.length; i++)
