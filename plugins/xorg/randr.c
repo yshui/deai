@@ -46,6 +46,15 @@ struct di_xorg_view {
 	xcb_timestamp_t ts;
 };
 
+struct di_xorg_mode {
+	struct di_object;
+	struct di_xorg_randr *rr;
+
+	unsigned int id;
+	unsigned int width;
+	unsigned int height;
+};
+
 struct di_xorg_view_config {
 	struct di_object;
 	int64_t x, y;
@@ -317,8 +326,8 @@ static struct di_array rr_outputs(struct di_xorg_randr *rr) {
 	auto scrn = screen_of_display(rr->dc->c, rr->dc->dflt_scrn);
 	with_cleanup_t(xcb_randr_get_screen_resources_current_reply_t) sr =
 	    xcb_randr_get_screen_resources_current_reply(
-	        rr->dc->c, xcb_randr_get_screen_resources_current(rr->dc->c, scrn->root),
-	        NULL);
+	        rr->dc->c,
+	        xcb_randr_get_screen_resources_current(rr->dc->c, scrn->root), NULL);
 	if (!sr)
 		return ret;
 
@@ -330,6 +339,41 @@ static struct di_array rr_outputs(struct di_xorg_randr *rr) {
 	void **arr = ret.arr = tmalloc(void *, ret.length);
 	for (int i = 0; i < ret.length; i++)
 		arr[i] = make_object_for_output(rr, os[i]);
+
+	return ret;
+}
+
+static struct di_object *
+make_object_for_modes(struct di_xorg_randr *rr, xcb_randr_mode_info_t *m) {
+	auto o = di_new_object_with_type(struct di_xorg_mode);
+	o->id = m->id;
+	o->width = m->width;
+	o->height = m->height;
+
+	di_field(o, width);
+	di_field(o, height);
+	di_field(o, id);
+
+	return (void *)o;
+}
+
+static struct di_array rr_modes(struct di_xorg_randr *rr) {
+	struct di_array ret = DI_ARRAY_NIL;
+	auto scrn = screen_of_display(rr->dc->c, rr->dc->dflt_scrn);
+	with_cleanup_t(xcb_randr_get_screen_resources_current_reply_t) sr =
+	    xcb_randr_get_screen_resources_current_reply(
+	        rr->dc->c,
+	        xcb_randr_get_screen_resources_current(rr->dc->c, scrn->root), NULL);
+	if (!sr)
+		return ret;
+
+	ret.length = xcb_randr_get_screen_resources_current_modes_length(sr);
+	ret.elem_type = DI_TYPE_OBJECT;
+
+	auto mi = xcb_randr_get_screen_resources_current_modes_iterator(sr);
+	struct di_object **arr = ret.arr = tmalloc(struct di_object *, ret.length);
+	for (int i = 0; mi.rem; xcb_randr_mode_info_next(&mi), i++)
+		arr[i] = make_object_for_modes(rr, mi.data);
 
 	return ret;
 }
@@ -347,7 +391,8 @@ struct di_xorg_ext *di_xorg_new_randr(struct di_xorg_connection *dc) {
 	auto scrn = screen_of_display(dc->c, dc->dflt_scrn);
 	with_cleanup_t(xcb_randr_get_screen_resources_current_reply_t) sr =
 	    xcb_randr_get_screen_resources_current_reply(
-	        dc->c, xcb_randr_get_screen_resources_current(dc->c, scrn->root), NULL);
+	        dc->c, xcb_randr_get_screen_resources_current(dc->c, scrn->root),
+	        NULL);
 	if (!sr)
 		return NULL;
 
@@ -367,6 +412,7 @@ struct di_xorg_ext *di_xorg_new_randr(struct di_xorg_connection *dc) {
 	                (struct di_xorg_ext *)rr);
 
 	di_rprop(rr, "outputs", rr_outputs);
+	di_rprop(rr, "modes", rr_modes);
 
 	di_register_signal((void *)rr, "output-change", 1, DI_TYPE_OBJECT);
 	di_register_signal((void *)rr, "view-change", 1, DI_TYPE_OBJECT);
