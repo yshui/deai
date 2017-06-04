@@ -71,11 +71,6 @@ struct di_module {
 	char padding[56];
 };
 
-struct di_listener_data {
-	struct di_object *obj;
-	void *user_data;
-};
-
 typedef void (*di_listener_fn_t)(struct di_signal *, struct di_listener *,
                                  void **args);
 
