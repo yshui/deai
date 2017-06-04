@@ -4,6 +4,10 @@
   how to free all the objects while listeners are still attached, etc.
   [done]
 
+# New functions
+
+* lua: interactive mode
+
 # Possible modules:
 
 Must have:
