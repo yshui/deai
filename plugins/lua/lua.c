@@ -754,6 +754,12 @@ static int di_lua_setter(lua_State *L) {
 	return 0;
 }
 
+static void remove_all_listeners(struct di_lua_module *m) {
+	struct di_lua_script *s;
+	di_lua_get_env(m->L, s);
+	di_lua_clear_listener(s);
+}
+
 static void di_lua_shutdown(struct di_lua_module *obj) {
 	struct di_lua_script *s, *ns;
 	list_for_each_entry_safe(s, ns, &obj->scripts, sibling)
@@ -770,19 +776,17 @@ const char *allowed_os[] = {"time", "difftime", "clock", "tmpname", "date", NULL
 PUBLIC int di_plugin_init(struct deai *di) {
 	auto m = di_new_module_with_type("lua", struct di_lua_module);
 
-	auto fn = di_create_typed_method((di_fn_t)di_lua_load_script, "load_script",
-	                                 DI_TYPE_OBJECT, 1, DI_TYPE_STRING);
+	di_register_typed_method(
+	    (void *)m,
+	    di_create_typed_method((di_fn_t)di_lua_load_script, "load_script",
+	                           DI_TYPE_OBJECT, 1, DI_TYPE_STRING));
+	di_register_typed_method(
+	    (void *)m, di_create_typed_method((di_fn_t)remove_all_listeners,
+	                                      "remove_all_listeners", DI_TYPE_VOID, 0));
 
-	auto dtor = di_create_typed_method((di_fn_t)di_lua_dtor, "__module_dtor",
-	                                   DI_TYPE_VOID, 0);
-
-	if (di_register_typed_method((void *)m, (void *)fn) != 0)
-		goto out;
-	fn = NULL;
-
-	if (di_register_typed_method((void *)m, (void *)dtor) != 0)
-		goto out;
-	dtor = NULL;
+	di_register_typed_method(
+	    (void *)m, di_create_typed_method((di_fn_t)di_lua_dtor, "__module_dtor",
+	                                      DI_TYPE_VOID, 0));
 
 	m->L = luaL_newstate();
 	luaL_openlibs(m->L);
