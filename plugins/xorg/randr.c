@@ -68,6 +68,7 @@ define_trivial_cleanup_t(xcb_randr_get_output_info_reply_t);
 define_trivial_cleanup_t(xcb_randr_get_crtc_info_reply_t);
 define_trivial_cleanup_t(xcb_randr_query_output_property_reply_t);
 define_trivial_cleanup_t(xcb_randr_get_output_property_reply_t);
+define_trivial_cleanup_t(xcb_randr_set_crtc_config_reply_t);
 
 static struct di_object *
 make_object_for_view(struct di_xorg_randr *rr, xcb_randr_crtc_t cid);
@@ -133,6 +134,57 @@ static struct di_object *get_view_config(struct di_xorg_view *v) {
 	di_field(ret, rotation);
 	di_field(ret, reflection);
 	return (void *)ret;
+}
+
+static void set_view_config(struct di_xorg_view *v, struct di_object *cfg) {
+	int x, y;
+	xcb_randr_mode_t mode;
+	int rotation, reflection;
+	uint16_t rr_rot;
+	with_cleanup_t(xcb_randr_get_crtc_info_reply_t) cr = NULL;
+
+	di_gets(cfg, "x", x);
+	di_gets(cfg, "y", y);
+	di_gets(cfg, "mode", mode);
+	di_gets(cfg, "rotation", rotation);
+	di_gets(cfg, "reflection", reflection);
+
+	if (x < INT16_MIN || x > INT16_MAX)
+		return;
+	if (y < INT16_MIN || y > INT16_MAX)
+		return;
+
+	switch (rotation) {
+	case 0: rr_rot = XCB_RANDR_ROTATION_ROTATE_0; break;
+	case 1: rr_rot = XCB_RANDR_ROTATION_ROTATE_90; break;
+	case 2: rr_rot = XCB_RANDR_ROTATION_ROTATE_180; break;
+	case 3: rr_rot = XCB_RANDR_ROTATION_ROTATE_270; break;
+	default: return;
+	}
+	if (reflection & 1)
+		rr_rot |= XCB_RANDR_ROTATION_REFLECT_X;
+	if (reflection & 2)
+		rr_rot |= XCB_RANDR_ROTATION_REFLECT_Y;
+retry:
+	// We might need to retry under race conditions, because Xorg sucks
+	cr = xcb_randr_get_crtc_info_reply(
+	    v->rr->dc->c, xcb_randr_get_crtc_info(v->rr->dc->c, v->cid, v->rr->cts),
+	    NULL);
+	if (!cr || cr->status != 0)
+		return;
+
+	with_cleanup_t(xcb_randr_set_crtc_config_reply_t) scr =
+	    xcb_randr_set_crtc_config_reply(
+	        v->rr->dc->c,
+	        xcb_randr_set_crtc_config(v->rr->dc->c, v->cid, cr->timestamp,
+	                                  v->rr->cts, x, y, mode, rr_rot,
+	                                  xcb_randr_get_crtc_info_outputs_length(cr),
+	                                  xcb_randr_get_crtc_info_outputs(cr)),
+	        NULL);
+	if (!scr)
+		return;
+	if (scr->status == XCB_RANDR_SET_CONFIG_INVALID_TIME)
+		goto retry;
 }
 
 static int get_output_backlight(struct di_xorg_output *o) {
@@ -242,7 +294,7 @@ make_object_for_view(struct di_xorg_randr *rr, xcb_randr_crtc_t cid) {
 	obj->cid = cid;
 
 	di_rprop(obj, "outputs", get_view_outputs);
-	di_rprop(obj, "config", get_view_config);
+	di_rwprop(obj, "config", get_view_config, set_view_config);
 	di_dtor(obj, view_dtor);
 
 	di_ref_object((void *)rr);
