@@ -9,37 +9,134 @@
 #include <deai.h>
 #include <string.h>
 
+#include <limits.h>
 #include <stddef.h>
+#include <stdint.h>
 
 int di_setv(struct di_object *o, const char *prop, di_type_t type, void *val);
 int di_getv(struct di_object *o, const char *prop, di_type_t *type, void **val);
 int di_register_field_getter(struct di_object *o, const char *prop, off_t offset,
                              di_type_t t);
 
+static inline int integer_conversion(di_type_t inty, const void *inp,
+                                     di_type_t outty, const void **outp) {
+	if (inty == outty) {
+		*outp = inp;
+		return 0;
+	}
+
+#define convert_case(srct, dstt, dstmax, dstmin)                                    \
+	case di_typeof((srct)0):                                                    \
+		do {                                                                \
+			srct tmp = *(srct *)(inp);                                  \
+			if (tmp > (dstmax) || tmp < (dstmin))                       \
+				return -ERANGE;                                     \
+			dstt *tmp2 = malloc(sizeof(dstt));                          \
+			*tmp2 = tmp;                                                \
+			*outp = tmp2;                                               \
+		} while (0);                                                        \
+		break
+
+#define convert_switch(s1, s2, s3, ...)                                             \
+	switch (inty) {                                                             \
+		convert_case(s1, __VA_ARGS__);                                      \
+		convert_case(s2, __VA_ARGS__);                                      \
+		convert_case(s3, __VA_ARGS__);                                      \
+	default: return -EINVAL;                                                    \
+	}
+
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wpragmas"
+#pragma GCC diagnostic ignored "-Wtautological-constant-out-of-range-compare"
+	switch (outty) {
+	case DI_TYPE_INT:
+		convert_switch(unsigned int, int, uint64_t, int64_t, INT64_MAX,
+		               INT64_MIN);
+		break;
+	case DI_TYPE_NINT:
+		convert_switch(unsigned int, uint64_t, int64_t, int, INT_MAX, INT_MIN);
+		break;
+	case DI_TYPE_UINT:
+		convert_switch(unsigned int, int, int64_t, uint64_t, UINT64_MAX, 0);
+		break;
+	case DI_TYPE_NUINT:
+		convert_switch(int, int64_t, uint64_t, unsigned int, UINT_MAX, 0);
+		break;
+	default: return -EINVAL;
+	}
+#pragma GCC diagnostic pop
+
+#undef convert_case
+#undef convert_switch
+	return 0;
+}
+
+static inline bool is_integer(di_type_t t) {
+	return t == DI_TYPE_INT || t == DI_TYPE_NINT || t == DI_TYPE_UINT ||
+	       t == DI_TYPE_NUINT;
+}
+
+static inline int number_conversion(di_type_t inty, const void *inp, di_type_t outty,
+                                    const void **outp) {
+	if (inty == outty) {
+		*outp = inp;
+		return 0;
+	}
+
+	if (is_integer(inty)) {
+		if (is_integer(outty))
+			return integer_conversion(inty, inp, outty, outp);
+		if (outty == DI_TYPE_FLOAT) {
+			double *res = malloc(sizeof(double));
+#define convert_case(srct)                                                          \
+	case di_typeof((srct)0): *res = *(srct *)inp; return 0;
+			switch (inty) {
+				convert_case(unsigned int);
+				convert_case(int);
+				convert_case(uint64_t);
+				convert_case(int64_t);
+			default: return -EINVAL;
+			}
+#undef convert_case
+			*outp = res;
+			return 0;
+		}
+	}
+
+	// float -> integer not allowed
+	return -EINVAL;
+}
+
 #define di_set(o, prop, v)                                                          \
 	({                                                                          \
 		__auto_type __tmp = (v);                                            \
-		di_set(o, prop, di_typeof(__tmp), &__tmp);                          \
+		di_setv(o, prop, di_typeof(__tmp), &__tmp);                         \
 	})
 
 #define di_get(o, prop, r)                                                          \
 	({                                                                          \
 		void *ret;                                                          \
+		const void *ret2;                                                   \
 		di_type_t rtype;                                                    \
 		int rc;                                                             \
 		do {                                                                \
-			int rc = di_get(o, prop, &rtype, &ret);                     \
+			rc = di_getv(o, prop, &rtype, &ret);                        \
 			if (rc != 0)                                                \
 				break;                                              \
-			if (di_typeof(r) != rtype) {                                \
-				rc = -EINVAL;                                       \
+			rc = number_conversion(rtype, ret, di_typeof(r), &ret2);    \
+			if (rc)                                                     \
 				break;                                              \
-			}                                                           \
-			(r) = *(typeof(r) *)ret;                                    \
+			(r) = *(typeof(r) *)ret2;                                   \
 			free(ret);                                                  \
+			if (ret2 != ret)                                            \
+				free((void *)ret2);                                 \
 		} while (0);                                                        \
 		rc;                                                                 \
 	})
+
+#define di_gets(o, prop, r)                                                         \
+	if (di_get(o, prop, r))                                                     \
+		return;
 
 // Pardon this mess, this is what you get for doing meta programming using C macros.
 #define CONCAT2(a, b) a##b
@@ -181,11 +278,11 @@ di_register_rw_property(struct di_object *obj, const char *name, di_fn_t prop_r,
 }
 
 #define di_rprop(o, name, prop_r)                                                   \
-	di_register_rw_property((void *)o, name, (di_fn_t)prop_r, NULL,           \
+	di_register_rw_property((void *)o, name, (di_fn_t)prop_r, NULL,             \
 	                        di_typeof((prop_r)(NULL)))
 #define di_rwprop(o, name, prop_r, prop_w)                                          \
-	di_register_rw_property((void *)o, name, (di_fn_t)prop_r,                 \
-	                        (di_fn_t)prop_w, di_typeof((prop_r)(NULL)))
+	di_register_rw_property((void *)o, name, (di_fn_t)prop_r, (di_fn_t)prop_w,  \
+	                        di_typeof((prop_r)(NULL)))
 
 // TODO maybe
 // macro to generate c wrapper for di functions

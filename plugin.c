@@ -7,6 +7,7 @@
 #define _GNU_SOURCE
 #include <assert.h>
 #include <deai.h>
+#include <helper.h>
 #include <stdarg.h>
 #include <stdio.h>
 #include <sys/mman.h>
@@ -355,62 +356,6 @@ PUBLIC size_t di_min_return_size(size_t in) {
 	return in;
 }
 
-static inline bool is_integer(di_type_t t) {
-	return t == DI_TYPE_INT || t == DI_TYPE_NINT || t == DI_TYPE_UINT ||
-	       t == DI_TYPE_NUINT;
-}
-
-static inline int integer_conversion(di_type_t inty, const void *inp,
-                                     di_type_t outty, const void **outp) {
-
-#define convert_case(srct, dstt, dstmax, dstmin)                                    \
-	case di_typeof((srct)0):                                                    \
-		do {                                                                \
-			srct tmp = *(srct *)(inp);                                  \
-			if (tmp > (dstmax) || tmp < (dstmin))                       \
-				return -ERANGE;                                     \
-			dstt *tmp2 = malloc(sizeof(dstt));                          \
-			*tmp2 = tmp;                                                \
-			*outp = tmp2;                                               \
-		} while (0);                                                        \
-		break
-
-#define convert_switch(s1, s2, s3, ...)                                             \
-	switch (inty) {                                                             \
-		convert_case(s1, __VA_ARGS__);                                      \
-		convert_case(s2, __VA_ARGS__);                                      \
-		convert_case(s3, __VA_ARGS__);                                      \
-	default: assert(0);                                                         \
-	}
-
-	assert(inty != outty);
-
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wpragmas"
-#pragma GCC diagnostic ignored "-Wtautological-constant-out-of-range-compare"
-	switch (outty) {
-	case DI_TYPE_INT:
-		convert_switch(unsigned int, int, uint64_t, int64_t, INT64_MAX,
-		               INT64_MIN);
-		break;
-	case DI_TYPE_NINT:
-		convert_switch(unsigned int, uint64_t, int64_t, int, INT_MAX, INT_MIN);
-		break;
-	case DI_TYPE_UINT:
-		convert_switch(unsigned int, int, int64_t, uint64_t, UINT64_MAX, 0);
-		break;
-	case DI_TYPE_NUINT:
-		convert_switch(int, int64_t, uint64_t, unsigned int, UINT_MAX, 0);
-		break;
-	default: assert(0);
-	}
-#pragma GCC diagnostic pop
-
-#undef convert_case
-#undef convert_switch
-	return 0;
-}
-
 static int
 di_typed_trampoline(di_type_t *rt, void **ret, unsigned int nargs,
                     const di_type_t *ats, const void *const *args, void *ud) {
@@ -425,55 +370,32 @@ di_typed_trampoline(di_type_t *rt, void **ret, unsigned int nargs,
 	int rc = 0;
 	xargs[0] = &fn->this;
 	for (int i = 0; i < nargs; i++) {
-		if (ats[i] == fn->atypes[i + 1]) {
-			xargs[i + 1] = args[i];
-			continue;
-		}
-
 		// Type check and implicit conversion
 		// conversion between all types of integers are allowed
 		// as long as there's no overflow
-		if (is_integer(ats[i])) {
-			if (is_integer(fn->atypes[i + 1])) {
-				rc = integer_conversion(ats[i], args[i],
-				                        fn->atypes[i + 1],
-				                        xargs + i + 1);
-				if (rc)
-					goto out;
-			} else if (fn->atypes[i + 1] == DI_TYPE_FLOAT) {
-				double *res = malloc(sizeof(double));
-#define convert_case(srct)                                                          \
-	case di_typeof((srct)0): *res = *(srct *)args[i]; break;
-				switch (ats[i]) {
-					convert_case(unsigned int);
-					convert_case(int);
-					convert_case(uint64_t);
-					convert_case(int64_t);
+		int rc = number_conversion(ats[i], args[i], fn->atypes[i + 1],
+		                           xargs + i + 1);
+		if (rc != 0) {
+			if (ats[i] == DI_TYPE_NIL) {
+				struct di_array *arr;
+				switch (fn->atypes[i + 1]) {
+				case DI_TYPE_OBJECT: xargs[i + 1] = &null_ptr; break;
+				case DI_TYPE_STRING:
+				case DI_TYPE_POINTER:
+					xargs[i + 1] = &null_ptr;
+					break;
+				case DI_TYPE_ARRAY:
+					arr = tmalloc(struct di_array, 1);
+					arr->length = 0;
+					arr->elem_type = DI_TYPE_NIL;
+					xargs[i + 1] = arr;
+					break;
 				default: rc = -EINVAL; goto out;
 				}
-#undef convert_case
-				xargs[i + 1] = res;
 			} else {
 				rc = -EINVAL;
 				goto out;
 			}
-		} else if (ats[i] == DI_TYPE_NIL) {
-			struct di_array *arr;
-			switch (fn->atypes[i + 1]) {
-			case DI_TYPE_OBJECT: xargs[i + 1] = &null_ptr; break;
-			case DI_TYPE_STRING:
-			case DI_TYPE_POINTER: xargs[i + 1] = &null_ptr; break;
-			case DI_TYPE_ARRAY:
-				arr = tmalloc(struct di_array, 1);
-				arr->length = 0;
-				arr->elem_type = DI_TYPE_NIL;
-				xargs[i + 1] = arr;
-				break;
-			default: rc = -EINVAL; goto out;
-			}
-		} else {
-			rc = -EINVAL;
-			goto out;
 		}
 	}
 
