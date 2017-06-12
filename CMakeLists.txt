@@ -60,6 +60,7 @@ set(HEADERS
 
 set(BUILTIN_HEADERS
 	include/builtin/event.h
+	include/builtin/spawn.h
 	include/builtin/log.h
 )
 

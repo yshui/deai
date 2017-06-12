@@ -21,11 +21,11 @@
 #include "config.h"
 #include "di_internal.h"
 #include "env.h"
-#include "spawn.h"
 #include "event.h"
 #include "log.h"
 #include "uthash.h"
 #include "utils.h"
+#include "spawn.h"
 
 static void load_plugin(struct deai *p, const char *sopath) {
 	if (!sopath)
@@ -196,6 +196,7 @@ int main(int argc, char *argv[]) {
 	di_init_event(p);
 	di_init_log(p);
 	di_init_env(p);
+	di_init_spawn(p);
 
 	if (argc < 2) {
 		printf("Usage: %s <module>.<method> <arg1> <arg2> ...\n", argv[0]);
