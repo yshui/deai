@@ -51,6 +51,7 @@ set(SRC
 	helper.c
 	env.c
 	spawn.c
+	string_buf.c
 )
 
 set(HEADERS

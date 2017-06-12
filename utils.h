@@ -33,6 +33,7 @@
 #define define_trivial_cleanup_t(type) define_trivial_cleanup(type, free_##type##p)
 
 #define with_cleanup_t(type) __attribute__((cleanup(free_##type##p))) type *
+#define with_cleanup(func) __attribute__((cleanup(func)))
 
 #define PUBLIC __attribute__((visibility("default")))
 

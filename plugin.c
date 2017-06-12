@@ -22,7 +22,6 @@
 #endif
 
 #define PUBLIC __attribute__((visibility("default")))
-#define cleanup(func) __attribute__((cleanup(func)))
 
 const void *null_ptr = NULL;
 
@@ -528,7 +527,7 @@ static inline void free_evd(struct di_signal **evd) {
 }
 
 PUBLIC int di_register_signal(struct di_object *r, const char *name, int nargs, ...) {
-	cleanup(free_evd) struct di_signal *evd = NULL;
+	with_cleanup(free_evd) struct di_signal *evd = NULL;
 	HASH_FIND_STR(r->evd, name, evd);
 	if (evd)
 		return -EEXIST;
