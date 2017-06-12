@@ -6,7 +6,7 @@
 
 #include <deai.h>
 #include <helper.h>
-#include <log.h>
+#include <builtin/log.h>
 
 #include <assert.h>
 #include <lauxlib.h>

@@ -8,9 +8,10 @@
 #include <stdarg.h>
 #include <stdio.h>
 #include <helper.h>
+#include <builtin/log.h>
 
 #include "di_internal.h"
-#include "log_internal.h"
+#include "log.h"
 #include "utils.h"
 
 struct di_log {

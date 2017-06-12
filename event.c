@@ -4,12 +4,15 @@
 
 /* Copyright (c) 2017, Yuxuan Shui <yshuiv7@gmail.com> */
 
-#include "di_internal.h"
-#include "event_internal.h"
-#include "utils.h"
 #include <deai.h>
 #include <ev.h>
 #include <helper.h>
+#include <builtin/event.h>
+
+#include "di_internal.h"
+#include "event.h"
+#include "utils.h"
+
 struct di_ioev {
 	struct di_object;
 	ev_io evh;

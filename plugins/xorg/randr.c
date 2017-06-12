@@ -5,7 +5,7 @@
 /* Copyright (c) 2017, Yuxuan Shui <yshuiv7@gmail.com> */
 
 #include <helper.h>
-#include <log.h>
+#include <builtin/log.h>
 
 #include "randr.h"
 

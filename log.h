@@ -5,7 +5,4 @@
 /* Copyright (c) 2017, Yuxuan Shui <yshuiv7@gmail.com> */
 
 #pragma once
-#include <event.h>
-#include <deai.h>
-
-void di_init_event_module(struct deai *di);
+void di_init_log(struct deai *di);

@@ -21,8 +21,9 @@
 #include "config.h"
 #include "di_internal.h"
 #include "env.h"
-#include "event_internal.h"
-#include "log_internal.h"
+#include "spawn.h"
+#include "event.h"
+#include "log.h"
 #include "uthash.h"
 #include "utils.h"
 
