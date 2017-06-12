@@ -106,7 +106,7 @@ void di_quit(struct deai *di) {
 
 struct di_ev_signal {
 	ev_signal;
-	struct deai *di;
+	void *ud;
 	int sig;
 };
 
@@ -181,11 +181,6 @@ static struct di_array di_get_argv(struct deai *p) {
 	return ret;
 }
 
-static struct di_object *di_identity(struct deai *p, struct di_object *o) {
-	di_ref_object((void *)o);
-	return o;
-}
-
 int main(int argc, char *argv[]) {
 	struct di_module_internal *pm;
 	struct deai *p = di_new_object_with_type(struct deai);
@@ -198,7 +193,7 @@ int main(int argc, char *argv[]) {
 	di_register_signal((void *)p, "shutdown", 0);
 
 	// (1) Initialize builtin modules first
-	di_init_event_module(p);
+	di_init_event(p);
 	di_init_log(p);
 	di_init_env(p);
 
@@ -219,10 +214,6 @@ int main(int argc, char *argv[]) {
 	di_register_typed_method(
 	    (void *)p, di_create_typed_method((di_fn_t)di_chdir, "chdir",
 	                                      DI_TYPE_NINT, 1, DI_TYPE_STRING));
-
-	di_register_typed_method(
-	    (void *)p, di_create_typed_method((di_fn_t)di_identity, "identity",
-	                                      DI_TYPE_OBJECT, 1, DI_TYPE_OBJECT));
 
 	di_register_typed_method(
 	    (void *)p,
@@ -246,13 +237,13 @@ int main(int argc, char *argv[]) {
 	                                      DI_TYPE_OBJECT, 1, DI_TYPE_STRING));
 
 	struct di_ev_signal sigintw;
-	sigintw.di = p;
+	sigintw.ud = p;
 	sigintw.sig = SIGINT;
 	ev_signal_init(&sigintw, di_sighandler, SIGINT);
 	ev_signal_start(p->loop, (void *)&sigintw);
 
 	struct di_ev_signal sigtermw;
-	sigtermw.di = p;
+	sigtermw.ud = p;
 	sigtermw.sig = SIGTERM;
 	ev_signal_init(&sigtermw, di_sighandler, SIGTERM);
 	ev_signal_start(p->loop, (void *)&sigtermw);

@@ -149,7 +149,7 @@ di_create_periodic(struct di_evmodule *evm, double interval, double offset) {
 	di_register_signal((void *)ret, "triggered", 1, DI_TYPE_FLOAT);
 	return (void *)ret;
 }
-void di_init_event_module(struct deai *di) {
+void di_init_event(struct deai *di) {
 	auto em = di_new_module_with_type("event", struct di_evmodule);
 
 	di_register_typed_method(
