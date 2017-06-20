@@ -23,9 +23,9 @@
 #include "env.h"
 #include "event.h"
 #include "log.h"
+#include "spawn.h"
 #include "uthash.h"
 #include "utils.h"
-#include "spawn.h"
 
 static void load_plugin(struct deai *p, const char *sopath) {
 	if (!sopath)
@@ -203,39 +203,29 @@ int main(int argc, char *argv[]) {
 		exit(1);
 	}
 
-	di_register_typed_method(
-	    (void *)p,
-	    di_create_typed_method((di_fn_t)load_plugin_dir, "load_plugin_from_dir",
-	                           DI_TYPE_NINT, 1, DI_TYPE_STRING));
+	di_register_typed_method((void *)p, (di_fn_t)load_plugin_dir,
+	                         "load_plugin_from_dir", DI_TYPE_NINT, 1,
+	                         DI_TYPE_STRING);
 
-	di_register_typed_method(
-	    (void *)p, di_create_typed_method((di_fn_t)load_plugin, "load_plugin",
-	                                      DI_TYPE_NINT, 1, DI_TYPE_STRING));
+	di_register_typed_method((void *)p, (di_fn_t)load_plugin, "load_plugin",
+	                         DI_TYPE_NINT, 1, DI_TYPE_STRING);
 
-	di_register_typed_method(
-	    (void *)p, di_create_typed_method((di_fn_t)di_chdir, "chdir",
-	                                      DI_TYPE_NINT, 1, DI_TYPE_STRING));
+	di_register_typed_method((void *)p, (di_fn_t)di_chdir, "chdir", DI_TYPE_NINT,
+	                         1, DI_TYPE_STRING);
 
-	di_register_typed_method(
-	    (void *)p,
-	    di_create_typed_method((di_fn_t)di_quit, "quit", DI_TYPE_VOID, 0));
+	di_register_typed_method((void *)p, (di_fn_t)di_quit, "quit", DI_TYPE_VOID, 0);
 
-	di_register_typed_method(
-	    (void *)p, di_create_typed_method((di_fn_t)di_get_pr_name,
-	                                      "__get_proctitle", DI_TYPE_STRING, 0));
+	di_register_typed_method((void *)p, (di_fn_t)di_get_pr_name,
+	                         "__get_proctitle", DI_TYPE_STRING, 0);
 
-	di_register_typed_method(
-	    (void *)p,
-	    di_create_typed_method((di_fn_t)di_set_pr_name, "__set_proctitle",
-	                           DI_TYPE_VOID, 1, DI_TYPE_STRING));
+	di_register_typed_method((void *)p, (di_fn_t)di_set_pr_name,
+	                         "__set_proctitle", DI_TYPE_VOID, 1, DI_TYPE_STRING);
 
-	di_register_typed_method(
-	    (void *)p, di_create_typed_method((di_fn_t)di_get_argv, "__get_argv",
-	                                      DI_TYPE_ARRAY, 0));
+	di_register_typed_method((void *)p, (di_fn_t)di_get_argv, "__get_argv",
+	                         DI_TYPE_ARRAY, 0);
 
-	di_register_typed_method(
-	    (void *)p, di_create_typed_method((di_fn_t)di_find_module, "__get",
-	                                      DI_TYPE_OBJECT, 1, DI_TYPE_STRING));
+	di_register_typed_method((void *)p, (di_fn_t)di_find_module, "__get",
+	                         DI_TYPE_OBJECT, 1, DI_TYPE_STRING);
 
 	struct di_ev_signal sigintw;
 	sigintw.ud = p;

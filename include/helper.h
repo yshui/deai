@@ -45,6 +45,13 @@ static inline int integer_conversion(di_type_t inty, const void *inp,
 	default: return -EINVAL;                                                    \
 	}
 
+#define RET_IF_ERR(expr)                                                            \
+	do {                                                                        \
+		int ret = (expr);                                                   \
+		if (ret != 0)                                                       \
+			return ret;                                                 \
+	} while (0)
+
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wpragmas"
 #pragma GCC diagnostic ignored "-Wtautological-constant-out-of-range-compare"
@@ -227,54 +234,41 @@ static inline int number_conversion(di_type_t inty, const void *inp, di_type_t o
 
 #define di_signal_handler(o, name, add, del)                                        \
 	do {                                                                        \
-		di_register_typed_method(                                           \
-		    (struct di_object *)o,                                          \
-		    di_create_typed_method((di_fn_t)add, "__add_listener_" name,    \
-		                           DI_TYPE_VOID, 0));                       \
-		di_register_typed_method(                                           \
-		    (struct di_object *)o,                                          \
-		    di_create_typed_method((di_fn_t)del, "__del_listener_" name,    \
-		                           DI_TYPE_VOID, 0));                       \
+		di_register_typed_method((struct di_object *)o, (di_fn_t)add,       \
+		                         "__add_listener_" name, DI_TYPE_VOID, 0);  \
+		di_register_typed_method((struct di_object *)o, (di_fn_t)del,       \
+		                         "__del_listener_" name, DI_TYPE_VOID, 0);  \
 	} while (0)
 
 #define di_dtor(o, dtor)                                                            \
-	di_register_typed_method(                                                   \
-	    (struct di_object *)o,                                                  \
-	    di_create_typed_method((di_fn_t)dtor, "__dtor", DI_TYPE_VOID, 0));
+	di_register_typed_method((struct di_object *)o, (di_fn_t)dtor, "__dtor",    \
+	                         DI_TYPE_VOID, 0);
+
+static inline void free_charp(char **ptr) {
+	free(*ptr);
+	*ptr = NULL;
+}
 
 static inline int
 di_register_rw_property(struct di_object *obj, const char *name, di_fn_t prop_r,
                         di_fn_t prop_w, di_type_t t) {
-	char *buf = malloc(strlen(name) + strlen("__get_") + 1);
+	__attribute__((cleanup(free_charp))) char *buf =
+	    malloc(strlen(name) + strlen("__get_") + 1);
 	if (!buf)
 		return -ENOMEM;
 
 	strcpy(buf, "__get_");
 	strcat(buf, name);
 
-	struct di_typed_method *mt = di_create_typed_method(prop_r, buf, t, 0);
-	if (!mt) {
-		free(buf);
-		return -EINVAL;
-	}
-
-	int ret = di_register_typed_method(obj, mt);
-	if (ret) {
-		free(buf);
-		return ret;
-	}
+	RET_IF_ERR(di_register_typed_method(obj, prop_r, buf, t, 0));
 
 	if (prop_w) {
 		strcpy(buf, "__set_");
 		strcat(buf, name);
-		mt = di_create_typed_method(prop_w, buf, DI_TYPE_VOID, 1, t);
-		free(buf);
-		if (!mt)
-			return -EINVAL;
-		ret = di_register_typed_method(obj, mt);
-	} else
-		free(buf);
-	return ret;
+		RET_IF_ERR(
+		    di_register_typed_method(obj, prop_w, buf, DI_TYPE_VOID, 1, t));
+	}
+	return 0;
 }
 
 #define di_rprop(o, name, prop_r)                                                   \

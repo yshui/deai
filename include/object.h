@@ -76,10 +76,8 @@ typedef void (*di_listener_fn_t)(struct di_signal *, struct di_listener *,
 
 void di_free_object(struct di_object *);
 int di_register_method(struct di_object *, struct di_method *);
-int di_register_typed_method(struct di_object *, struct di_typed_method *);
-struct di_typed_method *
-di_create_typed_method(di_fn_t fn, const char *name, di_type_t rtype,
-                       unsigned int nargs, ...);
+int di_register_typed_method(struct di_object *, di_fn_t fn, const char *name,
+                             di_type_t rtype, unsigned int nargs, ...);
 struct di_untyped_method *
 di_create_untyped_method(di_callbale_t fn, const char *name, void *user_data,
                          void (*user_data_free)(void **));

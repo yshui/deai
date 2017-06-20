@@ -52,9 +52,9 @@ static void chld_handler(EV_P_ ev_child *w, int revents) {
 	}
 	di_emit_signal_v((void *)c, "exit", ec, sig);
 
-	ev_child_stop(EV_A_ &c->w);
-	ev_io_stop(EV_A_ &c->outw);
-	ev_io_stop(EV_A_ &c->errw);
+	ev_child_stop(EV_A_ & c->w);
+	ev_io_stop(EV_A_ & c->outw);
+	ev_io_stop(EV_A_ & c->errw);
 	close(c->outw.fd);
 	close(c->errw.fd);
 	di_unref_object((void *)c);
@@ -82,14 +82,12 @@ output_handler(struct child *c, int fd, struct string_buf *b, const char *ev) {
 	}
 }
 
-static void
-stdout_cb(EV_P_ ev_io *w, int revents) {
+static void stdout_cb(EV_P_ ev_io *w, int revents) {
 	struct child *c = container_of(w, struct child, outw);
 	output_handler(c, w->fd, c->out, "stdout_line");
 }
 
-static void
-stderr_cb(EV_P_ ev_io *w, int revents) {
+static void stderr_cb(EV_P_ ev_io *w, int revents) {
 	struct child *c = container_of(w, struct child, errw);
 	output_handler(c, w->fd, c->err, "stderr_line");
 }
@@ -157,9 +155,8 @@ void di_init_spawn(struct deai *di) {
 	auto m = di_new_module_with_type("spawn", struct di_spawn);
 	m->di = di;
 
-	di_register_typed_method(
-	    (void *)m, di_create_typed_method((di_fn_t)di_spawn_run, "run",
-	                                      DI_TYPE_OBJECT, 1, DI_TYPE_ARRAY));
+	di_register_typed_method((void *)m, (di_fn_t)di_spawn_run, "run",
+	                         DI_TYPE_OBJECT, 1, DI_TYPE_ARRAY);
 
 	di_register_module(di, (void *)m);
 }

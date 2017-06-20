@@ -4,8 +4,8 @@
 
 /* Copyright (c) 2017, Yuxuan Shui <yshuiv7@gmail.com> */
 
-#include <deai.h>
 #include <builtin/event.h>
+#include <deai.h>
 #include <helper.h>
 
 #include <limits.h>
@@ -144,18 +144,14 @@ static struct di_object *di_file_new_watch(struct di_file *f, struct di_array pa
 	auto fw = di_new_object_with_type(struct di_file_watch);
 	fw->fd = ifd;
 
-	di_register_typed_method(
-	    (void *)fw,
-	    di_create_typed_method((di_fn_t)di_file_add_many_watch, "add",
-	                           DI_TYPE_NINT, 1, DI_TYPE_STRING));
+	di_register_typed_method((void *)fw, (di_fn_t)di_file_add_many_watch, "add",
+	                         DI_TYPE_NINT, 1, DI_TYPE_STRING);
 
-	di_register_typed_method(
-	    (void *)fw, di_create_typed_method((di_fn_t)di_file_add_watch, "add_one",
-	                                       DI_TYPE_NINT, 1, DI_TYPE_STRING));
+	di_register_typed_method((void *)fw, (di_fn_t)di_file_add_watch, "add_one",
+	                         DI_TYPE_NINT, 1, DI_TYPE_STRING);
 
-	di_register_typed_method(
-	    (void *)fw, di_create_typed_method((di_fn_t)di_file_rm_watch, "remove",
-	                                       DI_TYPE_NINT, 1, DI_TYPE_STRING));
+	di_register_typed_method((void *)fw, (di_fn_t)di_file_rm_watch, "remove",
+	                         DI_TYPE_NINT, 1, DI_TYPE_STRING);
 
 	di_dtor(fw, di_file_watch_dtor);
 
@@ -188,9 +184,8 @@ static struct di_object *di_file_new_watch(struct di_file *f, struct di_array pa
 PUBLIC int di_plugin_init(struct deai *di) {
 	auto fm = di_new_module_with_type("file", struct di_file);
 	fm->di = di;
-	di_register_typed_method(
-	    (void *)fm, di_create_typed_method((di_fn_t)di_file_new_watch, "watch",
-	                                       DI_TYPE_OBJECT, 1, DI_TYPE_ARRAY));
+	di_register_typed_method((void *)fm, (di_fn_t)di_file_new_watch, "watch",
+	                         DI_TYPE_OBJECT, 1, DI_TYPE_ARRAY);
 	di_register_module(di, (void *)fm);
 	return 0;
 }

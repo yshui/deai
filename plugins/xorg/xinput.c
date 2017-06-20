@@ -4,9 +4,9 @@
 
 /* Copyright (c) 2017, Yuxuan Shui <yshuiv7@gmail.com> */
 
+#include <builtin/log.h>
 #include <deai.h>
 #include <helper.h>
-#include <builtin/log.h>
 
 #include <assert.h>
 #include <ctype.h>
@@ -191,7 +191,6 @@ static int di_xorg_xinput_get_device_id(struct di_object *o) {
 }
 
 define_trivial_cleanup_t(xcb_input_xi_get_property_reply_t);
-define_trivial_cleanup_t(char);
 define_trivial_cleanup_t(xcb_input_xi_change_property_items_t);
 
 static void di_xorg_xinput_set_prop(struct di_xorg_xinput_device *dev,
@@ -399,15 +398,12 @@ static struct di_object *di_xorg_xinput_props(struct di_xorg_xinput_device *dev)
 	obj->deviceid = dev->deviceid;
 	obj->dc = dev->dc;
 
-	di_register_typed_method(
-	    (void *)obj,
-	    di_create_typed_method((di_fn_t)di_xorg_xinput_get_prop, "__get",
-	                           DI_TYPE_ARRAY, 1, DI_TYPE_STRING));
+	di_register_typed_method((void *)obj, (di_fn_t)di_xorg_xinput_get_prop,
+	                         "__get", DI_TYPE_ARRAY, 1, DI_TYPE_STRING);
 
-	di_register_typed_method(
-	    (void *)obj,
-	    di_create_typed_method((di_fn_t)di_xorg_xinput_set_prop, "__set",
-	                           DI_TYPE_VOID, 2, DI_TYPE_STRING, DI_TYPE_ARRAY));
+	di_register_typed_method((void *)obj, (di_fn_t)di_xorg_xinput_set_prop,
+	                         "__set", DI_TYPE_VOID, 2, DI_TYPE_STRING,
+	                         DI_TYPE_ARRAY);
 	return (void *)obj;
 }
 
@@ -426,25 +422,20 @@ di_xorg_make_object_for_devid(struct di_xorg_connection *dc, int deviceid) {
 
 	di_dtor(obj, free_xi_device_object);
 
-	auto tm = di_create_typed_method((di_fn_t)di_xorg_xinput_get_device_name,
-	                                 "__get_name", DI_TYPE_STRING, 0);
-	di_register_typed_method((void *)obj, tm);
+	di_register_typed_method((void *)obj, (di_fn_t)di_xorg_xinput_get_device_name,
+	                         "__get_name", DI_TYPE_STRING, 0);
 
-	tm = di_create_typed_method((di_fn_t)di_xorg_xinput_get_device_use,
-	                            "__get_use", DI_TYPE_STRING, 0);
-	di_register_typed_method((void *)obj, tm);
+	di_register_typed_method((void *)obj, (di_fn_t)di_xorg_xinput_get_device_use,
+	                         "__get_use", DI_TYPE_STRING, 0);
 
-	tm = di_create_typed_method((di_fn_t)di_xorg_xinput_get_device_id,
-	                            "__get_id", DI_TYPE_NINT, 0);
-	di_register_typed_method((void *)obj, tm);
+	di_register_typed_method((void *)obj, (di_fn_t)di_xorg_xinput_get_device_id,
+	                         "__get_id", DI_TYPE_NINT, 0);
 
-	tm = di_create_typed_method((di_fn_t)di_xorg_xinput_get_device_type,
-	                            "__get_type", DI_TYPE_STRING, 0);
-	di_register_typed_method((void *)obj, tm);
+	di_register_typed_method((void *)obj, (di_fn_t)di_xorg_xinput_get_device_type,
+	                         "__get_type", DI_TYPE_STRING, 0);
 
-	di_register_typed_method(
-	    (void *)obj, di_create_typed_method((di_fn_t)di_xorg_xinput_props,
-	                                        "__get_props", DI_TYPE_OBJECT, 0));
+	di_register_typed_method((void *)obj, (di_fn_t)di_xorg_xinput_props,
+	                         "__get_props", DI_TYPE_OBJECT, 0);
 
 	// const char *ty;
 	// DI_GET((void *)obj, "name", ty);
@@ -480,8 +471,7 @@ static struct di_array di_xorg_get_all_devices(struct di_xorg_xinput *xi) {
 	return ret;
 }
 
-static int
-handle_xinput_event(struct di_xorg_xinput *xi, xcb_generic_event_t *ev) {
+static int handle_xinput_event(struct di_xorg_xinput *xi, xcb_generic_event_t *ev) {
 	if (ev->response_type != XCB_GE_GENERIC)
 		return 1;
 
@@ -544,9 +534,8 @@ struct di_xorg_ext *di_xorg_new_xinput(struct di_xorg_connection *dc) {
 	di_signal_handler(xi, "device-disabled", enable_hierarchy_event,
 	                  disable_hierarchy_event);
 
-	auto tm = di_create_typed_method((di_fn_t)di_xorg_get_all_devices,
-	                                 "__get_devices", DI_TYPE_ARRAY, 0);
-	di_register_typed_method((void *)xi, tm);
+	di_register_typed_method((void *)xi, (di_fn_t)di_xorg_get_all_devices,
+	                         "__get_devices", DI_TYPE_ARRAY, 0);
 
 	di_register_signal((void *)xi, "new-device", 1, DI_TYPE_OBJECT);
 	di_register_signal((void *)xi, "device-enabled", 1, DI_TYPE_OBJECT);

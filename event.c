@@ -4,10 +4,10 @@
 
 /* Copyright (c) 2017, Yuxuan Shui <yshuiv7@gmail.com> */
 
+#include <builtin/event.h>
 #include <deai.h>
 #include <ev.h>
 #include <helper.h>
-#include <builtin/event.h>
 
 #include "di_internal.h"
 #include "event.h"
@@ -50,8 +50,7 @@ static void di_timer_callback(EV_P_ ev_timer *t, int revents) {
 	di_emit_signal_v((void *)d, "elapsed", ev_now(EV_A));
 }
 
-static void
-di_periodic_callback(EV_P_ ev_periodic *w, int revents) {
+static void di_periodic_callback(EV_P_ ev_periodic *w, int revents) {
 	auto p = container_of(w, struct di_periodic, pt);
 	di_emit_signal_v((void *)p, "triggered", ev_now(EV_A));
 }
@@ -90,9 +89,7 @@ static struct di_object *di_create_ioev(struct di_object *obj, int fd, int t) {
 	ev_io_init(&ret->evh, di_ioev_callback, fd, flags);
 	ret->loop = em->loop;
 
-	auto startfn =
-	    di_create_typed_method((di_fn_t)di_start_ioev, "start", DI_TYPE_VOID, 0);
-	di_register_typed_method((void *)ret, (void *)startfn);
+	di_register_typed_method((void *)ret, (di_fn_t)di_start_ioev, "start", DI_TYPE_VOID, 0);
 
 	di_dtor(ret, di_ioev_dtor);
 
@@ -108,25 +105,21 @@ static struct di_object *di_create_timer(struct di_object *obj, uint64_t timeout
 	ret->loop = em->loop;
 
 	di_dtor(ret, di_timer_dtor);
-	di_register_typed_method((void *)ret,
-	                         di_create_typed_method((di_fn_t)di_timer_again,
-	                                                "start", DI_TYPE_VOID, 0));
-	di_register_typed_method((void *)ret,
-	                         di_create_typed_method((di_fn_t)di_timer_again,
-	                                                "again", DI_TYPE_VOID, 0));
+	di_register_typed_method((void *)ret, (di_fn_t)di_timer_again, "start",
+	                         DI_TYPE_VOID, 0);
+	di_register_typed_method((void *)ret, (di_fn_t)di_timer_again, "again",
+	                         DI_TYPE_VOID, 0);
 
 	// Set the timeout and restart the timer
-	di_register_typed_method(
-	    (void *)ret, di_create_typed_method((di_fn_t)di_timer_set, "__set_timeout",
-	                                        DI_TYPE_VOID, 1, DI_TYPE_UINT));
+	di_register_typed_method((void *)ret, (di_fn_t)di_timer_set, "__set_timeout",
+	                         DI_TYPE_VOID, 1, DI_TYPE_UINT);
 
 	ev_init(&ret->evt, di_timer_callback);
 	ret->evt.repeat = timeout;
 	di_register_signal((void *)ret, "elapsed", 1, DI_TYPE_FLOAT);
 	return (void *)ret;
 }
-static void
-di_periodic_dtor(struct di_periodic *p) {
+static void di_periodic_dtor(struct di_periodic *p) {
 	ev_periodic_stop(p->loop, &p->pt);
 }
 static void di_periodic_set(struct di_periodic *p, double interval, double offset) {
@@ -139,10 +132,8 @@ di_create_periodic(struct di_evmodule *evm, double interval, double offset) {
 	ret->loop = evm->loop;
 
 	di_dtor(ret, di_periodic_dtor);
-	di_register_typed_method(
-	    (void *)ret,
-	    di_create_typed_method((di_fn_t)di_periodic_set, "set", DI_TYPE_VOID,
-	                           2, DI_TYPE_FLOAT, DI_TYPE_FLOAT));
+	di_register_typed_method((void *)ret, (di_fn_t)di_periodic_set, "set",
+	                         DI_TYPE_VOID, 2, DI_TYPE_FLOAT, DI_TYPE_FLOAT);
 
 	ev_periodic_init(&ret->pt, di_periodic_callback, offset, interval, NULL);
 	ev_periodic_start(evm->loop, &ret->pt);
@@ -152,19 +143,14 @@ di_create_periodic(struct di_evmodule *evm, double interval, double offset) {
 void di_init_event(struct deai *di) {
 	auto em = di_new_module_with_type("event", struct di_evmodule);
 
-	di_register_typed_method(
-	    (void *)em,
-	    di_create_typed_method((di_fn_t)di_create_ioev, "fdevent",
-	                           DI_TYPE_OBJECT, 2, DI_TYPE_NINT, DI_TYPE_NINT));
+	di_register_typed_method((void *)em, (di_fn_t)di_create_ioev, "fdevent",
+	                         DI_TYPE_OBJECT, 2, DI_TYPE_NINT, DI_TYPE_NINT);
 
-	di_register_typed_method(
-	    (void *)em, di_create_typed_method((di_fn_t)di_create_timer, "timer",
-	                                       DI_TYPE_OBJECT, 1, DI_TYPE_UINT));
+	di_register_typed_method((void *)em, (di_fn_t)di_create_timer, "timer",
+	                         DI_TYPE_OBJECT, 1, DI_TYPE_UINT);
 
-	di_register_typed_method(
-	    (void *)em,
-	    di_create_typed_method((di_fn_t)di_create_periodic, "periodic",
-	                           DI_TYPE_OBJECT, 2, DI_TYPE_FLOAT, DI_TYPE_FLOAT));
+	di_register_typed_method((void *)em, (di_fn_t)di_create_periodic, "periodic",
+	                         DI_TYPE_OBJECT, 2, DI_TYPE_FLOAT, DI_TYPE_FLOAT);
 	em->loop = di->loop;
 	di_register_module(di, (void *)em);
 }

@@ -238,22 +238,17 @@ di_xorg_connect_to(struct di_xorg *x, const char *displayname) {
 
 	di_call0(dc->xcb_fd, "start");
 
-	di_register_typed_method(
-	    (void *)dc, di_create_typed_method((di_fn_t)di_xorg_get_ext, "__get",
-	                                       DI_TYPE_OBJECT, 1, DI_TYPE_STRING));
+	di_register_typed_method((void *)dc, (di_fn_t)di_xorg_get_ext, "__get",
+	                         DI_TYPE_OBJECT, 1, DI_TYPE_STRING);
 
-	di_register_typed_method(
-	    (void *)dc, di_create_typed_method((di_fn_t)di_xorg_get_resource,
-	                                       "__get_xrdb", DI_TYPE_STRING, 0));
+	di_register_typed_method((void *)dc, (di_fn_t)di_xorg_get_resource,
+	                         "__get_xrdb", DI_TYPE_STRING, 0);
 
-	di_register_typed_method(
-	    (void *)dc,
-	    di_create_typed_method((di_fn_t)di_xorg_set_resource, "__set_xrdb",
-	                           DI_TYPE_VOID, 1, DI_TYPE_STRING));
+	di_register_typed_method((void *)dc, (di_fn_t)di_xorg_set_resource,
+	                         "__set_xrdb", DI_TYPE_VOID, 1, DI_TYPE_STRING);
 
-	di_register_typed_method(
-	    (void *)dc, di_create_typed_method((di_fn_t)get_screen, "__get_screen",
-	                                       DI_TYPE_OBJECT, 0));
+	di_register_typed_method((void *)dc, (di_fn_t)get_screen, "__get_screen",
+	                         DI_TYPE_OBJECT, 0);
 
 	di_dtor(dc, di_xorg_free_connection);
 
@@ -270,14 +265,11 @@ PUBLIC int di_plugin_init(struct deai *di) {
 	auto x = di_new_module_with_type("xorg", struct di_xorg);
 	x->di = di;
 
-	di_register_typed_method(
-	    (void *)x, di_create_typed_method((di_fn_t)di_xorg_connect, "connect",
-	                                      DI_TYPE_OBJECT, 0));
+	di_register_typed_method((void *)x, (di_fn_t)di_xorg_connect, "connect",
+	                         DI_TYPE_OBJECT, 0);
 
-	di_register_typed_method(
-	    (void *)x,
-	    di_create_typed_method((di_fn_t)di_xorg_connect_to, "connect_to",
-	                           DI_TYPE_OBJECT, 1, DI_TYPE_STRING));
+	di_register_typed_method((void *)x, (di_fn_t)di_xorg_connect_to,
+	                         "connect_to", DI_TYPE_OBJECT, 1, DI_TYPE_STRING);
 
 	di_register_module(di, (void *)x);
 	return 0;

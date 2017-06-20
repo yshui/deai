@@ -4,11 +4,11 @@
 
 /* Copyright (c) 2017, Yuxuan Shui <yshuiv7@gmail.com> */
 
+#include <builtin/log.h>
 #include <deai.h>
+#include <helper.h>
 #include <stdarg.h>
 #include <stdio.h>
-#include <helper.h>
-#include <builtin/log.h>
 
 #include "di_internal.h"
 #include "log.h"
@@ -64,17 +64,13 @@ void di_init_log(struct deai *di) {
 		return;
 	l->log_level = DI_LOG_ERROR;
 
-	auto fn = di_create_typed_method((di_fn_t)di_log, "log", DI_TYPE_NINT, 2,
-	                                 DI_TYPE_NINT, DI_TYPE_STRING);
-	di_register_typed_method((void *)l, (void *)fn);
+	di_register_typed_method((void *)l, (di_fn_t)di_log, "log", DI_TYPE_NINT,
+	                         2, DI_TYPE_NINT, DI_TYPE_STRING);
 
-	di_register_typed_method(
-	    (void *)l,
-	    di_create_typed_method((di_fn_t)di_log_set_loglevel, "__set_log_level",
-	                           DI_TYPE_VOID, 1, DI_TYPE_NINT));
+	di_register_typed_method((void *)l, (di_fn_t)di_log_set_loglevel,
+	                         "__set_log_level", DI_TYPE_VOID, 1, DI_TYPE_NINT);
 
-	di_register_typed_method(
-	    (void *)l, di_create_typed_method((di_fn_t)di_log_get, "__get",
-	                                      DI_TYPE_NINT, 1, DI_TYPE_STRING));
+	di_register_typed_method((void *)l, (di_fn_t)di_log_get, "__get",
+	                         DI_TYPE_NINT, 1, DI_TYPE_STRING);
 	di_register_module(di, (void *)l);
 }

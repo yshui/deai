@@ -103,13 +103,11 @@ PUBLIC struct di_object *di_new_error(const char *fmt, ...) {
 	struct di_error *err = di_new_object_with_type(struct di_error);
 	err->msg = errmsg;
 
-	struct di_typed_method *dtor =
-	    di_create_typed_method((void *)di_free_error, "__dtor", DI_TYPE_VOID, 0);
-	di_register_typed_method((void *)err, dtor);
+	di_register_typed_method((void *)err, (void *)di_free_error, "__dtor",
+	                         DI_TYPE_VOID, 0);
 
-	struct di_typed_method *errm = di_create_typed_method(
-	    (void *)di_get_error_msg, "__get_error_msg", DI_TYPE_STRING, 0);
-	di_register_typed_method((void *)err, errm);
+	di_register_typed_method((void *)err, (void *)di_get_error_msg,
+	                         "__get_error_msg", DI_TYPE_STRING, 0);
 	return (void *)err;
 }
 
@@ -138,9 +136,8 @@ PUBLIC struct di_module *di_new_module(const char *name, size_t size) {
 	struct di_module_internal *pm = (void *)di_new_object(size);
 	pm->name = strdup(name);
 
-	struct di_typed_method *dtor = di_create_typed_method(
-	    (di_fn_t)di_free_module, "__dtor", DI_TYPE_VOID, 0);
-	di_register_typed_method((void *)pm, dtor);
+	di_register_typed_method((void *)pm, (di_fn_t)di_free_module, "__dtor",
+	                         DI_TYPE_VOID, 0);
 
 	return (void *)pm;
 }
@@ -428,13 +425,13 @@ static void di_free_typed_method(struct di_typed_method *tm) {
 	free(tm);
 }
 
-PUBLIC struct di_typed_method *
-di_create_typed_method(void (*fn)(void), const char *name, di_type_t rtype,
-                       unsigned int nargs, ...) {
+PUBLIC int
+di_register_typed_method(struct di_object *obj, void (*fn)(void), const char *name,
+                         di_type_t rtype, unsigned int nargs, ...) {
 	auto f = (struct di_typed_method *)calloc(
 	    1, sizeof(struct di_typed_method) + sizeof(di_type_t) * (1 + nargs));
 	if (!f)
-		return NULL;
+		return -ENOMEM;
 
 	f->rtype = rtype;
 	f->fn_ptr = di_typed_trampoline;
@@ -449,7 +446,7 @@ di_create_typed_method(void (*fn)(void), const char *name, di_type_t rtype,
 		f->atypes[i + 1] = va_arg(ap, di_type_t);
 		if (f->atypes[i + 1] == DI_TYPE_NIL) {
 			free(f);
-			return NULL;
+			return -EINVAL;
 		}
 	}
 	va_end(ap);
@@ -461,10 +458,11 @@ di_create_typed_method(void (*fn)(void), const char *name, di_type_t rtype,
 
 	if (ret != FFI_OK) {
 		free(f);
-		return NULL;
+		return -EINVAL;
 	}
 
-	return (void *)f;
+	f->this = obj;
+	return di_register_method(obj, (void *)f);
 }
 
 static void di_free_untyped_method(struct di_untyped_method *m) {
@@ -509,13 +507,6 @@ PUBLIC int di_register_method(struct di_object *_obj, struct di_method *f) {
 
 	di_emit_signal_v(_obj, "new-method", f->name);
 	return 0;
-}
-
-PUBLIC int di_register_typed_method(struct di_object *obj, struct di_typed_method *f) {
-	int ret = di_register_method(obj, (void *)f);
-	if (ret == 0)
-		f->this = obj;
-	return ret;
 }
 
 static inline void free_evd(struct di_signal **evd) {

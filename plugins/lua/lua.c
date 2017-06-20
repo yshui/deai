@@ -4,9 +4,9 @@
 
 /* Copyright (c) 2017, Yuxuan Shui <yshuiv7@gmail.com> */
 
+#include <builtin/log.h>
 #include <deai.h>
 #include <helper.h>
-#include <builtin/log.h>
 
 #include <assert.h>
 #include <lauxlib.h>
@@ -117,7 +117,7 @@ static void di_lua_clear_listener(struct di_lua_script *s) {
 	// Remove all listeners
 	struct di_lua_listener *ll, *nll;
 	list_for_each_entry_safe(ll, nll, &s->listeners, sibling)
-		di_remove_listener(ll->o, ll->signame, ll->l);
+	    di_remove_listener(ll->o, ll->signame, ll->l);
 }
 
 static void di_lua_free_script(struct di_lua_script *s) {
@@ -776,17 +776,13 @@ const char *allowed_os[] = {"time", "difftime", "clock", "tmpname", "date", NULL
 PUBLIC int di_plugin_init(struct deai *di) {
 	auto m = di_new_module_with_type("lua", struct di_lua_module);
 
-	di_register_typed_method(
-	    (void *)m,
-	    di_create_typed_method((di_fn_t)di_lua_load_script, "load_script",
-	                           DI_TYPE_OBJECT, 1, DI_TYPE_STRING));
-	di_register_typed_method(
-	    (void *)m, di_create_typed_method((di_fn_t)remove_all_listeners,
-	                                      "remove_all_listeners", DI_TYPE_VOID, 0));
+	di_register_typed_method((void *)m, (di_fn_t)di_lua_load_script,
+	                         "load_script", DI_TYPE_OBJECT, 1, DI_TYPE_STRING);
+	di_register_typed_method((void *)m, (di_fn_t)remove_all_listeners,
+	                         "remove_all_listeners", DI_TYPE_VOID, 0);
 
-	di_register_typed_method(
-	    (void *)m, di_create_typed_method((di_fn_t)di_lua_dtor, "__module_dtor",
-	                                      DI_TYPE_VOID, 0));
+	di_register_typed_method((void *)m, (di_fn_t)di_lua_dtor, "__module_dtor",
+	                         DI_TYPE_VOID, 0);
 
 	m->L = luaL_newstate();
 	luaL_openlibs(m->L);
