@@ -41,6 +41,7 @@ else()
 endif()
 configure_file(config.h.in config.h)
 
+add_subdirectory(scripts)
 add_subdirectory(plugins)
 
 set(SRC
@@ -92,3 +93,4 @@ install(TARGETS deai
 )
 
 install(FILES ${BUILTIN_HEADERS} DESTINATION "include/deai/builtin")
+install(FILES desktop/deai.desktop DESTINATION "share/xsessions/")

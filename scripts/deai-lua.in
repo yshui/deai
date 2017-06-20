@@ -1,0 +1,3 @@
+#!/bin/sh
+
+@CMAKE_INSTALL_PREFIX@/bin/deai lua.load_script s:${XDG_CONFIG_DIR:-~/.config}/deai/init.lua
