@@ -57,7 +57,9 @@ static void chld_handler(EV_P_ ev_child *w, int revents) {
 	ev_io_stop(EV_A_ & c->errw);
 	close(c->outw.fd);
 	close(c->errw.fd);
-	di_unref_object((void *)c);
+	free(c->out);
+	free(c->err);
+	di_unref_object((void *)&c);
 }
 
 static void
@@ -65,20 +67,24 @@ output_handler(struct child *c, int fd, struct string_buf *b, const char *ev) {
 	static char buf[4096];
 	int ret;
 	while ((ret = read(fd, buf, sizeof(buf))) > 0) {
-		char *topush = buf;
-		char *eol = strchr(buf, '\n');
-		if (eol) {
-			*eol = '\0';
-			topush = eol + 1;
-
-			string_buf_push(b, buf);
-
-			char *out = string_buf_dump(b);
-			di_emit_signal_v((void *)c, ev, out);
-			free(out);
+		char *pos = buf;
+		while (1) {
+			char *eol = strchr(pos, '\n'), *out;
+			if (eol) {
+				*eol = '\0';
+				if (!string_buf_is_empty(b)) {
+					string_buf_push(b, pos);
+					out = string_buf_dump(b);
+					di_emit_signal_v((void *)c, ev, out);
+					free(out);
+				} else
+					di_emit_signal_v((void *)c, ev, pos);
+				pos = eol + 1;
+			} else {
+				string_buf_push(b, pos);
+				break;
+			}
 		}
-
-		string_buf_push(b, topush);
 	}
 }
 
@@ -131,6 +137,8 @@ struct di_object *di_spawn_run(struct di_spawn *p, struct di_array argv) {
 
 	auto cp = di_new_object_with_type(struct child);
 	cp->pid = pid;
+	cp->out = string_buf_new();
+	cp->err = string_buf_new();
 
 	di_register_signal((void *)cp, "exit", 2, DI_TYPE_NINT, DI_TYPE_NINT);
 	di_register_signal((void *)cp, "stdout_line", 1, DI_TYPE_STRING);
