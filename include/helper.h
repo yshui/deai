@@ -253,6 +253,29 @@ static inline int number_conversion(di_type_t inty, const void *inp, di_type_t o
 	di_register_typed_method((struct di_object *)o, (di_fn_t)dtor, "__dtor",    \
 	                         DI_TYPE_VOID, 0);
 
+#define TYPE_INIT(type)                                                             \
+	_Generic((type *)0, \
+	struct di_array *: DI_ARRAY_NIL, \
+	int *: 0, \
+	unsigned int *: 0, \
+	int64_t *: 0, \
+	uint64_t *: 0, \
+	char **: NULL, \
+	const char **: NULL, \
+	struct di_object **: NULL, \
+	void **: NULL, \
+	double *: 0.0 \
+	)
+#define gen_args(...) LIST_APPLY(TYPE_INIT, SEP_COMMA, __VA_ARGS__)
+
+#define di_return_typeof(fn, ...) di_typeid(typeof(fn(gen_args(__VA_ARGS__))))
+
+#define di_method(obj, name, fn, ...)                                               \
+	di_register_typed_method(                                                   \
+	    (struct di_object *)obj, (di_fn_t)fn, name,                             \
+	    di_return_typeof(fn, struct di_object *, __VA_ARGS__),                  \
+	    VA_ARGS_LENGTH(__VA_ARGS__), LIST_APPLY(di_typeid, SEP_COMMA, __VA_ARGS__))
+
 static inline void free_charp(char **ptr) {
 	free(*ptr);
 	*ptr = NULL;
