@@ -154,25 +154,34 @@ static inline int number_conversion(di_type_t inty, const void *inp, di_type_t o
 #define VA_ARGS_LENGTH(...)                                                         \
 	VA_ARGS_LENGTH_(0, ##__VA_ARGS__, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0)
 
-#define LIST_APPLY_0(fn, ...)
-#define LIST_APPLY_1(fn, x, ...) fn(x)
-#define LIST_APPLY_2(fn, x, ...) fn(x) LIST_APPLY_1(fn, __VA_ARGS__)
-#define LIST_APPLY_3(fn, x, ...) fn(x) LIST_APPLY_2(fn, __VA_ARGS__)
-#define LIST_APPLY_4(fn, x, ...) fn(x) LIST_APPLY_3(fn, __VA_ARGS__)
-#define LIST_APPLY_5(fn, x, ...) fn(x) LIST_APPLY_4(fn, __VA_ARGS__)
-#define LIST_APPLY_6(fn, x, ...) fn(x) LIST_APPLY_5(fn, __VA_ARGS__)
-#define LIST_APPLY_7(fn, x, ...) fn(x) LIST_APPLY_6(fn, __VA_ARGS__)
-#define LIST_APPLY_8(fn, x, ...) fn(x) LIST_APPLY_7(fn, __VA_ARGS__)
-#define LIST_APPLY_9(fn, x, ...) fn(x) LIST_APPLY_8(fn, __VA_ARGS__)
-#define LIST_APPLY_10(fn, x, ...) fn(x) LIST_APPLY_9(fn, __VA_ARGS__)
-#define LIST_APPLY_11(fn, x, ...) fn(x) LIST_APPLY_10(fn, __VA_ARGS__)
-#define LIST_APPLY_(N, fn, ...) CONCAT(LIST_APPLY_, N)(fn, __VA_ARGS__)
-#define LIST_APPLY(fn, ...) LIST_APPLY_(VA_ARGS_LENGTH(__VA_ARGS__), fn, __VA_ARGS__)
+#define LIST_SHIFT_0(...) __VA_ARGS__
+#define LIST_SHIFT_1(_0, ...) __VA_ARGS__
+#define LIST_SHIFT_2(_0, ...) LIST_SHIFT_1(__VA_ARGS__)
+#define LIST_SHIFT_3(_0, ...) LIST_SHIFT_2(__VA_ARGS__)
+
+#define LIST_APPLY_0(fn, sep, ...)
+#define LIST_APPLY_1(fn, sep, x, ...) fn(x)
+#define LIST_APPLY_2(fn, sep, x, ...) fn(x) sep() LIST_APPLY_1(fn, sep, __VA_ARGS__)
+#define LIST_APPLY_3(fn, sep, x, ...) fn(x) sep() LIST_APPLY_2(fn, sep, __VA_ARGS__)
+#define LIST_APPLY_4(fn, sep, x, ...) fn(x) sep() LIST_APPLY_3(fn, sep, __VA_ARGS__)
+#define LIST_APPLY_5(fn, sep, x, ...) fn(x) sep() LIST_APPLY_4(fn, sep, __VA_ARGS__)
+#define LIST_APPLY_6(fn, sep, x, ...) fn(x) sep() LIST_APPLY_5(fn, sep, __VA_ARGS__)
+#define LIST_APPLY_7(fn, sep, x, ...) fn(x) sep() LIST_APPLY_6(fn, sep, __VA_ARGS__)
+#define LIST_APPLY_8(fn, sep, x, ...) fn(x) sep() LIST_APPLY_7(fn, sep, __VA_ARGS__)
+#define LIST_APPLY_9(fn, sep, x, ...) fn(x) sep() LIST_APPLY_8(fn, sep, __VA_ARGS__)
+#define LIST_APPLY_10(fn, sep, x, ...) fn(x) sep() LIST_APPLY_9(fn, sep, __VA_ARGS__)
+#define LIST_APPLY_11(fn, sep, x, ...) fn(x) sep() LIST_APPLY_10(fn, sep, __VA_ARGS__)
+#define LIST_APPLY_(N, fn, sep, ...) CONCAT(LIST_APPLY_, N)(fn, sep, __VA_ARGS__)
+#define LIST_APPLY(fn, sep, ...) LIST_APPLY_(VA_ARGS_LENGTH(__VA_ARGS__), fn, sep, __VA_ARGS__)
+
+#define SEP_COMMA() ,
+#define SEP_COLON() ;
+#define SEP_NONE()
 
 #define STRINGIFY(x) #x
 
 #define di_type_pair(v) di_typeof(v), v,
-#define di_arg_list(...) LIST_APPLY(di_type_pair, __VA_ARGS__) DI_LAST_TYPE
+#define di_arg_list(...) LIST_APPLY(di_type_pair, SEP_NONE, __VA_ARGS__) DI_LAST_TYPE
 
 #define object_cleanup __attribute__((cleanup(di_cleanup_objectp)))
 

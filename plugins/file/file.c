@@ -160,8 +160,8 @@ static struct di_object *di_file_new_watch(struct di_file *f, struct di_array pa
 	di_register_signal((void *)fw, "moved-to", 3, DI_TYPE_STRING, DI_TYPE_STRING,
 	                   DI_TYPE_UINT);
 #define add_signal(name)                                                            \
-	di_register_signal((void *)fw, name, 2, DI_TYPE_STRING, DI_TYPE_STRING);
-#define add_signals(...) LIST_APPLY(add_signal, __VA_ARGS__)
+	di_register_signal((void *)fw, name, 2, DI_TYPE_STRING, DI_TYPE_STRING)
+#define add_signals(...) LIST_APPLY(add_signal, SEP_COLON, __VA_ARGS__)
 	add_signals("move-self", "access", "attrib", "close-write", "close-nowrite",
 	            "create", "delete", "delete-self", "modify", "open");
 #undef add_signal

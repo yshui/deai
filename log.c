@@ -50,9 +50,9 @@ static void di_log_set_loglevel(struct di_log *l, int log_level) {
 static int di_log_get(struct di_log *l, const char *prop) {
 #define ret_ll(name)                                                                \
 	if (strcmp(prop, #name) == 0)                                               \
-		return DI_LOG_##name;
+		return DI_LOG_##name
 
-	LIST_APPLY(ret_ll, ERROR, WARN, INFO, DEBUG);
+	LIST_APPLY(ret_ll, SEP_COLON, ERROR, WARN, INFO, DEBUG);
 	if (strcmp(prop, "log_level") == 0)
 		return l->log_level;
 	return 0;
