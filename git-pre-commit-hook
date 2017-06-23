@@ -1,3 +1,9 @@
 #!/bin/bash
 
-"@GCF_PYTHON_PATH@" "@GCF_SCRIPT@" "--pre-commit" "@GCF_GIT_PATH@" "@GCF_CLANGFORMAT_PATH@" "-style=@GCF_CLANGFORMAT_STYLE@" "-ignore=@GCF_IGNORE_LIST@"
+"@PYTHON_EXECUTABLE@" \
+	"@GCF_SCRIPT@" \
+	"--pre-commit" \
+	"@GIT_EXECUTABLE@" \
+	"@CLANG_FORMAT_EXECUTABLE@" \
+	"-style=@GCF_CLANGFORMAT_STYLE@" \
+	"-ignore=@GCF_IGNORE_LIST@"
