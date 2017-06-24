@@ -355,7 +355,7 @@ static void *di_lua_type_to_di(lua_State *L, int i, di_type_t *t) {
 	struct di_lua_script *s;
 	switch (lua_type(L, i)) {
 	case LUA_TBOOLEAN:
-		ret_arg(i, DI_TYPE_NUINT, unsigned int, lua_toboolean);
+		ret_arg(i, DI_TYPE_BOOL, bool, lua_toboolean);
 		break;
 	case LUA_TNUMBER:
 		if (lua_isinteger(L, i))
@@ -602,6 +602,7 @@ static int di_lua_pushany(lua_State *L, di_type_t t, void *d) {
 		}
 	}
 
+	int b;
 	lua_Integer i;
 	lua_Number n;
 	struct di_lua_object *lo;
@@ -635,6 +636,10 @@ static int di_lua_pushany(lua_State *L, di_type_t t, void *d) {
 			di_lua_pushany(L, arr->elem_type, arr->arr + step * i);
 			lua_rawseti(L, -2, i + 1);
 		}
+		return 1;
+	case DI_TYPE_BOOL:
+		b = *(bool *)d;
+		lua_pushboolean(L, b);
 		return 1;
 	case DI_TYPE_CALLABLE:
 	// shouldn't happen

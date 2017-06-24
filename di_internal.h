@@ -94,12 +94,18 @@ static ffi_type ffi_type_di_array = {
     .elements =
         (ffi_type *[]){&ffi_type_uint64, &ffi_type_pointer, &ffi_type_uint8, NULL},
 };
+
+static_assert(sizeof(bool) == sizeof(uint8_t), "bool is not uint8_t, unsupported "
+                                               "platform");
+static_assert(__alignof__(bool) == __alignof__(uint8_t), "bool is not uint8_t, "
+                                                         "unsupported platform");
+
 static inline ffi_type *di_type_to_ffi(di_type_t in) {
 	ffi_type *const type_map[DI_LAST_TYPE] = {
-	    &ffi_type_void,     &ffi_type_sint,    &ffi_type_uint,
-	    &ffi_type_uint64,   &ffi_type_sint64,  &ffi_type_double,
-	    &ffi_type_pointer,  &ffi_type_pointer, &ffi_type_pointer,
-	    &ffi_type_di_array, &ffi_type_pointer};
+	    &ffi_type_void,    &ffi_type_uint8,    &ffi_type_sint,
+	    &ffi_type_uint,    &ffi_type_uint64,   &ffi_type_sint64,
+	    &ffi_type_double,  &ffi_type_pointer,  &ffi_type_pointer,
+	    &ffi_type_pointer, &ffi_type_di_array, &ffi_type_pointer};
 
 	assert(in < DI_TYPE_NIL);
 	return type_map[in];

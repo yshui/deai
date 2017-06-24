@@ -9,11 +9,13 @@
 // XXX merge into deai.h
 
 #include <errno.h>
+#include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
 
 typedef enum di_type {
 	DI_TYPE_VOID = 0,
+	DI_TYPE_BOOL,            // boolean, no implicit conversion to number types
 	DI_TYPE_NINT,            // native int
 	DI_TYPE_NUINT,           // native unsigned int
 	DI_TYPE_UINT,            // uint64_t
@@ -132,6 +134,7 @@ static inline size_t di_sizeof_type(di_type_t t) {
 	case DI_TYPE_STRING:
 	case DI_TYPE_OBJECT:
 	case DI_TYPE_POINTER: return sizeof(void *);
+	case DI_TYPE_BOOL: return sizeof(bool);
 	}
 }
 
