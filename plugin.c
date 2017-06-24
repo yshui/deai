@@ -77,7 +77,6 @@ PUBLIC struct di_object *di_new_object(size_t sz) {
 	obj->evd = NULL;
 	obj->fn = NULL;
 	obj->ref_count = 1;
-	di_register_signal((void *)obj, "new-method", 1, DI_TYPE_STRING);
 	return obj;
 }
 
@@ -504,8 +503,6 @@ PUBLIC int di_register_method(struct di_object *_obj, struct di_method *f) {
 
 	HASH_ADD_KEYPTR(hh, obj->fn, f->name, strlen(f->name),
 	                (struct di_method_internal *)f);
-
-	di_emit_signal_v(_obj, "new-method", f->name);
 	return 0;
 }
 
