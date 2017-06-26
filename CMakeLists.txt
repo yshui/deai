@@ -18,22 +18,20 @@ execute_process(COMMAND ${GIT_EXECUTABLE} rev-parse --show-toplevel
   OUTPUT_VARIABLE GCF_GIT_ROOT
   OUTPUT_STRIP_TRAILING_WHITESPACE)
 if(NOT GCF_GIT_ROOT)
-  message(SEND_ERROR "Not in a git repository")
+  message(WARNING "Not in a git repository")
 else()
   configure_file(
     ${CMAKE_CURRENT_SOURCE_DIR}/git-pre-commit-hook
     ${GCF_GIT_ROOT}/.git/hooks/pre-commit
-    @ONLY
-  )
+    @ONLY)
   unset(GCF_GIT_ROOT)
 
   add_custom_target(format
     ${PYTHON_EXECUTABLE} ${GCF_SCRIPT}
     --cmake ${GIT_EXECUTABLE}
     ${CLANG_FORMAT_EXECUTABLE} -style=${GCF_CLANGFORMAT_STYLE} -ignore=${GCF_IGNORE_LIST}
-	  WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
-  )
+	  WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
   unset(GCF_SCRIPT)
 else()
-  message(SEND_ERROR "Cannot locate top .git repository")
+  message(WARNING "Cannot locate top .git repository")
 endif()
