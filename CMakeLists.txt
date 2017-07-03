@@ -46,24 +46,15 @@ add_subdirectory(plugins)
 
 set(SRC
 	main.c
-	plugin.c
+	object.c
+	callable.c
+	signal.c
 	event.c
 	log.c
 	helper.c
 	env.c
 	spawn.c
 	string_buf.c
-)
-
-set(HEADERS
-	include/deai.h
-	include/object.h
-)
-
-set(BUILTIN_HEADERS
-	include/builtin/event.h
-	include/builtin/spawn.h
-	include/builtin/log.h
 )
 
 add_executable(deai ${SRC})
@@ -77,7 +68,6 @@ target_compile_options(deai PUBLIC ${LIBFFI_CFLAGS_OTHER})
 target_compile_options(deai PRIVATE ${DI_CFLAGS})
 
 set_target_properties(deai PROPERTIES LINK_FLAGS "-rdynamic")
-set_target_properties(deai PROPERTIES PUBLIC_HEADER "${HEADERS}")
 
 find_path(LIBEV_INCLUDE_DIR ev.h)
 find_library(LIBEV_LIBRARY NAMES ev)
@@ -89,8 +79,7 @@ target_link_libraries(deai dl)
 
 install(TARGETS deai
 	RUNTIME DESTINATION bin
-	PUBLIC_HEADER DESTINATION "include/deai"
 )
 
-install(FILES ${BUILTIN_HEADERS} DESTINATION "include/deai/builtin")
+install(DIRECTORY "include/deai" DESTINATION "include/deai")
 install(FILES desktop/deai.desktop DESTINATION "share/xsessions/")

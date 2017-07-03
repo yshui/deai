@@ -16,7 +16,8 @@
 #include <sys/types.h>
 #include <unistd.h>
 
-#include <deai.h>
+#include <deai/deai.h>
+#include <deai/helper.h>
 
 #include "config.h"
 #include "di_internal.h"
@@ -114,10 +115,6 @@ static void di_sighandler(struct ev_loop *l, ev_signal *w, int revents) {
 	ev_break(l, EVBREAK_ALL);
 }
 
-static char *di_get_pr_name(struct deai *p) {
-	return strdup(p->argv[0]);
-}
-
 #ifdef HAVE_SETPROCTITLE
 static void setproctitle_init(int argc, char **argv, struct deai *p) {
 	// Copy argv and environ
@@ -181,16 +178,18 @@ static struct di_array di_get_argv(struct deai *p) {
 	return ret;
 }
 
+PUBLIC int di_register_module(struct deai *p, const char *name, struct di_module *m) {
+	return di_add_value_member((void *)p, name, false, DI_TYPE_OBJECT, m);
+}
+
 int main(int argc, char *argv[]) {
-	struct di_module_internal *pm;
 	struct deai *p = di_new_object_with_type(struct deai);
-	p->m = NULL;
 	p->loop = EV_DEFAULT;
 
 	// Signal for when new module is added
-	di_register_signal((void *)p, "new-module", 1, DI_TYPE_STRING);
+	di_register_signal((void *)p, "new-module", 1, (di_type_t[]){DI_TYPE_STRING});
 	// Signal for when deai is shutting down
-	di_register_signal((void *)p, "shutdown", 0);
+	di_register_signal((void *)p, "shutdown", 0, NULL);
 
 	// (1) Initialize builtin modules first
 	di_init_event(p);
@@ -203,29 +202,17 @@ int main(int argc, char *argv[]) {
 		exit(1);
 	}
 
-	di_register_typed_method((void *)p, (di_fn_t)load_plugin_dir,
-	                         "load_plugin_from_dir", DI_TYPE_NINT, 1,
-	                         DI_TYPE_STRING);
+	di_method(p, "load_plugin_from_dir", load_plugin_dir, char *);
+	di_method(p, "load_plugin", load_plugin, char *);
+	di_method(p, "register_module", di_register_module, char *,
+	          struct di_object *);
+	di_method(p, "chdir", di_chdir, char *);
+	di_method(p, "quit", di_quit);
+	di_method(p, "__set_proctitle", di_set_pr_name, char *);
+	di_method(p, "__get_argv", di_get_argv);
 
-	di_register_typed_method((void *)p, (di_fn_t)load_plugin, "load_plugin",
-	                         DI_TYPE_NINT, 1, DI_TYPE_STRING);
-
-	di_register_typed_method((void *)p, (di_fn_t)di_chdir, "chdir", DI_TYPE_NINT,
-	                         1, DI_TYPE_STRING);
-
-	di_register_typed_method((void *)p, (di_fn_t)di_quit, "quit", DI_TYPE_VOID, 0);
-
-	di_register_typed_method((void *)p, (di_fn_t)di_get_pr_name,
-	                         "__get_proctitle", DI_TYPE_STRING, 0);
-
-	di_register_typed_method((void *)p, (di_fn_t)di_set_pr_name,
-	                         "__set_proctitle", DI_TYPE_VOID, 1, DI_TYPE_STRING);
-
-	di_register_typed_method((void *)p, (di_fn_t)di_get_argv, "__get_argv",
-	                         DI_TYPE_ARRAY, 0);
-
-	di_register_typed_method((void *)p, (di_fn_t)di_find_module, "__get",
-	                         DI_TYPE_OBJECT, 1, DI_TYPE_STRING);
+	di_add_address_member((void *)p, "proctitle", false, DI_TYPE_STRING_LITERAL,
+	                      &p->proctitle);
 
 	struct di_ev_signal sigintw;
 	sigintw.ud = p;
@@ -293,56 +280,45 @@ int main(int argc, char *argv[]) {
 		exit(EXIT_FAILURE);
 	}
 
-	auto mod = di_find_module(p, modname);
-	if (!mod) {
+	struct di_object *mod;
+	ret = di_get(p, modname, mod);
+	if (ret != 0) {
 		fprintf(stderr, "Module \"%s\" not found\n", modname);
 		exit(EXIT_FAILURE);
 	}
 
-	auto mt = di_find_method((void *)mod, method);
-	if (!mt) {
-		fprintf(stderr, "Method \"%s\" not found in module \"%s\"\n", method,
-		        modname);
+	di_type_t rt;
+	void *retd = NULL;
+	ret = di_rawcallxn(mod, method, &rt, &retd, nargs, di_types, di_args);
+	if (ret != 0) {
+		fprintf(stderr, "Failed to call \"%s.%s\"\n", modname, method);
 		exit(EXIT_FAILURE);
 	}
+
+	di_free_value(rt, retd);
+	free(retd);
 	free(method);
 	free(modname);
-
-	di_type_t rtype;
-	void *retv;
-	ret = di_call_callable((void *)mt, &rtype, &retv, nargs, di_types, di_args);
-	if (ret != 0) {
-		fprintf(stderr, "Failed to call init function\n");
-		exit(EXIT_FAILURE);
-	}
 
 	for (int i = 0; i < nargs; i++)
 		free((void *)di_args[i]);
 	free(di_args);
 	free(di_types);
-	di_unref_object((void *)&mod);
+	di_unref_object(mod);
 
 	// (4) Start mainloop
 	if (!p->quit)
 		ev_run(p->loop, 0);
 
-	if (rtype == DI_TYPE_OBJECT && *(void **)retv)
-		di_unref_object(retv);
-	free(retv);
-
 	// (5) Exit
-	di_emit_signal_v((void *)p, "shutdown");
-	pm = p->m;
-	while (pm) {
-		auto next_pm = pm->hh.next;
-		HASH_DEL(p->m, pm);
-		// printf("%s:%d\n",pm->name, pm->ref_count);
-		di_unref_object((void *)&pm);
-		pm = next_pm;
-	}
+	di_emit_from_object((void *)p, "shutdown");
 
+#ifdef HAVE_SETPROCTITLE
 	for (int i = 0; i < p->argc; i++)
 		free(p->argv[i]);
 	free(p->argv);
-	di_unref_object((void *)&p);
+#endif
+
+	fprintf(stderr, "%d\n", p->ref_count);
+	di_unref_object((void *)p);
 }

@@ -8,7 +8,8 @@
 #include <fcntl.h>
 #include <unistd.h>
 
-#include <builtin/spawn.h>
+#include <deai/builtin/spawn.h>
+#include <deai/helper.h>
 
 #include "di_internal.h"
 #include "spawn.h"
@@ -42,15 +43,15 @@ static void chld_handler(EV_P_ ev_child *w, int revents) {
 	int ec = WEXITSTATUS(w->rstatus);
 	if (!string_buf_is_empty(c->out)) {
 		char *o = string_buf_dump(c->out);
-		di_emit_signal_v((void *)c, "stdout_line", o);
+		di_emit_from_object((void *)c, "stdout_line", o);
 		free(o);
 	}
 	if (!string_buf_is_empty(c->err)) {
 		char *o = string_buf_dump(c->err);
-		di_emit_signal_v((void *)c, "stderr_line", o);
+		di_emit_from_object((void *)c, "stderr_line", o);
 		free(o);
 	}
-	di_emit_signal_v((void *)c, "exit", ec, sig);
+	di_emit_from_object((void *)c, "exit", ec, sig);
 
 	ev_child_stop(EV_A_ & c->w);
 	ev_io_stop(EV_A_ & c->outw);
@@ -69,19 +70,20 @@ output_handler(struct child *c, int fd, struct string_buf *b, const char *ev) {
 	while ((ret = read(fd, buf, sizeof(buf))) > 0) {
 		char *pos = buf;
 		while (1) {
-			char *eol = strchr(pos, '\n'), *out;
+			size_t len = buf + ret - pos;
+			char *eol = memchr(pos, '\n', len), *out;
 			if (eol) {
 				*eol = '\0';
 				if (!string_buf_is_empty(b)) {
 					string_buf_push(b, pos);
 					out = string_buf_dump(b);
-					di_emit_signal_v((void *)c, ev, out);
+					di_emit_from_object((void *)c, ev, out);
 					free(out);
 				} else
-					di_emit_signal_v((void *)c, ev, pos);
+					di_emit_from_object((void *)c, ev, pos);
 				pos = eol + 1;
 			} else {
-				string_buf_push(b, pos);
+				string_buf_lpush(b, pos, len);
 				break;
 			}
 		}
@@ -140,9 +142,12 @@ struct di_object *di_spawn_run(struct di_spawn *p, struct di_array argv) {
 	cp->out = string_buf_new();
 	cp->err = string_buf_new();
 
-	di_register_signal((void *)cp, "exit", 2, DI_TYPE_NINT, DI_TYPE_NINT);
-	di_register_signal((void *)cp, "stdout_line", 1, DI_TYPE_STRING);
-	di_register_signal((void *)cp, "stderr_line", 1, DI_TYPE_STRING);
+	di_register_signal((void *)cp, "exit", 2,
+	                   (di_type_t[]){DI_TYPE_NINT, DI_TYPE_NINT});
+	di_register_signal((void *)cp, "stdout_line", 1,
+	                   (di_type_t[]){DI_TYPE_STRING});
+	di_register_signal((void *)cp, "stderr_line", 1,
+	                   (di_type_t[]){DI_TYPE_STRING});
 
 	ev_child_init(&cp->w, chld_handler, pid, 0);
 	ev_child_start(p->di->loop, &cp->w);
@@ -160,11 +165,12 @@ struct di_object *di_spawn_run(struct di_spawn *p, struct di_array argv) {
 }
 
 void di_init_spawn(struct deai *di) {
-	auto m = di_new_module_with_type("spawn", struct di_spawn);
+	auto m = di_new_module_with_type(struct di_spawn);
 	m->di = di;
 
-	di_register_typed_method((void *)m, (di_fn_t)di_spawn_run, "run",
-	                         DI_TYPE_OBJECT, 1, DI_TYPE_ARRAY);
+	// di_register_typed_method((void *)m, (di_fn_t)di_spawn_run, "run",
+	//                         DI_TYPE_OBJECT, 1, DI_TYPE_ARRAY);
+	di_method(m, "run", di_spawn_run, struct di_array);
 
-	di_register_module(di, (void *)m);
+	di_register_module(di, "spawn", (void *)m);
 }

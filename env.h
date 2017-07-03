@@ -5,6 +5,6 @@
 /* Copyright (c) 2017, Yuxuan Shui <yshuiv7@gmail.com> */
 
 #pragma once
-#include <deai.h>
+#include <deai/deai.h>
 
 void di_init_env(struct deai *p);

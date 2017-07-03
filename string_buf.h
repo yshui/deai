@@ -11,6 +11,7 @@
 struct string_buf;
 
 struct string_buf *string_buf_new(void);
+void string_buf_lpush(struct string_buf *, const char *str, size_t len);
 void string_buf_push(struct string_buf *, const char *str);
 char *string_buf_dump(struct string_buf *);
 bool string_buf_is_empty(struct string_buf *);

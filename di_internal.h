@@ -5,28 +5,19 @@
 /* Copyright (c) 2017, Yuxuan Shui <yshuiv7@gmail.com> */
 
 #pragma once
-#include "list.h"
-#include "uthash.h"
 #include <assert.h>
-#include <deai.h>
 #include <ffi.h>
 
+#include <deai/deai.h>
+
+#include "list.h"
+#include "uthash.h"
+
 struct di_module_internal;
-
-struct di_signal {
-	char *name;
-	unsigned int nargs;
-	ffi_cif cif;
-
-	UT_hash_handle hh;
-	struct list_head listeners;
-	di_type_t types[];
-};
 
 struct deai {
 	struct di_object;
 	struct ev_loop *loop;
-	struct di_module_internal *m;
 
 	int argc;
 	char **argv;
@@ -35,53 +26,27 @@ struct deai {
 	bool quit;
 };
 
-struct di_method_internal {
-	struct di_callable;
-
-	char *name;
-	bool typed;
-	void (*free)(void *);
-	UT_hash_handle hh;
-};
-
 struct di_typed_method {
-	struct di_method_internal;
+	struct di_object;
 
 	struct di_object *this;
 	di_fn_t real_fn_ptr;
 
-	unsigned int nargs;
+	int nargs;
 	di_type_t rtype;
 	ffi_cif cif;
 	di_type_t atypes[];
 };
 
-// Dynamically typed method
-struct di_untyped_method {
-	struct di_method_internal;
-
-	void *user_data;
-	di_callbale_t real_fn_ptr;
-	free_fn_t ud_free;
-};
-
-struct di_listener {
-	di_listener_fn_t f;
-	void *ud;
-	free_fn_t ud_free;
-	struct list_head siblings;
-};
-
 struct di_module_internal {
 	struct di_object;
-	char *name;
 	struct deai *di;
 	UT_hash_handle hh;
 };
 
-struct di_error {
-	struct di_object;
-	char *msg;
+struct di_member_internal {
+	struct di_member;
+	UT_hash_handle hh;
 };
 
 static_assert(sizeof(struct di_module_internal) == sizeof(struct di_module),
@@ -102,10 +67,32 @@ static_assert(__alignof__(bool) == __alignof__(uint8_t), "bool is not uint8_t, "
 
 static inline ffi_type *di_type_to_ffi(di_type_t in) {
 	ffi_type *const type_map[DI_LAST_TYPE] = {
-	    &ffi_type_void,    &ffi_type_uint8,    &ffi_type_sint,
-	    &ffi_type_uint,    &ffi_type_uint64,   &ffi_type_sint64,
-	    &ffi_type_double,  &ffi_type_pointer,  &ffi_type_pointer,
-	    &ffi_type_pointer, &ffi_type_di_array, &ffi_type_pointer};
+	    // void
+	    &ffi_type_void,
+	    // bool
+	    &ffi_type_uint8,
+	    // nint
+	    &ffi_type_sint,
+	    // nuint
+	    &ffi_type_uint,
+	    // uint
+	    &ffi_type_uint64,
+	    // int
+	    &ffi_type_sint64,
+	    // float
+	    &ffi_type_double,
+	    // pointer
+	    &ffi_type_pointer,
+	    // object
+	    &ffi_type_pointer,
+	    // string
+	    &ffi_type_pointer,
+	    // stirng literal
+	    &ffi_type_pointer,
+	    // array
+	    &ffi_type_di_array,
+	    // end
+	};
 
 	assert(in < DI_TYPE_NIL);
 	return type_map[in];

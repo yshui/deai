@@ -5,102 +5,86 @@
 /* Copyright (c) 2017, Yuxuan Shui <yshuiv7@gmail.com> */
 
 #define _GNU_SOURCE
-#include <deai.h>
-#include <helper.h>
+#include <deai/deai.h>
+#include <deai/helper.h>
 
 #include <assert.h>
 #include <stdio.h>
 
 #include "utils.h"
 
-PUBLIC int di_setv(struct di_object *o, const char *prop, di_type_t type, void *val) {
-	if (!prop)
-		return -EINVAL;
+define_trivial_cleanup(struct di_signal, free_sig);
+define_trivial_cleanup(struct di_member, free_mem);
 
-	char *buf;
-	void *ret;
-	di_type_t rtype;
-	asprintf(&buf, "__set_%s", prop);
+PUBLIC int di_register_signal(struct di_object *r, const char *name, int nargs,
+                              di_type_t *types) {
+	struct di_signal *sig = di_new_signal(nargs, types);
 
-	auto m = di_find_method(o, buf);
-	free(buf);
-	if (m) {
-		const void *args[1] = {val};
+	int ret = di_add_value_member(r, name, false, DI_TYPE_OBJECT, sig);
+	if (ret != 0)
+		di_unref_object((void *)sig);
 
-		int cret = di_call_callable((void *)m, &rtype, &ret, 1, &type, args);
-		free(ret);
-		return cret;
-	}
-
-	m = di_find_method(o, "__set");
-	if (m) {
-		const void *args[2] = {&prop, val};
-		di_type_t types[2] = {DI_TYPE_STRING, type};
-
-		int cret = di_call_callable((void *)m, &rtype, &ret, 2, types, args);
-		free(ret);
-		return cret;
-	}
-
-	return -ENOENT;
+	return ret;
 }
 
-PUBLIC int
-di_getv(struct di_object *o, const char *prop, di_type_t *type, void **ret) {
-	if (!prop)
-		return -EINVAL;
-
-	char *buf;
-	asprintf(&buf, "__get_%s", prop);
-
-	auto m = di_find_method(o, buf);
-	free(buf);
-	if (m) {
-		int cret = di_call_callable_v((void *)m, type, ret, DI_LAST_TYPE);
-		return cret;
-	}
-
-	m = di_find_method(o, "__get");
-	if (m) {
-		int cret = di_call_callable_v((void *)m, type, ret, DI_TYPE_STRING,
-		                              prop, DI_LAST_TYPE);
-		return cret;
-	}
-
-	return -ENOENT;
-}
-
-struct _prop {
-	struct di_object *obj;
-	off_t offset;
-	di_type_t t;
+struct di_error {
+	struct di_object;
+	char *msg;
 };
 
-static int
-offset_property(di_type_t *rtype, void **ret, unsigned int nargs,
-                const di_type_t *atypes, const void *const *args, void *ud) {
-	struct _prop *p = ud;
-	assert(di_sizeof_type(p->t) > 0);
-	if (nargs != 0)
+static void di_free_error(struct di_object *o) {
+	struct di_error *e = (void *)o;
+	free(e->msg);
+}
+
+PUBLIC struct di_object *di_new_error(const char *fmt, ...) {
+	va_list ap;
+	va_start(ap, fmt);
+
+	char *errmsg;
+	int ret = asprintf(&errmsg, fmt, ap);
+	if (ret < 0)
+		errmsg = strdup(fmt);
+
+	struct di_error *err = di_new_object_with_type(struct di_error);
+	err->msg = errmsg;
+	err->dtor = di_free_error;
+
+	di_add_address_member((void *)err, "errmsg", false, DI_TYPE_STRING, &err->msg);
+	return (void *)err;
+}
+
+PUBLIC int di_emit_from_object(struct di_object *o, const char *name, ...) {
+	struct di_object *sig;
+
+	int rc = di_get(o, name, sig);
+	if (rc != 0)
+		return rc;
+
+	if (!di_check_type(sig, "signal"))
 		return -EINVAL;
-	*ret = malloc(di_sizeof_type(p->t));
-	memcpy(*ret, ((char *)p->obj) + p->offset, di_sizeof_type(p->t));
-	*rtype = p->t;
-	return 0;
+
+	va_list ap;
+	va_start(ap, name);
+	rc = di_emitv((void *)sig, o, ap);
+	va_end(ap);
+	return rc;
 }
 
-static void free_ud(void **ud) {
-	free(*ud);
-	*ud = NULL;
-}
+PUBLIC struct di_listener *
+di_add_listener(struct di_object *o, const char *name, struct di_object *l) {
+	struct di_object *sig;
+	int rc = di_get(o, name, sig);
+	if (rc != 0)
+		return ERR_PTR(rc);
 
-PUBLIC int di_register_field_getter(struct di_object *o, const char *fname,
-                                    off_t offset, di_type_t type) {
-	auto p = tmalloc(struct _prop, 1);
-	p->obj = o;
-	p->offset = offset;
-	p->t = type;
+	if (!di_check_type(sig, "signal"))
+		return ERR_PTR(-EINVAL);
 
-	return di_register_method(
-	    o, (void *)di_create_untyped_method(offset_property, fname, p, free_ud));
+	auto li = di_add_listener_to_signal((void *)sig, l);
+	if (IS_ERR(li))
+		return li;
+
+	di_bind_listener(li, o);
+	return li;
 }

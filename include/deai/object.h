@@ -15,43 +15,32 @@
 
 typedef enum di_type {
 	DI_TYPE_VOID = 0,
-	DI_TYPE_BOOL,            // boolean, no implicit conversion to number types
-	DI_TYPE_NINT,            // native int
-	DI_TYPE_NUINT,           // native unsigned int
-	DI_TYPE_UINT,            // uint64_t
-	DI_TYPE_INT,             // int64_t
-	DI_TYPE_FLOAT,           // platform dependent, double
-	DI_TYPE_POINTER,         // Generic pointer, void *
-	DI_TYPE_OBJECT,          // pointer to di_object
-	DI_TYPE_STRING,          // utf-8 string, const char *
-	DI_TYPE_ARRAY,           // struct di_array
-	DI_TYPE_CALLABLE,        // pointer to di_callable
+	DI_TYPE_BOOL,           // boolean, no implicit conversion to number types
+	DI_TYPE_NINT,           // native int
+	DI_TYPE_NUINT,          // native unsigned int
+	DI_TYPE_UINT,           // uint64_t
+	DI_TYPE_INT,            // int64_t
+	DI_TYPE_FLOAT,          // platform dependent, double
+	DI_TYPE_POINTER,        // Generic pointer, void *
+	DI_TYPE_OBJECT,         // pointer to di_object
+	DI_TYPE_STRING,         // utf-8 string, char *
+	DI_TYPE_STRING_LITERAL,        // utf-8 string literal, const char *
+	DI_TYPE_ARRAY,                 // struct di_array
 	DI_TYPE_NIL,
 	DI_LAST_TYPE
 } di_type_t;
 
 typedef void (*di_fn_t)(void);
-typedef void (*free_fn_t)(void **);
-typedef int (*di_callbale_t)(di_type_t *rtype, void **ret, unsigned int nargs,
-                             const di_type_t *atypes, const void *const *args,
-                             void *user_data);
 
-struct di_callable {
-	di_callbale_t fn_ptr;
-};
-
-struct di_typed_method;
-struct di_untyped_method;
-struct di_method {
-	struct di_callable;
-	const char *name;
-};
 struct di_signal;
 struct di_listener;
 struct di_callable;
 struct di_object {
-	struct di_method *fn;
-	struct di_signal *evd;
+	struct di_member *members;
+
+	void (*dtor)(struct di_object *);
+	int (*call)(struct di_object *, di_type_t *rt, void **ret, int nargs,
+	            const di_type_t *atypes, const void *const *args);
 
 	uint64_t ref_count;
 
@@ -68,60 +57,59 @@ struct di_array {
 
 struct di_module {
 	struct di_object;
-	const char *name;
 	struct deai *di;
 	char padding[56];
 };
 
-typedef void (*di_listener_fn_t)(struct di_signal *, struct di_listener *,
-                                 void **args);
+struct di_member {
+	const char *name;
+	void *data;
+	di_type_t type;
+	bool writable;
+	bool own;
+};
+
+int di_callx(struct di_object *o, const char *name, di_type_t *rt, void **ret, ...);
+int di_rawcallx(struct di_object *o, const char *name, di_type_t *rt, void **ret, ...);
+int di_rawcallxn(struct di_object *o, const char *name, di_type_t *rt, void **ret,
+                 int nargs, const di_type_t *ats, const void *const *args);
+
+int di_setx(struct di_object *o, const char *prop, di_type_t type, const void *ret);
+int di_rawgetx(struct di_object *o, const char *prop, di_type_t *type,
+               const void **ret);
+int di_rawgetxt(struct di_object *o, const char *prop, di_type_t type,
+                const void **ret);
+int di_getx(struct di_object *o, const char *prop, di_type_t *type, const void **ret);
+int di_getxt(struct di_object *o, const char *prop, di_type_t type, const void **ret);
+
+int di_set_type(struct di_object *o, const char *type);
+const char *di_get_type(struct di_object *o);
+bool di_check_type(struct di_object *o, const char *type);
 
 void di_free_object(struct di_object *);
-int di_register_method(struct di_object *, struct di_method *);
-int di_register_typed_method(struct di_object *, di_fn_t fn, const char *name,
-                             di_type_t rtype, unsigned int nargs, ...);
-struct di_untyped_method *
-di_create_untyped_method(di_callbale_t fn, const char *name, void *user_data,
-                         void (*user_data_free)(void **));
 
-int di_call_callable(struct di_callable *c, di_type_t *rtype, void **ret,
-                     unsigned int nargs, const di_type_t *atypes,
-                     const void *const *args);
-int di_call_callable_v(struct di_callable *c, di_type_t *rtype, void **ret, ...);
-
-struct di_listener *di_add_typed_listener(struct di_object *, const char *name,
-                                          void *ud, free_fn_t ud_free, di_fn_t f);
-struct di_listener *
-di_add_untyped_listener(struct di_object *obj, const char *name, void *ud,
-                        free_fn_t ud_free, di_listener_fn_t f);
-void *di_get_listener_user_data(struct di_listener *);
-
+struct di_member *di_alloc_member(void);
+int di_add_address_member(struct di_object *o, const char *name, bool writable,
+                          di_type_t t, void *address);
+int di_add_value_member(struct di_object *o, const char *name, bool writable,
+                        di_type_t t, ...);
+struct di_member *di_find_member(struct di_object *o, const char *name);
 struct di_object *di_new_object(size_t sz);
 void di_destroy_object(struct di_object *);
 void di_ref_object(struct di_object *);
-void di_unref_object(struct di_object **);
+void di_unref_object(struct di_object *);
 
-/**
- * Remove a listener from signal
- *
- * Returns the user_data passed to add_listener if succeed, otherwise
- * returns an error code.
- */
-int di_remove_listener(struct di_object *o, const char *name, struct di_listener *l);
-int di_emit_signal(struct di_object *, const char *name, void **args);
-int di_emit_signal_v(struct di_object *obj, const char *name, ...);
-int di_register_signal(struct di_object *, const char *name, int nargs, ...);
-const di_type_t *di_get_signal_arg_types(struct di_signal *sig, unsigned int *nargs);
+const di_type_t *di_get_signal_arg_types(struct di_signal *sig, int *nargs);
 struct di_object *di_new_error(const char *fmt, ...);
 void di_free_array(struct di_array);
 void di_free_value(di_type_t, void *);
+void di_copy_value(di_type_t t, void *dest, const void *src);
 
 size_t di_min_return_size(size_t);
 
 static inline size_t di_sizeof_type(di_type_t t) {
 	switch (t) {
 	case DI_TYPE_VOID:
-	case DI_TYPE_CALLABLE:
 	case DI_LAST_TYPE:
 	case DI_TYPE_NIL:
 	default: return 0;
@@ -132,6 +120,7 @@ static inline size_t di_sizeof_type(di_type_t t) {
 	case DI_TYPE_NUINT: return sizeof(unsigned int);
 	case DI_TYPE_NINT: return sizeof(int);
 	case DI_TYPE_STRING:
+	case DI_TYPE_STRING_LITERAL:
 	case DI_TYPE_OBJECT:
 	case DI_TYPE_POINTER: return sizeof(void *);
 	case DI_TYPE_BOOL: return sizeof(bool);
@@ -151,7 +140,8 @@ static inline size_t di_sizeof_type(di_type_t t) {
 	const char **: DI_TYPE_STRING, \
 	struct di_object **: DI_TYPE_OBJECT, \
 	void **: DI_TYPE_POINTER, \
-	double *: DI_TYPE_FLOAT \
+	double *: DI_TYPE_FLOAT, \
+	void *: DI_TYPE_VOID \
 )
 
 #define di_typeof(expr) di_typeid(typeof(expr))
@@ -167,3 +157,10 @@ static inline size_t di_sizeof_type(di_type_t t) {
 	} while (0);
 
 #define DI_ARRAY_NIL ((struct di_array){0, NULL, DI_TYPE_VOID})
+
+#define define_object_cleanup(t)                                                    \
+	static inline void free_##t(struct t **ptr) {                               \
+		if (*ptr)                                                           \
+			di_unref_object((void *)ptr);                               \
+		*ptr = NULL;                                                        \
+	}

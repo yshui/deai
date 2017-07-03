@@ -8,7 +8,7 @@
 #include <stdlib.h>
 
 #include "list.h"
-#include "utils.h"
+#include "common.h"
 #include "string_buf.h"
 
 struct string_buf {

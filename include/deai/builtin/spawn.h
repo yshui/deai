@@ -5,13 +5,9 @@
 /* Copyright (c) 2017, Yuxuan Shui <yshuiv7@gmail.com> */
 
 #pragma once
-#include <object.h>
 
-enum di_log_level {
-	DI_LOG_ERROR,
-	DI_LOG_WARN,
-	DI_LOG_INFO,
-	DI_LOG_DEBUG,
-};
+#include <deai/object.h>
 
-int di_log_va(struct di_object *o, int log_level, const char *fmt, ...);
+struct di_spawn;
+
+struct di_object *di_spawn_run(struct di_spawn *s, struct di_array argv);
