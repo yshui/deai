@@ -23,6 +23,7 @@ int di_new_value(struct di_object *o, const char *name, bool writable, di_type_t
 struct di_listener *
 di_add_listener(struct di_object *o, const char *name, struct di_object *h);
 
+int di_emitn_from_object(struct di_object *o, const char *name, const void *const *args);
 int di_emit_from_object(struct di_object *o, const char *name, ...);
 #define RET_IF_ERR(expr)                                                            \
 	do {                                                                        \
@@ -215,20 +216,8 @@ int di_emit_from_object(struct di_object *o, const char *name, ...);
 #define di_return_typeof(fn, ...) di_typeid(typeof(fn(gen_args(__VA_ARGS__))))
 
 #define di_register_typed_method(o, name, fn, rtype, ...)                           \
-	({                                                                          \
-		int rc = 0;                                                         \
-		do {                                                                \
-			__auto_type x = di_create_typed_fn(                         \
-			    (fn), (rtype), VA_ARGS_LENGTH(__VA_ARGS__),             \
-			    ##__VA_ARGS__);                                         \
-			if (IS_ERR(x)) {                                            \
-				rc = PTR_ERR(x);                                    \
-				break;                                              \
-			}                                                           \
-			rc = di_add_method(o, name, x);                             \
-		} while (0);                                                        \
-		rc;                                                                 \
-	})
+	di_add_method((void *)(o), (name), (void *)(fn), (rtype),                   \
+	              VA_ARGS_LENGTH(__VA_ARGS__), ##__VA_ARGS__)
 
 #define INDIRECT(fn, ...) fn(__VA_ARGS__)
 

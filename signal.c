@@ -24,6 +24,9 @@ struct di_listener {
 	struct di_object *emitter;
 	struct di_object *handler;
 	struct di_signal *signal;
+
+	struct di_object *holder;
+
 	struct list_head siblings;
 };
 
@@ -57,6 +60,20 @@ PUBLIC struct di_signal *di_new_signal(int nargs, di_type_t *types) {
 	return (void *)sig;
 }
 
+static void di_hold_listener(struct di_object *o, struct di_object *set) {
+	assert(di_check_type(o, "listener"));
+
+	struct di_listener *l = (void *)o;
+	l->holder = set;
+}
+
+static void di_release_listener(struct di_object *o) {
+	assert(di_check_type(o, "listener"));
+
+	struct di_listener *l = (void *)o;
+	l->holder = NULL;
+}
+
 PUBLIC struct di_listener *di_new_listener(void) {
 	struct di_listener *l = di_new_object_with_type(struct di_listener);
 
@@ -64,6 +81,10 @@ PUBLIC struct di_listener *di_new_listener(void) {
 	di_add_address_member((void *)l, "handler", true, DI_TYPE_OBJECT, &l->handler);
 
 	di_method(l, "stop", di_stop_listener);
+	di_method(l, "objset_hold", di_hold_listener, struct di_object *);
+	di_method(l, "objset_release", di_release_listener);
+
+	l->dtor = (void *)di_stop_listener;
 
 	ABRT_IF_ERR(di_set_type((void *)l, "listener"));
 	return l;
@@ -81,17 +102,13 @@ di_add_listener_to_signal(struct di_signal *_sig, struct di_object *h) {
 		}
 	}
 
-	struct di_listener *l = tmalloc(struct di_listener, 1);
+	auto l = di_new_listener();
 	l->handler = h;
 	l->signal = _sig;
 
 	di_ref_object((void *)sig);
-	di_ref_object(h);
 
 	list_add(&l->siblings, &sig->listeners);
-
-	di_ref_object((void *)l);
-
 	return l;
 }
 
@@ -115,13 +132,20 @@ del:
 
 	di_unref_object((void *)p->signal);
 	di_unref_object(p->handler);
-	di_unref_object((void *)p);
+
+	if (p->holder)
+		di_call(p->holder, "release", (struct di_object *)p);
+	p->signal = NULL;
+	p->handler = NULL;
+	p->emitter = NULL;
+
 	return 0;
 }
 
-PUBLIC int
+PUBLIC void
 di_stop_listener(struct di_listener *l) {
-	return di_remove_listener_from_signal(l->signal, l);
+	if (l->signal)
+		ABRT_IF_ERR(di_remove_listener_from_signal(l->signal, l));
 }
 
 PUBLIC void di_bind_listener(struct di_listener *l, struct di_object *e) {
@@ -131,29 +155,11 @@ PUBLIC void di_bind_listener(struct di_listener *l, struct di_object *e) {
 	di_ref_object(e);
 }
 
-PUBLIC int di_emitv(struct di_signal *_sig, struct di_object *emitter, va_list ap) {
-	if (!emitter)
-		return -EINVAL;
-
-	struct di_signal_internal *sig = (void *)_sig;
-
-	void **args = alloca(sizeof(void *) * (sig->nargs + 1));
-	for (unsigned int i = 1; i < sig->nargs; i++) {
-		assert(di_sizeof_type(sig->types[i]) != 0);
-		args[i] = alloca(di_sizeof_type(sig->types[i]));
-		va_arg_with_di_type(ap, sig->types[i], args[i]);
-	}
-
-	struct di_listener *l, *nl;
-
-	// Hold a reference to prevent object from being freed during
-	// signal emission
-	assert(emitter->ref_count > 0);
-	di_ref_object(emitter);
-
-	args[0] = emitter;
-
+PUBLIC int di_emitn(struct di_signal *_sig, struct di_object *emitter, const void *const *args) {
+	assert(emitter == *(struct di_object **)args[0]);
 	// Allow remove listener from listener
+	struct di_signal_internal *sig = (void *)_sig;
+	struct di_listener *l, *nl;
 	list_for_each_entry_safe(l, nl, &sig->listeners, siblings) {
 		di_type_t rtype = DI_TYPE_NIL;
 		void *ret = NULL;
@@ -166,7 +172,29 @@ PUBLIC int di_emitv(struct di_signal *_sig, struct di_object *emitter, va_list a
 		di_free_value(rtype, (void *)ret);
 		free((void *)ret);
 	}
+	return 0;
+}
 
+PUBLIC int di_emitv(struct di_signal *_sig, struct di_object *emitter, va_list ap) {
+	if (!emitter)
+		return -EINVAL;
+
+	struct di_signal_internal *sig = (void *)_sig;
+
+	const void **args = alloca(sizeof(void *) * (sig->nargs + 1));
+	for (unsigned int i = 1; i <= sig->nargs; i++) {
+		assert(di_sizeof_type(sig->types[i]) != 0);
+		void *dst = alloca(di_sizeof_type(sig->types[i]));
+		va_arg_with_di_type(ap, sig->types[i], dst);
+		args[i] = dst;
+	}
+
+	// Hold a reference to prevent object from being freed during
+	// signal emission
+	assert(emitter->ref_count > 0);
+	di_ref_object(emitter);
+	args[0] = &emitter;
+	di_emitn(_sig, emitter, args);
 	di_unref_object(emitter);
 	return 0;
 }

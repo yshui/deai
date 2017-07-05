@@ -4,13 +4,13 @@
 
 /* Copyright (c) 2017, Yuxuan Shui <yshuiv7@gmail.com> */
 
-#include <builtin/event.h>
-#include <deai.h>
-#include <helper.h>
-
 #include <limits.h>
 #include <sys/inotify.h>
 #include <unistd.h>
+
+#include <deai/builtin/event.h>
+#include <deai/deai.h>
+#include <deai/helper.h>
 
 #include "uthash.h"
 #include "utils.h"
@@ -35,7 +35,7 @@ struct di_file_watch {
 	struct di_file_watch_entry *byname, *bywd;
 };
 
-static int di_file_ioev(struct di_file_watch *o) {
+static int di_file_ioev(struct di_file_watch *o, struct di_object *fd) {
 	char evbuf[sizeof(struct inotify_event) + NAME_MAX + 1];
 	struct inotify_event *ev = (void *)evbuf;
 	int ret = read(o->fd, evbuf, sizeof(evbuf));
@@ -52,7 +52,7 @@ static int di_file_ioev(struct di_file_watch *o) {
 			continue;
 #define emit(m, name)                                                               \
 	if (ev->mask & m)                                                           \
-	di_emit_signal_v((void *)o, name, we->fname, path)
+	di_emit_from_object((void *)o, name, we->fname, path)
 		emit(IN_CREATE, "create");
 		emit(IN_ACCESS, "access");
 		emit(IN_ATTRIB, "attrib");
@@ -64,11 +64,11 @@ static int di_file_ioev(struct di_file_watch *o) {
 		emit(IN_MOVE_SELF, "move-self");
 		emit(IN_OPEN, "open");
 		if (ev->mask & IN_MOVED_FROM)
-			di_emit_signal_v((void *)o, "moved-from", we->fname, path,
-			                 (uint64_t)ev->cookie);
+			di_emit_from_object((void *)o, "moved-from", we->fname, path,
+			                    (uint64_t)ev->cookie);
 		if (ev->mask & IN_MOVED_TO)
-			di_emit_signal_v((void *)o, "moved-to", we->fname, path,
-			                 (uint64_t)ev->cookie);
+			di_emit_from_object((void *)o, "moved-to", we->fname, path,
+			                    (uint64_t)ev->cookie);
 #undef emit
 		off += sizeof(struct inotify_event) + ev->len;
 		ev = (void *)(evbuf + off);
@@ -129,8 +129,8 @@ static void di_file_watch_dtor(struct di_file_watch *fw) {
 		free(we);
 	}
 
-	di_remove_listener(fw->fdev, "read", fw->fdev_listener);
-	di_unref_object(&fw->fdev);
+	di_unref_object((void *)fw->fdev_listener);
+	di_unref_object(fw->fdev);
 }
 
 static struct di_object *di_file_new_watch(struct di_file *f, struct di_array paths) {
@@ -144,48 +144,46 @@ static struct di_object *di_file_new_watch(struct di_file *f, struct di_array pa
 	auto fw = di_new_object_with_type(struct di_file_watch);
 	fw->fd = ifd;
 
-	di_register_typed_method((void *)fw, (di_fn_t)di_file_add_many_watch, "add",
-	                         DI_TYPE_NINT, 1, DI_TYPE_STRING);
+	di_method(fw, "add", di_file_add_many_watch, struct di_array);
+	di_method(fw, "add_one", di_file_add_watch, char *);
+	di_method(fw, "remove", di_file_rm_watch, char *);
 
-	di_register_typed_method((void *)fw, (di_fn_t)di_file_add_watch, "add_one",
-	                         DI_TYPE_NINT, 1, DI_TYPE_STRING);
+	fw->dtor = (void *)di_file_watch_dtor;
 
-	di_register_typed_method((void *)fw, (di_fn_t)di_file_rm_watch, "remove",
-	                         DI_TYPE_NINT, 1, DI_TYPE_STRING);
-
-	di_dtor(fw, di_file_watch_dtor);
-
-	di_register_signal((void *)fw, "moved-from", 3, DI_TYPE_STRING,
-	                   DI_TYPE_STRING, DI_TYPE_UINT);
-	di_register_signal((void *)fw, "moved-to", 3, DI_TYPE_STRING, DI_TYPE_STRING,
-	                   DI_TYPE_UINT);
+	di_register_signal(
+	    (void *)fw, "moved-from", 3,
+	    (di_type_t[]){DI_TYPE_STRING, DI_TYPE_STRING, DI_TYPE_UINT});
+	di_register_signal(
+	    (void *)fw, "moved-to", 3,
+	    (di_type_t[]){DI_TYPE_STRING, DI_TYPE_STRING, DI_TYPE_UINT});
 #define add_signal(name)                                                            \
-	di_register_signal((void *)fw, name, 2, DI_TYPE_STRING, DI_TYPE_STRING)
+	di_register_signal((void *)fw, name, 2,                                     \
+	                   (di_type_t[]){DI_TYPE_STRING, DI_TYPE_STRING})
 #define add_signals(...) LIST_APPLY(add_signal, SEP_COLON, __VA_ARGS__)
 	add_signals("move-self", "access", "attrib", "close-write", "close-nowrite",
 	            "create", "delete", "delete-self", "modify", "open");
 #undef add_signal
 #undef add_signals
 
-	di_getm(f->di, event);
-	di_call(eventm, "fdevent", fw->fdev, fw->fd, IOEV_READ);
-	di_ref_object((void *)fw);
-	fw->fdev_listener = di_add_typed_listener(fw->fdev, "read", fw,
-	                                          (free_fn_t)di_cleanup_objectp,
-	                                          (di_fn_t)di_file_ioev);
+	di_getm(f->di, event, di_new_error("Can't find event module"));
+	di_callr(eventm, "fdevent", fw->fdev, fw->fd, IOEV_READ);
+
+	auto cl = di_create_closure(
+	    (void *)di_file_ioev, DI_TYPE_VOID, 1, (di_type_t[]){DI_TYPE_OBJECT},
+	    (const void *[]){&fw}, 1, (di_type_t[]){DI_TYPE_OBJECT});
+	fw->fdev_listener = di_add_listener(fw->fdev, "read", (void *)cl);
 
 	const char **arr = paths.arr;
 	for (int i = 0; i < paths.length; i++)
 		di_file_add_watch(fw, arr[i]);
 
-	di_call0(fw->fdev, "start");
+	di_call(fw->fdev, "start");
 	return (void *)fw;
 }
 PUBLIC int di_plugin_init(struct deai *di) {
-	auto fm = di_new_module_with_type("file", struct di_file);
+	auto fm = di_new_module_with_type(struct di_file);
 	fm->di = di;
-	di_register_typed_method((void *)fm, (di_fn_t)di_file_new_watch, "watch",
-	                         DI_TYPE_OBJECT, 1, DI_TYPE_ARRAY);
-	di_register_module(di, (void *)fm);
+	di_method(fm, "watch", di_file_new_watch, struct di_array);
+	di_register_module(di, "file", (void *)fm);
 	return 0;
 }

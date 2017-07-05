@@ -186,8 +186,6 @@ int main(int argc, char *argv[]) {
 	struct deai *p = di_new_object_with_type(struct deai);
 	p->loop = EV_DEFAULT;
 
-	// Signal for when new module is added
-	di_register_signal((void *)p, "new-module", 1, (di_type_t[]){DI_TYPE_STRING});
 	// Signal for when deai is shutting down
 	di_register_signal((void *)p, "shutdown", 0, NULL);
 

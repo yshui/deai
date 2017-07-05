@@ -13,8 +13,7 @@
 
 #include "utils.h"
 
-define_trivial_cleanup(struct di_signal, free_sig);
-define_trivial_cleanup(struct di_member, free_mem);
+define_object_cleanup(di_signal);
 
 PUBLIC int di_register_signal(struct di_object *r, const char *name, int nargs,
                               di_type_t *types) {
@@ -32,11 +31,6 @@ struct di_error {
 	char *msg;
 };
 
-static void di_free_error(struct di_object *o) {
-	struct di_error *e = (void *)o;
-	free(e->msg);
-}
-
 PUBLIC struct di_object *di_new_error(const char *fmt, ...) {
 	va_list ap;
 	va_start(ap, fmt);
@@ -48,15 +42,13 @@ PUBLIC struct di_object *di_new_error(const char *fmt, ...) {
 
 	struct di_error *err = di_new_object_with_type(struct di_error);
 	err->msg = errmsg;
-	err->dtor = di_free_error;
 
 	di_add_address_member((void *)err, "errmsg", false, DI_TYPE_STRING, &err->msg);
 	return (void *)err;
 }
 
-PUBLIC int di_emit_from_object(struct di_object *o, const char *name, ...) {
+static int get_signal(struct di_object *o, const char *name, struct di_signal **ret) {
 	struct di_object *sig;
-
 	int rc = di_get(o, name, sig);
 	if (rc != 0)
 		return rc;
@@ -64,22 +56,39 @@ PUBLIC int di_emit_from_object(struct di_object *o, const char *name, ...) {
 	if (!di_check_type(sig, "signal"))
 		return -EINVAL;
 
+	*ret = (void *)sig;
+	return 0;
+}
+
+PUBLIC int di_emitn_from_object(struct di_object *o, const char *name, const void * const *args) {
+	assert(o == *(struct di_object **)args[0]);
+	with_object_cleanup(di_signal) sig = NULL;
+	int rc = get_signal(o, name, &sig);
+	if (rc != 0)
+		return rc;
+
+	return di_emitn(sig, o, args);
+}
+
+PUBLIC int di_emit_from_object(struct di_object *o, const char *name, ...) {
+	with_object_cleanup(di_signal) sig = NULL;
+	int rc = get_signal(o, name, &sig);
+	if (rc != 0)
+		return rc;
+
 	va_list ap;
 	va_start(ap, name);
-	rc = di_emitv((void *)sig, o, ap);
+	rc = di_emitv(sig, o, ap);
 	va_end(ap);
 	return rc;
 }
 
 PUBLIC struct di_listener *
 di_add_listener(struct di_object *o, const char *name, struct di_object *l) {
-	struct di_object *sig;
-	int rc = di_get(o, name, sig);
+	with_object_cleanup(di_signal) sig = NULL;
+	int rc = get_signal(o, name, &sig);
 	if (rc != 0)
 		return ERR_PTR(rc);
-
-	if (!di_check_type(sig, "signal"))
-		return ERR_PTR(-EINVAL);
 
 	auto li = di_add_listener_to_signal((void *)sig, l);
 	if (IS_ERR(li))

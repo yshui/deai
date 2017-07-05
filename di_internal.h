@@ -26,18 +26,6 @@ struct deai {
 	bool quit;
 };
 
-struct di_typed_method {
-	struct di_object;
-
-	struct di_object *this;
-	di_fn_t real_fn_ptr;
-
-	int nargs;
-	di_type_t rtype;
-	ffi_cif cif;
-	di_type_t atypes[];
-};
-
 struct di_module_internal {
 	struct di_object;
 	struct deai *di;

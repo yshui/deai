@@ -13,46 +13,61 @@
 #include "di_internal.h"
 #include "utils.h"
 
+struct di_typed_method {
+	struct di_object;
+
+	struct di_object *this;
+	di_fn_t fn;
+
+	int nargs;
+	di_type_t rtype;
+	ffi_cif cif;
+	di_type_t atypes[];
+};
+
+struct di_closure {
+	struct di_object;
+
+	const void **cargs;
+	di_fn_t fn;
+
+	int nargs;
+	int nargs0;
+	di_type_t rtype;
+	ffi_cif cif;
+	di_type_t atypes[];
+};
+
 static int
-di_typed_trampoline(struct di_object *o, di_type_t *rt, void **ret, int nargs,
-                    const di_type_t *ats, const void *const *args) {
-	struct di_typed_method *fn = (void *)o;
-
-	if (nargs + 1 != fn->nargs)
-		return -EINVAL;
-
+_di_typed_trampoline(ffi_cif *cif, di_fn_t fn, void *ret, const di_type_t *fnats,
+                     int nargs0, const void *const *args0, int nargs,
+                     const di_type_t *ats, const void *const *args) {
 	assert(nargs == 0 || args != NULL);
+	assert(nargs0 == 0 || args0 != NULL);
 
 	void *null_ptr = NULL;
-	const void **xargs = calloc(nargs + 1, sizeof(void *));
+	const void **xargs = calloc(nargs0 + nargs, sizeof(void *));
+	memcpy(xargs, args0, sizeof(void *) * nargs0);
+
 	int rc = 0;
-	int start = 0;
-	if (fn->this) {
-		xargs[0] = &fn->this;
-		start = 1;
-	}
-	for (int i = 0; i < nargs; i++) {
+	for (int i = nargs0; i < nargs0 + nargs; i++) {
 		// Type check and implicit conversion
 		// conversion between all types of integers are allowed
 		// as long as there's no overflow
-		rc = di_type_conversion(ats[i], args[i], fn->atypes[i + start],
-		                        xargs + i + start);
+		rc = di_type_conversion(ats[i - nargs0], args[i - nargs0],
+		                        fnats[i - nargs0], xargs + i);
 		if (rc != 0) {
-			if (ats[i] == DI_TYPE_NIL) {
+			if (ats[i - nargs0] == DI_TYPE_NIL) {
 				struct di_array *arr;
-				switch (fn->atypes[i + start]) {
-				case DI_TYPE_OBJECT:
-					xargs[i + start] = &null_ptr;
-					break;
+				switch (fnats[i - nargs0]) {
+				case DI_TYPE_OBJECT: xargs[i] = &null_ptr; break;
 				case DI_TYPE_STRING:
-				case DI_TYPE_POINTER:
-					xargs[i + start] = &null_ptr;
-					break;
+				case DI_TYPE_POINTER: xargs[i] = &null_ptr; break;
 				case DI_TYPE_ARRAY:
 					arr = tmalloc(struct di_array, 1);
 					arr->length = 0;
 					arr->elem_type = DI_TYPE_NIL;
-					xargs[i + start] = arr;
+					xargs[i] = arr;
 					break;
 				default: rc = -EINVAL; goto out;
 				}
@@ -63,31 +78,131 @@ di_typed_trampoline(struct di_object *o, di_type_t *rt, void **ret, int nargs,
 		}
 	}
 
-	if (fn->rtype != DI_TYPE_VOID)
-		*ret = malloc(di_min_return_size(di_sizeof_type(fn->rtype)));
-	else
-		*ret = NULL;
-
-	ffi_call(&fn->cif, fn->real_fn_ptr, *ret, (void *)xargs);
-	*rt = fn->rtype;
+	ffi_call(cif, fn, ret, (void *)xargs);
 
 out:
-	for (int i = 0; i < nargs; i++)
-		if (xargs[i + 1] != args[i] && xargs[i + 1] != &null_ptr)
-			free((void *)xargs[i + 1]);
+	for (int i = nargs0; i < nargs0 + nargs; i++) {
+		if (xargs[i] != args[i - nargs0] && xargs[i] != &null_ptr)
+			free((void *)xargs[i]);
+	}
 	free(xargs);
 
 	return rc;
 }
 
-PUBLIC struct di_object *
-di_create_typed_fn(di_fn_t fn, di_type_t rtype, int nargs, ...) {
+static int
+method_trampoline(struct di_object *o, di_type_t *rtype, void **ret, int nargs,
+                  const di_type_t *ats, const void *const *args) {
+	if (!di_check_type(o, "method"))
+		return -EINVAL;
+
+	struct di_typed_method *tm = (void *)o;
+	if (nargs != tm->nargs)
+		return -EINVAL;
+
+	*rtype = tm->rtype;
+
+	if (di_sizeof_type(tm->rtype) != 0)
+		*ret = malloc(di_sizeof_type(tm->rtype));
+	else
+		*ret = NULL;
+
+	void *this = tm->this;
+	return _di_typed_trampoline(&tm->cif, tm->fn, *ret, tm->atypes + 1, 1,
+	                            (const void *[]){&this}, tm->nargs, ats, args);
+}
+
+static int
+closure_trampoline(struct di_object *o, di_type_t *rtype, void **ret, int nargs,
+                   const di_type_t *ats, const void *const *args) {
+	if (!di_check_type(o, "closure"))
+		return -EINVAL;
+
+	struct di_closure *cl = (void *)o;
+	if (nargs != cl->nargs)
+		return -EINVAL;
+
+	*rtype = cl->rtype;
+
+	if (di_sizeof_type(cl->rtype) != 0)
+		*ret = malloc(di_sizeof_type(cl->rtype));
+	else
+		*ret = NULL;
+
+	return _di_typed_trampoline(&cl->cif, cl->fn, *ret, cl->atypes + cl->nargs0,
+	                            cl->nargs0, cl->cargs, nargs, ats, args);
+}
+
+static void free_closure(struct di_object *o) {
+	assert(di_check_type(o, "closure"));
+
+	struct di_closure *cl = (void *)o;
+	for (int i = 0; i < cl->nargs0; i++) {
+		di_free_value(cl->atypes[i], (void *)cl->cargs[i]);
+		free((void *)cl->cargs[i]);
+	}
+	free(cl->cargs);
+	free(cl->cif.arg_types);
+}
+
+PUBLIC struct di_closure *
+di_create_closure(di_fn_t fn, di_type_t rtype, int nargs0, const di_type_t *cats,
+                  const void *const *cargs, int nargs, const di_type_t *ats) {
+	for (int i = 0; i < nargs0; i++)
+		if (di_sizeof_type(cats[i]) == 0)
+			return ERR_PTR(-EINVAL);
+
+	for (int i = 0; i < nargs; i++)
+		if (di_sizeof_type(ats[i]) == 0)
+			return ERR_PTR(-EINVAL);
+
+	struct di_closure *cl = (void *)di_new_object(
+	    sizeof(struct di_closure) + sizeof(di_type_t) * (nargs0 + nargs));
+
+	cl->rtype = rtype;
+	cl->call = closure_trampoline;
+	cl->fn = fn;
+	cl->dtor = free_closure;
+	cl->nargs = nargs;
+	cl->nargs0 = nargs0;
+
+	if (nargs0)
+		memcpy(cl->atypes, cats, sizeof(di_type_t) * nargs0);
+	if (nargs)
+		memcpy(cl->atypes + nargs0, ats, sizeof(di_type_t) * nargs);
+
+	auto ffiret =
+	    di_ffi_prep_cif(&cl->cif, nargs0 + nargs, cl->rtype, cl->atypes);
+	if (ffiret != FFI_OK) {
+		free(cl);
+		return ERR_PTR(-EINVAL);
+	}
+
+	cl->cargs = malloc(sizeof(void *) * nargs0);
+	for (int i = 0; i < nargs0; i++) {
+		void *dst = malloc(di_sizeof_type(cats[i]));
+		di_copy_value(cats[i], dst, cargs[i]);
+		cl->cargs[i] = dst;
+	}
+
+	di_set_type((void *)cl, "closure");
+
+	return cl;
+}
+
+static void free_method(struct di_typed_method *tm) {
+	free(tm->cif.arg_types);
+}
+
+PUBLIC int di_add_method(struct di_object *o, const char *name, di_fn_t fn,
+                         di_type_t rtype, int nargs, ...) {
 	struct di_typed_method *f = (void *)di_new_object(
 	    sizeof(struct di_typed_method) + sizeof(di_type_t) * (1 + nargs));
 
 	f->rtype = rtype;
-	f->call = di_typed_trampoline;
-	f->real_fn_ptr = fn;
+	f->call = method_trampoline;
+	f->fn = fn;
+	f->dtor = (void *)free_method;
 
 	va_list ap;
 	va_start(ap, nargs);
@@ -95,45 +210,25 @@ di_create_typed_fn(di_fn_t fn, di_type_t rtype, int nargs, ...) {
 		f->atypes[i + 1] = va_arg(ap, di_type_t);
 		if (f->atypes[i + 1] == DI_TYPE_NIL) {
 			free(f);
-			return ERR_PTR(-EINVAL);
+			return -EINVAL;
 		}
 	}
 	va_end(ap);
 
 	f->atypes[0] = DI_TYPE_OBJECT;
-	f->nargs = nargs + 1;
+	f->nargs = nargs;
 
 	ffi_status ret = di_ffi_prep_cif(&f->cif, nargs + 1, f->rtype, f->atypes);
 
 	if (ret != FFI_OK) {
 		free(f);
-		return ERR_PTR(-EINVAL);
+		return -EINVAL;
 	}
 
-	di_set_type((void *)f, "function");
-	return (void *)f;
-}
+	di_set_type((void *)f, "method");
 
-PUBLIC int
-di_add_method(struct di_object *o, const char *name, struct di_object *_fn) {
-	if (!di_check_type(_fn, "function"))
-		return -EINVAL;
-
-	struct di_typed_method *fn = (void *)_fn;
-	if (!fn->call)
-		return -EINVAL;
-
-	fn->this = o;
-	return di_add_value_member(o, name, false, DI_TYPE_OBJECT, fn);
-}
-
-PUBLIC void di_set_this(struct di_object *o, struct di_object *th) {
-	if (!di_check_type(o, "function"))
-		return;
-
-	struct di_typed_method *fn = (void *)o;
-	di_ref_object(th);
-	fn->this = th;
+	f->this = o;
+	return di_add_value_member(o, name, false, DI_TYPE_OBJECT, f);
 }
 
 // va_args version of di_call_callable

@@ -54,6 +54,7 @@ set(SRC
 	helper.c
 	env.c
 	spawn.c
+	objset.c
 	string_buf.c
 )
 

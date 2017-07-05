@@ -233,13 +233,21 @@ PUBLIC void di_destroy_object(struct di_object *_obj) {
 	struct di_member_internal *m = (void *)obj->members;
 	while (m) {
 		auto next_m = m->hh.next;
-		fprintf(stderr, "removing member %s\n", m->name);
+		if (m->type != DI_TYPE_OBJECT)
+			fprintf(stderr, "removing member %s\n", m->name);
+		else
+			fprintf(stderr, "removing member %s(%d)\n", m->name,
+			        *(struct di_object **)m->data
+			            ? (*(struct di_object **)m->data)->ref_count
+			            : -1);
 		HASH_DEL(*(struct di_member_internal **)&obj->members, m);
 
 		di_free_value(m->type, m->data);
 
 		if (m->own)
 			free(m->data);
+		free(m->name);
+		free(m);
 		m = next_m;
 	}
 
@@ -373,7 +381,19 @@ PUBLIC int di_add_address_member(struct di_object *o, const char *name,
 PUBLIC struct di_member *di_find_member(struct di_object *o, const char *name) {
 	struct di_member_internal *ret = NULL;
 
-	HASH_FIND_STR(M(o->members), name, ret);
+	do {
+		ret = NULL;
+		if (o->members != NULL) {
+			unsigned _hf_bkt, _hf_hashv;
+			HASH_FCN(name, strlen(name), ((struct di_member_internal *)o->members)->hh.tbl->num_buckets,
+			         _hf_hashv, _hf_bkt);
+			if (HASH_BLOOM_TEST(((struct di_member_internal *)o->members)->hh.tbl, _hf_hashv) != 0) {
+				HASH_FIND_IN_BKT(((struct di_member_internal *)o->members)->hh.tbl, hh,
+				                 ((struct di_member_internal *)o->members)->hh.tbl->buckets[_hf_bkt],
+				                 name, strlen(name), ret);
+			}
+		}
+	} while (0);
 	return (void *)ret;
 }
 
@@ -397,7 +417,7 @@ PUBLIC void di_free_value(di_type_t t, void *ret) {
 	}
 }
 
-PUBLIC void di_copy_value(di_type_t t, void *dest, const void *src) {
+PUBLIC void di_copy_value(di_type_t t, void *dst, const void *src) {
 	const struct di_array *arr;
 	void *d;
 	switch (t) {
@@ -409,16 +429,16 @@ PUBLIC void di_copy_value(di_type_t t, void *dest, const void *src) {
 			di_copy_value(arr->elem_type,
 			              d + di_sizeof_type(arr->elem_type) * i,
 			              arr->arr + di_sizeof_type(arr->elem_type) * i);
-		*(struct di_array *)dest =
+		*(struct di_array *)dst =
 		    (struct di_array){arr->length, d, arr->elem_type};
 		break;
 	case DI_TYPE_STRING:
-		*(const char **)dest = strdup(*(const char **)src);
+		*(const char **)dst = strdup(*(const char **)src);
 		break;
 	case DI_TYPE_OBJECT:
 		di_ref_object(*(struct di_object **)src);
-		*(struct di_object **)dest = *(struct di_object **)src;
+		*(struct di_object **)dst = *(struct di_object **)src;
 		break;
-	default: memcpy(dest, src, di_sizeof_type(t)); break;
+	default: memcpy(dst, src, di_sizeof_type(t)); break;
 	}
 }

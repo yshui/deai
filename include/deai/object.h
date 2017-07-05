@@ -62,7 +62,7 @@ struct di_module {
 };
 
 struct di_member {
-	const char *name;
+	char *name;
 	void *data;
 	di_type_t type;
 	bool writable;
@@ -161,6 +161,7 @@ static inline size_t di_sizeof_type(di_type_t t) {
 #define define_object_cleanup(t)                                                    \
 	static inline void free_##t(struct t **ptr) {                               \
 		if (*ptr)                                                           \
-			di_unref_object((void *)ptr);                               \
+			di_unref_object((struct di_object *)*ptr);                  \
 		*ptr = NULL;                                                        \
 	}
+#define with_object_cleanup(t) with_cleanup(free_##t) struct t *

@@ -6,14 +6,15 @@
 
 #pragma once
 
+#include <assert.h>
+#include <limits.h>
 #include <stdbool.h>
 #include <string.h>
-#include <limits.h>
-#include <assert.h>
 
 #include "common.h"
 
-static inline void typed_alloc_copy(di_type_t type, const void **dest, const void *src) {
+static inline void
+typed_alloc_copy(di_type_t type, const void **dest, const void *src) {
 	void *ret = calloc(1, di_sizeof_type(type));
 	memcpy(ret, src, di_sizeof_type(type));
 	*dest = ret;
