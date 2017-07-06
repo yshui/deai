@@ -13,17 +13,13 @@
 
 #include "utils.h"
 
+define_object_cleanup(di_object);
 define_object_cleanup(di_signal);
 
 PUBLIC int di_register_signal(struct di_object *r, const char *name, int nargs,
                               di_type_t *types) {
-	struct di_signal *sig = di_new_signal(nargs, types);
-
-	int ret = di_add_value_member(r, name, false, DI_TYPE_OBJECT, sig);
-	if (ret != 0)
-		di_unref_object((void *)sig);
-
-	return ret;
+	with_object_cleanup(di_signal) sig = di_new_signal(nargs, types);
+	return di_add_value_member(r, name, false, DI_TYPE_OBJECT, sig);
 }
 
 struct di_error {
@@ -60,7 +56,8 @@ static int get_signal(struct di_object *o, const char *name, struct di_signal **
 	return 0;
 }
 
-PUBLIC int di_emitn_from_object(struct di_object *o, const char *name, const void * const *args) {
+PUBLIC int
+di_emitn_from_object(struct di_object *o, const char *name, const void *const *args) {
 	assert(o == *(struct di_object **)args[0]);
 	with_object_cleanup(di_signal) sig = NULL;
 	int rc = get_signal(o, name, &sig);
@@ -94,6 +91,12 @@ di_add_listener(struct di_object *o, const char *name, struct di_object *l) {
 	if (IS_ERR(li))
 		return li;
 
-	di_bind_listener(li, o);
 	return li;
+}
+
+PUBLIC int di_gmethod(struct di_object *o, const char *name, di_fn_t fn) {
+	with_object_cleanup(di_object) m = di_new_object_with_type(struct di_object);
+	m->call = (void *)fn;
+
+	return di_add_value_member(o, name, false, DI_TYPE_OBJECT, m);
 }

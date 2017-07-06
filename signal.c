@@ -21,7 +21,6 @@ struct di_signal_internal {
 struct di_listener {
 	struct di_object;
 
-	struct di_object *emitter;
 	struct di_object *handler;
 	struct di_signal *signal;
 
@@ -29,6 +28,17 @@ struct di_listener {
 
 	struct list_head siblings;
 };
+
+static void listener_cleanup(struct di_listener *l) {
+	di_unref_object(l->handler);
+
+	if (l->holder)
+		di_call(l->holder, "release", (struct di_object *)l);
+	l->signal = NULL;
+	l->handler = NULL;
+
+	di_unref_object((void *)l);
+}
 
 static void signal_dtor(struct di_signal_internal *sig) {
 	// Remove all listener
@@ -38,8 +48,7 @@ static void signal_dtor(struct di_signal_internal *sig) {
 	struct di_listener *l, *ln;
 	list_for_each_entry_safe(l, ln, &sig->listeners, siblings) {
 		list_del(&l->siblings);
-		di_unref_object(l->handler);
-		free(l);
+		listener_cleanup(l);
 	}
 }
 
@@ -77,7 +86,6 @@ static void di_release_listener(struct di_object *o) {
 PUBLIC struct di_listener *di_new_listener(void) {
 	struct di_listener *l = di_new_object_with_type(struct di_listener);
 
-	di_add_address_member((void *)l, "emitter", true, DI_TYPE_OBJECT, &l->emitter);
 	di_add_address_member((void *)l, "handler", true, DI_TYPE_OBJECT, &l->handler);
 
 	di_method(l, "stop", di_stop_listener);
@@ -106,9 +114,10 @@ di_add_listener_to_signal(struct di_signal *_sig, struct di_object *h) {
 	l->handler = h;
 	l->signal = _sig;
 
-	di_ref_object((void *)sig);
-
+	di_ref_object((void *)l);
+	di_ref_object(h);
 	list_add(&l->siblings, &sig->listeners);
+
 	return l;
 }
 
@@ -116,7 +125,9 @@ PUBLIC int
 di_remove_listener_from_signal(struct di_signal *_sig, struct di_listener *l) {
 	struct di_signal_internal *sig = (void *)_sig;
 	struct di_listener *p = NULL;
-	list_for_each_entry(p, &sig->listeners, siblings) if (p == l) goto del;
+	list_for_each_entry(p, &sig->listeners, siblings)
+		if (p == l)
+			goto del;
 	return -ENOENT;
 
 del:
@@ -127,35 +138,19 @@ del:
 			sig->remove((void *)sig);
 	}
 
-	if (p->emitter)
-		di_unref_object(p->emitter);
-
-	di_unref_object((void *)p->signal);
-	di_unref_object(p->handler);
-
-	if (p->holder)
-		di_call(p->holder, "release", (struct di_object *)p);
-	p->signal = NULL;
-	p->handler = NULL;
-	p->emitter = NULL;
-
+	listener_cleanup(p);
 	return 0;
 }
 
-PUBLIC void
-di_stop_listener(struct di_listener *l) {
+PUBLIC void di_stop_listener(struct di_listener *l) {
 	if (l->signal)
 		ABRT_IF_ERR(di_remove_listener_from_signal(l->signal, l));
 }
 
-PUBLIC void di_bind_listener(struct di_listener *l, struct di_object *e) {
-	if (l->emitter)
-		di_unref_object(l->emitter);
-	l->emitter = e;
-	di_ref_object(e);
-}
-
-PUBLIC int di_emitn(struct di_signal *_sig, struct di_object *emitter, const void *const *args) {
+// Need to pass emitter to signal handler function, so the handler function doesn't
+// need to capture the emitter, preventing a reference cycle
+PUBLIC int
+di_emitn(struct di_signal *_sig, struct di_object *emitter, const void *const *args) {
 	assert(emitter == *(struct di_object **)args[0]);
 	// Allow remove listener from listener
 	struct di_signal_internal *sig = (void *)_sig;
@@ -163,14 +158,13 @@ PUBLIC int di_emitn(struct di_signal *_sig, struct di_object *emitter, const voi
 	list_for_each_entry_safe(l, nl, &sig->listeners, siblings) {
 		di_type_t rtype = DI_TYPE_NIL;
 		void *ret = NULL;
-		if (l->emitter && emitter != l->emitter)
-			continue;
+		int rc = l->handler->call(l->handler, &rtype, &ret, sig->nargs + 1,
+		                          sig->types, (const void *const *)args);
 
-		l->handler->call(l->handler, &rtype, &ret, sig->nargs + 1,
-		                 sig->types, (const void *const *)args);
-
-		di_free_value(rtype, (void *)ret);
-		free((void *)ret);
+		if (rc == 0) {
+			di_free_value(rtype, (void *)ret);
+			free((void *)ret);
+		}
 	}
 	return 0;
 }

@@ -38,15 +38,24 @@ struct di_closure {
 	di_type_t atypes[];
 };
 
+static inline void *allocate_for_return(di_type_t rtype) {
+	auto sz = di_sizeof_type(rtype);
+	if (sz < sizeof(ffi_arg))
+		sz = sizeof(ffi_arg);
+	return malloc(sz);
+}
+
 static int
 _di_typed_trampoline(ffi_cif *cif, di_fn_t fn, void *ret, const di_type_t *fnats,
                      int nargs0, const void *const *args0, int nargs,
                      const di_type_t *ats, const void *const *args) {
 	assert(nargs == 0 || args != NULL);
 	assert(nargs0 == 0 || args0 != NULL);
+	assert(nargs >= 0 && nargs0 >= 0);
+	assert(nargs+nargs0 <= MAX_NARGS);
 
 	void *null_ptr = NULL;
-	const void **xargs = calloc(nargs0 + nargs, sizeof(void *));
+	const void **xargs = alloca((nargs0 + nargs) * sizeof(void *));
 	memcpy(xargs, args0, sizeof(void *) * nargs0);
 
 	int rc = 0;
@@ -85,7 +94,6 @@ out:
 		if (xargs[i] != args[i - nargs0] && xargs[i] != &null_ptr)
 			free((void *)xargs[i]);
 	}
-	free(xargs);
 
 	return rc;
 }
@@ -103,7 +111,7 @@ method_trampoline(struct di_object *o, di_type_t *rtype, void **ret, int nargs,
 	*rtype = tm->rtype;
 
 	if (di_sizeof_type(tm->rtype) != 0)
-		*ret = malloc(di_sizeof_type(tm->rtype));
+		*ret = allocate_for_return(tm->rtype);
 	else
 		*ret = NULL;
 
@@ -125,7 +133,7 @@ closure_trampoline(struct di_object *o, di_type_t *rtype, void **ret, int nargs,
 	*rtype = cl->rtype;
 
 	if (di_sizeof_type(cl->rtype) != 0)
-		*ret = malloc(di_sizeof_type(cl->rtype));
+		*ret = allocate_for_return(cl->rtype);
 	else
 		*ret = NULL;
 
@@ -148,6 +156,9 @@ static void free_closure(struct di_object *o) {
 PUBLIC struct di_closure *
 di_create_closure(di_fn_t fn, di_type_t rtype, int nargs0, const di_type_t *cats,
                   const void *const *cargs, int nargs, const di_type_t *ats) {
+	if (nargs0 < 0 || nargs < 0 || nargs0+nargs > MAX_NARGS)
+		return ERR_PTR(-E2BIG);
+
 	for (int i = 0; i < nargs0; i++)
 		if (di_sizeof_type(cats[i]) == 0)
 			return ERR_PTR(-EINVAL);
@@ -178,7 +189,9 @@ di_create_closure(di_fn_t fn, di_type_t rtype, int nargs0, const di_type_t *cats
 		return ERR_PTR(-EINVAL);
 	}
 
-	cl->cargs = malloc(sizeof(void *) * nargs0);
+	if (nargs0)
+		cl->cargs = malloc(sizeof(void *) * nargs0);
+
 	for (int i = 0; i < nargs0; i++) {
 		void *dst = malloc(di_sizeof_type(cats[i]));
 		di_copy_value(cats[i], dst, cargs[i]);
@@ -196,6 +209,9 @@ static void free_method(struct di_typed_method *tm) {
 
 PUBLIC int di_add_method(struct di_object *o, const char *name, di_fn_t fn,
                          di_type_t rtype, int nargs, ...) {
+	if (nargs < 0 || nargs+1 > MAX_NARGS)
+		return -EINVAL;
+
 	struct di_typed_method *f = (void *)di_new_object(
 	    sizeof(struct di_typed_method) + sizeof(di_type_t) * (1 + nargs));
 
@@ -228,7 +244,9 @@ PUBLIC int di_add_method(struct di_object *o, const char *name, di_fn_t fn,
 	di_set_type((void *)f, "method");
 
 	f->this = o;
-	return di_add_value_member(o, name, false, DI_TYPE_OBJECT, f);
+	int rc = di_add_value_member(o, name, false, DI_TYPE_OBJECT, f);
+	di_unref_object((void *)f);
+	return rc;
 }
 
 // va_args version of di_call_callable

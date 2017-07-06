@@ -145,4 +145,5 @@ void di_init_event(struct deai *di) {
 
 	em->loop = di->loop;
 	di_register_module(di, "event", (void *)em);
+	di_unref_object((void *)em);
 }

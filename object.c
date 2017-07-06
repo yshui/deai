@@ -75,7 +75,8 @@ di_setx(struct di_object *o, const char *name, di_type_t type, const void *val) 
 		rc = di_type_conversion(type, val, mem->type, &val2);
 		if (rc != 0)
 			return rc;
-		memcpy(mem->data, val2, di_sizeof_type(mem->type));
+		di_free_value(mem->type, mem->data);
+		di_copy_value(mem->type, mem->data, val2);
 		free((void *)val2);
 		return 0;
 	}
@@ -363,14 +364,18 @@ PUBLIC int di_add_value_member(struct di_object *o, const char *name, bool writa
 	if (di_sizeof_type(t) == 0)
 		return -EINVAL;
 
-	auto nv = calloc(1, di_sizeof_type(t));
+	void *nv = calloc(1, di_sizeof_type(t));
+	void *v = calloc(1, di_sizeof_type(t));
 	va_list ap;
 
 	va_start(ap, t);
 	va_arg_with_di_type(ap, t, nv);
 	va_end(ap);
 
-	return _di_add_member(o, name, writable, true, t, nv);
+	di_copy_value(t, v, nv);
+	free(nv);
+
+	return _di_add_member(o, name, writable, true, t, v);
 }
 
 PUBLIC int di_add_address_member(struct di_object *o, const char *name,
@@ -439,6 +444,6 @@ PUBLIC void di_copy_value(di_type_t t, void *dst, const void *src) {
 		di_ref_object(*(struct di_object **)src);
 		*(struct di_object **)dst = *(struct di_object **)src;
 		break;
-	default: memcpy(dst, src, di_sizeof_type(t)); break;
+	default: memmove(dst, src, di_sizeof_type(t)); break;
 	}
 }

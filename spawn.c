@@ -173,4 +173,5 @@ void di_init_spawn(struct deai *di) {
 	di_method(m, "run", di_spawn_run, struct di_array);
 
 	di_register_module(di, "spawn", (void *)m);
+	di_unref_object((void *)m);
 }

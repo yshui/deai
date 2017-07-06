@@ -172,6 +172,7 @@ static struct di_object *di_file_new_watch(struct di_file *f, struct di_array pa
 	    (void *)di_file_ioev, DI_TYPE_VOID, 1, (di_type_t[]){DI_TYPE_OBJECT},
 	    (const void *[]){&fw}, 1, (di_type_t[]){DI_TYPE_OBJECT});
 	fw->fdev_listener = di_add_listener(fw->fdev, "read", (void *)cl);
+	di_unref_object((void *)cl);
 
 	const char **arr = paths.arr;
 	for (int i = 0; i < paths.length; i++)
@@ -185,5 +186,6 @@ PUBLIC int di_plugin_init(struct deai *di) {
 	fm->di = di;
 	di_method(fm, "watch", di_file_new_watch, struct di_array);
 	di_register_module(di, "file", (void *)fm);
+	di_unref_object((void *)fm);
 	return 0;
 }

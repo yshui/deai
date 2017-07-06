@@ -20,6 +20,7 @@ int di_new_value_with_address(struct di_object *o, const char *name, bool writab
                               bool own, di_type_t t, void *v);
 int di_new_value(struct di_object *o, const char *name, bool writable, di_type_t t,
                  ...);
+int di_gmethod(struct di_object *o, const char *name, di_fn_t fn);
 struct di_listener *
 di_add_listener(struct di_object *o, const char *name, struct di_object *h);
 

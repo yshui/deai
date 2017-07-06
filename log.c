@@ -67,4 +67,5 @@ void di_init_log(struct deai *di) {
 	                      &l->log_level);
 	di_method(l, "log", di_log, char *, char *);
 	di_register_module(di, "log", (void *)l);
+	di_unref_object((void *)l);
 }

@@ -12,6 +12,7 @@
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
+#include <string.h>
 
 typedef enum di_type {
 	DI_TYPE_VOID = 0,
@@ -29,6 +30,11 @@ typedef enum di_type {
 	DI_TYPE_NIL,
 	DI_LAST_TYPE
 } di_type_t;
+
+static const char *di_type_name[] = {
+    "void",  "bool",    "nint",   "nuint",  "uint",  "int",
+    "float", "pointer", "object", "string", "array",
+};
 
 typedef void (*di_fn_t)(void);
 
@@ -88,7 +94,6 @@ bool di_check_type(struct di_object *o, const char *type);
 
 void di_free_object(struct di_object *);
 
-struct di_member *di_alloc_member(void);
 int di_add_address_member(struct di_object *o, const char *name, bool writable,
                           di_type_t t, void *address);
 int di_add_value_member(struct di_object *o, const char *name, bool writable,
@@ -125,6 +130,13 @@ static inline size_t di_sizeof_type(di_type_t t) {
 	case DI_TYPE_POINTER: return sizeof(void *);
 	case DI_TYPE_BOOL: return sizeof(bool);
 	}
+}
+
+static inline int di_string_to_type(const char *type) {
+	for (int i = 0; i < DI_LAST_TYPE; i++)
+		if (strcmp(type, di_type_name[i]) == 0)
+			return i;
+	return DI_LAST_TYPE;
 }
 
 // Workaround for _Generic limitations, see:

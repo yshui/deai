@@ -31,6 +31,7 @@ PUBLIC int di_hold_object(struct di_objset *set, struct di_object *obj) {
 	m->obj = obj;
 	HASH_ADD_PTR(set->set_members, obj, m);
 
+	di_ref_object(obj);
 	// notify the object
 	di_call(obj, "objset_hold", (struct di_object *)set);
 	return 0;

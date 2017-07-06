@@ -9,6 +9,10 @@
 
 #include <stdarg.h>
 
+enum {
+	MAX_NARGS = 128,
+};
+
 struct di_closure;
 
 int di_call_objectv(struct di_object *obj, di_type_t *rtype, void **ret, va_list);
