@@ -379,7 +379,7 @@ _lua_type_to_di_object(lua_State *L, int i, void *call, size_t sz) {
 
 	auto getter = di_new_object_with_type(struct lua_table_getter);
 	getter->call = di_lua_table_get;
-	// not incrementing the ref_count for getter->t to prevent cycle
+	// not incrementing getter->t->ref_count to prevent cycle
 	getter->t = o;
 	di_add_value_member((void *)o, "__get", false, DI_TYPE_OBJECT, getter);
 	di_unref_object((void *)getter);
@@ -388,7 +388,8 @@ _lua_type_to_di_object(lua_State *L, int i, void *call, size_t sz) {
 
 	auto sh = di_new_object_with_type(struct lua_ref_shutdown_handler);
 	sh->call = _lua_ref_shutdown_handler;
-	// not incrementing o->ref_count to prevent cycle
+	// not incrementing o->ref_count, because we don't want to
+	// prevent o from being freed.
 	sh->ref = o;
 
 	o->lua_shutdown = di_add_listener((void *)s->m, "shutdown", (void *)sh);
