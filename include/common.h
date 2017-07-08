@@ -6,6 +6,8 @@
 
 #pragma once
 
+#include <deai/compiler.h>
+
 #define tmalloc(type, nmem) (type *)calloc(nmem, sizeof(type))
 #define auto __auto_type
 
@@ -23,7 +25,7 @@
 	})
 
 #define define_trivial_cleanup(type, name)                                          \
-	static inline __attribute__((unused)) void name(type **ptr) {               \
+	static inline UNUSED void name(type **ptr) {                                \
 		free(*ptr);                                                         \
 		*ptr = NULL;                                                        \
 	}

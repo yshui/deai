@@ -19,7 +19,7 @@ int di_call_objectv(struct di_object *obj, di_type_t *rtype, void **ret, va_list
 struct di_closure *
 di_create_closure(di_fn_t fn, di_type_t rtype, int ncaptures,
                   const di_type_t *captypes, const void *const *captures, int nargs,
-                  const di_type_t *argtypes);
+                  const di_type_t *argtypes, bool weak_capture);
 int di_add_method(struct di_object *object, const char *name, di_fn_t fn,
                   di_type_t rtype, int nargs, ...);
 void di_set_this(struct di_object *fn, struct di_object *this);

@@ -11,6 +11,11 @@
 #include "common.h"
 #include "uthash.h"
 
+// TODO:
+// 1) should hold weak ref
+// 2) handle "__destroyed" signal
+// 3) support calling method on all member (e.g. stop all listeners)
+
 struct di_objset_member {
 	struct di_object *obj;
 	UT_hash_handle hh;

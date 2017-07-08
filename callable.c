@@ -34,6 +34,7 @@ struct di_closure {
 	int nargs;
 	int nargs0;
 	di_type_t rtype;
+	bool weak_capture;
 	ffi_cif cif;
 	di_type_t atypes[];
 };
@@ -52,7 +53,7 @@ _di_typed_trampoline(ffi_cif *cif, di_fn_t fn, void *ret, const di_type_t *fnats
 	assert(nargs == 0 || args != NULL);
 	assert(nargs0 == 0 || args0 != NULL);
 	assert(nargs >= 0 && nargs0 >= 0);
-	assert(nargs+nargs0 <= MAX_NARGS);
+	assert(nargs + nargs0 <= MAX_NARGS);
 
 	void *null_ptr = NULL;
 	const void **xargs = alloca((nargs0 + nargs) * sizeof(void *));
@@ -146,7 +147,8 @@ static void free_closure(struct di_object *o) {
 
 	struct di_closure *cl = (void *)o;
 	for (int i = 0; i < cl->nargs0; i++) {
-		di_free_value(cl->atypes[i], (void *)cl->cargs[i]);
+		if (!cl->weak_capture)
+			di_free_value(cl->atypes[i], (void *)cl->cargs[i]);
 		free((void *)cl->cargs[i]);
 	}
 	free(cl->cargs);
@@ -155,8 +157,9 @@ static void free_closure(struct di_object *o) {
 
 PUBLIC struct di_closure *
 di_create_closure(di_fn_t fn, di_type_t rtype, int nargs0, const di_type_t *cats,
-                  const void *const *cargs, int nargs, const di_type_t *ats) {
-	if (nargs0 < 0 || nargs < 0 || nargs0+nargs > MAX_NARGS)
+                  const void *const *cargs, int nargs, const di_type_t *ats,
+                  bool weak_capture) {
+	if (nargs0 < 0 || nargs < 0 || nargs0 + nargs > MAX_NARGS)
 		return ERR_PTR(-E2BIG);
 
 	for (int i = 0; i < nargs0; i++)
@@ -176,6 +179,7 @@ di_create_closure(di_fn_t fn, di_type_t rtype, int nargs0, const di_type_t *cats
 	cl->dtor = free_closure;
 	cl->nargs = nargs;
 	cl->nargs0 = nargs0;
+	cl->weak_capture = weak_capture;
 
 	if (nargs0)
 		memcpy(cl->atypes, cats, sizeof(di_type_t) * nargs0);
@@ -194,7 +198,10 @@ di_create_closure(di_fn_t fn, di_type_t rtype, int nargs0, const di_type_t *cats
 
 	for (int i = 0; i < nargs0; i++) {
 		void *dst = malloc(di_sizeof_type(cats[i]));
-		di_copy_value(cats[i], dst, cargs[i]);
+		if (!weak_capture)
+			di_copy_value(cats[i], dst, cargs[i]);
+		else
+			memcpy(dst, cargs[i], di_sizeof_type(cats[i]));
 		cl->cargs[i] = dst;
 	}
 
@@ -209,7 +216,7 @@ static void free_method(struct di_typed_method *tm) {
 
 PUBLIC int di_add_method(struct di_object *o, const char *name, di_fn_t fn,
                          di_type_t rtype, int nargs, ...) {
-	if (nargs < 0 || nargs+1 > MAX_NARGS)
+	if (nargs < 0 || nargs + 1 > MAX_NARGS)
 		return -EINVAL;
 
 	struct di_typed_method *f = (void *)di_new_object(

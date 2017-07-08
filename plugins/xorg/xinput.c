@@ -4,9 +4,10 @@
 
 /* Copyright (c) 2017, Yuxuan Shui <yshuiv7@gmail.com> */
 
-#include <builtin/log.h>
-#include <deai.h>
-#include <helper.h>
+#include <deai/builtin/log.h>
+#include <deai/deai.h>
+#include <deai/helper.h>
+#include <deai/compiler.h>
 
 #include <assert.h>
 #include <ctype.h>
@@ -39,9 +40,11 @@ struct di_xorg_xinput_device {
 #define get_mask(a, m) (a)[(m) >> 3] & (1 << ((m)&7))
 
 static void di_xorg_xi_start_listen_for_event(struct di_xorg_xinput *xi, int ev) {
-	di_getm(xi->dc->x->di, log);
+	di_getmi(xi->dc->x->di, log);
 	if (ev > 26) {
-		di_log_va(logm, DI_LOG_ERROR, "invalid xi event number %d", ev);
+		if (logm)
+			di_log_va(logm, DI_LOG_ERROR, "invalid xi event number %d",
+			          ev);
 		return;
 	}
 
@@ -54,14 +57,16 @@ static void di_xorg_xi_start_listen_for_event(struct di_xorg_xinput *xi, int ev)
 	auto cookie =
 	    xcb_input_xi_select_events_checked(xi->dc->c, scrn->root, 1, &xi->ec);
 	auto e = xcb_request_check(xi->dc->c, cookie);
-	if (e)
+	if (e && logm)
 		di_log_va(logm, DI_LOG_ERROR, "select events failed\n");
 }
 
 static void di_xorg_xi_stop_listen_for_event(struct di_xorg_xinput *xi, int ev) {
-	di_getm(xi->dc->x->di, log);
+	di_getmi(xi->dc->x->di, log);
 	if (ev > 26) {
-		di_log_va(logm, DI_LOG_ERROR, "invalid xi event number %d", ev);
+		if (logm)
+			di_log_va(logm, DI_LOG_ERROR, "invalid xi event number %d",
+			          ev);
 		return;
 	}
 
@@ -75,7 +80,7 @@ static void di_xorg_xi_stop_listen_for_event(struct di_xorg_xinput *xi, int ev) 
 	auto cookie =
 	    xcb_input_xi_select_events_checked(xi->dc->c, scrn->root, 1, &xi->ec);
 	auto e = xcb_request_check(xi->dc->c, cookie);
-	if (e)
+	if (e && logm)
 		di_log_va(logm, DI_LOG_ERROR, "select events failed\n");
 }
 
@@ -83,13 +88,13 @@ static void enable_hierarchy_event(struct di_xorg_xinput *xi) {
 	di_xorg_xi_start_listen_for_event(xi, XCB_INPUT_HIERARCHY);
 }
 
-static void disable_hierarchy_event(struct di_xorg_xinput *xi) {
+static void UNUSED disable_hierarchy_event(struct di_xorg_xinput *xi) {
 	di_xorg_xi_stop_listen_for_event(xi, XCB_INPUT_HIERARCHY);
 }
 
 static void di_xorg_free_xinput(struct di_xorg_ext *x) {
+	di_getmi(x->dc->x->di, log);
 	// clear event mask when free
-	di_getm(x->dc->x->di, log);
 	struct di_xorg_xinput *xi = (void *)x;
 	memset(xi->mask, 0, xi->ec.mask_len * 4);
 	auto scrn = screen_of_display(xi->dc->c, xi->dc->dflt_scrn);
@@ -98,7 +103,7 @@ static void di_xorg_free_xinput(struct di_xorg_ext *x) {
 	auto cookie =
 	    xcb_input_xi_select_events_checked(xi->dc->c, scrn->root, 1, &xi->ec);
 	auto e = xcb_request_check(xi->dc->c, cookie);
-	if (e)
+	if (e && logm)
 		di_log_va(logm, DI_LOG_ERROR, "select events failed\n");
 }
 
@@ -192,10 +197,11 @@ static int di_xorg_xinput_get_device_id(struct di_object *o) {
 
 define_trivial_cleanup_t(xcb_input_xi_get_property_reply_t);
 define_trivial_cleanup_t(xcb_input_xi_change_property_items_t);
+define_trivial_cleanup_t(char);
 
 static void di_xorg_xinput_set_prop(struct di_xorg_xinput_device *dev,
                                     const char *key, struct di_array arr) {
-	di_getm(dev->dc->x->di, log);
+	di_getmi(dev->dc->x->di, log);
 	xcb_generic_error_t *e;
 	auto prop_atom = di_xorg_intern_atom(dev->dc, key, &e);
 	if (e)
@@ -211,8 +217,9 @@ static void di_xorg_xinput_set_prop(struct di_xorg_xinput_device *dev,
 
 	if (prop->type == XCB_ATOM_NONE) {
 		// non-existent property should be silently ignored
-		di_log_va(logm, DI_LOG_DEBUG, "setting non-existent property: %s\n",
-		          key);
+		if (logm)
+			di_log_va(logm, DI_LOG_DEBUG,
+			          "setting non-existent property: %s\n", key);
 		return;
 	}
 
@@ -311,7 +318,7 @@ err:
 
 static struct di_array
 di_xorg_xinput_get_prop(struct di_xorg_xinput_device *dev, const char *name) {
-	di_getm(dev->dc->x->di, log);
+	di_getmi(dev->dc->x->di, log);
 	xcb_generic_error_t *e;
 	struct di_array ret = {0, NULL, DI_TYPE_NIL};
 	auto prop_atom = di_xorg_intern_atom(dev->dc, name, &e);
@@ -348,13 +355,16 @@ di_xorg_xinput_get_prop(struct di_xorg_xinput_device *dev, const char *name) {
 	else if (prop->type == float_atom)
 		ret.elem_type = DI_TYPE_FLOAT;
 	else {
-		di_log_va(logm, DI_LOG_WARN, "Unknown property type %d\n", prop->type);
+		if (logm)
+			di_log_va(logm, DI_LOG_WARN, "Unknown property type %d\n",
+			          prop->type);
 		return ret;
 	}
 
 	if (prop->format != 8 && prop->format != 16 && prop->format != 32) {
-		di_log_va(logm, DI_LOG_WARN, "Xorg returns invalid format %d\n",
-		          prop->format);
+		if (logm)
+			di_log_va(logm, DI_LOG_WARN,
+			          "Xorg returns invalid format %d\n", prop->format);
 		return ret;
 	}
 	if ((prop->type == float_atom || prop->type == XCB_ATOM_ATOM) &&
@@ -398,12 +408,8 @@ static struct di_object *di_xorg_xinput_props(struct di_xorg_xinput_device *dev)
 	obj->deviceid = dev->deviceid;
 	obj->dc = dev->dc;
 
-	di_register_typed_method((void *)obj, (di_fn_t)di_xorg_xinput_get_prop,
-	                         "__get", DI_TYPE_ARRAY, 1, DI_TYPE_STRING);
-
-	di_register_typed_method((void *)obj, (di_fn_t)di_xorg_xinput_set_prop,
-	                         "__set", DI_TYPE_VOID, 2, DI_TYPE_STRING,
-	                         DI_TYPE_ARRAY);
+	di_method(obj, "__get", di_xorg_xinput_get_prop, char *);
+	di_method(obj, "__set", di_xorg_xinput_set_prop, char *, struct di_array);
 	return (void *)obj;
 }
 
@@ -420,22 +426,13 @@ di_xorg_make_object_for_devid(struct di_xorg_connection *dc, int deviceid) {
 
 	di_ref_object((void *)dc);
 
-	di_dtor(obj, free_xi_device_object);
+	obj->dtor = (void *)free_xi_device_object;
 
-	di_register_typed_method((void *)obj, (di_fn_t)di_xorg_xinput_get_device_name,
-	                         "__get_name", DI_TYPE_STRING, 0);
-
-	di_register_typed_method((void *)obj, (di_fn_t)di_xorg_xinput_get_device_use,
-	                         "__get_use", DI_TYPE_STRING, 0);
-
-	di_register_typed_method((void *)obj, (di_fn_t)di_xorg_xinput_get_device_id,
-	                         "__get_id", DI_TYPE_NINT, 0);
-
-	di_register_typed_method((void *)obj, (di_fn_t)di_xorg_xinput_get_device_type,
-	                         "__get_type", DI_TYPE_STRING, 0);
-
-	di_register_typed_method((void *)obj, (di_fn_t)di_xorg_xinput_props,
-	                         "__get_props", DI_TYPE_OBJECT, 0);
+	di_method(obj, "__get_name", di_xorg_xinput_get_device_name);
+	di_method(obj, "__get_use", di_xorg_xinput_get_device_use);
+	di_method(obj, "__get_id", di_xorg_xinput_get_device_id);
+	di_method(obj, "__get_type", di_xorg_xinput_get_device_type);
+	di_method(obj, "__get_props", di_xorg_xinput_props);
 
 	// const char *ty;
 	// DI_GET((void *)obj, "name", ty);
@@ -490,12 +487,12 @@ static int handle_xinput_event(struct di_xorg_xinput *xi, xcb_generic_event_t *e
 			// di_log_va(log, DI_LOG_DEBUG, "hierarchy change %u %u\n",
 			// info->deviceid, info->flags);
 			if (info->flags & XCB_INPUT_HIERARCHY_MASK_SLAVE_ADDED)
-				di_emit_signal_v((void *)xi, "new-device", obj);
+				di_emit_from_object((void *)xi, "new-device", obj);
 			if (info->flags & XCB_INPUT_HIERARCHY_MASK_DEVICE_ENABLED)
-				di_emit_signal_v((void *)xi, "device-enabled", obj);
+				di_emit_from_object((void *)xi, "device-enabled", obj);
 			if (info->flags & XCB_INPUT_HIERARCHY_MASK_DEVICE_DISABLED)
-				di_emit_signal_v((void *)xi, "device-disabled", obj);
-			di_unref_object(&obj);
+				di_emit_from_object((void *)xi, "device-disabled", obj);
+			di_unref_object(obj);
 		}
 	}
 	return 0;
@@ -527,18 +524,13 @@ struct di_xorg_ext *di_xorg_new_xinput(struct di_xorg_connection *dc) {
 
 	free(r);
 
-	di_signal_handler(xi, "new-device", enable_hierarchy_event,
-	                  disable_hierarchy_event);
-	di_signal_handler(xi, "device-enabled", enable_hierarchy_event,
-	                  disable_hierarchy_event);
-	di_signal_handler(xi, "device-disabled", enable_hierarchy_event,
-	                  disable_hierarchy_event);
+	// TODO: only enable if there are listeners?
+	enable_hierarchy_event(xi);
 
-	di_register_typed_method((void *)xi, (di_fn_t)di_xorg_get_all_devices,
-	                         "__get_devices", DI_TYPE_ARRAY, 0);
+	di_method(xi, "__get_devices", di_xorg_get_all_devices);
 
-	di_register_signal((void *)xi, "new-device", 1, DI_TYPE_OBJECT);
-	di_register_signal((void *)xi, "device-enabled", 1, DI_TYPE_OBJECT);
-	di_register_signal((void *)xi, "device-disabled", 1, DI_TYPE_OBJECT);
+	di_register_signal((void *)xi, "new-device", 1, (di_type_t[]){DI_TYPE_OBJECT});
+	di_register_signal((void *)xi, "device-enabled", 1, (di_type_t[]){DI_TYPE_OBJECT});
+	di_register_signal((void *)xi, "device-disabled", 1, (di_type_t[]){DI_TYPE_OBJECT});
 	return (void *)xi;
 }

@@ -4,10 +4,10 @@
 
 /* Copyright (c) 2017, Yuxuan Shui <yshuiv7@gmail.com> */
 
-#include <builtin/event.h>
-#include <builtin/log.h>
-#include <deai.h>
-#include <helper.h>
+#include <deai/builtin/event.h>
+#include <deai/builtin/log.h>
+#include <deai/deai.h>
+#include <deai/helper.h>
 
 #include <assert.h>
 #include <stdio.h>
@@ -29,7 +29,7 @@ struct di_atom_entry {
 
 define_trivial_cleanup_t(xcb_generic_error_t);
 
-static void di_xorg_ioev(struct di_xorg_connection *dc) {
+static void di_xorg_ioev(struct di_xorg_connection *dc, struct di_object *fd) {
 	// di_get_log(dc->x->di);
 	// di_log_va((void *)log, DI_LOG_DEBUG, "xcb ioev\n");
 
@@ -49,16 +49,14 @@ static void di_xorg_ioev(struct di_xorg_connection *dc) {
 
 	if (xcb_connection_has_error(dc->c)) {
 		// remove the listeners to prevent busy loop
-		di_remove_listener(dc->xcb_fd, "read", dc->xcb_fdlistener);
-		di_unref_object((void *)&dc->xcb_fd);
+		di_unref_object((void *)dc->xcb_fd);
 
 		// don't close the xcb connection just yet
 		// all those destructors still need it even if it's dead
 
-		dc->xcb_fdlistener = NULL;
 		dc->xcb_fd = NULL;
 
-		di_emit_signal_v((void *)dc, "connection-error");
+		di_emit_from_object((void *)dc, "connection-error");
 	}
 }
 
@@ -86,7 +84,7 @@ const char *di_xorg_get_atom_name(struct di_xorg_connection *xc, xcb_atom_t atom
 
 xcb_atom_t di_xorg_intern_atom(struct di_xorg_connection *xc, const char *name,
                                xcb_generic_error_t **e) {
-	di_getm(xc->x->di, log);
+	di_getm(xc->x->di, log, 0);
 	struct di_atom_entry *ae = NULL;
 	*e = NULL;
 
@@ -116,15 +114,23 @@ void di_xorg_free_sub(struct di_xorg_ext *x) {
 	HASH_DEL(x->dc->xext, x);
 	if (x->free)
 		x->free(x);
-	di_unref_object((void *)&x->dc);
+	di_unref_object((void *)x->dc);
 }
 
-static void di_xorg_free_connection(struct di_xorg_connection *xc) {
-	assert(!xc->xext);
-	if (xc->xcb_fd) {
-		di_remove_listener(xc->xcb_fd, "read", xc->xcb_fdlistener);
-		di_unref_object(&xc->xcb_fd);
+static void di_xorg_disconnect(struct di_xorg_connection *xc) {
+	struct di_xorg_ext *ext, *text;
+	HASH_ITER(hh, xc->xext, ext, text) {
+		ext->dc = NULL;
+		di_unref_object((void *)xc);
+		HASH_DEL(xc->xext, ext);
 	}
+
+	di_stop_listener(xc->xcb_fdlistener);
+	di_unref_object((void *)xc->xcb_fdlistener);
+	di_stop_listener(xc->shutdown_listener);
+	di_unref_object((void *)xc->shutdown_listener);
+
+	di_unref_object((void *)xc->xcb_fd);
 	xcb_disconnect(xc->c);
 	xc->x = NULL;
 
@@ -189,7 +195,7 @@ di_xorg_get_ext(struct di_xorg_connection *xc, const char *name) {
 	for (int i = 0; xext_reg[i].name; i++)
 		if (strcmp(xext_reg[i].name, name) == 0) {
 			auto ext = xext_reg[i].new(xc);
-			di_dtor(ext, di_xorg_free_sub);
+			ext->dtor = (void *)di_xorg_free_sub;
 			return (void *)ext;
 		}
 	return NULL;
@@ -199,17 +205,22 @@ struct xscreen {
 	struct di_object;
 	uint64_t width, height;
 };
-static struct xscreen *get_screen(struct di_xorg_connection *dc) {
+static struct di_object *get_screen(struct di_xorg_connection *dc) {
 	auto scrn = screen_of_display(dc->c, dc->dflt_scrn);
 
 	auto ret = di_new_object_with_type(struct xscreen);
 	ret->height = scrn->height_in_pixels;
 	ret->width = scrn->width_in_pixels;
 
-	di_field(ret, height);
-	di_field(ret, width);
+	di_add_address_member((void *)ret, "height", false, DI_TYPE_UINT,
+	                      &ret->height);
+	di_add_address_member((void *)ret, "width", false, DI_TYPE_UINT, &ret->width);
 
-	return ret;
+	return (void *)ret;
+}
+
+static void handle_shutdown(struct di_xorg_connection *xc, struct deai *di) {
+	di_xorg_disconnect(xc);
 }
 
 static struct di_object *
@@ -221,7 +232,7 @@ di_xorg_connect_to(struct di_xorg *x, const char *displayname) {
 		return di_new_error("Cannot connect to the display");
 	}
 
-	di_getm(x->di, event);
+	di_getm(x->di, event, di_new_error("Can't get event module"));
 
 	struct di_xorg_connection *dc =
 	    di_new_object_with_type(struct di_xorg_connection);
@@ -232,27 +243,28 @@ di_xorg_connect_to(struct di_xorg *x, const char *displayname) {
 	        IOEV_READ);
 
 	di_ref_object((void *)dc);
-	dc->xcb_fdlistener = di_add_typed_listener(dc->xcb_fd, "read", dc,
-	                                           (free_fn_t)di_cleanup_objectp,
-	                                           (di_fn_t)di_xorg_ioev);
+	auto cl = di_create_closure(
+	    (di_fn_t)di_xorg_ioev, DI_TYPE_VOID, 1, (di_type_t[]){DI_TYPE_OBJECT},
+	    (const void *[]){&dc}, 1, (di_type_t[]){DI_TYPE_OBJECT}, false);
+	dc->xcb_fdlistener = di_add_listener(dc->xcb_fd, "read", (void *)cl);
+	di_unref_object((void *)cl);
 
-	di_call0(dc->xcb_fd, "start");
+	cl = di_create_closure((di_fn_t)handle_shutdown, DI_TYPE_VOID, 1,
+	                       (di_type_t[]){DI_TYPE_OBJECT}, (const void *[]){&dc},
+	                       1, (di_type_t[]){DI_TYPE_OBJECT}, true);
+	dc->shutdown_listener = di_add_listener((void *)x->di, "shutdown", (void *)cl);
+	di_unref_object((void *)cl);
 
-	di_register_typed_method((void *)dc, (di_fn_t)di_xorg_get_ext, "__get",
-	                         DI_TYPE_OBJECT, 1, DI_TYPE_STRING);
 
-	di_register_typed_method((void *)dc, (di_fn_t)di_xorg_get_resource,
-	                         "__get_xrdb", DI_TYPE_STRING, 0);
+	di_call(dc->xcb_fd, "start");
 
-	di_register_typed_method((void *)dc, (di_fn_t)di_xorg_set_resource,
-	                         "__set_xrdb", DI_TYPE_VOID, 1, DI_TYPE_STRING);
+	di_method(dc, "__get", di_xorg_get_ext, char *);
+	di_method(dc, "__get_xrdb", di_xorg_get_resource);
+	di_method(dc, "__set_xrdb", di_xorg_set_resource, char *);
+	di_method(dc, "__get_screen", get_screen);
+	di_method(dc, "disconnect", di_xorg_disconnect);
 
-	di_register_typed_method((void *)dc, (di_fn_t)get_screen, "__get_screen",
-	                         DI_TYPE_OBJECT, 0);
-
-	di_dtor(dc, di_xorg_free_connection);
-
-	di_register_signal((void *)dc, "connection-error", 0);
+	di_register_signal((void *)dc, "connection-error", 0, NULL);
 
 	dc->x = x;
 	return (void *)dc;
@@ -262,15 +274,13 @@ static struct di_object *di_xorg_connect(struct di_xorg *x) {
 	return di_xorg_connect_to(x, NULL);
 }
 PUBLIC int di_plugin_init(struct deai *di) {
-	auto x = di_new_module_with_type("xorg", struct di_xorg);
+	auto x = di_new_module_with_type(struct di_xorg);
 	x->di = di;
 
-	di_register_typed_method((void *)x, (di_fn_t)di_xorg_connect, "connect",
-	                         DI_TYPE_OBJECT, 0);
+	di_method(x, "connect", di_xorg_connect);
+	di_method(x, "connect_to", di_xorg_connect_to, char *);
 
-	di_register_typed_method((void *)x, (di_fn_t)di_xorg_connect_to,
-	                         "connect_to", DI_TYPE_OBJECT, 1, DI_TYPE_STRING);
-
-	di_register_module(di, (void *)x);
+	di_register_module(di, "xorg", (void *)x);
+	di_unref_object((void *)x);
 	return 0;
 }

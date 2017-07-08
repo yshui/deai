@@ -6,7 +6,7 @@
 
 #pragma once
 
-#include <deai.h>
+#include <deai/deai.h>
 
 #include <xcb/xcb.h>
 
@@ -27,6 +27,7 @@ struct di_xorg_connection {
 	int dflt_scrn;
 	struct di_object *xcb_fd;
 	struct di_listener *xcb_fdlistener;
+	struct di_listener *shutdown_listener;
 	struct di_xorg_ext *xext;
 
 	struct di_atom_entry *a_byatom, *a_byname;

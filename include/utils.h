@@ -34,7 +34,7 @@ static inline int integer_conversion(di_type_t inty, const void *inp,
 			if (tmp > (dstmax) || tmp < (dstmin))                       \
 				return -ERANGE;                                     \
 			dstt *tmp2 = malloc(sizeof(dstt));                          \
-			*tmp2 = tmp;                                                \
+			*tmp2 = (dstt)tmp;                                          \
 			*outp = tmp2;                                               \
 		} while (0);                                                        \
 		break
@@ -98,7 +98,7 @@ static inline int di_type_conversion(di_type_t inty, const void *inp,
 		if (outty == DI_TYPE_FLOAT) {
 			double *res = malloc(sizeof(double));
 #define convert_case(srct)                                                          \
-	case di_typeof((srct)0): *res = *(srct *)inp; break;
+	case di_typeof((srct)0): *res = (double)*(srct *)inp; break;
 			switch (inty) {
 				convert_case(unsigned int);
 				convert_case(int);

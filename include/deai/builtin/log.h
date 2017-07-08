@@ -5,6 +5,8 @@
 /* Copyright (c) 2017, Yuxuan Shui <yshuiv7@gmail.com> */
 
 #pragma once
+#include <deai/compiler.h>
+
 struct di_object;
 
 enum di_log_level {
@@ -14,4 +16,4 @@ enum di_log_level {
 	DI_LOG_DEBUG,
 };
 
-int di_log_va(struct di_object *o, int log_level, const char *fmt, ...);
+int di_log_va(struct di_object *o, int log_level, const char *fmt, ...) NONNULL_ARG(1);

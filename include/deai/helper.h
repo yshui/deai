@@ -24,7 +24,8 @@ int di_gmethod(struct di_object *o, const char *name, di_fn_t fn);
 struct di_listener *
 di_add_listener(struct di_object *o, const char *name, struct di_object *h);
 
-int di_emitn_from_object(struct di_object *o, const char *name, const void *const *args);
+int di_emitn_from_object(struct di_object *o, const char *name,
+                         const void *const *args);
 int di_emit_from_object(struct di_object *o, const char *name, ...);
 #define RET_IF_ERR(expr)                                                            \
 	do {                                                                        \
@@ -134,19 +135,22 @@ int di_emit_from_object(struct di_object *o, const char *name, ...);
 
 #define object_cleanup __attribute__((cleanup(__free_objp)))
 
-#define di_getm(di, modn, on_err)                                                   \
+#define _di_getm(di, modn, on_err)                                                  \
 	object_cleanup struct di_object *modn##m = NULL;                            \
 	do {                                                                        \
 		struct di_object *__o;                                              \
 		int rc = di_get(di, #modn, __o);                                    \
 		if (rc != 0)                                                        \
-			return (on_err);                                            \
+			on_err;                                                     \
 		if (!di_check_type(__o, "module")) {                                \
 			rc = -EINVAL;                                               \
-			return (on_err);                                            \
+			on_err;                                                     \
 		}                                                                   \
 		modn##m = __o;                                                      \
-	} while (0);
+	} while (0)
+
+#define di_getm(di, modn, on_err) _di_getm(di, modn, return (on_err))
+#define di_getmi(di, modn) _di_getm(di, modn, break)
 
 // call but ignore return
 #define di_call(o, name, ...)                                                       \
@@ -188,8 +192,23 @@ int di_emit_from_object(struct di_object *o, const char *name, ...);
 	})
 
 #define di_field(o, name)                                                           \
-	di_register_field_getter((struct di_object *)o, STRINGIFY(__get_##name),    \
-	                         offsetof(typeof(*o), name), di_typeof(o->name))
+	di_add_address_member((struct di_object *)(o), #name, false,                \
+	                      di_typeof((o)->name), &((o)->name))
+
+#define di_getter(o, name, g) di_method(o, STRINGIFY(__get_##name), g)
+
+#define di_getter_setter(o, name, g, s)                                             \
+	({                                                                          \
+		int rc = 0;                                                         \
+		do {                                                                \
+			rc = di_getter(o, name, g);                                 \
+			if (rc != 0)                                                \
+				break;                                              \
+			rc = di_method(o, STRINGIFY(__set_##name), s,               \
+			               di_return_typeof(g, struct di_object *));    \
+		} while (0);                                                        \
+		rc;                                                                 \
+	})
 
 #define di_signal_handler(o, name, add, del)                                        \
 	do {                                                                        \
@@ -212,12 +231,13 @@ int di_emit_from_object(struct di_object *o, const char *name, ...);
 	void **: NULL, \
 	double *: 0.0 \
 	)
-#define gen_args(...) LIST_APPLY(TYPE_INIT, SEP_COMMA, __VA_ARGS__)
+#define gen_args(...) LIST_APPLY(TYPE_INIT, SEP_COMMA, ##__VA_ARGS__)
 
-#define di_return_typeof(fn, ...) di_typeid(typeof(fn(gen_args(__VA_ARGS__))))
+#define di_return_typeof(fn, ...) typeof(fn(gen_args(__VA_ARGS__)))
+#define di_return_typeid(fn, ...) di_typeid(di_return_typeof(fn, ##__VA_ARGS__))
 
 #define di_register_typed_method(o, name, fn, rtype, ...)                           \
-	di_add_method((void *)(o), (name), (void *)(fn), (rtype),                   \
+	di_add_method((struct di_object *)(o), (name), (di_fn_t)(fn), (rtype),      \
 	              VA_ARGS_LENGTH(__VA_ARGS__), ##__VA_ARGS__)
 
 #define INDIRECT(fn, ...) fn(__VA_ARGS__)
@@ -225,9 +245,8 @@ int di_emit_from_object(struct di_object *o, const char *name, ...);
 // Need to use INDIRECT because macro(A B) is consider to have only one argument,
 // even if B expands to something starts with a comma
 #define di_method(obj, name, fn, ...)                                               \
-	INDIRECT(di_register_typed_method, (struct di_object *)obj, name,           \
-	         (di_fn_t)fn,                                                       \
-	         di_return_typeof(fn, struct di_object *, ##__VA_ARGS__)            \
+	INDIRECT(di_register_typed_method, obj, name, fn,                           \
+	         di_return_typeid(fn, struct di_object *, ##__VA_ARGS__)            \
 	             LIST_APPLY_pre(di_typeid, SEP_COMMA, ##__VA_ARGS__))
 
 static inline void __free_objp(struct di_object **p) {

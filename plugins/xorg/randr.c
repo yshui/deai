@@ -4,8 +4,8 @@
 
 /* Copyright (c) 2017, Yuxuan Shui <yshuiv7@gmail.com> */
 
-#include <helper.h>
-#include <builtin/log.h>
+#include <deai/builtin/log.h>
+#include <deai/helper.h>
 
 #include "randr.h"
 
@@ -221,7 +221,7 @@ static void set_output_backlight(struct di_xorg_output *o, int bkl) {
 	                          o->rr->dc->c, o->oid, bklatom, XCB_ATOM_INTEGER,
 	                          32, XCB_PROP_MODE_REPLACE, 1, (void *)&v));
 	if (e) {
-		di_getm(o->rr->dc->x->di, log);
+		di_getm(o->rr->dc->x->di, log, (void)0);
 		di_log_va(logm, DI_LOG_ERROR, "Failed to set backlight");
 	}
 }
@@ -257,11 +257,12 @@ make_object_for_output(struct di_xorg_randr *rr, xcb_randr_output_t oid) {
 	auto obj = di_new_object_with_type(struct di_xorg_output);
 	obj->rr = rr;
 	obj->oid = oid;
-	di_rprop(obj, "view", get_output_view);
-	di_rprop(obj, "name", get_output_name);
-	di_rwprop(obj, "backlight", get_output_backlight, set_output_backlight);
-	di_rprop(obj, "max_backlight", get_output_max_backlight);
-	di_dtor(obj, output_dtor);
+	di_getter(obj, view, get_output_view);
+	di_getter(obj, name, get_output_name);
+	di_getter_setter(obj, backlight, get_output_backlight, set_output_backlight);
+	di_getter(obj, max_backlight, get_output_max_backlight);
+
+	obj->dtor = (void *)output_dtor;
 
 	di_ref_object((void *)rr);
 	return (void *)obj;
@@ -293,9 +294,9 @@ make_object_for_view(struct di_xorg_randr *rr, xcb_randr_crtc_t cid) {
 	obj->rr = rr;
 	obj->cid = cid;
 
-	di_rprop(obj, "outputs", get_view_outputs);
-	di_rwprop(obj, "config", get_view_config, set_view_config);
-	di_dtor(obj, view_dtor);
+	di_getter(obj, outputs, get_view_outputs);
+	di_getter_setter(obj, config, get_view_config, set_view_config);
+	obj->dtor = (void *)view_dtor;
 
 	di_ref_object((void *)rr);
 
@@ -310,12 +311,13 @@ static int handle_randr_event(struct di_xorg_ext *ext, xcb_generic_event_t *ev) 
 	} else if (ev->response_type == rr->evbase + 1) {
 		xcb_randr_notify_event_t *rev = (void *)ev;
 		if (rev->subCode == XCB_RANDR_NOTIFY_OUTPUT_CHANGE) {
-			di_emit_signal_v((void *)ext, "output-change",
-			                 make_object_for_output(rr, rev->u.oc.output));
+			di_emit_from_object(
+			    (void *)ext, "output-change",
+			    make_object_for_output(rr, rev->u.oc.output));
 			rr->cts = rev->u.oc.config_timestamp;
 		} else if (rev->subCode == XCB_RANDR_NOTIFY_CRTC_CHANGE)
-			di_emit_signal_v((void *)ext, "view-change",
-			                 make_object_for_view(rr, rev->u.cc.crtc));
+			di_emit_from_object((void *)ext, "view-change",
+			                    make_object_for_view(rr, rev->u.cc.crtc));
 	} else
 		return 1;
 	return 0;
@@ -326,7 +328,7 @@ static inline void rr_select_input(struct di_xorg_randr *rr, uint16_t mask) {
 	auto e = xcb_request_check(
 	    rr->dc->c, xcb_randr_select_input(rr->dc->c, scrn->root, mask));
 
-	di_getm(rr->dc->x->di, log);
+	di_getm(rr->dc->x->di, log, (void)0);
 	if (e)
 		di_log_va(logm, DI_LOG_ERROR, "randr select input failed\n");
 }
@@ -463,11 +465,11 @@ struct di_xorg_ext *di_xorg_new_randr(struct di_xorg_connection *dc) {
 	HASH_ADD_KEYPTR(hh, dc->xext, rr->extname, strlen(rr->extname),
 	                (struct di_xorg_ext *)rr);
 
-	di_rprop(rr, "outputs", rr_outputs);
-	di_rprop(rr, "modes", rr_modes);
+	di_getter(rr, outputs, rr_outputs);
+	di_getter(rr, modes, rr_modes);
 
-	di_register_signal((void *)rr, "output-change", 1, DI_TYPE_OBJECT);
-	di_register_signal((void *)rr, "view-change", 1, DI_TYPE_OBJECT);
+	di_register_signal((void *)rr, "output-change", 1, (di_type_t[]){DI_TYPE_OBJECT});
+	di_register_signal((void *)rr, "view-change", 1, (di_type_t[]){DI_TYPE_OBJECT});
 
 	rr_select_input(rr,
 	                XCB_RANDR_NOTIFY_MASK_OUTPUT_CHANGE |

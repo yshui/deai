@@ -31,6 +31,7 @@ struct di_file_watch {
 
 	struct di_object *fdev;
 	struct di_listener *fdev_listener;
+	struct di_listener *shutdown_listener;
 
 	struct di_file_watch_entry *byname, *bywd;
 };
@@ -118,7 +119,7 @@ static int di_file_rm_watch(struct di_file_watch *fw, const char *path) {
 	return 0;
 }
 
-static void di_file_watch_dtor(struct di_file_watch *fw) {
+static void stop_file_watcher(struct di_file_watch *fw) {
 	close(fw->fd);
 
 	struct di_file_watch_entry *we, *twe;
@@ -129,8 +130,15 @@ static void di_file_watch_dtor(struct di_file_watch *fw) {
 		free(we);
 	}
 
+	di_stop_listener(fw->fdev_listener);
 	di_unref_object((void *)fw->fdev_listener);
+	di_stop_listener(fw->shutdown_listener);
+	di_unref_object((void *)fw->shutdown_listener);
 	di_unref_object(fw->fdev);
+}
+
+static void handle_shutdown(struct di_file_watch *fw, struct deai *di) {
+	stop_file_watcher(fw);
 }
 
 static struct di_object *di_file_new_watch(struct di_file *f, struct di_array paths) {
@@ -147,8 +155,7 @@ static struct di_object *di_file_new_watch(struct di_file *f, struct di_array pa
 	di_method(fw, "add", di_file_add_many_watch, struct di_array);
 	di_method(fw, "add_one", di_file_add_watch, char *);
 	di_method(fw, "remove", di_file_rm_watch, char *);
-
-	fw->dtor = (void *)di_file_watch_dtor;
+	di_method(fw, "stop", stop_file_watcher);
 
 	di_register_signal(
 	    (void *)fw, "moved-from", 3,
@@ -170,8 +177,15 @@ static struct di_object *di_file_new_watch(struct di_file *f, struct di_array pa
 
 	auto cl = di_create_closure(
 	    (void *)di_file_ioev, DI_TYPE_VOID, 1, (di_type_t[]){DI_TYPE_OBJECT},
-	    (const void *[]){&fw}, 1, (di_type_t[]){DI_TYPE_OBJECT});
+	    (const void *[]){&fw}, 1, (di_type_t[]){DI_TYPE_OBJECT}, false);
 	fw->fdev_listener = di_add_listener(fw->fdev, "read", (void *)cl);
+	di_unref_object((void *)cl);
+
+	cl = di_create_closure((void *)handle_shutdown, DI_TYPE_VOID, 1,
+	                       (di_type_t[]){DI_TYPE_OBJECT}, (const void *[]){&fw},
+	                       1, (di_type_t[]){DI_TYPE_OBJECT}, true);
+	fw->shutdown_listener =
+	    di_add_listener((void *)f->di, "shutdown", (void *)cl);
 	di_unref_object((void *)cl);
 
 	const char **arr = paths.arr;
