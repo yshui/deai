@@ -8,6 +8,8 @@
 
 // XXX merge into deai.h
 
+#include <deai/compiler.h>
+
 #include <errno.h>
 #include <stdbool.h>
 #include <stddef.h>
@@ -75,37 +77,44 @@ struct di_member {
 	bool own;
 };
 
-int di_callx(struct di_object *o, const char *name, di_type_t *rt, void **ret, ...);
-int di_rawcallx(struct di_object *o, const char *name, di_type_t *rt, void **ret, ...);
+int di_callx(struct di_object *o, const char *name, di_type_t *rt, void **ret,
+             ...) NONNULL_ALL;
+int di_rawcallx(struct di_object *o, const char *name, di_type_t *rt, void **ret,
+                ...) NONNULL_ALL;
 int di_rawcallxn(struct di_object *o, const char *name, di_type_t *rt, void **ret,
-                 int nargs, const di_type_t *ats, const void *const *args);
+                 int nargs, const di_type_t *ats,
+                 const void *const *args) NONNULL_ALL;
 
-int di_setx(struct di_object *o, const char *prop, di_type_t type, const void *ret);
+int di_setx(struct di_object *o, const char *prop, di_type_t type, const void *ret)
+    NONNULL_ARG(1, 2, 4);
 int di_rawgetx(struct di_object *o, const char *prop, di_type_t *type,
-               const void **ret);
+               const void **ret) NONNULL_ALL;
 int di_rawgetxt(struct di_object *o, const char *prop, di_type_t type,
-                const void **ret);
-int di_getx(struct di_object *o, const char *prop, di_type_t *type, const void **ret);
-int di_getxt(struct di_object *o, const char *prop, di_type_t type, const void **ret);
+                const void **ret) NONNULL_ALL;
+int di_getx(struct di_object *o, const char *prop, di_type_t *type,
+            const void **ret) NONNULL_ALL;
+int di_getxt(struct di_object *o, const char *prop, di_type_t type, const void **ret)
+    NONNULL_ARG(1, 2, 4);
 
-int di_set_type(struct di_object *o, const char *type);
-const char *di_get_type(struct di_object *o);
-bool di_check_type(struct di_object *o, const char *type);
+int di_set_type(struct di_object *o, const char *type) NONNULL_ALL;
+const char *di_get_type(struct di_object *o) NONNULL_ARG(1);
+bool di_check_type(struct di_object *o, const char *type) NONNULL_ALL;
 
 void di_free_object(struct di_object *);
 
 int di_add_address_member(struct di_object *o, const char *name, bool writable,
-                          di_type_t t, void *address);
+                          di_type_t t, void *address) NONNULL_ARG(1, 2, 5);
 int di_add_value_member(struct di_object *o, const char *name, bool writable,
-                        di_type_t t, ...);
-struct di_member *di_find_member(struct di_object *o, const char *name);
+                        di_type_t t, ...) NONNULL_ARG(1, 2);
+struct di_member *
+di_find_member(struct di_object *o, const char *name) NONNULL_ARG(1, 2);
 struct di_object *di_new_object(size_t sz);
 void di_destroy_object(struct di_object *);
-void di_ref_object(struct di_object *);
-void di_unref_object(struct di_object *);
+void di_ref_object(struct di_object *) NONNULL_ALL;
+void di_unref_object(struct di_object *) NONNULL_ALL;
 
 const di_type_t *di_get_signal_arg_types(struct di_signal *sig, int *nargs);
-struct di_object *di_new_error(const char *fmt, ...);
+struct di_object *di_new_error(const char *fmt, ...) NONNULL_ALL;
 void di_free_array(struct di_array);
 void di_free_value(di_type_t, void *);
 void di_copy_value(di_type_t t, void *dest, const void *src);

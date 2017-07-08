@@ -65,9 +65,6 @@ di_rawcallxn(struct di_object *o, const char *name, di_type_t *rt, void **ret,
 
 PUBLIC int
 di_setx(struct di_object *o, const char *name, di_type_t type, const void *val) {
-	if (!name)
-		return -EINVAL;
-
 	auto mem = di_find_member(o, name);
 	int rc;
 	const void *val2;
@@ -122,9 +119,6 @@ di_rawgetx(struct di_object *o, const char *name, di_type_t *type, const void **
 
 PUBLIC int
 di_getx(struct di_object *o, const char *name, di_type_t *type, const void **ret) {
-	if (!name)
-		return -EINVAL;
-
 	int rc = di_rawgetx(o, name, type, ret);
 	if (rc == 0)
 		return 0;
