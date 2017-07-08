@@ -229,6 +229,8 @@ PUBLIC void di_destroy_object(struct di_object *_obj) {
 
 	obj->destroyed = 2;
 
+	// TODO: Send __destroyed signal
+
 	if (obj->dtor)
 		obj->dtor(obj);
 	struct di_member_internal *m = (void *)obj->members;

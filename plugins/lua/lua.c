@@ -14,7 +14,6 @@
 #include <deai/builtin/log.h>
 #include <deai/deai.h>
 #include <deai/helper.h>
-#include <deai/objset.h>
 
 #include "list.h"
 #include "utils.h"
@@ -510,9 +509,6 @@ static int di_lua_add_listener(lua_State *L) {
 	struct di_lua_handler *h =
 	    (void *)lua_type_to_di_object(L, -1, call_lua_function);
 
-	struct di_lua_script *s;
-	di_lua_get_env(L, s);
-
 	auto l = di_add_listener(o, signame, (void *)h);
 	if (IS_ERR(l))
 		return luaL_error(L, "failed to add listener %s",
@@ -607,7 +603,6 @@ static int di_lua_pushany(lua_State *L, const char *name, di_type_t t, const voi
 	int b;
 	lua_Integer i;
 	lua_Number n;
-	struct di_lua_script *s;
 	struct di_array *arr;
 	int step;
 	switch (t) {
@@ -623,7 +618,6 @@ static int di_lua_pushany(lua_State *L, const char *name, di_type_t t, const voi
 	case DI_TYPE_OBJECT:
 		lua_pushliteral(L, DI_LUA_REGISTRY_SCRIPT_OBJECT_KEY);
 		lua_rawget(L, LUA_REGISTRYINDEX);
-		s = lua_touserdata(L, -1);
 		lua_pop(L, 1);
 		di_lua_pushobject(L, name, *(void **)d, di_lua_methods);
 		return 1;

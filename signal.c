@@ -24,16 +24,12 @@ struct di_listener {
 	struct di_object *handler;
 	struct di_signal *signal;
 
-	struct di_object *holder;
-
 	struct list_head siblings;
 };
 
 static void listener_cleanup(struct di_listener *l) {
 	di_unref_object(l->handler);
 
-	if (l->holder)
-		di_call(l->holder, "release", (struct di_object *)l);
 	l->signal = NULL;
 	l->handler = NULL;
 
@@ -69,29 +65,12 @@ PUBLIC struct di_signal *di_new_signal(int nargs, di_type_t *types) {
 	return (void *)sig;
 }
 
-static void di_hold_listener(struct di_object *o, struct di_object *set) {
-	assert(di_check_type(o, "listener"));
-
-	struct di_listener *l = (void *)o;
-	l->holder = set;
-}
-
-static void di_release_listener(struct di_object *o) {
-	assert(di_check_type(o, "listener"));
-
-	struct di_listener *l = (void *)o;
-	l->holder = NULL;
-}
-
 PUBLIC struct di_listener *di_new_listener(void) {
 	struct di_listener *l = di_new_object_with_type(struct di_listener);
 
 	di_add_address_member((void *)l, "handler", true, DI_TYPE_OBJECT, &l->handler);
 
 	di_method(l, "stop", di_stop_listener);
-	di_method(l, "objset_hold", di_hold_listener, struct di_object *);
-	di_method(l, "objset_release", di_release_listener);
-
 	l->dtor = (void *)di_stop_listener;
 
 	ABRT_IF_ERR(di_set_type((void *)l, "listener"));
