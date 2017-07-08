@@ -230,6 +230,7 @@ PUBLIC void di_destroy_object(struct di_object *_obj) {
 	struct di_member_internal *m = (void *)obj->members;
 	while (m) {
 		auto next_m = m->hh.next;
+#if 0
 		if (m->type != DI_TYPE_OBJECT)
 			fprintf(stderr, "removing member %s\n", m->name);
 		else
@@ -237,6 +238,7 @@ PUBLIC void di_destroy_object(struct di_object *_obj) {
 			        *(struct di_object **)m->data
 			            ? (*(struct di_object **)m->data)->ref_count
 			            : -1);
+#endif
 		HASH_DEL(*(struct di_member_internal **)&obj->members, m);
 
 		di_free_value(m->type, m->data);
@@ -325,10 +327,6 @@ static int check_new_member(struct di_object *r, struct di_member_internal *m) {
 		}
 	}
 	return 0;
-}
-
-static struct di_member *di_alloc_member(void) {
-	return (void *)calloc(1, sizeof(struct di_member_internal));
 }
 
 static int di_insert_member(struct di_object *r, struct di_member_internal *m) {

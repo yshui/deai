@@ -343,6 +343,6 @@ int main(int argc, char *argv[]) {
 	free(p->argv);
 #endif
 
-	fprintf(stderr, "%d\n", p->ref_count);
+	// fprintf(stderr, "%d\n", p->ref_count);
 	di_unref_object((void *)p);
 }
