@@ -236,6 +236,7 @@ static int di_lua_checkarray(lua_State *L, int index, di_type_t *elemt) {
 
 	void *ret = di_lua_type_to_di(L, -1, elemt);
 	di_free_value(*elemt, ret);
+	free(ret);
 	// Pop 2 value, top of stack is the key
 	lua_pop(L, 2);
 
@@ -251,6 +252,7 @@ static int di_lua_checkarray(lua_State *L, int index, di_type_t *elemt) {
 		di_type_t t;
 		ret = di_lua_type_to_di(L, -1, &t);
 		di_free_value(t, ret);
+		free(ret);
 		// pop 2 value
 		lua_pop(L, 2);
 		if (t != *elemt) {
