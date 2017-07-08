@@ -24,6 +24,9 @@ cflag_check_and_apply(DI_CFLAGS -fvisibility=hidden)
 cflag_check_and_apply(DI_CFLAGS -fno-strict-aliasing)
 cflag_check_and_apply(DI_CFLAGS -fms-extensions REQUIRED)
 cflag_check_and_apply(DI_CFLAGS -Wno-microsoft-anon-tag)
+cflag_check_and_apply(DI_CFLAGS -Werror=incompatible-pointer-types)
+cflag_check_and_apply(DI_CFLAGS -Werror=int-conversion)
+cflag_check_and_apply(DI_CFLAGS -Werror=implicit)
 cflag_check_and_apply(DI_CFLAGS -Wall)
 
 
