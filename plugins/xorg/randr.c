@@ -249,7 +249,7 @@ static int get_output_max_backlight(struct di_xorg_output *o) {
 }
 
 static void output_dtor(struct di_xorg_output *o) {
-	di_unref_object((void *)&o->rr);
+	di_unref_object((void *)o->rr);
 }
 
 static struct di_object *
@@ -285,7 +285,7 @@ static struct di_array get_view_outputs(struct di_xorg_view *v) {
 }
 
 static void view_dtor(struct di_xorg_view *v) {
-	di_unref_object((void *)&v->rr);
+	di_unref_object((void *)v->rr);
 }
 
 static struct di_object *

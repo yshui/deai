@@ -96,7 +96,7 @@ di_setx(struct di_object *o, const char *name, di_type_t type, const void *val) 
 
 	rc2 = di_rawcallxn(o, "__set", &rtype, &ret, 2,
 	                   (di_type_t[]){DI_TYPE_STRING, type},
-	                   (const void *[]){name, val});
+	                   (const void *[]){&name, val});
 	if (rc2 != -ENOENT)
 		return rc2;
 	return rc;

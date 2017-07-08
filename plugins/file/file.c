@@ -129,12 +129,15 @@ static void stop_file_watcher(struct di_file_watch *fw) {
 		free(we->fname);
 		free(we);
 	}
+	di_unref_object(fw->fdev);
 
+	// listener needs to be the last thing to remove
+	// because unref listeners might cause the object
+	// itself to be unref'd
 	di_stop_listener(fw->fdev_listener);
 	di_unref_object((void *)fw->fdev_listener);
 	di_stop_listener(fw->shutdown_listener);
 	di_unref_object((void *)fw->shutdown_listener);
-	di_unref_object(fw->fdev);
 }
 
 static void handle_shutdown(struct di_file_watch *fw, struct deai *di) {

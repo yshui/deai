@@ -111,10 +111,13 @@ xcb_atom_t di_xorg_intern_atom(struct di_xorg_connection *xc, const char *name,
 }
 
 void di_xorg_free_sub(struct di_xorg_ext *x) {
-	HASH_DEL(x->dc->xext, x);
+	if (x->dc) {
+		HASH_DEL(x->dc->xext, x);
+		di_unref_object((void *)x->dc);
+		x->dc = NULL;
+	}
 	if (x->free)
 		x->free(x);
-	di_unref_object((void *)x->dc);
 }
 
 static void di_xorg_disconnect(struct di_xorg_connection *xc) {
@@ -124,11 +127,6 @@ static void di_xorg_disconnect(struct di_xorg_connection *xc) {
 		di_unref_object((void *)xc);
 		HASH_DEL(xc->xext, ext);
 	}
-
-	di_stop_listener(xc->xcb_fdlistener);
-	di_unref_object((void *)xc->xcb_fdlistener);
-	di_stop_listener(xc->shutdown_listener);
-	di_unref_object((void *)xc->shutdown_listener);
 
 	di_unref_object((void *)xc->xcb_fd);
 	xcb_disconnect(xc->c);
@@ -141,6 +139,11 @@ static void di_xorg_disconnect(struct di_xorg_connection *xc) {
 		free(ae->name);
 		free(ae);
 	}
+
+	di_stop_listener(xc->xcb_fdlistener);
+	di_unref_object((void *)xc->xcb_fdlistener);
+	di_stop_listener(xc->shutdown_listener);
+	di_unref_object((void *)xc->shutdown_listener);
 }
 
 static char *di_xorg_get_resource(struct di_xorg_connection *xc) {
@@ -239,10 +242,9 @@ di_xorg_connect_to(struct di_xorg *x, const char *displayname) {
 	dc->c = c;
 	dc->dflt_scrn = scrn;
 
-	di_call(eventm, "fdevent", dc->xcb_fd, xcb_get_file_descriptor(dc->c),
-	        IOEV_READ);
+	di_callr(eventm, "fdevent", dc->xcb_fd, xcb_get_file_descriptor(dc->c),
+	         IOEV_READ);
 
-	di_ref_object((void *)dc);
 	auto cl = di_create_closure(
 	    (di_fn_t)di_xorg_ioev, DI_TYPE_VOID, 1, (di_type_t[]){DI_TYPE_OBJECT},
 	    (const void *[]){&dc}, 1, (di_type_t[]){DI_TYPE_OBJECT}, false);
@@ -252,9 +254,9 @@ di_xorg_connect_to(struct di_xorg *x, const char *displayname) {
 	cl = di_create_closure((di_fn_t)handle_shutdown, DI_TYPE_VOID, 1,
 	                       (di_type_t[]){DI_TYPE_OBJECT}, (const void *[]){&dc},
 	                       1, (di_type_t[]){DI_TYPE_OBJECT}, true);
-	dc->shutdown_listener = di_add_listener((void *)x->di, "shutdown", (void *)cl);
+	dc->shutdown_listener =
+	    di_add_listener((void *)x->di, "shutdown", (void *)cl);
 	di_unref_object((void *)cl);
-
 
 	di_call(dc->xcb_fd, "start");
 
