@@ -22,6 +22,8 @@ struct deai {
 	int argc;
 	char **argv;
 
+	char **env_copy;
+
 	char *proctitle, *proctitle_end;
 	bool quit;
 };

@@ -131,13 +131,16 @@ static void setproctitle_init(int argc, char **argv, struct deai *p) {
 	for (; environ[envsz]; envsz++)
 		;
 	char **old_env = environ;
-	environ = calloc(envsz + 1, sizeof(void *));
+	environ = calloc(envsz + 1, sizeof(char *));
+	p->env_copy = calloc(envsz+1, sizeof(char *));
 	for (int i = 0; i < envsz; i++) {
 		// fprintf(stderr, "%p %s %p\n", old_env[i], old_env[i],
 		//        old_env[i] + strlen(old_env[i]));
 		environ[i] = strdup(old_env[i]);
+		p->env_copy[i] = environ[i];
 	}
 	environ[envsz] = NULL;
+	p->env_copy[envsz] = NULL;
 
 	// Available space extends until the end of the page
 	uintptr_t end = (uintptr_t)p->proctitle;
@@ -344,5 +347,8 @@ int main(int argc, char *argv[]) {
 #endif
 
 	// fprintf(stderr, "%d\n", p->ref_count);
+	for (int i = 0; p->env_copy[i]; i++)
+		free(p->env_copy[i]);
+	free(p->env_copy);
 	di_unref_object((void *)p);
 }
