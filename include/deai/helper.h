@@ -14,6 +14,8 @@
 #include <stddef.h>
 #include <stdint.h>
 
+struct di_object *di_new_error(const char *fmt, ...);
+
 int di_register_signal(struct di_object *r, const char *name, int nargs,
                        di_type_t *types);
 int di_new_value_with_address(struct di_object *o, const char *name, bool writable,

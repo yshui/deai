@@ -51,7 +51,7 @@ di_rawcallxn(struct di_object *o, const char *name, di_type_t *rt, void **ret,
 	if (rc != 0)
 		return rc;
 
-	auto m = *(struct di_object **)val;
+	auto m = *(struct di_object * _Nonnull *)val;
 	free((void *)val);
 
 	if (!m->call)
@@ -65,7 +65,7 @@ di_rawcallxn(struct di_object *o, const char *name, di_type_t *rt, void **ret,
 
 PUBLIC int
 di_setx(struct di_object *o, const char *name, di_type_t type, const void *val) {
-	auto mem = di_find_member(o, name);
+	auto mem = di_lookup(o, name);
 	int rc;
 	const void *val2;
 	if (mem && mem->writable) {
@@ -104,7 +104,7 @@ di_setx(struct di_object *o, const char *name, di_type_t type, const void *val) 
 
 PUBLIC int
 di_rawgetx(struct di_object *o, const char *name, di_type_t *type, const void **ret) {
-	auto m = di_find_member(o, name);
+	auto m = di_lookup(o, name);
 	if (!m)
 		return -ENOENT;
 

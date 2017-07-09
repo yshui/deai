@@ -11,3 +11,13 @@
 #define NONNULL_ARG(...) __attribute__((nonnull(__VA_ARGS__)))
 #define NONNULL_ALL __attribute__((nonnull))
 #define UNUSED __attribute__((unused))
+
+#ifndef __has_feature
+# define __has_feature(x) 0
+#endif
+
+#if !__has_feature(nullability)
+# define _Nonnull
+# define _Nullable
+# define _Null_unspecified
+#endif

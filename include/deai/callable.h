@@ -9,17 +9,17 @@
 
 #include <stdarg.h>
 
-enum {
-	MAX_NARGS = 128,
+enum { MAX_NARGS = 128,
 };
 
 struct di_closure;
 
-int di_call_objectv(struct di_object *obj, di_type_t *rtype, void **ret, va_list);
-struct di_closure *
-di_create_closure(di_fn_t fn, di_type_t rtype, int ncaptures,
-                  const di_type_t *captypes, const void *const *captures, int nargs,
-                  const di_type_t *argtypes, bool weak_capture);
-int di_add_method(struct di_object *object, const char *name, di_fn_t fn,
-                  di_type_t rtype, int nargs, ...);
-void di_set_this(struct di_object *fn, struct di_object *this);
+int di_call_objectv(struct di_object *_Nonnull obj, di_type_t *_Nonnull rtype,
+                    void *_Nullable *_Nonnull ret, va_list);
+struct di_closure *_Nullable
+di_create_closure(di_fn_t _Nonnull fn, di_type_t rtype, int ncaptures,
+                  const di_type_t *_Nullable captypes,
+                  const void *_Nonnull const *_Nullable captures, int nargs,
+                  const di_type_t *_Nullable argtypes, bool weak_capture);
+int di_add_method(struct di_object *_Nonnull object, const char *_Nonnull name,
+                  di_fn_t _Nonnull fn, di_type_t rtype, int nargs, ...);

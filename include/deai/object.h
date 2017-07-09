@@ -33,22 +33,26 @@ typedef enum di_type {
 	DI_LAST_TYPE
 } di_type_t;
 
-static const char *di_type_name[] = {
+static const char *_Nonnull di_type_name[] = {
     "void",  "bool",    "nint",   "nuint",  "uint",  "int",
     "float", "pointer", "object", "string", "array",
 };
 
+struct di_object;
 typedef void (*di_fn_t)(void);
+typedef int (*di_call_fn_t)(struct di_object *_Nonnull, di_type_t *_Nonnull rt,
+                            void *_Nullable *_Nonnull ret, int nargs,
+                            const di_type_t *_Nullable atypes,
+                            const void *_Nonnull const *_Nullable args);
 
 struct di_signal;
 struct di_listener;
 struct di_callable;
 struct di_object {
-	struct di_member *members;
+	struct di_member *_Nullable members;
 
-	void (*dtor)(struct di_object *);
-	int (*call)(struct di_object *, di_type_t *rt, void **ret, int nargs,
-	            const di_type_t *atypes, const void *const *args);
+	void (*_Nullable dtor)(struct di_object *_Nonnull);
+	di_call_fn_t _Nullable call;
 
 	uint64_t ref_count;
 
@@ -59,67 +63,63 @@ struct di_object {
 
 struct di_array {
 	uint64_t length;
-	void *arr;
+	void *_Nullable arr;
 	uint8_t elem_type;
 };
 
 struct di_module {
 	struct di_object;
-	struct deai *di;
+	struct deai *_Nonnull di;
 	char padding[56];
 };
 
 struct di_member {
-	char *name;
-	void *data;
+	char *_Nonnull name;
+	void *_Nonnull data;
 	di_type_t type;
 	bool writable;
 	bool own;
 };
 
-int di_callx(struct di_object *o, const char *name, di_type_t *rt, void **ret,
-             ...) NONNULL_ALL;
-int di_rawcallx(struct di_object *o, const char *name, di_type_t *rt, void **ret,
-                ...) NONNULL_ALL;
-int di_rawcallxn(struct di_object *o, const char *name, di_type_t *rt, void **ret,
-                 int nargs, const di_type_t *ats,
-                 const void *const *args) NONNULL_ALL;
+int di_callx(struct di_object *_Nonnull o, const char *_Nonnull name,
+             di_type_t *_Nonnull rt, void *_Nullable *_Nonnull ret, ...);
+int di_rawcallx(struct di_object *_Nonnull o, const char *_Nonnull name,
+                di_type_t *_Nonnull rt, void *_Nullable *_Nonnull ret, ...);
+int di_rawcallxn(struct di_object *_Nonnull o, const char *_Nonnull name,
+                 di_type_t *_Nonnull rt, void *_Nullable *_Nonnull ret, int nargs,
+                 const di_type_t *_Nullable ats, const void *_Nonnull const *_Nullable args);
 
-int di_setx(struct di_object *o, const char *prop, di_type_t type, const void *ret)
-    NONNULL_ARG(1, 2, 4);
-int di_rawgetx(struct di_object *o, const char *prop, di_type_t *type,
-               const void **ret) NONNULL_ALL;
-int di_rawgetxt(struct di_object *o, const char *prop, di_type_t type,
-                const void **ret) NONNULL_ALL;
-int di_getx(struct di_object *o, const char *prop, di_type_t *type,
-            const void **ret) NONNULL_ALL;
-int di_getxt(struct di_object *o, const char *prop, di_type_t type, const void **ret)
-    NONNULL_ARG(1, 2, 4);
+int di_setx(struct di_object *_Nonnull o, const char *_Nonnull prop, di_type_t type,
+            const void *_Nonnull val);
+int di_rawgetx(struct di_object *_Nonnull o, const char *_Nonnull prop,
+               di_type_t *_Nonnull type, const void *_Nullable *_Nonnull ret);
+int di_rawgetxt(struct di_object *_Nonnull o, const char *_Nonnull prop,
+                di_type_t type, const void *_Nullable *_Nonnull ret);
+int di_getx(struct di_object *_Nonnull no, const char *_Nonnull prop,
+            di_type_t *_Nonnull type, const void *_Nullable *_Nonnull ret);
+int di_getxt(struct di_object *_Nonnull o, const char *_Nonnull prop, di_type_t type,
+             const void *_Nullable *_Nonnull ret);
 
-int di_set_type(struct di_object *o, const char *type) NONNULL_ALL;
-const char *di_get_type(struct di_object *o) NONNULL_ARG(1);
-bool di_check_type(struct di_object *o, const char *type) NONNULL_ALL;
+int di_set_type(struct di_object *_Nonnull o, const char *_Nonnull type);
+const char *_Nonnull di_get_type(struct di_object *_Nonnull o);
+bool di_check_type(struct di_object *_Nonnull o, const char *_Nonnull type);
 
-void di_free_object(struct di_object *);
+int di_add_address_member(struct di_object *_Nonnull o, const char *_Nonnull name,
+                          bool writable, di_type_t t, void *_Nonnull address);
+int di_add_value_member(struct di_object *_Nonnull o, const char *_Nonnull name,
+                        bool writable, di_type_t t, ...);
+struct di_member *_Nullable di_lookup(struct di_object *_Nonnull o,
+                                      const char *_Nonnull name);
+struct di_object *_Nullable di_new_object(size_t sz);
 
-int di_add_address_member(struct di_object *o, const char *name, bool writable,
-                          di_type_t t, void *address) NONNULL_ARG(1, 2, 5);
-int di_add_value_member(struct di_object *o, const char *name, bool writable,
-                        di_type_t t, ...) NONNULL_ARG(1, 2);
-struct di_member *
-di_find_member(struct di_object *o, const char *name) NONNULL_ARG(1, 2);
-struct di_object *di_new_object(size_t sz);
-void di_destroy_object(struct di_object *);
-void di_ref_object(struct di_object *) NONNULL_ALL;
-void di_unref_object(struct di_object *) NONNULL_ALL;
+void di_disarm_all(struct di_object *_Nonnull);
+void di_destroy_object(struct di_object *_Nonnull);
+void di_ref_object(struct di_object *_Nonnull);
+void di_unref_object(struct di_object *_Nonnull);
 
-const di_type_t *di_get_signal_arg_types(struct di_signal *sig, int *nargs);
-struct di_object *di_new_error(const char *fmt, ...) NONNULL_ALL;
 void di_free_array(struct di_array);
-void di_free_value(di_type_t, void *);
-void di_copy_value(di_type_t t, void *dest, const void *src);
-
-size_t di_min_return_size(size_t);
+void di_free_value(di_type_t, void *_Nonnull);
+void di_copy_value(di_type_t t, void *_Nonnull dest, const void *_Nonnull src);
 
 static inline size_t di_sizeof_type(di_type_t t) {
 	switch (t) {
@@ -141,7 +141,7 @@ static inline size_t di_sizeof_type(di_type_t t) {
 	}
 }
 
-static inline int di_string_to_type(const char *type) {
+static inline int di_string_to_type(const char *_Nonnull type) {
 	for (int i = 0; i < DI_LAST_TYPE; i++)
 		if (strcmp(type, di_type_name[i]) == 0)
 			return i;
