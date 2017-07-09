@@ -231,7 +231,8 @@ int di_emit_from_object(struct di_object *o, const char *name, ...);
 	const char **: NULL, \
 	struct di_object **: NULL, \
 	void **: NULL, \
-	double *: 0.0 \
+	double *: 0.0, \
+	bool *: false \
 	)
 #define gen_args(...) LIST_APPLY(TYPE_INIT, SEP_COMMA, ##__VA_ARGS__)
 

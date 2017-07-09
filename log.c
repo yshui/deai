@@ -35,6 +35,16 @@ static int level_lookup(char *l) {
 	return DI_LOG_DEBUG + 1;
 }
 
+static const char *level_tostring(int log_level) {
+	switch (log_level) {
+	case DI_LOG_DEBUG: return "debug";
+	case DI_LOG_INFO: return "info";
+	case DI_LOG_WARN: return "warn";
+	case DI_LOG_ERROR: return "error";
+	default: return NULL;
+	}
+}
+
 // Function exposed via di_object to be used by any plugins
 static int di_log(struct di_object *o, di_type_t *rt, void **ret, int nargs,
                   const di_type_t *atypes, const void *const *args) {
@@ -74,8 +84,9 @@ struct log_file {
 static int file_target_write(struct log_file *lf, char *log) {
 	auto rc = fputs(log, lf->f);
 	auto len = strlen(log);
-	if (log[len-1] != '\n')
+	if (log[len - 1] != '\n')
 		fputs("\n", lf->f);
+	fflush(lf->f);
 	return rc;
 }
 
@@ -83,8 +94,9 @@ static void file_target_dtor(struct log_file *lf) {
 	fclose(lf->f);
 }
 
-static struct di_object *file_target(struct di_log *l, const char *filename) {
-	FILE *f = fopen(filename, "w");
+static struct di_object *
+file_target(struct di_log *l, const char *filename, bool overwrite) {
+	FILE *f = fopen(filename, overwrite ? "w" : "a");
 	if (!f)
 		return di_new_error("Can't open %s for writing", filename);
 
@@ -109,18 +121,38 @@ di_log_va(struct di_object *o, int log_level, const char *fmt, ...) {
 	return ret;
 }
 
+static char *get_log_level(struct di_log *l) {
+	return strdup(level_tostring(l->log_level));
+}
+
+static int set_log_level(struct di_log *l, char *ll) {
+	int nll = level_lookup(ll);
+	if (nll <= DI_LOG_DEBUG) {
+		l->log_level = nll;
+		return 0;
+	}
+	return -1;
+}
+
+PUBLIC int di_set_log_level(struct di_object *o, int log_level) {
+	if (log_level > DI_LOG_DEBUG)
+		return -1;
+	struct di_log *l = (void *)o;
+	l->log_level = log_level;
+	return 0;
+}
+
 void di_init_log(struct deai *di) {
 	auto l = di_new_module_with_type(struct di_log);
 	if (!l)
 		return;
 	l->log_level = DI_LOG_ERROR;
 
-	di_add_address_member((void *)l, "log_level", true, DI_TYPE_NINT,
-	                      &l->log_level);
 	di_add_address_member((void *)l, "log_target", true, DI_TYPE_OBJECT,
 	                      &l->log_target);
 	l->call = di_log;
-	di_method(l, "file_target", file_target, char *);
-	di_register_module(di, "log", (void *)l);
+	di_method(l, "file_target", file_target, char *, bool);
+	di_getter_setter(l, log_level, get_log_level, set_log_level);
+	    di_register_module(di, "log", (void *)l);
 	di_unref_object((void *)l);
 }

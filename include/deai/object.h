@@ -162,7 +162,8 @@ static inline int di_string_to_type(const char *_Nonnull type) {
 	struct di_object **: DI_TYPE_OBJECT, \
 	void **: DI_TYPE_POINTER, \
 	double *: DI_TYPE_FLOAT, \
-	void *: DI_TYPE_VOID \
+	void *: DI_TYPE_VOID, \
+	bool *: DI_TYPE_BOOL \
 )
 
 #define di_typeof(expr) di_typeid(typeof(expr))
