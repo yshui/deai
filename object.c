@@ -91,12 +91,22 @@ di_setx(struct di_object *o, const char *name, di_type_t type, const void *val) 
 	int rc2 = di_rawcallxn(o, buf, &rtype, &ret, 1, (di_type_t[]){type},
 	                       (const void *[]){val});
 	free(buf);
+	if (rc2 == 0 && rtype != DI_TYPE_VOID) {
+		// Ignore for now
+		di_free_value(rtype, ret);
+		free(ret);
+	}
 	if (rc2 != -ENOENT)
 		return rc2;
 
 	rc2 = di_rawcallxn(o, "__set", &rtype, &ret, 2,
 	                   (di_type_t[]){DI_TYPE_STRING, type},
 	                   (const void *[]){&name, val});
+	if (rc2 == 0 && rtype != DI_TYPE_VOID) {
+		// Ignore for now
+		di_free_value(rtype, ret);
+		free(ret);
+	}
 	if (rc2 != -ENOENT)
 		return rc2;
 	return rc;
