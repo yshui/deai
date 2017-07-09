@@ -36,7 +36,8 @@ static void listener_cleanup(struct di_listener *l) {
 	di_unref_object((void *)l);
 }
 
-static void signal_dtor(struct di_signal_internal *sig) {
+PUBLIC void di_disarm(struct di_signal *_sig) {
+	struct di_signal_internal *sig = (void *)_sig;
 	// Remove all listener
 	if (!list_empty(&sig->listeners) && sig->remove)
 		sig->remove((void *)sig);
@@ -59,8 +60,9 @@ PUBLIC struct di_signal *di_new_signal(int nargs, di_type_t *types) {
 		memcpy(sig->types + 1, types, sizeof(di_type_t) * nargs);
 	sig->types[0] = DI_TYPE_OBJECT;
 
-	sig->dtor = (void *)signal_dtor;
+	sig->dtor = (void *)di_disarm;
 	ABRT_IF_ERR(di_set_type((void *)sig, "signal"));
+	di_method((void *)sig, "disarm", di_disarm);
 
 	return (void *)sig;
 }

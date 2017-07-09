@@ -28,6 +28,8 @@ void di_stop_listener(struct di_listener *l);
 void di_bind_listener(struct di_listener *l, struct di_object *emitter);
 struct di_signal *di_new_signal(int nargs, di_type_t *types);
 
+void di_disarm(struct di_signal *);
+
 int di_emitn(struct di_signal *sig, struct di_object *emitter, const void *const *args);
 int di_emitv(struct di_signal *sig, struct di_object *emitter, va_list ap);
 int di_emit(struct di_signal *sig, struct di_object *emitter, ...);

@@ -144,6 +144,8 @@ static void di_xorg_disconnect(struct di_xorg_connection *xc) {
 	di_unref_object((void *)xc->xcb_fdlistener);
 	di_stop_listener(xc->shutdown_listener);
 	di_unref_object((void *)xc->shutdown_listener);
+
+	di_disarm_all((void *)xc);
 }
 
 static char *di_xorg_get_resource(struct di_xorg_connection *xc) {

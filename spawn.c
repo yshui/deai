@@ -60,6 +60,7 @@ static void chld_handler(EV_P_ ev_child *w, int revents) {
 	close(c->errw.fd);
 	free(c->out);
 	free(c->err);
+	di_disarm_all((void *)c);
 	di_unref_object((void *)c);
 }
 

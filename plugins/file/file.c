@@ -138,6 +138,8 @@ static void stop_file_watcher(struct di_file_watch *fw) {
 	di_unref_object((void *)fw->fdev_listener);
 	di_stop_listener(fw->shutdown_listener);
 	di_unref_object((void *)fw->shutdown_listener);
+
+	di_disarm_all((void *)fw);
 }
 
 static void handle_shutdown(struct di_file_watch *fw, struct deai *di) {

@@ -377,22 +377,20 @@ PUBLIC int di_add_address_member(struct di_object *o, const char *name,
 	return _di_add_member(o, name, writable, false, t, addr);
 }
 
-PUBLIC struct di_member *di_find_member(struct di_object *o, const char *name) {
-	struct di_member_internal *ret = NULL;
+PUBLIC void di_disarm_all(struct di_object *o) {
+	struct di_member_internal *m, *tm;
+	HASH_ITER(hh, M(o->members), m, tm) {
+		if (m->type != DI_TYPE_OBJECT)
+			continue;
+		if (!di_check_type(*(struct di_object **)m->data, "signal"))
+			continue;
+		di_disarm(*(struct di_signal **)m->data);
+	}
+}
 
-	do {
-		ret = NULL;
-		if (o->members != NULL) {
-			unsigned _hf_bkt, _hf_hashv;
-			HASH_FCN(name, strlen(name), ((struct di_member_internal *)o->members)->hh.tbl->num_buckets,
-			         _hf_hashv, _hf_bkt);
-			if (HASH_BLOOM_TEST(((struct di_member_internal *)o->members)->hh.tbl, _hf_hashv) != 0) {
-				HASH_FIND_IN_BKT(((struct di_member_internal *)o->members)->hh.tbl, hh,
-				                 ((struct di_member_internal *)o->members)->hh.tbl->buckets[_hf_bkt],
-				                 name, strlen(name), ret);
-			}
-		}
-	} while (0);
+PUBLIC struct di_member *di_lookup(struct di_object *o, const char *name) {
+	struct di_member_internal *ret = NULL;
+	HASH_FIND_STR(M(o->members), name, ret);
 	return (void *)ret;
 }
 
