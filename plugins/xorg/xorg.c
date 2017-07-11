@@ -16,6 +16,7 @@
 #include "uthash.h"
 #include "utils.h"
 
+#include "key.h"
 #include "randr.h"
 #include "xinput.h"
 #include "xorg.h"
@@ -28,6 +29,46 @@ struct di_atom_entry {
 };
 
 define_trivial_cleanup_t(xcb_generic_error_t);
+
+void di_xorg_free_sub(struct di_xorg_ext *x) {
+	if (x->dc) {
+		if (x->free)
+			x->free(x);
+		HASH_DEL(x->dc->xext, x);
+		di_unref_object((void *)x->dc);
+		x->dc = NULL;
+	}
+	di_clear_listener((void *)x);
+}
+
+static void di_xorg_disconnect(struct di_xorg_connection *xc) {
+	if (!xc->xcb_fd)
+		return;
+
+	di_unref_object((void *)xc->xcb_fd);
+	xc->xcb_fd = NULL;
+
+	// free_sub might need the connection, don't disconnect now
+	struct di_xorg_ext *ext, *text;
+	HASH_ITER(hh, xc->xext, ext, text) {
+		di_xorg_free_sub(ext);
+	}
+	xcb_disconnect(xc->c);
+	xc->x = NULL;
+
+	struct di_atom_entry *ae, *tae;
+	HASH_ITER(hh, xc->a_byatom, ae, tae) {
+		HASH_DEL(xc->a_byatom, ae);
+		HASH_DELETE(hh2, xc->a_byname, ae);
+		free(ae->name);
+		free(ae);
+	}
+
+	di_stop_listener(xc->xcb_fdlistener);
+	di_unref_object((void *)xc->xcb_fdlistener);
+
+	di_clear_listener((void *)xc);
+}
 
 static void di_xorg_ioev(struct di_xorg_connection *dc, struct di_object *fd) {
 	// di_get_log(dc->x->di);
@@ -48,15 +89,8 @@ static void di_xorg_ioev(struct di_xorg_connection *dc, struct di_object *fd) {
 	}
 
 	if (xcb_connection_has_error(dc->c)) {
-		// remove the listeners to prevent busy loop
-		di_unref_object((void *)dc->xcb_fd);
-
-		// don't close the xcb connection just yet
-		// all those destructors still need it even if it's dead
-
-		dc->xcb_fd = NULL;
-
-		di_emit_from_object((void *)dc, "connection-error");
+		di_emit(dc, "connection-error");
+		di_xorg_disconnect(dc);
 	}
 }
 
@@ -110,44 +144,6 @@ xcb_atom_t di_xorg_intern_atom(struct di_xorg_connection *xc, const char *name,
 	return ae->atom;
 }
 
-void di_xorg_free_sub(struct di_xorg_ext *x) {
-	if (x->dc) {
-		HASH_DEL(x->dc->xext, x);
-		di_unref_object((void *)x->dc);
-		x->dc = NULL;
-	}
-	if (x->free)
-		x->free(x);
-}
-
-static void di_xorg_disconnect(struct di_xorg_connection *xc) {
-	struct di_xorg_ext *ext, *text;
-	HASH_ITER(hh, xc->xext, ext, text) {
-		ext->dc = NULL;
-		di_unref_object((void *)xc);
-		HASH_DEL(xc->xext, ext);
-	}
-
-	di_unref_object((void *)xc->xcb_fd);
-	xcb_disconnect(xc->c);
-	xc->x = NULL;
-
-	struct di_atom_entry *ae, *tae;
-	HASH_ITER(hh, xc->a_byatom, ae, tae) {
-		HASH_DEL(xc->a_byatom, ae);
-		HASH_DELETE(hh2, xc->a_byname, ae);
-		free(ae->name);
-		free(ae);
-	}
-
-	di_stop_listener(xc->xcb_fdlistener);
-	di_unref_object((void *)xc->xcb_fdlistener);
-	di_stop_listener(xc->shutdown_listener);
-	di_unref_object((void *)xc->shutdown_listener);
-
-	di_disarm_all((void *)xc);
-}
-
 static char *di_xorg_get_resource(struct di_xorg_connection *xc) {
 	auto scrn = screen_of_display(xc->c, xc->dflt_scrn);
 	auto r = xcb_get_property_reply(
@@ -186,7 +182,10 @@ struct _xext {
 	const char *name;
 	struct di_xorg_ext *(*new)(struct di_xorg_connection *xc);
 } xext_reg[] = {
-    {"xinput", di_xorg_new_xinput}, {"randr", di_xorg_new_randr}, {NULL, NULL},
+    {"xinput", di_xorg_new_xinput},
+    {"randr", di_xorg_new_randr},
+    {"key", di_xorg_new_key},
+    {NULL, NULL},
 };
 
 static struct di_object *
@@ -201,6 +200,10 @@ di_xorg_get_ext(struct di_xorg_connection *xc, const char *name) {
 		if (strcmp(xext_reg[i].name, name) == 0) {
 			auto ext = xext_reg[i].new(xc);
 			ext->dtor = (void *)di_xorg_free_sub;
+
+			HASH_ADD_KEYPTR(hh, xc->xext, ext->extname,
+			                strlen(ext->extname), ext);
+			di_ref_object((void *)xc);
 			return (void *)ext;
 		}
 	return NULL;
@@ -224,10 +227,6 @@ static struct di_object *get_screen(struct di_xorg_connection *dc) {
 	return (void *)ret;
 }
 
-static void handle_shutdown(struct di_xorg_connection *xc, struct deai *di) {
-	di_xorg_disconnect(xc);
-}
-
 static struct di_object *
 di_xorg_connect_to(struct di_xorg *x, const char *displayname) {
 	int scrn;
@@ -247,18 +246,13 @@ di_xorg_connect_to(struct di_xorg *x, const char *displayname) {
 	di_callr(eventm, "fdevent", dc->xcb_fd, xcb_get_file_descriptor(dc->c),
 	         IOEV_READ);
 
-	auto cl = di_create_closure(
-	    (di_fn_t)di_xorg_ioev, DI_TYPE_VOID, 1, (di_type_t[]){DI_TYPE_OBJECT},
-	    (const void *[]){&dc}, 1, (di_type_t[]){DI_TYPE_OBJECT}, false);
-	dc->xcb_fdlistener = di_add_listener(dc->xcb_fd, "read", (void *)cl);
+	struct di_object *odc = (void *)dc;
+	auto cl = di_closure(di_xorg_ioev, true, (odc), struct di_object *);
+	dc->xcb_fdlistener = di_listen_to(dc->xcb_fd, "read", (void *)cl);
 	di_unref_object((void *)cl);
 
-	cl = di_create_closure((di_fn_t)handle_shutdown, DI_TYPE_VOID, 1,
-	                       (di_type_t[]){DI_TYPE_OBJECT}, (const void *[]){&dc},
-	                       1, (di_type_t[]){DI_TYPE_OBJECT}, true);
-	dc->shutdown_listener =
-	    di_add_listener((void *)x->di, "shutdown", (void *)cl);
-	di_unref_object((void *)cl);
+	ABRT_IF_ERR(di_set_detach(dc->xcb_fdlistener,
+	                          (di_detach_fn_t)di_xorg_disconnect, (void *)dc));
 
 	di_call(dc->xcb_fd, "start");
 
@@ -267,8 +261,6 @@ di_xorg_connect_to(struct di_xorg *x, const char *displayname) {
 	di_method(dc, "__set_xrdb", di_xorg_set_resource, char *);
 	di_method(dc, "__get_screen", get_screen);
 	di_method(dc, "disconnect", di_xorg_disconnect);
-
-	di_register_signal((void *)dc, "connection-error", 0, NULL);
 
 	dc->x = x;
 	return (void *)dc;

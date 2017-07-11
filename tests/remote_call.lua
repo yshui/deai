@@ -1,6 +1,6 @@
 obj = {
     func = function()
-        di.log.log("error", "test\n")
+        di.log("error", "test\n")
     end
 }
 

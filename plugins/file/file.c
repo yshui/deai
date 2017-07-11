@@ -31,7 +31,6 @@ struct di_file_watch {
 
 	struct di_object *fdev;
 	struct di_listener *fdev_listener;
-	struct di_listener *shutdown_listener;
 
 	struct di_file_watch_entry *byname, *bywd;
 };
@@ -53,7 +52,7 @@ static int di_file_ioev(struct di_file_watch *o, struct di_object *fd) {
 			continue;
 #define emit(m, name)                                                               \
 	if (ev->mask & m)                                                           \
-	di_emit_from_object((void *)o, name, we->fname, path)
+	di_emit(o, name, we->fname, path)
 		emit(IN_CREATE, "create");
 		emit(IN_ACCESS, "access");
 		emit(IN_ATTRIB, "attrib");
@@ -65,11 +64,9 @@ static int di_file_ioev(struct di_file_watch *o, struct di_object *fd) {
 		emit(IN_MOVE_SELF, "move-self");
 		emit(IN_OPEN, "open");
 		if (ev->mask & IN_MOVED_FROM)
-			di_emit_from_object((void *)o, "moved-from", we->fname, path,
-			                    (uint64_t)ev->cookie);
+			di_emit(o, "moved-from", we->fname, path, ev->cookie);
 		if (ev->mask & IN_MOVED_TO)
-			di_emit_from_object((void *)o, "moved-to", we->fname, path,
-			                    (uint64_t)ev->cookie);
+			di_emit(o, "moved-to", we->fname, path, ev->cookie);
 #undef emit
 		off += sizeof(struct inotify_event) + ev->len;
 		ev = (void *)(evbuf + off);
@@ -120,6 +117,9 @@ static int di_file_rm_watch(struct di_file_watch *fw, const char *path) {
 }
 
 static void stop_file_watcher(struct di_file_watch *fw) {
+	if (!fw->fdev)
+		return;
+
 	close(fw->fd);
 
 	struct di_file_watch_entry *we, *twe;
@@ -130,20 +130,15 @@ static void stop_file_watcher(struct di_file_watch *fw) {
 		free(we);
 	}
 	di_unref_object(fw->fdev);
+	fw->fdev = NULL;
 
 	// listener needs to be the last thing to remove
 	// because unref listeners might cause the object
 	// itself to be unref'd
 	di_stop_listener(fw->fdev_listener);
 	di_unref_object((void *)fw->fdev_listener);
-	di_stop_listener(fw->shutdown_listener);
-	di_unref_object((void *)fw->shutdown_listener);
 
-	di_disarm_all((void *)fw);
-}
-
-static void handle_shutdown(struct di_file_watch *fw, struct deai *di) {
-	stop_file_watcher(fw);
+	di_clear_listener((void *)fw);
 }
 
 static struct di_object *di_file_new_watch(struct di_file *f, struct di_array paths) {
@@ -156,41 +151,19 @@ static struct di_object *di_file_new_watch(struct di_file *f, struct di_array pa
 
 	auto fw = di_new_object_with_type(struct di_file_watch);
 	fw->fd = ifd;
+	fw->dtor = (void *)stop_file_watcher;
 
 	di_method(fw, "add", di_file_add_many_watch, struct di_array);
 	di_method(fw, "add_one", di_file_add_watch, char *);
 	di_method(fw, "remove", di_file_rm_watch, char *);
 	di_method(fw, "stop", stop_file_watcher);
-
-	di_register_signal(
-	    (void *)fw, "moved-from", 3,
-	    (di_type_t[]){DI_TYPE_STRING, DI_TYPE_STRING, DI_TYPE_UINT});
-	di_register_signal(
-	    (void *)fw, "moved-to", 3,
-	    (di_type_t[]){DI_TYPE_STRING, DI_TYPE_STRING, DI_TYPE_UINT});
-#define add_signal(name)                                                            \
-	di_register_signal((void *)fw, name, 2,                                     \
-	                   (di_type_t[]){DI_TYPE_STRING, DI_TYPE_STRING})
-#define add_signals(...) LIST_APPLY(add_signal, SEP_COLON, __VA_ARGS__)
-	add_signals("move-self", "access", "attrib", "close-write", "close-nowrite",
-	            "create", "delete", "delete-self", "modify", "open");
-#undef add_signal
-#undef add_signals
-
 	di_getm(f->di, event, di_new_error("Can't find event module"));
 	di_callr(eventm, "fdevent", fw->fdev, fw->fd, IOEV_READ);
 
-	auto cl = di_create_closure(
-	    (void *)di_file_ioev, DI_TYPE_VOID, 1, (di_type_t[]){DI_TYPE_OBJECT},
-	    (const void *[]){&fw}, 1, (di_type_t[]){DI_TYPE_OBJECT}, false);
-	fw->fdev_listener = di_add_listener(fw->fdev, "read", (void *)cl);
-	di_unref_object((void *)cl);
-
-	cl = di_create_closure((void *)handle_shutdown, DI_TYPE_VOID, 1,
-	                       (di_type_t[]){DI_TYPE_OBJECT}, (const void *[]){&fw},
-	                       1, (di_type_t[]){DI_TYPE_OBJECT}, true);
-	fw->shutdown_listener =
-	    di_add_listener((void *)f->di, "shutdown", (void *)cl);
+	struct di_object *tmpo = (void *)fw;
+	auto cl = di_closure(di_file_ioev, true, (tmpo), struct di_object *);
+	fw->fdev_listener = di_listen_to(fw->fdev, "read", (void *)cl);
+	di_set_detach(fw->fdev_listener, (di_detach_fn_t)stop_file_watcher, (void *)fw);
 	di_unref_object((void *)cl);
 
 	const char **arr = paths.arr;

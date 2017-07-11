@@ -17,43 +17,47 @@
 struct di_ioev {
 	struct di_object;
 	ev_io evh;
+	struct di_listener *shutdown;
 	struct ev_loop *loop;
 };
 
 struct di_timer {
 	struct di_object;
 	ev_timer evt;
+	struct di_listener *shutdown;
 	struct ev_loop *loop;
 };
 
 struct di_periodic {
 	struct di_object;
 	ev_periodic pt;
+	struct di_listener *shutdown;
 	struct ev_loop *loop;
 };
 
 struct di_evmodule {
 	struct di_module;
-	struct ev_loop *loop;
 };
 
 static void di_ioev_callback(EV_P_ ev_io *w, int revents) {
 	auto ev = container_of(w, struct di_ioev, evh);
 	if (revents & EV_READ)
-		di_emit_from_object((void *)ev, "read");
+		di_emit(ev, "read");
 	if (revents & EV_WRITE)
-		di_emit_from_object((void *)ev, "write");
+		di_emit(ev, "write");
 }
 
 static void di_timer_callback(EV_P_ ev_timer *t, int revents) {
 	auto d = container_of(t, struct di_timer, evt);
+	double now = ev_now(EV_A);
 	ev_timer_stop(d->loop, t);
-	di_emit_from_object((void *)d, "elapsed", ev_now(EV_A));
+	di_emit(d, "elapsed", now);
 }
 
 static void di_periodic_callback(EV_P_ ev_periodic *w, int revents) {
 	auto p = container_of(w, struct di_periodic, pt);
-	di_emit_from_object((void *)p, "triggered", ev_now(EV_A));
+	double now = ev_now(EV_A);
+	di_emit(p, "triggered", now);
 }
 
 static void di_start_ioev(struct di_object *obj) {
@@ -63,12 +67,24 @@ static void di_start_ioev(struct di_object *obj) {
 
 static void di_ioev_dtor(struct di_object *obj) {
 	struct di_ioev *ev = (void *)obj;
+	if (ev->shutdown) {
+		di_stop_listener(ev->shutdown);
+		di_unref_object((void *)ev->shutdown);
+		ev->shutdown = NULL;
+	}
 	ev_io_stop(ev->loop, &ev->evh);
+	di_clear_listener(obj);
 }
 
 static void di_timer_dtor(struct di_object *obj) {
 	struct di_timer *ev = (void *)obj;
+	if (ev->shutdown) {
+		di_stop_listener(ev->shutdown);
+		di_unref_object((void *)ev->shutdown);
+		ev->shutdown = NULL;
+	}
 	ev_timer_stop(ev->loop, &ev->evt);
+	di_clear_listener(obj);
 }
 static void di_timer_again(struct di_timer *obj) {
 	ev_timer_again(obj->loop, &obj->evt);
@@ -88,22 +104,20 @@ static struct di_object *di_create_ioev(struct di_object *obj, int fd, int t) {
 		flags |= EV_WRITE;
 
 	ev_io_init(&ret->evh, di_ioev_callback, fd, flags);
-	ret->loop = em->loop;
+	ret->loop = em->di->loop;
+
+	ret->shutdown =
+	    di_listen_to_shutdown((void *)em->di, trivial_shutdown, (void *)ret);
 
 	di_method(ret, "start", di_start_ioev);
 
 	ret->dtor = di_ioev_dtor;
-
-	if (t & IOEV_READ)
-		di_register_signal((void *)ret, "read", 0, NULL);
-	if (t & IOEV_WRITE)
-		di_register_signal((void *)ret, "write", 0, NULL);
 	return (void *)ret;
 }
 static struct di_object *di_create_timer(struct di_object *obj, uint64_t timeout) {
 	struct di_evmodule *em = (void *)obj;
 	auto ret = di_new_object_with_type(struct di_timer);
-	ret->loop = em->loop;
+	ret->loop = em->di->loop;
 
 	ret->dtor = di_timer_dtor;
 	di_method(ret, "start", di_timer_again);
@@ -112,38 +126,49 @@ static struct di_object *di_create_timer(struct di_object *obj, uint64_t timeout
 	// Set the timeout and restart the timer
 	di_method(ret, "__set_timeout", di_timer_set, uint64_t);
 
+	ret->shutdown =
+	    di_listen_to_shutdown((void *)em->di, trivial_shutdown, (void *)ret);
+
 	ev_init(&ret->evt, di_timer_callback);
 	ret->evt.repeat = timeout;
-	di_register_signal((void *)ret, "elapsed", 1, (di_type_t[]){DI_TYPE_FLOAT});
 	return (void *)ret;
 }
-static void di_periodic_dtor(struct di_periodic *p) {
+static void periodic_dtor(struct di_periodic *p) {
+	if (p->shutdown) {
+		di_stop_listener(p->shutdown);
+		di_unref_object((void *)p->shutdown);
+		p->shutdown = NULL;
+	}
 	ev_periodic_stop(p->loop, &p->pt);
+	di_clear_listener((void *)p);
 }
-static void di_periodic_set(struct di_periodic *p, double interval, double offset) {
+static void periodic_set(struct di_periodic *p, double interval, double offset) {
 	ev_periodic_set(&p->pt, offset, interval, NULL);
 	ev_periodic_again(p->loop, &p->pt);
 }
 static struct di_object *
 di_create_periodic(struct di_evmodule *evm, double interval, double offset) {
 	auto ret = di_new_object_with_type(struct di_periodic);
-	ret->loop = evm->loop;
+	ret->loop = evm->di->loop;
 
-	ret->dtor = (void *)di_periodic_dtor;
-	di_method(ret, "set", di_periodic_set, double, double);
+	ret->dtor = (void *)periodic_dtor;
+	di_method(ret, "set", periodic_set, double, double);
 	ev_periodic_init(&ret->pt, di_periodic_callback, offset, interval, NULL);
-	ev_periodic_start(evm->loop, &ret->pt);
-	di_register_signal((void *)ret, "triggered", 1, (di_type_t[]){DI_TYPE_FLOAT});
+	ev_periodic_start(ret->loop, &ret->pt);
+
+	ret->shutdown =
+	    di_listen_to_shutdown((void *)evm->di, trivial_shutdown, (void *)ret);
+
 	return (void *)ret;
 }
 void di_init_event(struct deai *di) {
 	auto em = di_new_module_with_type(struct di_evmodule);
+	em->di = di;
 
 	di_method(em, "fdevent", di_create_ioev, int, int);
 	di_method(em, "timer", di_create_timer, unsigned int);
 	di_method(em, "periodic", di_create_periodic, double, double);
 
-	em->loop = di->loop;
 	di_register_module(di, "event", (void *)em);
 	di_unref_object((void *)em);
 }

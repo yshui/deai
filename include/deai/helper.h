@@ -23,12 +23,9 @@ int di_new_value_with_address(struct di_object *o, const char *name, bool writab
 int di_new_value(struct di_object *o, const char *name, bool writable, di_type_t t,
                  ...);
 int di_gmethod(struct di_object *o, const char *name, di_fn_t fn);
-struct di_listener *
-di_add_listener(struct di_object *o, const char *name, struct di_object *h);
 
-int di_emitn_from_object(struct di_object *o, const char *name,
-                         const void *const *args);
-int di_emit_from_object(struct di_object *o, const char *name, ...);
+#define DTOR(o) ((struct di_object *)o)->dtor
+
 #define RET_IF_ERR(expr)                                                            \
 	do {                                                                        \
 		int ret = (expr);                                                   \
@@ -132,10 +129,27 @@ int di_emit_from_object(struct di_object *o, const char *name, ...);
 
 #define STRINGIFY(x) #x
 
+#define addressof(x) (&(x))
+
 #define di_type_pair(v) di_typeof(v), v,
 #define di_arg_list(...) LIST_APPLY(di_type_pair, SEP_NONE, __VA_ARGS__) DI_LAST_TYPE
 
 #define object_cleanup __attribute__((cleanup(__free_objp)))
+
+#define capture(...)                                                                \
+	VA_ARGS_LENGTH(__VA_ARGS__)                                                 \
+	, (di_type_t[]){LIST_APPLY(di_typeof, SEP_COMMA, __VA_ARGS__)},             \
+	    (const void *[]) {                                                      \
+		LIST_APPLY(addressof, SEP_COMMA, __VA_ARGS__)                       \
+	}
+
+#define capture_types(...) LIST_APPLY_pre(typeof, SEP_COMMA, __VA_ARGS__)
+
+#define di_closure(fn, weak, caps, ...)                                             \
+	di_create_closure(                                                          \
+	    (di_fn_t)fn, di_return_typeid(fn capture_types caps, ##__VA_ARGS__),    \
+	    capture caps, VA_ARGS_LENGTH(__VA_ARGS__),                              \
+	    (di_type_t[]){LIST_APPLY(di_typeid, SEP_COMMA, __VA_ARGS__)}, weak)
 
 #define _di_getm(di, modn, on_err)                                                  \
 	object_cleanup struct di_object *modn##m = NULL;                            \
@@ -193,6 +207,12 @@ int di_emit_from_object(struct di_object *o, const char *name, ...);
 		rc;                                                                 \
 	})
 
+#define di_emit(o, name, ...)                                                       \
+	di_emitn((struct di_object *)o, name, VA_ARGS_LENGTH(__VA_ARGS__) + 1,      \
+	         (di_type_t[]){DI_TYPE_OBJECT,                                      \
+	                       LIST_APPLY(di_typeof, SEP_COMMA, __VA_ARGS__)},      \
+	         (const void *[]){&o, LIST_APPLY(addressof, SEP_COMMA, __VA_ARGS__)})
+
 #define di_field(o, name)                                                           \
 	di_add_address_member((struct di_object *)(o), #name, false,                \
 	                      di_typeof((o)->name), &((o)->name))
@@ -211,14 +231,6 @@ int di_emit_from_object(struct di_object *o, const char *name, ...);
 		} while (0);                                                        \
 		rc;                                                                 \
 	})
-
-#define di_signal_handler(o, name, add, del)                                        \
-	do {                                                                        \
-		di_register_typed_method((struct di_object *)o, (di_fn_t)add,       \
-		                         "__add_listener_" name, DI_TYPE_VOID, 0);  \
-		di_register_typed_method((struct di_object *)o, (di_fn_t)del,       \
-		                         "__del_listener_" name, DI_TYPE_VOID, 0);  \
-	} while (0)
 
 #define TYPE_INIT(type)                                                             \
 	_Generic((type *)0, \
@@ -256,6 +268,31 @@ static inline void __free_objp(struct di_object **p) {
 	if (*p)
 		di_unref_object(*p);
 	*p = NULL;
+}
+
+static void __attribute__((unused))
+trivial_shutdown(struct di_object *o, struct di_object *o2) {
+	o->dtor(o);
+}
+
+static inline struct di_listener *
+di_listen_to_shutdown(struct di_object *o,
+                      void (*fn)(struct di_object *, struct di_object *),
+                      struct di_object *o2) {
+	struct di_closure *cl = di_closure(fn, true, (o2), struct di_object *);
+	struct di_listener *ret = di_listen_to(o, "shutdown", (void *)cl);
+	di_unref_object((void *)cl);
+	return ret;
+}
+
+typedef void (*di_detach_fn_t)(struct di_object *);
+
+static inline int
+di_set_detach(struct di_listener *l, di_detach_fn_t fn, struct di_object *o) {
+	struct di_closure *cl = di_closure(fn, true, (o));
+	int ret = di_add_value_member((void *)l, "__detach", false, DI_TYPE_OBJECT, cl);
+	di_unref_object((void *)cl);
+	return ret;
 }
 
 // TODO maybe

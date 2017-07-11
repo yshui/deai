@@ -50,6 +50,7 @@ struct di_listener;
 struct di_callable;
 struct di_object {
 	struct di_member *_Nullable members;
+	struct di_signal *_Nullable signals;
 
 	void (*_Nullable dtor)(struct di_object *_Nonnull);
 	di_call_fn_t _Nullable call;
@@ -87,7 +88,8 @@ int di_rawcallx(struct di_object *_Nonnull o, const char *_Nonnull name,
                 di_type_t *_Nonnull rt, void *_Nullable *_Nonnull ret, ...);
 int di_rawcallxn(struct di_object *_Nonnull o, const char *_Nonnull name,
                  di_type_t *_Nonnull rt, void *_Nullable *_Nonnull ret, int nargs,
-                 const di_type_t *_Nullable ats, const void *_Nonnull const *_Nullable args);
+                 const di_type_t *_Nullable ats,
+                 const void *_Nonnull const *_Nullable args);
 
 int di_setx(struct di_object *_Nonnull o, const char *_Nonnull prop, di_type_t type,
             const void *_Nonnull val);
@@ -112,7 +114,14 @@ struct di_member *_Nullable di_lookup(struct di_object *_Nonnull o,
                                       const char *_Nonnull name);
 struct di_object *_Nullable di_new_object(size_t sz);
 
-void di_disarm_all(struct di_object *_Nonnull);
+struct di_listener *_Nullable
+di_listen_to(struct di_object *_Nonnull o, const char *_Nonnull name, struct di_object *_Nonnull h);
+int di_stop_listener(struct di_listener *_Nullable);
+int di_emitn(struct di_object *_Nonnull, const char *_Nonnull name, int nargs,
+             const di_type_t *_Nullable, const void *_Nonnull const *_Nullable args);
+
+void di_clear_listener(struct di_object *_Nonnull);
+
 void di_destroy_object(struct di_object *_Nonnull);
 void di_ref_object(struct di_object *_Nonnull);
 void di_unref_object(struct di_object *_Nonnull);
@@ -178,7 +187,7 @@ static inline int di_string_to_type(const char *_Nonnull type) {
 		*retv = v;                                                          \
 	} while (0);
 
-#define DI_ARRAY_NIL ((struct di_array){0, NULL, DI_TYPE_VOID})
+#define DI_ARRAY_NIL ((struct di_array){0, NULL, DI_TYPE_NIL})
 
 #define define_object_cleanup(t)                                                    \
 	static inline void free_##t(struct t **ptr) {                               \

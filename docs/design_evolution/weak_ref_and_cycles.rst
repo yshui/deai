@@ -26,8 +26,8 @@ The (2) reference is necessary, because it keeps the listener alive when there's
 
 So (1) and (2) combined seems to be a **unavoidable cycle**.
 
-How to solve it???
-------------------
+Ideas
+-----
 
 - It's probably fine during normal execution of the program. Object will at least be reachable through the weak reference
 
@@ -36,3 +36,16 @@ How to solve it???
 - So the object needs to handle the "shutdown" signal to clear itself (Should the shutdown handler closure be weak?)
 
 - Problem: this forces all the signal emitters to handle "shutdown" signal. Maybe let the emitter choose if the listener should hold ref of it.
+
+Decision
+--------
+
+1. Remove the object -> member -> signal indirection. Now signals belongs directly to the object. No need to register signals.
+
+2. All objects capable of generation signals, should:
+
+  a) listen on the "shutdown" signal (could be indirectly, if order of freeing is required).
+
+  b) Add a "detach" member to the upstream listener, if the source of signal is from some upstream. This member will be called if the listener is stopped, or cleared by upstream
+
+3. Object should clear its listeners in the shutdown handler/detach

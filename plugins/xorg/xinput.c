@@ -515,11 +515,11 @@ static int handle_xinput_event(struct di_xorg_xinput *xi, xcb_generic_event_t *e
 			// di_log_va(log, DI_LOG_DEBUG, "hierarchy change %u %u\n",
 			// info->deviceid, info->flags);
 			if (info->flags & XCB_INPUT_HIERARCHY_MASK_SLAVE_ADDED)
-				di_emit_from_object((void *)xi, "new-device", obj);
+				di_emit(xi, "new-device", obj);
 			if (info->flags & XCB_INPUT_HIERARCHY_MASK_DEVICE_ENABLED)
-				di_emit_from_object((void *)xi, "device-enabled", obj);
+				di_emit(xi, "device-enabled", obj);
 			if (info->flags & XCB_INPUT_HIERARCHY_MASK_DEVICE_DISABLED)
-				di_emit_from_object((void *)xi, "device-disabled", obj);
+				di_emit(xi, "device-disabled", obj);
 			di_unref_object(obj);
 		}
 	}
@@ -545,20 +545,11 @@ struct di_xorg_ext *di_xorg_new_xinput(struct di_xorg_connection *dc) {
 	xi->extname = "xinput";
 	xi->free = di_xorg_free_xinput;
 
-	HASH_ADD_KEYPTR(hh, dc->xext, xi->extname, strlen(xi->extname),
-	                (struct di_xorg_ext *)xi);
-
-	di_ref_object((void *)dc);
-
 	free(r);
 
 	// TODO: only enable if there are listeners?
 	enable_hierarchy_event(xi);
 
 	di_method(xi, "__get_devices", di_xorg_get_all_devices);
-
-	di_register_signal((void *)xi, "new-device", 1, (di_type_t[]){DI_TYPE_OBJECT});
-	di_register_signal((void *)xi, "device-enabled", 1, (di_type_t[]){DI_TYPE_OBJECT});
-	di_register_signal((void *)xi, "device-disabled", 1, (di_type_t[]){DI_TYPE_OBJECT});
 	return (void *)xi;
 }

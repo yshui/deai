@@ -1,4 +1,4 @@
-a = {ev = di.new_signal("int")}
+a = {}
 
 di.register_module("test_a", a)
 di.test_a.on("ev", function(a, i)

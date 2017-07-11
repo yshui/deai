@@ -10,7 +10,6 @@
 #include <stdlib.h>
 
 #include <deai/object.h>
-#include <deai/signal.h>
 #include <deai/callable.h>
 
 struct deai;

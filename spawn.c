@@ -43,15 +43,15 @@ static void chld_handler(EV_P_ ev_child *w, int revents) {
 	int ec = WEXITSTATUS(w->rstatus);
 	if (!string_buf_is_empty(c->out)) {
 		char *o = string_buf_dump(c->out);
-		di_emit_from_object((void *)c, "stdout_line", o);
+		di_emit(c, "stdout_line", o);
 		free(o);
 	}
 	if (!string_buf_is_empty(c->err)) {
 		char *o = string_buf_dump(c->err);
-		di_emit_from_object((void *)c, "stderr_line", o);
+		di_emit(c, "stderr_line", o);
 		free(o);
 	}
-	di_emit_from_object((void *)c, "exit", ec, sig);
+	di_emit(c, "exit", ec, sig);
 
 	ev_child_stop(EV_A_ & c->w);
 	ev_io_stop(EV_A_ & c->outw);
@@ -60,7 +60,7 @@ static void chld_handler(EV_P_ ev_child *w, int revents) {
 	close(c->errw.fd);
 	free(c->out);
 	free(c->err);
-	di_disarm_all((void *)c);
+	di_clear_listener((void *)c);
 	di_unref_object((void *)c);
 }
 
@@ -78,10 +78,10 @@ output_handler(struct child *c, int fd, struct string_buf *b, const char *ev) {
 				if (!string_buf_is_empty(b)) {
 					string_buf_push(b, pos);
 					out = string_buf_dump(b);
-					di_emit_from_object((void *)c, ev, out);
+					di_emit(c, ev, out);
 					free(out);
 				} else
-					di_emit_from_object((void *)c, ev, pos);
+					di_emit(c, ev, pos);
 				pos = eol + 1;
 			} else {
 				string_buf_lpush(b, pos, len);
@@ -142,13 +142,6 @@ struct di_object *di_spawn_run(struct di_spawn *p, struct di_array argv) {
 	cp->pid = pid;
 	cp->out = string_buf_new();
 	cp->err = string_buf_new();
-
-	di_register_signal((void *)cp, "exit", 2,
-	                   (di_type_t[]){DI_TYPE_NINT, DI_TYPE_NINT});
-	di_register_signal((void *)cp, "stdout_line", 1,
-	                   (di_type_t[]){DI_TYPE_STRING});
-	di_register_signal((void *)cp, "stderr_line", 1,
-	                   (di_type_t[]){DI_TYPE_STRING});
 
 	ev_child_init(&cp->w, chld_handler, pid, 0);
 	ev_child_start(p->di->loop, &cp->w);

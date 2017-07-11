@@ -185,36 +185,9 @@ PUBLIC int di_register_module(struct deai *p, const char *name, struct di_module
 	return di_add_value_member((void *)p, name, false, DI_TYPE_OBJECT, m);
 }
 
-static int new_signal(struct di_object *o, di_type_t *rt, void **ret, int nargs,
-                      const di_type_t *atypes, const void *const *args) {
-	if (nargs < 0 || nargs > MAX_NARGS)
-		return -EINVAL;
-
-	di_type_t *sigtype = alloca(sizeof(di_type_t)*nargs);
-	for (int i = 0; i < nargs; i++) {
-		if (atypes[i] != DI_TYPE_STRING)
-			return -EINVAL;
-		const char *type = *(const char **)args[i];
-		int t = di_string_to_type(type);
-		if (t < 0)
-			return -EINVAL;
-		sigtype[i] = t;
-	}
-
-	*rt = DI_TYPE_OBJECT;
-	struct di_object **res = tmalloc(struct di_object *, 1);
-	*res = (void *)di_new_signal(nargs, sigtype);
-
-	*ret = res;
-	return 0;
-}
-
 int main(int argc, char *argv[]) {
 	struct deai *p = di_new_object_with_type(struct deai);
 	p->loop = EV_DEFAULT;
-
-	// Signal for when deai is shutting down
-	di_register_signal((void *)p, "shutdown", 0, NULL);
 
 	// (1) Initialize builtin modules first
 	di_init_event(p);
@@ -235,8 +208,6 @@ int main(int argc, char *argv[]) {
 	di_method(p, "quit", di_quit);
 	di_method(p, "__set_proctitle", di_set_pr_name, char *);
 	di_method(p, "__get_argv", di_get_argv);
-
-	di_gmethod((void *)p, "new_signal", (void *)new_signal);
 
 	di_add_address_member((void *)p, "proctitle", false, DI_TYPE_STRING_LITERAL,
 	                      &p->proctitle);
@@ -338,7 +309,7 @@ int main(int argc, char *argv[]) {
 		ev_run(p->loop, 0);
 
 	// (5) Exit
-	di_emit_from_object((void *)p, "shutdown");
+	di_emit(p, "shutdown");
 
 #ifdef HAVE_SETPROCTITLE
 	for (int i = 0; i < p->argc; i++)
@@ -350,5 +321,7 @@ int main(int argc, char *argv[]) {
 	for (int i = 0; p->env_copy[i]; i++)
 		free(p->env_copy[i]);
 	free(p->env_copy);
+
+	di_clear_listener((void *)p);
 	di_unref_object((void *)p);
 }

@@ -11,13 +11,12 @@
 #include <sys/mman.h>
 
 #include <deai/callable.h>
+#include <deai/helper.h>
 #include <deai/object.h>
 
 #include "config.h"
 #include "di_internal.h"
 #include "utils.h"
-
-#define PUBLIC __attribute__((visibility("default")))
 
 const void *null_ptr = NULL;
 
@@ -387,17 +386,6 @@ PUBLIC int di_add_address_member(struct di_object *o, const char *name,
 	return _di_add_member(o, name, writable, false, t, addr);
 }
 
-PUBLIC void di_disarm_all(struct di_object *o) {
-	struct di_member_internal *m, *tm;
-	HASH_ITER(hh, M(o->members), m, tm) {
-		if (m->type != DI_TYPE_OBJECT)
-			continue;
-		if (!di_check_type(*(struct di_object **)m->data, "signal"))
-			continue;
-		di_disarm(*(struct di_signal **)m->data);
-	}
-}
-
 PUBLIC struct di_member *di_lookup(struct di_object *o, const char *name) {
 	struct di_member_internal *ret = NULL;
 	HASH_FIND_STR(M(o->members), name, ret);
@@ -448,4 +436,150 @@ PUBLIC void di_copy_value(di_type_t t, void *dst, const void *src) {
 		break;
 	default: memmove(dst, src, di_sizeof_type(t)); break;
 	}
+}
+
+struct di_signal {
+	char *name;
+	int nlisteners;
+	struct di_object *owner;
+	struct list_head listeners;
+	UT_hash_handle hh;
+};
+
+struct di_listener {
+	struct di_object;
+
+	struct di_object *handler;
+	struct di_signal *signal;
+
+	struct list_head siblings;
+};
+
+static struct di_listener *di_new_listener(void) {
+	struct di_listener *l = di_new_object_with_type(struct di_listener);
+
+	// stop_listener should be set as dtor, because if a listener is
+	// alive, it's ref_count is guaranteed to be > 0
+	di_method(l, "stop", di_stop_listener);
+
+	ABRT_IF_ERR(di_set_type((void *)l, "listener"));
+	return l;
+}
+
+PUBLIC struct di_listener *
+di_listen_to(struct di_object *o, const char *name, struct di_object *h) {
+	struct di_signal *sig = NULL;
+	HASH_FIND_STR(o->signals, name, sig);
+	if (!sig) {
+		sig = tmalloc(struct di_signal, 1);
+		sig->name = strdup(name);
+		sig->owner = o;
+
+		di_ref_object((void *)o);
+		INIT_LIST_HEAD(&sig->listeners);
+		HASH_ADD_KEYPTR(hh, o->signals, sig->name, strlen(sig->name), sig);
+		di_call(o, "__new_signal", name);
+	}
+
+	auto l = di_new_listener();
+	l->handler = h;
+	l->signal = sig;
+
+	di_ref_object(h);
+	di_ref_object((void *)l);
+	list_add(&l->siblings, &sig->listeners);
+
+	sig->nlisteners++;
+
+	return l;
+}
+
+/**
+ * Remove all listeners from an object.
+ * @param o the object.
+ */
+PUBLIC void
+di_clear_listener(struct di_object *o) {
+	struct di_signal *sig, *tsig;
+	// Don't let the object die while we are freeing
+	// If we are in the destroy routine, don't do this
+	if (!o->destroyed)
+		di_ref_object((void *)o);
+	HASH_ITER(hh, o->signals, sig, tsig) {
+		di_call(o, "__del_signal", sig->name);
+
+		struct di_listener *l, *nl;
+		list_for_each_entry_safe(l, nl, &sig->listeners, siblings) {
+			list_del(&l->siblings);
+			l->signal = NULL;
+			di_unref_object(l->handler);
+			di_call(l, "__detach");
+			di_unref_object((void *)l);
+		}
+
+		HASH_DEL(o->signals, sig);
+		free(sig->name);
+		free(sig);
+		di_unref_object(o);
+	}
+	if (!o->destroyed)
+		di_unref_object(o);
+}
+
+PUBLIC int di_stop_listener(struct di_listener *l) {
+	if (!l->signal)
+		return -ENOENT;
+
+	list_del(&l->siblings);
+	l->signal->nlisteners--;
+	if (list_empty(&l->signal->listeners)) {
+		di_call(l->signal->owner, "__del_signal", l->signal->name);
+
+		HASH_DEL(l->signal->owner->signals, l->signal);
+		free(l->signal->name);
+		di_unref_object((void *)l->signal->owner);
+		free(l->signal);
+	}
+
+	di_unref_object(l->handler);
+	l->signal = NULL;
+	l->handler = NULL;
+	di_call(l, "__detach");
+	di_unref_object((void *)l);
+	return 0;
+}
+
+PUBLIC int di_emitn(struct di_object *o, const char *name, int nargs,
+                    const di_type_t *atypes, const void *const *args) {
+	if (nargs + 1 > MAX_NARGS)
+		return -E2BIG;
+
+	if (o != *(struct di_object **)args[0] || atypes[0] != DI_TYPE_OBJECT)
+		return -EINVAL;
+
+	assert(nargs == 0 || (atypes != NULL && args != NULL));
+
+	struct di_signal *sig;
+	HASH_FIND_STR(o->signals, name, sig);
+	if (!sig)
+		return 0;
+
+	auto hlds = tmalloc(struct di_object *, sig->nlisteners);
+	int cnt = 0;
+	struct di_listener *l;
+	list_for_each_entry(l, &sig->listeners, siblings) hlds[cnt++] = l->handler;
+	assert(cnt == sig->nlisteners);
+
+	for (int i = 0; i < cnt; i++) {
+		di_type_t rtype;
+		void *ret = NULL;
+		int rc = hlds[i]->call(hlds[i], &rtype, &ret, nargs, atypes, args);
+
+		if (rc == 0) {
+			di_free_value(rtype, ret);
+			free(ret);
+		}
+	}
+	free(hlds);
+	return 0;
 }

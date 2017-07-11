@@ -52,7 +52,6 @@ set(SRC
 	main.c
 	object.c
 	callable.c
-	signal.c
 	event.c
 	log.c
 	helper.c

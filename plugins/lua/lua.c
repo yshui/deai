@@ -174,7 +174,7 @@ static int di_lua_table_to_array(lua_State *L, int index, int nelem, di_type_t e
 	ret->elem_type = elemt;
 
 	size_t sz = di_sizeof_type(elemt);
-	assert(sz != 0);
+	assert(sz != 0 || nelem == 0);
 	ret->arr = calloc(nelem, sz);
 
 	for (int i = 1; i <= nelem; i++) {
@@ -317,6 +317,11 @@ static void di_lua_ref_dtor(struct di_lua_ref *t) {
 		di_unref_object((void *)t->lua_shutdown);
 		t->lua_shutdown = NULL;
 	}
+	di_clear_listener((void *)t);
+}
+
+static void lua_ref_shutdown(struct di_object *t, struct di_object *m) {
+	di_lua_ref_dtor((void *)t);
 }
 
 static int
@@ -372,17 +377,8 @@ _lua_type_to_di_object(lua_State *L, int i, void *call, size_t sz) {
 	o->dtor = (void *)di_lua_ref_dtor;
 	o->call = call;
 
-	// setup shutdown handler, so we can properly free up lua_ref objects
-	// before lua_script object dies. Might happen when e.g. a lua_ref object
-	// is registered as module
-
-	// weak capture to prevent cycle: o -> s -> m -> listener -> cl -> o
-	// also we don't want this listener to prevent o from being freed
-	auto cl = di_create_closure(
-	    (di_fn_t)di_lua_ref_dtor, DI_TYPE_VOID, 1, (di_type_t[]){DI_TYPE_OBJECT},
-	    (const void *[]){&o}, 1, (di_type_t[]){DI_TYPE_OBJECT}, true);
-	o->lua_shutdown = di_add_listener((void *)s->m, "shutdown", (void *)cl);
-	di_unref_object((void *)cl);
+	o->lua_shutdown =
+	    di_listen_to_shutdown((void *)s->m, lua_ref_shutdown, (void *)o);
 
 	return (void *)o;
 }
@@ -424,7 +420,8 @@ static void *di_lua_type_to_di(lua_State *L, int i, di_type_t *t) {
 			goto type_error;
 		ret_arg(i, DI_TYPE_OBJECT, void *, toobjref);
 	case LUA_TTABLE:
-		if ((nelem = di_lua_checkarray(L, i, &elemt)) < 0) {
+		// Empty table should be pushed as object
+		if ((nelem = di_lua_checkarray(L, i, &elemt)) <= 0) {
 			*t = DI_TYPE_OBJECT;
 			ret = malloc(sizeof(struct di_object *));
 			*(void **)ret = lua_type_to_di_object(L, i, NULL);
@@ -511,7 +508,7 @@ static int di_lua_add_listener(lua_State *L) {
 	struct di_lua_handler *h =
 	    (void *)lua_type_to_di_object(L, -1, call_lua_function);
 
-	auto l = di_add_listener(o, signame, (void *)h);
+	auto l = di_listen_to(o, signame, (void *)h);
 	if (IS_ERR(l))
 		return luaL_error(L, "failed to add listener %s",
 		                  strerror(PTR_ERR(l)));
@@ -668,7 +665,7 @@ int di_lua_emit_signal(lua_State *L) {
 	args[0] = &o;
 	atypes[0] = DI_TYPE_OBJECT;
 
-	int ret = di_emitn_from_object(o, signame, args);
+	int ret = di_emitn(o, signame, top, atypes, args);
 
 	di_unref_object(o);
 	for (int i = 1; i < top; i++) {
@@ -759,11 +756,9 @@ static int di_lua_setter(lua_State *L) {
 }
 
 static void di_lua_shutdown(struct di_lua_module *obj, struct deai *di) {
-	di_emit_from_object((void *)obj, "shutdown");
+	di_emit(obj, "shutdown");
+	di_clear_listener((void *)obj);
 	lua_close(obj->L);
-}
-
-static void di_lua_module_dtor(struct di_lua_module *m) {
 }
 
 const char *allowed_os[] = {"time", "difftime", "clock", "tmpname", "date", NULL};
@@ -773,11 +768,8 @@ PUBLIC int di_plugin_init(struct deai *di) {
 
 	di_method(m, "load_script", di_lua_load_script, char *);
 
-	di_register_signal((void *)m, "shutdown", 0, NULL);
-
 	m->L = luaL_newstate();
 	luaL_openlibs(m->L);
-	m->dtor = (void *)di_lua_module_dtor;
 
 	di_lua_pushobject(m->L, "di", (void *)di, di_lua_methods);
 	lua_setglobal(m->L, "di");
@@ -804,7 +796,7 @@ PUBLIC int di_plugin_init(struct deai *di) {
 	    (void *)di_lua_shutdown, DI_TYPE_VOID, 1, (di_type_t[]){DI_TYPE_OBJECT},
 	    (const void *[]){&m}, 1, (di_type_t[]){DI_TYPE_OBJECT}, false);
 
-	auto shutdownl = di_add_listener((void *)di, "shutdown", (void *)fn);
+	auto shutdownl = di_listen_to((void *)di, "shutdown", (void *)fn);
 	di_unref_object((void *)fn);
 	di_unref_object((void *)shutdownl);
 
