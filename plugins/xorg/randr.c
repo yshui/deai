@@ -7,7 +7,7 @@
 #include <deai/builtin/log.h>
 #include <deai/helper.h>
 
-#include "randr.h"
+#include "xorg.h"
 
 #include <assert.h>
 #include <stdio.h>
@@ -472,7 +472,7 @@ static void free_randr(struct di_xorg_ext *x) {
 	rr_select_input((void *)x, 0);
 }
 
-struct di_xorg_ext *di_xorg_new_randr(struct di_xorg_connection *dc) {
+struct di_xorg_ext *new_randr(struct di_xorg_connection *dc) {
 	char *extname = "RANDR";
 	if (!xorg_has_extension(dc->c, extname))
 		return NULL;

@@ -16,9 +16,6 @@
 #include "uthash.h"
 #include "utils.h"
 
-#include "key.h"
-#include "randr.h"
-#include "xinput.h"
 #include "xorg.h"
 
 struct di_atom_entry {
@@ -182,9 +179,9 @@ struct _xext {
 	const char *name;
 	struct di_xorg_ext *(*new)(struct di_xorg_connection *xc);
 } xext_reg[] = {
-    {"xinput", di_xorg_new_xinput},
-    {"randr", di_xorg_new_randr},
-    {"key", di_xorg_new_key},
+    {"xinput", new_xinput},
+    {"randr", new_randr},
+    {"key", new_key},
     {NULL, NULL},
 };
 

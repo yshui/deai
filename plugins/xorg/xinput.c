@@ -14,7 +14,6 @@
 #include <stdio.h>
 #include <xcb/xinput.h>
 
-#include "xinput.h"
 #include "xorg.h"
 
 struct di_xorg_xinput {
@@ -526,7 +525,7 @@ static int handle_xinput_event(struct di_xorg_xinput *xi, xcb_generic_event_t *e
 	return 0;
 }
 
-struct di_xorg_ext *di_xorg_new_xinput(struct di_xorg_connection *dc) {
+struct di_xorg_ext *new_xinput(struct di_xorg_connection *dc) {
 	char *extname = "XInputExtension";
 	if (!xorg_has_extension(dc->c, extname))
 		return NULL;
