@@ -223,8 +223,7 @@ PUBLIC struct di_module *di_new_module(size_t size) {
 
 // Must be called holding external references. i.e.
 // __dtor shouldn't cause the reference count to drop to 0
-PUBLIC void di_destroy_object(struct di_object *_obj) {
-	struct di_object *obj = (void *)_obj;
+static void di_destroy_object(struct di_object *obj) {
 	assert(obj->destroyed != 2);
 
 	if (obj->destroyed)
@@ -233,6 +232,8 @@ PUBLIC void di_destroy_object(struct di_object *_obj) {
 	obj->destroyed = 2;
 
 	// TODO: Send __destroyed signal
+	di_emit(obj, "__destroyed");
+
 
 	if (obj->dtor)
 		obj->dtor(obj);
@@ -466,6 +467,11 @@ static struct di_listener *di_new_listener(void) {
 	return l;
 }
 
+// __destroyed is a special signal, it doesn't hold reference to the object
+// (otherwise the object won't be freed, catch 22), and __new_/__del_ methods
+// are not called for it
+#define is_destroy(n) (strcmp(n, "__destroyed") == 0)
+
 PUBLIC struct di_listener *
 di_listen_to(struct di_object *o, const char *name, struct di_object *h) {
 	struct di_signal *sig = NULL;
@@ -475,10 +481,12 @@ di_listen_to(struct di_object *o, const char *name, struct di_object *h) {
 		sig->name = strdup(name);
 		sig->owner = o;
 
-		di_ref_object((void *)o);
 		INIT_LIST_HEAD(&sig->listeners);
 		HASH_ADD_KEYPTR(hh, o->signals, sig->name, strlen(sig->name), sig);
-		di_call(o, "__new_signal", name);
+		if (!is_destroy(name)) {
+			di_call(o, "__new_signal", name);
+			di_ref_object((void *)o);
+		}
 	}
 
 	auto l = di_new_listener();
@@ -506,7 +514,8 @@ di_clear_listener(struct di_object *o) {
 	if (!o->destroyed)
 		di_ref_object((void *)o);
 	HASH_ITER(hh, o->signals, sig, tsig) {
-		di_call(o, "__del_signal", sig->name);
+		if (!is_destroy(sig->name))
+			di_call(o, "__del_signal", sig->name);
 
 		struct di_listener *l, *nl;
 		list_for_each_entry_safe(l, nl, &sig->listeners, siblings) {
@@ -518,9 +527,10 @@ di_clear_listener(struct di_object *o) {
 		}
 
 		HASH_DEL(o->signals, sig);
+		if (!is_destroy(sig->name))
+			di_unref_object(o);
 		free(sig->name);
 		free(sig);
-		di_unref_object(o);
 	}
 	if (!o->destroyed)
 		di_unref_object(o);
@@ -533,11 +543,12 @@ PUBLIC int di_stop_listener(struct di_listener *l) {
 	list_del(&l->siblings);
 	l->signal->nlisteners--;
 	if (list_empty(&l->signal->listeners)) {
-		di_call(l->signal->owner, "__del_signal", l->signal->name);
-
 		HASH_DEL(l->signal->owner->signals, l->signal);
+		if (!is_destroy(l->signal->name)) {
+			di_call(l->signal->owner, "__del_signal", l->signal->name);
+			di_unref_object((void *)l->signal->owner);
+		}
 		free(l->signal->name);
-		di_unref_object((void *)l->signal->owner);
 		free(l->signal);
 	}
 
@@ -567,8 +578,22 @@ PUBLIC int di_emitn(struct di_object *o, const char *name, int nargs,
 	auto hlds = tmalloc(struct di_object *, sig->nlisteners);
 	int cnt = 0;
 	struct di_listener *l;
-	list_for_each_entry(l, &sig->listeners, siblings) hlds[cnt++] = l->handler;
+
+	// Extra caution needed when emitting __destroyed.
+	list_for_each_entry(l, &sig->listeners, siblings){
+		hlds[cnt++] = l->handler;
+		// 1) hold ref to handler, because we will
+		// clear the listeners.
+		di_ref_object(l->handler);
+	}
 	assert(cnt == sig->nlisteners);
+
+	// 2) keep the object alive, this is useful for
+	// normal signals as well
+	if (!o->destroyed)
+		di_ref_object(o);
+	if (is_destroy(name))
+		di_clear_listener(o);
 
 	for (int i = 0; i < cnt; i++) {
 		di_type_t rtype;
@@ -579,7 +604,12 @@ PUBLIC int di_emitn(struct di_object *o, const char *name, int nargs,
 			di_free_value(rtype, ret);
 			free(ret);
 		}
+		di_unref_object(hlds[i]);
 	}
+	if (!o->destroyed)
+		di_unref_object(o);
 	free(hlds);
 	return 0;
 }
+
+#undef is_destroy

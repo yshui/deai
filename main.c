@@ -98,11 +98,36 @@ int di_chdir(struct di_object *p, const char *dir) {
 	return ret;
 }
 
-void di_quit(struct deai *di) {
-	// This function can be called before ev_run
-	// If so, don't even call ev_run
-	di->quit = true;
+void di_dtor(struct deai *di) {
+	*di->quit = true;
+#ifdef HAVE_SETPROCTITLE
+	for (int i = 0; i < di->argc; i++)
+		free(di->argv[i]);
+	free(di->argv);
+#endif
+
+	// fprintf(stderr, "%d\n", p->ref_count);
+	for (int i = 0; di->env_copy[i]; i++)
+		free(di->env_copy[i]);
+	free(di->env_copy);
 	ev_break(di->loop, EVBREAK_ALL);
+}
+
+struct di_ev_prepare {
+	ev_prepare;
+	struct deai *di;
+};
+
+void di_quit_cb(EV_P_ ev_prepare *w, int revents) {
+	struct di_ev_prepare *evp = (void *)w;
+	di_emit(evp->di, "__destroyed");
+}
+
+void di_prepare_quit(struct deai *di) {
+	auto *evp = tmalloc(struct di_ev_prepare, 1);
+	evp->di = di;
+	ev_prepare_init(evp, di_quit_cb);
+	ev_prepare_start(di->loop, (void *)evp);
 }
 
 struct di_ev_signal {
@@ -132,7 +157,7 @@ static void setproctitle_init(int argc, char **argv, struct deai *p) {
 		;
 	char **old_env = environ;
 	environ = calloc(envsz + 1, sizeof(char *));
-	p->env_copy = calloc(envsz+1, sizeof(char *));
+	p->env_copy = calloc(envsz + 1, sizeof(char *));
 	for (int i = 0; i < envsz; i++) {
 		// fprintf(stderr, "%p %s %p\n", old_env[i], old_env[i],
 		//        old_env[i] + strlen(old_env[i]));
@@ -205,7 +230,13 @@ int main(int argc, char *argv[]) {
 	di_method(p, "register_module", di_register_module, char *,
 	          struct di_object *);
 	di_method(p, "chdir", di_chdir, char *);
-	di_method(p, "quit", di_quit);
+
+	/**
+	 * XXX: Quit method should delay the __destroyed signal until control flow
+	 * gets back to the mainloop. The destruction shouldn't happen on someone
+	 * else's stack frame
+	 */
+	di_method(p, "quit", di_prepare_quit);
 	di_method(p, "__set_proctitle", di_set_pr_name, char *);
 	di_method(p, "__get_argv", di_get_argv);
 
@@ -305,23 +336,11 @@ int main(int argc, char *argv[]) {
 	di_unref_object(mod);
 
 	// (4) Start mainloop
-	if (!p->quit)
-		ev_run(p->loop, 0);
-
-	// (5) Exit
-	di_emit(p, "shutdown");
-
-#ifdef HAVE_SETPROCTITLE
-	for (int i = 0; i < p->argc; i++)
-		free(p->argv[i]);
-	free(p->argv);
-#endif
-
-	// fprintf(stderr, "%d\n", p->ref_count);
-	for (int i = 0; p->env_copy[i]; i++)
-		free(p->env_copy[i]);
-	free(p->env_copy);
-
-	di_clear_listener((void *)p);
+	bool quit = false;
+	p->dtor = (void *)di_dtor;
+	p->quit = &quit;
 	di_unref_object((void *)p);
+	if (!quit)
+		ev_run(p->loop, 0);
+	return 0;
 }

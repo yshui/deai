@@ -276,11 +276,11 @@ trivial_shutdown(struct di_object *o, struct di_object *o2) {
 }
 
 static inline struct di_listener *
-di_listen_to_shutdown(struct di_object *o,
-                      void (*fn)(struct di_object *, struct di_object *),
-                      struct di_object *o2) {
+di_listen_to_destroyed(struct di_object *o,
+                       void (*fn)(struct di_object *, struct di_object *),
+                       struct di_object *o2) {
 	struct di_closure *cl = di_closure(fn, true, (o2), struct di_object *);
-	struct di_listener *ret = di_listen_to(o, "shutdown", (void *)cl);
+	struct di_listener *ret = di_listen_to(o, "__destroyed", (void *)cl);
 	di_unref_object((void *)cl);
 	return ret;
 }
@@ -290,9 +290,20 @@ typedef void (*di_detach_fn_t)(struct di_object *);
 static inline int
 di_set_detach(struct di_listener *l, di_detach_fn_t fn, struct di_object *o) {
 	struct di_closure *cl = di_closure(fn, true, (o));
-	int ret = di_add_value_member((void *)l, "__detach", false, DI_TYPE_OBJECT, cl);
+	int ret =
+	    di_add_value_member((void *)l, "__detach", false, DI_TYPE_OBJECT, cl);
 	di_unref_object((void *)cl);
 	return ret;
+}
+
+static inline void
+di_stop_unref_listenerp(struct di_listener **l) {
+	if (*l) {
+		struct di_listener *tmp = *l;
+		*l = NULL;
+		di_stop_listener(tmp);
+		di_unref_object((void *)tmp);
+	}
 }
 
 // TODO maybe

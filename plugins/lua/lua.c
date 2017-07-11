@@ -53,7 +53,7 @@ struct di_lua_ref {
 	struct di_object;
 	int tref;
 	struct di_lua_script *s;
-	struct di_listener *lua_shutdown;
+	struct di_listener *d;
 };
 
 struct di_lua_handler {
@@ -155,9 +155,9 @@ static struct di_object *di_lua_load_script(struct di_object *obj, const char *p
 	di_lua_xchg_env(m->L, s);
 
 	if (ret != 0) {
-		// destroy the object to remove any listener that
-		// might have been added
-		di_destroy_object((void *)s);
+		// Right now there's no way to revert what this script
+		// have done. (e.g. add listeners). So there's not much
+		// we can do here except unref and return an error object
 		di_unref_object((void *)s);
 
 		// Pop error handling function
@@ -312,16 +312,8 @@ static void di_lua_ref_dtor(struct di_lua_ref *t) {
 		di_unref_object((void *)t->s);
 		t->s = NULL;
 	}
-	if (t->lua_shutdown) {
-		di_stop_listener(t->lua_shutdown);
-		di_unref_object((void *)t->lua_shutdown);
-		t->lua_shutdown = NULL;
-	}
+	di_stop_unref_listenerp(&t->d);
 	di_clear_listener((void *)t);
-}
-
-static void lua_ref_shutdown(struct di_object *t, struct di_object *m) {
-	di_lua_ref_dtor((void *)t);
 }
 
 static int
@@ -376,9 +368,7 @@ _lua_type_to_di_object(lua_State *L, int i, void *call, size_t sz) {
 	di_unref_object((void *)getter);
 	o->dtor = (void *)di_lua_ref_dtor;
 	o->call = call;
-
-	o->lua_shutdown =
-	    di_listen_to_shutdown((void *)s->m, lua_ref_shutdown, (void *)o);
+	o->d = di_listen_to_destroyed((void *)s->m, trivial_shutdown, (void *)o);
 
 	return (void *)o;
 }
@@ -756,12 +746,16 @@ static int di_lua_setter(lua_State *L) {
 }
 
 static void di_lua_shutdown(struct di_lua_module *obj, struct deai *di) {
-	di_emit(obj, "shutdown");
-	di_clear_listener((void *)obj);
+	di_emit(obj, "__destroyed");
 	lua_close(obj->L);
 }
 
 const char *allowed_os[] = {"time", "difftime", "clock", "tmpname", "date", NULL};
+
+// the "di" global variable doesn't care about __gc
+const luaL_Reg di_lua_di_methods[] = {
+    {"__index", di_lua_getter}, {"__newindex", di_lua_setter}, {0, 0},
+};
 
 PUBLIC int di_plugin_init(struct deai *di) {
 	auto m = di_new_module_with_type(struct di_lua_module);
@@ -771,7 +765,9 @@ PUBLIC int di_plugin_init(struct deai *di) {
 	m->L = luaL_newstate();
 	luaL_openlibs(m->L);
 
-	di_lua_pushobject(m->L, "di", (void *)di, di_lua_methods);
+	di_lua_pushobject(m->L, "di", (void *)di, di_lua_di_methods);
+	// Make it a weak ref
+	di_unref_object((void *)di);
 	lua_setglobal(m->L, "di");
 
 	// We have to unref di here, otherwise there will be a ref cycle:
@@ -792,13 +788,9 @@ PUBLIC int di_plugin_init(struct deai *di) {
 
 	di_register_module(di, "lua", (void *)m);
 
-	auto fn = di_create_closure(
-	    (void *)di_lua_shutdown, DI_TYPE_VOID, 1, (di_type_t[]){DI_TYPE_OBJECT},
-	    (const void *[]){&m}, 1, (di_type_t[]){DI_TYPE_OBJECT}, false);
-
-	auto shutdownl = di_listen_to((void *)di, "shutdown", (void *)fn);
-	di_unref_object((void *)fn);
-	di_unref_object((void *)shutdownl);
+	// Needs to trigger gc on __destroyed
+	di_unref_object((void *)di_listen_to_destroyed(
+	    (void *)di, (void *)di_lua_shutdown, (void *)m));
 
 	m->di = di;
 

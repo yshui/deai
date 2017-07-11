@@ -15,6 +15,7 @@
 
 struct di_module_internal;
 
+struct di_ev_prepare;
 struct deai {
 	struct di_object;
 	struct ev_loop *loop;
@@ -25,7 +26,10 @@ struct deai {
 	char **env_copy;
 
 	char *proctitle, *proctitle_end;
-	bool quit;
+
+	// The quit flag can't be stored in struct deai, because it's only set
+	// in deai's dtor, meaning it will be freed right after being set.
+	bool *quit;
 };
 
 struct di_module_internal {
