@@ -56,6 +56,8 @@ void string_buf_clear(struct string_buf *buf) {
 		free(tmp);
 		tmp = next;
 	}
+	buf->head = NULL;
+	buf->tail = &buf->head;
 }
 
 char *string_buf_dump(struct string_buf *buf) {
