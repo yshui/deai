@@ -48,6 +48,16 @@ bool string_buf_is_empty(struct string_buf *buf) {
 	return !buf->head;
 }
 
+void string_buf_clear(struct string_buf *buf) {
+	auto tmp = buf->head;
+	while(tmp) {
+		auto next = tmp->next;
+		free(tmp->str);
+		free(tmp);
+		tmp = next;
+	}
+}
+
 char *string_buf_dump(struct string_buf *buf) {
 	int len = 0;
 

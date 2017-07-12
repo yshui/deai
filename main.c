@@ -120,7 +120,7 @@ struct di_ev_prepare {
 
 void di_quit_cb(EV_P_ ev_prepare *w, int revents) {
 	struct di_ev_prepare *evp = (void *)w;
-	di_emit(evp->di, "__destroyed");
+	di_apoptosis((void *)evp->di);
 }
 
 void di_prepare_quit(struct deai *di) {

@@ -23,3 +23,12 @@ PenaltyBreakString: 5
 PenaltyExcessCharacter: 15
 BreakBeforeBinaryOperators: None
 PenaltyBreakBeforeFirstCallParameter: 3
+IncludeCategories:
+  - Regex:           '<deai/.*\.h>'
+    Priority:        1
+  - Regex:           '<.*\.h>'
+    Priority:        2
+  - Regex:           '".*\.h"'
+    Priority:        3
+SortIncludes: true
+ForEachMacros:   [ list_for_each_entry, list_for_each_entry_safe, HASH_ITER ]

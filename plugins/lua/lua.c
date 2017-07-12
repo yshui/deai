@@ -307,18 +307,21 @@ static int di_lua_table_get(struct di_object *m, di_type_t *rt, void **ret, int 
 }
 
 static void di_lua_ref_dtor(struct di_lua_ref *t) {
+	di_stop_unref_listenerp(&t->d);
 	if (t->s) {
 		luaL_unref(t->s->m->L, LUA_REGISTRYINDEX, t->tref);
 		di_unref_object((void *)t->s);
 		t->s = NULL;
 	}
-	di_stop_unref_listenerp(&t->d);
 	di_clear_listener((void *)t);
 }
 
 static int
 call_lua_function(struct di_lua_ref *ref, di_type_t *rt, void **ret, int nargs,
                   const di_type_t *atypes, const void *const *args) {
+	if (!ref->s)
+		return -EBADF;
+
 	lua_State *L = ref->s->m->L;
 	struct di_lua_script *s = ref->s;
 	// Prevent script object from being freed during pcall
@@ -746,8 +749,9 @@ static int di_lua_setter(lua_State *L) {
 }
 
 static void di_lua_shutdown(struct di_lua_module *obj, struct deai *di) {
-	di_emit(obj, "__destroyed");
-	lua_close(obj->L);
+	lua_State *L = obj->L;
+	di_apoptosis((void *)obj);
+	lua_close(L);
 }
 
 const char *allowed_os[] = {"time", "difftime", "clock", "tmpname", "date", NULL};
@@ -788,7 +792,7 @@ PUBLIC int di_plugin_init(struct deai *di) {
 
 	di_register_module(di, "lua", (void *)m);
 
-	// Needs to trigger gc on __destroyed
+	// Needs to trigger gc on di __destroyed
 	di_unref_object((void *)di_listen_to_destroyed(
 	    (void *)di, (void *)di_lua_shutdown, (void *)m));
 

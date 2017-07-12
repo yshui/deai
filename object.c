@@ -5,15 +5,14 @@
 /* Copyright (c) 2017, Yuxuan Shui <yshuiv7@gmail.com> */
 
 #define _GNU_SOURCE
-#include <assert.h>
-#include <stdarg.h>
-#include <stdio.h>
-#include <sys/mman.h>
 
 #include <deai/callable.h>
 #include <deai/helper.h>
 #include <deai/object.h>
-
+#include <assert.h>
+#include <stdarg.h>
+#include <stdio.h>
+#include <sys/mman.h>
 #include "config.h"
 #include "di_internal.h"
 #include "utils.h"
@@ -207,6 +206,7 @@ PUBLIC struct di_object *di_new_object(size_t sz) {
 
 	struct di_object *obj = calloc(1, sz);
 	obj->ref_count = 1;
+	obj->state = DI_OBJECT_STATE_HEALTHY;
 	return obj;
 }
 
@@ -224,16 +224,14 @@ PUBLIC struct di_module *di_new_module(size_t size) {
 // Must be called holding external references. i.e.
 // __dtor shouldn't cause the reference count to drop to 0
 static void di_destroy_object(struct di_object *obj) {
-	assert(obj->destroyed != 2);
+	assert(obj->state != DI_OBJECT_STATE_DEAD);
 
-	if (obj->destroyed)
-		return;
+	if (obj->state == DI_OBJECT_STATE_HEALTHY) {
+		obj->state = DI_OBJECT_STATE_ORPHANED;
+		di_apoptosis(obj);
+	}
 
-	obj->destroyed = 2;
-
-	// TODO: Send __destroyed signal
-	di_emit(obj, "__destroyed");
-
+	obj->state = DI_OBJECT_STATE_DEAD;
 
 	if (obj->dtor)
 		obj->dtor(obj);
@@ -259,8 +257,6 @@ static void di_destroy_object(struct di_object *obj) {
 		free(m);
 		m = next_m;
 	}
-
-	obj->destroyed = 1;
 }
 
 PUBLIC void di_ref_object(struct di_object *obj) {
@@ -506,19 +502,14 @@ di_listen_to(struct di_object *o, const char *name, struct di_object *h) {
  * Remove all listeners from an object.
  * @param o the object.
  */
-PUBLIC void
-di_clear_listener(struct di_object *o) {
+PUBLIC void di_clear_listener(struct di_object *o) {
 	struct di_signal *sig, *tsig;
-	// Don't let the object die while we are freeing
-	// If we are in the destroy routine, don't do this
-	if (!o->destroyed)
-		di_ref_object((void *)o);
-	HASH_ITER(hh, o->signals, sig, tsig) {
+	HASH_ITER (hh, o->signals, sig, tsig) {
 		if (!is_destroy(sig->name))
 			di_call(o, "__del_signal", sig->name);
 
 		struct di_listener *l, *nl;
-		list_for_each_entry_safe(l, nl, &sig->listeners, siblings) {
+		list_for_each_entry_safe (l, nl, &sig->listeners, siblings) {
 			list_del(&l->siblings);
 			l->signal = NULL;
 			di_unref_object(l->handler);
@@ -532,8 +523,6 @@ di_clear_listener(struct di_object *o) {
 		free(sig->name);
 		free(sig);
 	}
-	if (!o->destroyed)
-		di_unref_object(o);
 }
 
 PUBLIC int di_stop_listener(struct di_listener *l) {
@@ -560,8 +549,8 @@ PUBLIC int di_stop_listener(struct di_listener *l) {
 	return 0;
 }
 
-PUBLIC int di_emitn(struct di_object *o, const char *name, int nargs,
-                    const di_type_t *atypes, const void *const *args) {
+static int di_emitn_internal(struct di_object *o, const char *name, int nargs,
+                             const di_type_t *atypes, const void *const *args) {
 	if (nargs + 1 > MAX_NARGS)
 		return -E2BIG;
 
@@ -579,21 +568,9 @@ PUBLIC int di_emitn(struct di_object *o, const char *name, int nargs,
 	int cnt = 0;
 	struct di_listener *l;
 
-	// Extra caution needed when emitting __destroyed.
-	list_for_each_entry(l, &sig->listeners, siblings){
+	list_for_each_entry (l, &sig->listeners, siblings)
 		hlds[cnt++] = l->handler;
-		// 1) hold ref to handler, because we will
-		// clear the listeners.
-		di_ref_object(l->handler);
-	}
 	assert(cnt == sig->nlisteners);
-
-	// 2) keep the object alive, this is useful for
-	// normal signals as well
-	if (!o->destroyed)
-		di_ref_object(o);
-	if (is_destroy(name))
-		di_clear_listener(o);
 
 	for (int i = 0; i < cnt; i++) {
 		di_type_t rtype;
@@ -604,12 +581,45 @@ PUBLIC int di_emitn(struct di_object *o, const char *name, int nargs,
 			di_free_value(rtype, ret);
 			free(ret);
 		}
-		di_unref_object(hlds[i]);
 	}
-	if (!o->destroyed)
-		di_unref_object(o);
+
 	free(hlds);
 	return 0;
+}
+
+PUBLIC int di_emitn(struct di_object *o, const char *name, int nargs,
+                    const di_type_t *atypes, const void *const *args) {
+	assert(!(o->state & DI_OBJECT_STATE_DEAD));
+	if (o->state != DI_OBJECT_STATE_HEALTHY)
+		return 0;
+	// Prevent di_destroy_object from being called in the middle of an emission.
+	// e.g. One handler might remove all listeners, causing ref_count to drop to
+	// 0.
+	di_ref_object(o);
+	int ret = di_emitn_internal(o, name, nargs, atypes, args);
+	di_unref_object(o);
+	return ret;
+}
+
+PUBLIC void di_apoptosis(struct di_object *obj) {
+	if (obj->state == DI_OBJECT_STATE_APOPTOSIS)
+		return;
+
+	if (obj->state == DI_OBJECT_STATE_HEALTHY) {
+		obj->state = DI_OBJECT_STATE_APOPTOSIS;
+		// Prevent object death before signal emission finishes. Object
+		// death can cause the death of its referees, and some of the handlers
+		// might need those referees to be alive.
+		di_ref_object(obj);
+	} /* else */
+		// apoptosis called by di_destroy_object, obj->state
+		// is already set approperiately.
+
+	di_emitn_internal(obj, "__destroyed", 1, (di_type_t[]){DI_TYPE_OBJECT},
+	                  (const void *[]){&obj});
+	di_clear_listener(obj);
+	if (obj->state == DI_OBJECT_STATE_APOPTOSIS)
+		di_unref_object(obj);
 }
 
 #undef is_destroy

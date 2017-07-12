@@ -33,6 +33,13 @@ typedef enum di_type {
 	DI_LAST_TYPE
 } di_type_t;
 
+enum di_object_state {
+	DI_OBJECT_STATE_HEALTHY,
+	DI_OBJECT_STATE_APOPTOSIS,
+	DI_OBJECT_STATE_ORPHANED,
+	DI_OBJECT_STATE_DEAD,
+};
+
 static const char *_Nonnull di_type_name[] = {
     "void",  "bool",    "nint",   "nuint",  "uint",  "int",
     "float", "pointer", "object", "string", "array",
@@ -56,10 +63,7 @@ struct di_object {
 	di_call_fn_t _Nullable call;
 
 	uint64_t ref_count;
-
-	// If a object is destroyed, it's just a placeholder
-	// waiting for its ref count to drop to 0
-	uint8_t destroyed;        // 1 -> destroyed, 2 -> destroying
+	uint16_t state;
 };
 
 struct di_array {
@@ -119,6 +123,7 @@ di_listen_to(struct di_object *_Nonnull o, const char *_Nonnull name, struct di_
 int di_stop_listener(struct di_listener *_Nullable);
 int di_emitn(struct di_object *_Nonnull, const char *_Nonnull name, int nargs,
              const di_type_t *_Nullable, const void *_Nonnull const *_Nullable args);
+void di_apoptosis(struct di_object *_Nonnull);
 
 void di_clear_listener(struct di_object *_Nonnull);
 

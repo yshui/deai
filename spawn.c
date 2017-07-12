@@ -25,6 +25,8 @@ struct child {
 	ev_io outw, errw;
 
 	struct string_buf *out, *err;
+	struct di_listener *d;
+	struct deai *di;
 };
 
 struct di_spawn {
@@ -33,8 +35,27 @@ struct di_spawn {
 	struct child *children;
 };
 
-static void chld_handler(EV_P_ ev_child *w, int revents) {
+static inline void child_cleanup(EV_P_ struct child *c) {
+	ev_child_stop(EV_A_ & c->w);
+	ev_io_stop(EV_A_ & c->outw);
+	ev_io_stop(EV_A_ & c->errw);
+	close(c->outw.fd);
+	close(c->errw.fd);
+	free(c->out);
+	free(c->err);
+	di_unref_object((void *)c->d);
+	di_clear_listener((void *)c);
+
+	struct deai *di = c->di;
+	di_unref_object((void *)c);
+
+	// It's fine if di's dtor is invoked on this stack frame
+	di_unref_object((void *)di);
+}
+
+static void sigchld_handler(EV_P_ ev_child *w, int revents) {
 	struct child *c = container_of(w, struct child, w);
+	di_stop_listener(c->d);
 
 	int sig = 0;
 	if (WIFSIGNALED(w->rstatus))
@@ -53,15 +74,7 @@ static void chld_handler(EV_P_ ev_child *w, int revents) {
 	}
 	di_emit(c, "exit", ec, sig);
 
-	ev_child_stop(EV_A_ & c->w);
-	ev_io_stop(EV_A_ & c->outw);
-	ev_io_stop(EV_A_ & c->errw);
-	close(c->outw.fd);
-	close(c->errw.fd);
-	free(c->out);
-	free(c->err);
-	di_clear_listener((void *)c);
-	di_unref_object((void *)c);
+	child_cleanup(EV_A_ c);
 }
 
 static void
@@ -89,6 +102,13 @@ output_handler(struct child *c, int fd, struct string_buf *b, const char *ev) {
 			}
 		}
 	}
+}
+
+static void child_destroy(struct child *c, struct deai *di) {
+	kill(c->pid, SIGTERM);
+	string_buf_clear(c->err);
+	string_buf_clear(c->out);
+	child_cleanup(di->loop, c);
 }
 
 static void stdout_cb(EV_P_ ev_io *w, int revents) {
@@ -142,8 +162,9 @@ struct di_object *di_spawn_run(struct di_spawn *p, struct di_array argv) {
 	cp->pid = pid;
 	cp->out = string_buf_new();
 	cp->err = string_buf_new();
+	cp->di = p->di;
 
-	ev_child_init(&cp->w, chld_handler, pid, 0);
+	ev_child_init(&cp->w, sigchld_handler, pid, 0);
 	ev_child_start(p->di->loop, &cp->w);
 
 	ev_io_init(&cp->outw, stdout_cb, opfds[0], EV_READ);
@@ -152,8 +173,12 @@ struct di_object *di_spawn_run(struct di_spawn *p, struct di_array argv) {
 	ev_io_init(&cp->errw, stderr_cb, epfds[0], EV_READ);
 	ev_io_start(p->di->loop, &cp->errw);
 
+	cp->d =
+	    di_listen_to_destroyed((void *)p->di, (void *)child_destroy, (void *)cp);
+
 	// child object can't die before the child process
 	di_ref_object((void *)cp);
+	di_ref_object((void *)cp->di);
 
 	return (void *)cp;
 }
