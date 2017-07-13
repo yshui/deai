@@ -38,7 +38,7 @@ void di_xorg_free_sub(struct di_xorg_ext *x) {
 	di_clear_listener((void *)x);
 }
 
-static void di_xorg_disconnect(struct di_xorg_connection *xc) {
+static void xorg_disconnect(struct di_xorg_connection *xc) {
 	if (!xc->xcb_fd)
 		return;
 
@@ -61,10 +61,8 @@ static void di_xorg_disconnect(struct di_xorg_connection *xc) {
 		free(ae);
 	}
 
-	di_stop_listener(xc->xcb_fdlistener);
 	di_unref_object((void *)xc->xcb_fdlistener);
-
-	di_clear_listener((void *)xc);
+	di_apoptosis((void *)xc);
 }
 
 static void di_xorg_ioev(struct di_xorg_connection *dc, struct di_object *fd) {
@@ -87,7 +85,7 @@ static void di_xorg_ioev(struct di_xorg_connection *dc, struct di_object *fd) {
 
 	if (xcb_connection_has_error(dc->c)) {
 		di_emit(dc, "connection-error");
-		di_xorg_disconnect(dc);
+		xorg_disconnect(dc);
 	}
 }
 
@@ -224,6 +222,10 @@ static struct di_object *get_screen(struct di_xorg_connection *dc) {
 	return (void *)ret;
 }
 
+static void xorg_pre_disconnect(struct di_xorg_connection *xc) {
+	di_stop_listener(xc->xcb_fdlistener);
+}
+
 static struct di_object *
 di_xorg_connect_to(struct di_xorg *x, const char *displayname) {
 	int scrn;
@@ -248,8 +250,10 @@ di_xorg_connect_to(struct di_xorg *x, const char *displayname) {
 	dc->xcb_fdlistener = di_listen_to(dc->xcb_fd, "read", (void *)cl);
 	di_unref_object((void *)cl);
 
+	dc->dtor = (void *)xorg_pre_disconnect;
+
 	ABRT_IF_ERR(di_set_detach(dc->xcb_fdlistener,
-	                          (di_detach_fn_t)di_xorg_disconnect, (void *)dc));
+	                          (di_detach_fn_t)xorg_disconnect, (void *)dc));
 
 	di_call(dc->xcb_fd, "start");
 
@@ -257,7 +261,7 @@ di_xorg_connect_to(struct di_xorg *x, const char *displayname) {
 	di_method(dc, "__get_xrdb", di_xorg_get_resource);
 	di_method(dc, "__set_xrdb", di_xorg_set_resource, char *);
 	di_method(dc, "__get_screen", get_screen);
-	di_method(dc, "disconnect", di_xorg_disconnect);
+	di_method(dc, "disconnect", xorg_pre_disconnect);
 
 	dc->x = x;
 	return (void *)dc;

@@ -271,8 +271,13 @@ static inline void __free_objp(struct di_object **p) {
 }
 
 static void __attribute__((unused))
-trivial_shutdown(struct di_object *o, struct di_object *o2) {
-	o->dtor(o);
+trivial_destroyed_handler(struct di_object *o, struct di_object *o2) {
+	di_apoptosis(o);
+}
+
+static void __attribute__((unused))
+trivial_detach(struct di_object *o) {
+	di_apoptosis(o);
 }
 
 static inline struct di_listener *

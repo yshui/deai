@@ -470,6 +470,9 @@ static struct di_listener *di_new_listener(void) {
 
 PUBLIC struct di_listener *
 di_listen_to(struct di_object *o, const char *name, struct di_object *h) {
+	if (o->state != DI_OBJECT_STATE_HEALTHY)
+		return NULL;
+
 	struct di_signal *sig = NULL;
 	HASH_FIND_STR(o->signals, name, sig);
 	if (!sig) {
@@ -564,26 +567,38 @@ static int di_emitn_internal(struct di_object *o, const char *name, int nargs,
 	if (!sig)
 		return 0;
 
-	auto hlds = tmalloc(struct di_object *, sig->nlisteners);
 	int cnt = 0;
-	struct di_listener *l;
+	struct di_listener *l, **all_l = tmalloc(struct di_listener *, sig->nlisteners);
 
-	list_for_each_entry (l, &sig->listeners, siblings)
-		hlds[cnt++] = l->handler;
+	// Allow listeners to be removed during emission
+	// One usecase: There're two object, A, B, where A -> B.
+	// Both A and B listen to a signal. In A's handler, A unref B,
+	// causing it to be freed. B's dtor could then remove the listener
+	list_for_each_entry (l, &sig->listeners, siblings) {
+		all_l[cnt++] = l;
+		di_ref_object((void *)l);
+	}
+
 	assert(cnt == sig->nlisteners);
 
 	for (int i = 0; i < cnt; i++) {
+		__label__ next;
+		l = all_l[i];
+		if (!l->handler)
+			// Listener stopped
+			goto next;
 		di_type_t rtype;
 		void *ret = NULL;
-		int rc = hlds[i]->call(hlds[i], &rtype, &ret, nargs, atypes, args);
+		int rc = l->handler->call(l->handler, &rtype, &ret, nargs, atypes, args);
 
 		if (rc == 0) {
 			di_free_value(rtype, ret);
 			free(ret);
 		}
+	next:
+		di_unref_object((void *)l);
 	}
-
-	free(hlds);
+	free(all_l);
 	return 0;
 }
 
@@ -602,18 +617,20 @@ PUBLIC int di_emitn(struct di_object *o, const char *name, int nargs,
 }
 
 PUBLIC void di_apoptosis(struct di_object *obj) {
-	if (obj->state == DI_OBJECT_STATE_APOPTOSIS)
+	if (obj->state == DI_OBJECT_STATE_APOPTOSIS ||
+	    obj->state == DI_OBJECT_STATE_DEAD)
 		return;
 
 	if (obj->state == DI_OBJECT_STATE_HEALTHY) {
 		obj->state = DI_OBJECT_STATE_APOPTOSIS;
 		// Prevent object death before signal emission finishes. Object
-		// death can cause the death of its referees, and some of the handlers
+		// death can cause the death of its referees, and some of the
+		// handlers
 		// might need those referees to be alive.
 		di_ref_object(obj);
 	} /* else */
-		// apoptosis called by di_destroy_object, obj->state
-		// is already set approperiately.
+	  // apoptosis called by di_destroy_object, obj->state
+	  // is already set approperiately.
 
 	di_emitn_internal(obj, "__destroyed", 1, (di_type_t[]){DI_TYPE_OBJECT},
 	                  (const void *[]){&obj});
