@@ -31,8 +31,10 @@ static inline int integer_conversion(di_type_t inty, const void *inp,
 	case di_typeof((srct)0):                                                    \
 		do {                                                                \
 			srct tmp = *(srct *)(inp);                                  \
-			if (tmp > (dstmax) || tmp < (dstmin))                       \
+			if (tmp > (dstmax) || tmp < (dstmin)) {                     \
+				*outp = NULL;                                       \
 				return -ERANGE;                                     \
+			}                                                           \
 			dstt *tmp2 = malloc(sizeof(dstt));                          \
 			*tmp2 = (dstt)tmp;                                          \
 			*outp = tmp2;                                               \
@@ -44,7 +46,7 @@ static inline int integer_conversion(di_type_t inty, const void *inp,
 		convert_case(s1, __VA_ARGS__);                                      \
 		convert_case(s2, __VA_ARGS__);                                      \
 		convert_case(s3, __VA_ARGS__);                                      \
-	default: return -EINVAL;                                                    \
+	default: *outp = NULL; return -EINVAL;                                      \
 	}
 
 #pragma GCC diagnostic push
@@ -64,7 +66,7 @@ static inline int integer_conversion(di_type_t inty, const void *inp,
 	case DI_TYPE_NUINT:
 		convert_switch(int, int64_t, uint64_t, unsigned int, UINT_MAX, 0);
 		break;
-	default: return -EINVAL;
+	default: *outp = NULL; return -EINVAL;
 	}
 #pragma GCC diagnostic pop
 
@@ -104,7 +106,10 @@ static inline int di_type_conversion(di_type_t inty, const void *inp,
 				convert_case(int);
 				convert_case(uint64_t);
 				convert_case(int64_t);
-			default: return -EINVAL;
+			default:
+				free(res);
+				*outp = NULL;
+				return -EINVAL;
 			}
 #undef convert_case
 			*outp = res;
@@ -113,6 +118,7 @@ static inline int di_type_conversion(di_type_t inty, const void *inp,
 	}
 
 	// float -> integer not allowed
+	*outp = NULL;
 	return -EINVAL;
 }
 

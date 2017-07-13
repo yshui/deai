@@ -79,9 +79,10 @@ _di_typed_trampoline(ffi_cif *cif, di_fn_t fn, void *ret, const di_type_t *fnats
 					arr->elem_type = DI_TYPE_NIL;
 					xargs[i] = arr;
 					break;
-				default: rc = -EINVAL; goto out;
+				default: rc = -EINVAL; xargs[i] = NULL; goto out;
 				}
 			} else {
+				xargs[i] = NULL;
 				rc = -EINVAL;
 				goto out;
 			}
