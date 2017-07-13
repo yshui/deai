@@ -217,6 +217,7 @@ static void free_method(struct di_typed_method *tm) {
 
 PUBLIC int di_add_method(struct di_object *o, const char *name, di_fn_t fn,
                          di_type_t rtype, int nargs, ...) {
+	// TODO: convert to use closure
 	if (nargs < 0 || nargs + 1 > MAX_NARGS)
 		return -EINVAL;
 

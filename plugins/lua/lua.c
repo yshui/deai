@@ -427,10 +427,10 @@ static struct di_object *di_lua_load_script(struct di_object *obj, const char *p
 		// Right now there's no way to revert what this script
 		// have done. (e.g. add listeners). So there's not much
 		// we can do here except unref and return an error object
-		di_unref_object((void *)s);
 
 		// Pop error handling function
 		lua_pop(m->L->L, 1);
+		di_unref_object((void *)s);
 		return di_new_error("Failed to run the lua script");
 	}
 	return (void *)s;
