@@ -272,7 +272,7 @@ err:
 	if (argi > 0)
 		return luaL_argerror(L, argi, "Unhandled lua type");
 	else if (argi != 0)
-		return luaL_error(L, "Failed to call function %s %d %s", name, argi,
+		return luaL_error(L, "Failed to call function \"%s\": %d %s", name, argi,
 		                  strerror(-nret));
 	else
 		return nret;
@@ -280,7 +280,7 @@ err:
 
 static int di_lua_method_handler(lua_State *L) {
 	struct di_object *m = lua_touserdata(L, lua_upvalueindex(1));
-	const char *name = lua_touserdata(L, lua_upvalueindex(2));
+	const char *name = lua_tostring(L, lua_upvalueindex(2));
 	return _di_lua_method_handler(L, name, m);
 }
 
