@@ -62,6 +62,7 @@ static void xorg_disconnect(struct di_xorg_connection *xc) {
 	}
 
 	di_unref_object((void *)xc->xcb_fdlistener);
+	xc->xcb_fdlistener = NULL;
 	di_apoptosis((void *)xc);
 }
 
@@ -223,7 +224,8 @@ static struct di_object *get_screen(struct di_xorg_connection *dc) {
 }
 
 static void xorg_pre_disconnect(struct di_xorg_connection *xc) {
-	di_stop_listener(xc->xcb_fdlistener);
+	if (xc->xcb_fdlistener)
+		di_stop_listener(xc->xcb_fdlistener);
 }
 
 static struct di_object *
