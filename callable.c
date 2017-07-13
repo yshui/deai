@@ -70,20 +70,20 @@ _di_typed_trampoline(ffi_cif *cif, di_fn_t fn, void *ret, const di_type_t *fnats
 			if (ats[i - nargs0] == DI_TYPE_NIL) {
 				struct di_array *arr;
 				switch (fnats[i - nargs0]) {
-				case DI_TYPE_OBJECT: xargs[i] = &null_ptr; break;
+				case DI_TYPE_OBJECT: rc = 0; xargs[i] = &null_ptr; break;
 				case DI_TYPE_STRING:
-				case DI_TYPE_POINTER: xargs[i] = &null_ptr; break;
+				case DI_TYPE_POINTER: rc = 0; xargs[i] = &null_ptr; break;
 				case DI_TYPE_ARRAY:
 					arr = tmalloc(struct di_array, 1);
 					arr->length = 0;
 					arr->elem_type = DI_TYPE_NIL;
 					xargs[i] = arr;
+					rc = 0;
 					break;
-				default: rc = -EINVAL; xargs[i] = NULL; goto out;
+				default: xargs[i] = NULL; goto out;
 				}
 			} else {
 				xargs[i] = NULL;
-				rc = -EINVAL;
 				goto out;
 			}
 		}
