@@ -24,7 +24,7 @@ struct xorg_key {
 struct keybinding {
 	struct di_object;
 
-	xcb_keysym_t keysym;
+	xcb_keysym_t keysym; // really needed?
 	xcb_keycode_t *keycodes;
 	uint16_t modifiers;
 	struct xorg_key *k;
@@ -72,6 +72,36 @@ static void binding_dtor(struct keybinding *kb) {
 	di_apoptosis((void *)kb);
 }
 
+static int refresh_binding(struct keybinding *kb) {
+	if (kb->keycodes) {
+		ungrab(kb);
+		kb->keycodes = NULL;
+		free(kb->keycodes);
+	}
+
+	auto kc = xcb_key_symbols_get_keycode(kb->k->keysyms, kb->keysym);
+	if (kc == NULL)
+		return -1;
+
+	kb->keycodes = kc;
+
+	auto dc = kb->k->dc;
+	auto s = screen_of_display(dc->c, dc->dflt_scrn);
+	for (int i = 0; kb->keycodes[i] != XCB_NO_SYMBOL; i++) {
+		auto err = xcb_request_check(
+		    dc->c, xcb_grab_key_checked(
+		                  dc->c, true, s->root, kb->modifiers, kb->keycodes[i],
+		                  XCB_GRAB_MODE_ASYNC, XCB_GRAB_MODE_SYNC));
+		if (err) {
+			di_getmi(dc->x->di, log);
+			if (logm)
+				di_log_va(logm, DI_LOG_ERROR, "Cannot grab");
+			free(err);
+		}
+	}
+	return 0;
+}
+
 struct di_object *
 new_binding(struct xorg_key *k, struct di_array modifiers, char *key, bool replay) {
 	if (!k->dc)
@@ -93,13 +123,10 @@ new_binding(struct xorg_key *k, struct di_array modifiers, char *key, bool repla
 		mod |= tmp;
 	}
 
-	auto kc = xcb_key_symbols_get_keycode(k->keysyms, ks);
-	if (kc == NULL)
 		return di_new_error("No keycodes found");
 
 	auto kb = di_new_object_with_type(struct keybinding);
 	kb->modifiers = mod;
-	kb->keycodes = kc;
 	kb->keysym = ks;
 	kb->dtor = (void *)binding_dtor;
 	kb->k = k;
@@ -107,21 +134,13 @@ new_binding(struct xorg_key *k, struct di_array modifiers, char *key, bool repla
 	di_ref_object((void *)k);
 	list_add(&kb->siblings, &k->bindings);
 
-	di_method(kb, "stop", binding_dtor);
-
-	auto s = screen_of_display(k->dc->c, k->dc->dflt_scrn);
-	for (int i = 0; kb->keycodes[i] != XCB_NO_SYMBOL; i++) {
-		auto err = xcb_request_check(
-		    k->dc->c, xcb_grab_key_checked(
-		                  k->dc->c, true, s->root, mod, kb->keycodes[i],
-		                  XCB_GRAB_MODE_ASYNC, XCB_GRAB_MODE_SYNC));
-		if (err) {
-			di_getmi(k->dc->x->di, log);
-			if (logm)
-				di_log_va(logm, DI_LOG_ERROR, "Cannot grab");
-			free(err);
-		}
+	int ret = refresh_binding(kb);
+	if (ret != 0) {
+		di_unref_object((void *)kb);
+		return di_new_error("Failed to setup key grab");
 	}
+
+	di_method(kb, "stop", binding_dtor);
 	return (void *)kb;
 }
 
@@ -152,6 +171,7 @@ static int handle_key(struct di_xorg_ext *ext, xcb_generic_event_t *ev) {
 	xcb_keycode_t kc;
 	uint16_t mod;
 	const char *event;
+	struct xorg_key *k = (void *)ext;
 	switch (ev->response_type) {
 	case XCB_KEY_PRESS:;
 		xcb_key_press_event_t *pe = (void *)ev;
@@ -170,10 +190,22 @@ static int handle_key(struct di_xorg_ext *ext, xcb_generic_event_t *ev) {
 		mod = re->state & ~mod_from_keycode(ext->dc, kc);
 		event = "released";
 		break;
+	case XCB_MAPPING_NOTIFY:;
+		xcb_mapping_notify_event_t *me = (void *)ev;
+		if (me->request == XCB_MAPPING_POINTER)
+			return 1;
+		if (xcb_refresh_keyboard_mapping(k->keysyms, me) == 1) {
+			struct keybinding *kb;
+			list_for_each_entry(kb, &k->bindings, siblings) {
+				int ret = refresh_binding(kb);
+				if (ret != 0)
+					binding_dtor(kb);
+			}
+		}
+		return 1;
 	default: return 1;
 	}
 
-	struct xorg_key *k = (void *)ext;
 	struct keybinding *kb, *nkb;
 	list_for_each_entry(kb, &k->bindings, siblings)
 		di_ref_object((void *)kb);
