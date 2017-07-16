@@ -123,8 +123,6 @@ new_binding(struct xorg_key *k, struct di_array modifiers, char *key, bool repla
 		mod |= tmp;
 	}
 
-		return di_new_error("No keycodes found");
-
 	auto kb = di_new_object_with_type(struct keybinding);
 	kb->modifiers = mod;
 	kb->keysym = ks;
