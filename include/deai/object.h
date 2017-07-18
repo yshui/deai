@@ -127,7 +127,6 @@ void di_apoptosis(struct di_object *_Nonnull);
 
 void di_clear_listener(struct di_object *_Nonnull);
 
-void di_destroy_object(struct di_object *_Nonnull);
 void di_ref_object(struct di_object *_Nonnull);
 void di_unref_object(struct di_object *_Nonnull);
 

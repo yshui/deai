@@ -124,7 +124,7 @@ void di_quit_cb(EV_P_ ev_prepare *w, int revents) {
 }
 
 void di_prepare_quit(struct deai *di) {
-	auto *evp = tmalloc(struct di_ev_prepare, 1);
+	auto evp = tmalloc(struct di_ev_prepare, 1);
 	evp->di = di;
 	ev_prepare_init(evp, di_quit_cb);
 	ev_prepare_start(di->loop, (void *)evp);
