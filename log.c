@@ -106,7 +106,6 @@ file_target(struct di_log *l, const char *filename, bool overwrite) {
 		fclose(f);
 		return di_new_error("Can't get the file descriptor");
 	}
-	fprintf(stderr, "setting cloexec\n");
 	int ret = fcntl(fd, F_SETFD, fcntl(fd, F_GETFD) | FD_CLOEXEC);
 	if (ret < 0) {
 		fclose(f);
