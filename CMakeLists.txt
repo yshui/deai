@@ -63,7 +63,7 @@ set(SRC
 add_executable(deai ${SRC})
 #cflag_check_and_apply(DI_CFLAGS -fplan9-extensions)
 
-target_include_directories(deai PUBLIC "include")
+target_include_directories(deai PUBLIC "include" ${CMAKE_BINARY_DIR})
 pkg_check_modules(LIBFFI libffi>=3.0 REQUIRED)
 target_link_libraries(deai ${LIBFFI_LIBRARIES} ${UNW_LIBRARIES})
 target_include_directories(deai PRIVATE ${LIBFFI_INCLUDE_DIRS} ${UNW_INCLUDE_DIRS})
