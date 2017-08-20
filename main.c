@@ -228,9 +228,20 @@ int di_exec(struct deai *p, struct di_array argv) {
 	return -1;
 }
 
+// Terminate self and all children.
+//
+// This is a best effort attempt, some of the children might have moved to different
+// process group.
+void di_terminate(struct deai *p) {
+	kill(0, SIGTERM);
+}
+
 int main(int argc, char *argv[]) {
 	struct deai *p = di_new_object_with_type(struct deai);
 	p->loop = EV_DEFAULT;
+
+	// We want to be our own process group leader
+	setpgid(0, 0);
 
 	// (1) Initialize builtin modules first
 	di_init_event(p);
@@ -256,6 +267,7 @@ int main(int argc, char *argv[]) {
 	 * else's stack frame
 	 */
 	di_method(p, "quit", di_prepare_quit);
+	di_method(p, "terminate", di_terminate);
 	di_method(p, "__set_proctitle", di_set_pr_name, char *);
 	di_method(p, "__get_argv", di_get_argv);
 
@@ -361,5 +373,6 @@ int main(int argc, char *argv[]) {
 	di_unref_object((void *)p);
 	if (!quit)
 		ev_run(p->loop, 0);
+
 	return 0;
 }
