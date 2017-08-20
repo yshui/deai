@@ -56,7 +56,15 @@ static int load_plugin_dir(struct deai *di, const char *path) {
 	realpath(path, rpath);
 
 	int dirfd = open(path, O_DIRECTORY | O_RDONLY);
+	if (dirfd < 0)
+		return -1;
+
 	DIR *dir = fdopendir(dirfd);
+	if (!dir) {
+		close(dirfd);
+		return -1;
+	}
+
 	struct dirent *dent;
 	while ((dent = readdir(dir))) {
 		bool is_reg = dent->d_type == DT_REG;
