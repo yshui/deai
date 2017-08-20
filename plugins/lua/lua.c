@@ -795,7 +795,7 @@ static int di_lua_setter(lua_State *L) {
 	di_type_t vt;
 
 	void *val = di_lua_type_to_di(L, 3, &vt);
-	if (!val)
+	if (!val && vt != DI_TYPE_NIL)
 		return luaL_error(L, "unhandled lua type");
 
 	int ret = di_setx(ud, key, vt, val);
