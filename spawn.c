@@ -121,6 +121,10 @@ static void stderr_cb(EV_P_ ev_io *w, int revents) {
 	output_handler(c, w->fd, c->err, "stderr_line");
 }
 
+static uint64_t get_child_pid(struct child *c) {
+	return (uint64_t)c->pid;
+}
+
 define_trivial_cleanup(char *, free_charpp);
 
 struct di_object *di_spawn_run(struct di_spawn *p, struct di_array argv) {
@@ -159,6 +163,7 @@ struct di_object *di_spawn_run(struct di_spawn *p, struct di_array argv) {
 		return di_new_error("Failed to fork");
 
 	auto cp = di_new_object_with_type(struct child);
+	di_method(cp, "__get_pid", get_child_pid);
 	cp->pid = pid;
 	cp->out = string_buf_new();
 	cp->err = string_buf_new();
