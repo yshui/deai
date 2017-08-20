@@ -6,6 +6,7 @@
 
 #include <stdarg.h>
 #include <stdio.h>
+#include <fcntl.h>
 
 #include <deai/builtin/log.h>
 #include <deai/deai.h>
@@ -100,6 +101,17 @@ file_target(struct di_log *l, const char *filename, bool overwrite) {
 	if (!f)
 		return di_new_error("Can't open %s for writing", filename);
 
+	int fd = fileno(f);
+	if (fd < 0) {
+		fclose(f);
+		return di_new_error("Can't get the file descriptor");
+	}
+	fprintf(stderr, "setting cloexec\n");
+	int ret = fcntl(fd, F_SETFD, fcntl(fd, F_GETFD) | FD_CLOEXEC);
+	if (ret < 0) {
+		fclose(f);
+		return di_new_error("Can't set the CLOEXEC flag");
+	}
 	auto lf = di_new_object_with_type(struct log_file);
 	lf->f = f;
 	lf->dtor = (void *)file_target_dtor;
