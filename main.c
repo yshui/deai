@@ -210,6 +210,16 @@ PUBLIC int di_register_module(struct deai *p, const char *name, struct di_module
 	return di_add_value_member((void *)p, name, false, DI_TYPE_OBJECT, m);
 }
 
+define_trivial_cleanup(char *, free_charpp);
+
+int di_exec(struct deai *p, struct di_array argv) {
+	with_cleanup(free_charpp) char **nargv = tmalloc(char *, argv.length + 1);
+	memcpy(nargv, argv.arr, sizeof(void *) * argv.length);
+
+	execvp(nargv[0], nargv);
+	return -1;
+}
+
 int main(int argc, char *argv[]) {
 	struct deai *p = di_new_object_with_type(struct deai);
 	p->loop = EV_DEFAULT;
@@ -230,6 +240,7 @@ int main(int argc, char *argv[]) {
 	di_method(p, "register_module", di_register_module, char *,
 	          struct di_object *);
 	di_method(p, "chdir", di_chdir, char *);
+	di_method(p, "exec", di_exec, struct di_array);
 
 	/**
 	 * XXX: Quit method should delay the __destroyed signal until control flow
