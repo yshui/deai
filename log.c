@@ -109,7 +109,7 @@ file_target(struct di_log *l, const char *filename, bool overwrite) {
 	int ret = fcntl(fd, F_SETFD, fcntl(fd, F_GETFD) | FD_CLOEXEC);
 	if (ret < 0) {
 		fclose(f);
-		return di_new_error("Can't set the CLOEXEC flag");
+		return di_new_error("Can't set cloexec");
 	}
 	auto lf = di_new_object_with_type(struct log_file);
 	lf->f = f;

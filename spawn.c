@@ -141,9 +141,13 @@ struct di_object *di_spawn_run(struct di_spawn *p, struct di_array argv) {
 
 	close(ipfds[1]);
 
+	if (fcntl(opfds[0], F_SETFD, FD_CLOEXEC) < 0 ||
+	    fcntl(epfds[0], F_SETFD, FD_CLOEXEC) < 0)
+		return di_new_error("Can't set cloexec");
+
 	if (fcntl(opfds[0], F_SETFL, O_NONBLOCK) < 0 ||
 	    fcntl(epfds[0], F_SETFL, O_NONBLOCK) < 0)
-		return di_new_error("Failed to fcntl");
+		return di_new_error("Can't set non block");
 
 	auto pid = fork();
 	if (pid == 0) {
