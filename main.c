@@ -19,7 +19,8 @@
 #include <deai/deai.h>
 #include <deai/helper.h>
 
-#include "config.h"
+#include <config.h>
+
 #include "di_internal.h"
 #include "env.h"
 #include "event.h"
