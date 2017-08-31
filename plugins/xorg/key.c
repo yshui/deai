@@ -95,7 +95,7 @@ static int refresh_binding(struct keybinding *kb) {
 		if (err) {
 			di_getmi(dc->x->di, log);
 			if (logm)
-				di_log_va(logm, DI_LOG_ERROR, "Cannot grab");
+				di_log_va(logm, DI_LOG_ERROR, "Cannot grab %c", kb->keycodes[i]);
 			free(err);
 		}
 	}
