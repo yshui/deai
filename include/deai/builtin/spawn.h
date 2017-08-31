@@ -10,4 +10,13 @@
 
 struct di_spawn;
 
-struct di_object *di_spawn_run(struct di_spawn *s, struct di_array argv);
+/**
+ * Spawn a child process with arguments
+ *
+ * @param[in] s The spawn module object
+ * @param[in] argv The arguments passed to exec
+ * @param[in] ignore_output If true, the stdout and stderr will be redirected to
+ *            /dev/null
+ */
+struct di_object *
+di_spawn_run(struct di_spawn *s, struct di_array argv, bool ignore_output);
