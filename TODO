@@ -12,11 +12,11 @@
 
 Must have:
 
-* backlight
+* backlight [done]
 * battery
-* hotkeys
+* hotkeys [done]
 * dbus
-* inotify
+* inotify [done]
 
 Probably:
 
