@@ -24,7 +24,7 @@ def getGitHead():
 def getGitRoot():
     RevParse = subprocess.Popen([Git, 'rev-parse', '--show-toplevel'],
         stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-    return RevParse.stdout.read().strip()
+    return RevParse.stdout.read().decode().strip()
 
 def getEditedFiles(InPlace):
     Head = getGitHead()
