@@ -8,9 +8,9 @@ list(APPEND CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR})
 find_package(ClangFormat REQUIRED)
 
 set(GCF_CLANGFORMAT_STYLE "file" CACHE STRING
-	"Parameter pass to clang-format -style=<here>")
+    "Parameter pass to clang-format -style=<here>")
 set(GCF_IGNORE_LIST "" CACHE STRING
-	"Semi colon separated list of directories to ignore")
+    "Semi colon separated list of directories to ignore")
 set(GCF_SCRIPT ${CMAKE_CURRENT_SOURCE_DIR}/git-cmake-format.py)
 
 execute_process(COMMAND ${GIT_EXECUTABLE} rev-parse --show-toplevel
@@ -29,9 +29,8 @@ else()
   add_custom_target(format
     ${PYTHON_EXECUTABLE} ${GCF_SCRIPT}
     --cmake ${GIT_EXECUTABLE}
-    ${CLANG_FORMAT_EXECUTABLE} -style=${GCF_CLANGFORMAT_STYLE} -ignore=${GCF_IGNORE_LIST}
-	  WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+    ${CLANG_FORMAT_EXECUTABLE} -style=${GCF_CLANGFORMAT_STYLE}
+    -ignore=${GCF_IGNORE_LIST}
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
   unset(GCF_SCRIPT)
-else()
-  message(WARNING "Cannot locate top .git repository")
 endif()
