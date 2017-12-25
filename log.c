@@ -47,15 +47,14 @@ static const char *level_tostring(int log_level) {
 }
 
 // Function exposed via di_object to be used by any plugins
-static int di_log(struct di_object *o, di_type_t *rt, void **ret, int nargs,
-                  const di_type_t *atypes, const void *const *args) {
-	if (nargs != 2)
+static int di_log(struct di_object *o, di_type_t *rt, void **ret, struct di_tuple t) {
+	if (t.length != 2)
 		return -EINVAL;
-	if (atypes[0] != DI_TYPE_STRING || atypes[1] != DI_TYPE_STRING)
+	if (t.elem_type[0] != DI_TYPE_STRING || t.elem_type[1] != DI_TYPE_STRING)
 		return -EINVAL;
 
-	char *log_level = *(char **)args[0];
-	char *str = *(char **)args[1];
+	char *log_level = *(char **)t.tuple[0];
+	char *str = *(char **)t.tuple[1];
 	if (!str)
 		str = "(nil)";
 	*rt = DI_TYPE_NINT;

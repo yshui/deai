@@ -41,13 +41,11 @@ enum di_object_state {
 	DI_OBJECT_STATE_DEAD,
 };
 
+struct di_tuple;
 struct di_object;
 typedef void (*di_fn_t)(void);
 typedef int (*di_call_fn_t)(struct di_object *_Nonnull, di_type_t *_Nonnull rt,
-                            void *_Nullable *_Nonnull ret, int nargs,
-                            const di_type_t *_Nullable atypes,
-                            const void *_Nonnull const *_Nullable args);
-
+                            void *_Nullable *_Nonnull ret, struct di_tuple);
 struct di_signal;
 struct di_listener;
 struct di_callable;
@@ -93,12 +91,11 @@ int di_callx(struct di_object *_Nonnull o, const char *_Nonnull name,
 int di_rawcallx(struct di_object *_Nonnull o, const char *_Nonnull name,
                 di_type_t *_Nonnull rt, void *_Nullable *_Nonnull ret, ...);
 int di_rawcallxn(struct di_object *_Nonnull o, const char *_Nonnull name,
-                 di_type_t *_Nonnull rt, void *_Nullable *_Nonnull ret, int nargs,
-                 const di_type_t *_Nullable ats,
-                 const void *_Nonnull const *_Nullable args);
+                 di_type_t *_Nonnull rt, void *_Nullable *_Nonnull ret,
+                 struct di_tuple);
 
 int di_setx(struct di_object *_Nonnull o, const char *_Nonnull prop, di_type_t type,
-            const void *_Nullable val);
+            void *_Nullable val);
 int di_rawgetx(struct di_object *_Nonnull o, const char *_Nonnull prop,
                di_type_t *_Nonnull type, const void *_Nullable *_Nonnull ret);
 int di_rawgetxt(struct di_object *_Nonnull o, const char *_Nonnull prop,
@@ -129,8 +126,7 @@ struct di_listener *_Nullable di_listen_to_once(struct di_object *_Nonnull o,
                                                 struct di_object *_Nonnull h,
                                                 bool once);
 int di_stop_listener(struct di_listener *_Nullable);
-int di_emitn(struct di_object *_Nonnull, const char *_Nonnull name, int nargs,
-             const di_type_t *_Nullable, const void *_Nonnull const *_Nullable args);
+int di_emitn(struct di_object *_Nonnull, const char *_Nonnull name, struct di_tuple);
 void di_apoptosis(struct di_object *_Nonnull);
 
 void di_clear_listeners(struct di_object *_Nonnull);
@@ -196,6 +192,7 @@ static inline size_t di_sizeof_type(di_type_t t) {
 	} while (0);
 
 #define DI_ARRAY_NIL ((struct di_array){0, NULL, DI_TYPE_NIL})
+#define DI_TUPLE_NIL ((struct di_tuple){0, NULL, NULL})
 
 #define define_object_cleanup(t)                                                    \
 	static inline void free_##t(struct t **ptr) {                               \

@@ -150,7 +150,7 @@ static void _dbus_call_method_reply_cb(struct di_object *sig, void *msg) {
 	dbus_message_iter_init(msg, &i);
 	_dbus_deserialize_tuple(&i, &t);
 
-	di_emitn(sig, "reply", t.length, t.elem_type, (const void **)t.tuple);
+	di_emitn(sig, "reply", t);
 
 	di_free_tuple(t);
 	dbus_message_unref(msg);
@@ -158,12 +158,17 @@ static void _dbus_call_method_reply_cb(struct di_object *sig, void *msg) {
 
 static void
 _dbus_call_method_step2(struct di_dbus_object *dobj, struct di_object *sig,
-                        char *method, const char *interface, struct di_object *err) {
+                        char *method, struct di_tuple t, const char *interface,
+                        struct di_object *err) {
 	if (err)
 		di_emit(sig, "error", err);
 
 	DBusMessage *msg =
 	    dbus_message_new_method_call(dobj->bus, dobj->obj, interface, method);
+	DBusMessageIter i;
+	dbus_message_iter_init_append(msg, &i);
+
+	_dbus_serialize_tuple(&i, t);
 	auto p = di_dbus_send(dobj->c, msg);
 	auto cl = di_closure(_dbus_call_method_reply_cb, false, (sig), void *);
 	auto l = di_listen_to_once(p, "reply", (void *)cl, true);
@@ -180,20 +185,46 @@ static void di_free_dbus_object(struct di_object *o) {
 }
 
 static struct di_object *
-di_dbus_call_method(struct di_dbus_object *dobj, char *method) {
+di_dbus_call_method(struct di_dbus_object *dobj, char *method, struct di_tuple t) {
 	auto ret = di_new_object_with_type(struct di_object);
 	auto cl = di_closure(_dbus_call_method_step2, false,
-	                     ((struct di_object *)dobj, ret, method), const char *,
-	                     struct di_object *);
+	                     ((struct di_object *)dobj, ret, method, t),
+	                     const char *, struct di_object *);
 	_dbus_lookup_method(dobj, method, (void *)cl);
 	di_unref_object((void *)cl);
 	return ret;
 }
 
+struct di_dbus_method {
+	struct di_object;
+	struct di_dbus_object *dobj;
+	char *method;
+};
+
+static void di_dbus_free_method(struct di_dbus_method *o) {
+	free(o->method);
+	di_unref_object((void *)o->dobj);
+}
+
+static int call_dbus_method(struct di_dbus_method *m, di_type_t *rt, void **ret,
+                            struct di_tuple t) {
+	*rt = DI_TYPE_OBJECT;
+	void *retd = tmalloc(void *, 1);
+	*(struct di_object **)retd = di_dbus_call_method(m->dobj, m->method, t);
+	*ret = retd;
+	return 0;
+}
+
 static struct di_object *
 di_dbus_object_getter(struct di_dbus_object *dobj, const char *method) {
-	return (void *)di_closure(di_dbus_call_method, false,
-	                          ((struct di_object *)dobj, method));
+	auto ret = di_new_object_with_type(struct di_dbus_method);
+	ret->method = strdup(method);
+	ret->dobj = dobj;
+	di_ref_object((void *)dobj);
+
+	ret->dtor = (void *)di_dbus_free_method;
+	ret->call = (void *)call_dbus_method;
+	return (void *)ret;
 }
 
 static struct di_object *

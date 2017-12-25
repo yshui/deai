@@ -41,9 +41,8 @@ const void *null_ptr = NULL;
 PUBLIC gen_callx(di_rawcallx, di_rawgetxt);
 PUBLIC gen_callx(di_callx, di_getxt);
 
-PUBLIC int
-di_rawcallxn(struct di_object *o, const char *name, di_type_t *rt, void **ret,
-             int nargs, const di_type_t *ats, const void *const *args) {
+PUBLIC int di_rawcallxn(struct di_object *o, const char *name, di_type_t *rt,
+                        void **ret, struct di_tuple t) {
 	const void *val;
 	int rc = di_rawgetxt(o, name, DI_TYPE_OBJECT, &val);
 	if (rc != 0)
@@ -55,14 +54,13 @@ di_rawcallxn(struct di_object *o, const char *name, di_type_t *rt, void **ret,
 	if (!m->call)
 		return -EINVAL;
 
-	rc = m->call(m, rt, ret, nargs, ats, args);
+	rc = m->call(m, rt, ret, t);
 
 	di_unref_object(m);
 	return rc;
 }
 
-PUBLIC int
-di_setx(struct di_object *o, const char *name, di_type_t type, const void *val) {
+PUBLIC int di_setx(struct di_object *o, const char *name, di_type_t type, void *val) {
 	auto mem = di_lookup(o, name);
 	int rc;
 	const void *val2;
@@ -90,8 +88,9 @@ di_setx(struct di_object *o, const char *name, di_type_t type, const void *val) 
 	di_type_t rtype;
 	asprintf(&buf, "__set_%s", name);
 
-	int rc2 = di_rawcallxn(o, buf, &rtype, &ret, 1, (di_type_t[]){type},
-	                       (const void *[]){val});
+	int rc2 =
+	    di_rawcallxn(o, buf, &rtype, &ret,
+	                 (struct di_tuple){1, (void *[]){val}, (di_type_t[]){type}});
 	free(buf);
 	if (rc2 == 0 && rtype != DI_TYPE_VOID) {
 		// Ignore for now
@@ -101,9 +100,10 @@ di_setx(struct di_object *o, const char *name, di_type_t type, const void *val) 
 	if (rc2 != -ENOENT)
 		return rc2;
 
-	rc2 = di_rawcallxn(o, "__set", &rtype, &ret, 2,
-	                   (di_type_t[]){DI_TYPE_STRING, type},
-	                   (const void *[]){&name, val});
+	rc2 = di_rawcallxn(o, "__set", &rtype, &ret,
+	                   (struct di_tuple){2, (void *[]){&name, val},
+	                                     (di_type_t[]){DI_TYPE_STRING, type}});
+
 	if (rc2 == 0 && rtype != DI_TYPE_VOID) {
 		// Ignore for now
 		di_free_value(rtype, ret);
@@ -414,6 +414,7 @@ PUBLIC void di_free_tuple(struct di_tuple t) {
 		di_free_value(t.elem_type[i], t.tuple[i]);
 		free(t.tuple[i]);
 	}
+	free(t.elem_type);
 	free(t.tuple);
 }
 
@@ -427,6 +428,7 @@ PUBLIC void di_free_array(struct di_array arr) {
 PUBLIC void di_free_value(di_type_t t, void *ret) {
 	switch (t) {
 	case DI_TYPE_ARRAY: di_free_array(*(struct di_array *)ret); break;
+	case DI_TYPE_TUPLE: di_free_tuple(*(struct di_tuple *)ret); break;
 	case DI_TYPE_STRING: chknull(ret) free(*(char **)ret); break;
 	case DI_TYPE_OBJECT:
 		chknull(ret) di_unref_object(*(struct di_object **)ret);
@@ -437,6 +439,8 @@ PUBLIC void di_free_value(di_type_t t, void *ret) {
 
 PUBLIC void di_copy_value(di_type_t t, void *dst, const void *src) {
 	const struct di_array *arr;
+	const struct di_tuple *tuple;
+	struct di_tuple ret;
 	void *d;
 
 	// dst and src only allowed to be null when t is nil
@@ -452,6 +456,18 @@ PUBLIC void di_copy_value(di_type_t t, void *dst, const void *src) {
 			              arr->arr + di_sizeof_type(arr->elem_type) * i);
 		*(struct di_array *)dst =
 		    (struct di_array){arr->length, d, arr->elem_type};
+		break;
+	case DI_TYPE_TUPLE:
+		tuple = src;
+		ret.tuple = tmalloc(void *, tuple->length);
+		ret.elem_type = tmalloc(di_type_t, tuple->length);
+		ret.length = tuple->length;
+		for (int i = 0; i < tuple->length; i++) {
+			ret.tuple[i] = calloc(1, di_sizeof_type(tuple->elem_type[i]));
+			di_copy_value(tuple->elem_type[i], ret.tuple[i],
+			              tuple->tuple[i]);
+		}
+		*(struct di_tuple *)dst = ret;
 		break;
 	case DI_TYPE_STRING:
 		*(const char **)dst = strdup(*(const char **)src);
@@ -597,12 +613,15 @@ PUBLIC int di_stop_listener(struct di_listener *l) {
 	return 0;
 }
 
-static int di_emitn_internal(struct di_object *o, const char *name, int nargs,
-                             const di_type_t *atypes, const void *const *args) {
-	if (nargs > MAX_NARGS)
+PUBLIC int di_emitn(struct di_object *o, const char *name, struct di_tuple t) {
+	assert(!(o->state & DI_OBJECT_STATE_DEAD) || !strcmp(name, "__destroyed"));
+	if (o->state != DI_OBJECT_STATE_HEALTHY)
+		return 0;
+
+	if (t.length > MAX_NARGS)
 		return -E2BIG;
 
-	assert(nargs == 0 || (atypes != NULL && args != NULL));
+	assert(t.length == 0 || (t.elem_type != NULL && t.tuple != NULL));
 
 	struct di_signal *sig;
 	HASH_FIND_STR(o->signals, name, sig);
@@ -624,6 +643,10 @@ static int di_emitn_internal(struct di_object *o, const char *name, int nargs,
 
 	assert(cnt == sig->nlisteners);
 
+	// Prevent di_destroy_object from being called in the middle of an emission.
+	// e.g. One handler might remove all listeners, causing ref_count to drop to
+	// 0.
+	di_ref_object(o);
 	for (int i = 0; i < cnt; i++) {
 		__label__ next;
 		l = all_l[i];
@@ -632,8 +655,7 @@ static int di_emitn_internal(struct di_object *o, const char *name, int nargs,
 			goto next;
 		di_type_t rtype;
 		void *ret = NULL;
-		int rc =
-		    l->handler->call(l->handler, &rtype, &ret, nargs, atypes, args);
+		int rc = l->handler->call(l->handler, &rtype, &ret, t);
 
 		if (rc == 0) {
 			di_free_value(rtype, ret);
@@ -647,21 +669,8 @@ static int di_emitn_internal(struct di_object *o, const char *name, int nargs,
 		di_unref_object((void *)l);
 	}
 	free(all_l);
-	return 0;
-}
-
-PUBLIC int di_emitn(struct di_object *o, const char *name, int nargs,
-                    const di_type_t *atypes, const void *const *args) {
-	assert(!(o->state & DI_OBJECT_STATE_DEAD));
-	if (o->state != DI_OBJECT_STATE_HEALTHY)
-		return 0;
-	// Prevent di_destroy_object from being called in the middle of an emission.
-	// e.g. One handler might remove all listeners, causing ref_count to drop to
-	// 0.
-	di_ref_object(o);
-	int ret = di_emitn_internal(o, name, nargs, atypes, args);
 	di_unref_object(o);
-	return ret;
+	return 0;
 }
 
 PUBLIC void di_apoptosis(struct di_object *obj) {
@@ -680,7 +689,7 @@ PUBLIC void di_apoptosis(struct di_object *obj) {
 	  // apoptosis called by di_destroy_object, obj->state
 	  // is already set approperiately.
 
-	di_emitn_internal(obj, "__destroyed", 0, NULL, NULL);
+	di_emitn(obj, "__destroyed", DI_TUPLE_NIL);
 	di_clear_listeners(obj);
 	if (obj->state == DI_OBJECT_STATE_APOPTOSIS)
 		di_unref_object(obj);

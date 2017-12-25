@@ -54,41 +54,38 @@ static ffi_type ffi_type_di_array = {
         (ffi_type *[]){&ffi_type_uint64, &ffi_type_pointer, &ffi_type_uint8, NULL},
 };
 
+static ffi_type ffi_type_di_tuple = {
+    .size = 0,
+    .alignment = 0,
+    .type = FFI_TYPE_STRUCT,
+    .elements =
+        (ffi_type *[]){&ffi_type_uint64, &ffi_type_pointer, &ffi_type_pointer, NULL},
+};
+
 static_assert(sizeof(bool) == sizeof(uint8_t), "bool is not uint8_t, unsupported "
                                                "platform");
 static_assert(__alignof__(bool) == __alignof__(uint8_t), "bool is not uint8_t, "
                                                          "unsupported platform");
 
 static inline ffi_type *di_type_to_ffi(di_type_t in) {
-	ffi_type *const type_map[DI_LAST_TYPE] = {
-	    // void
-	    &ffi_type_void,
-	    // bool
-	    &ffi_type_uint8,
-	    // nint
-	    &ffi_type_sint,
-	    // nuint
-	    &ffi_type_uint,
-	    // uint
-	    &ffi_type_uint64,
-	    // int
-	    &ffi_type_sint64,
-	    // float
-	    &ffi_type_double,
-	    // pointer
-	    &ffi_type_pointer,
-	    // object
-	    &ffi_type_pointer,
-	    // string
-	    &ffi_type_pointer,
-	    // stirng literal
-	    &ffi_type_pointer,
-	    // array
-	    &ffi_type_di_array,
-	    // end
+	ffi_type *const type_map[] = {
+	        [DI_TYPE_VOID] = &ffi_type_void,
+	        [DI_TYPE_BOOL] = &ffi_type_uint8,
+	        [DI_TYPE_NINT] = &ffi_type_sint,
+	        [DI_TYPE_NUINT] = &ffi_type_uint,
+	        [DI_TYPE_UINT] = &ffi_type_uint64,
+	        [DI_TYPE_INT] = &ffi_type_sint64,
+	        [DI_TYPE_FLOAT] = &ffi_type_double,
+	        [DI_TYPE_POINTER] = &ffi_type_pointer,
+	        [DI_TYPE_OBJECT] = &ffi_type_pointer,
+	        [DI_TYPE_STRING] = &ffi_type_pointer,
+	        [DI_TYPE_STRING_LITERAL] = &ffi_type_pointer,
+	        [DI_TYPE_ARRAY] = &ffi_type_di_array,
+	        [DI_TYPE_TUPLE] = &ffi_type_di_tuple,
+	        [DI_LAST_TYPE] = NULL,
 	};
 
-	assert(in < DI_TYPE_NIL);
+	assert(type_map[in]);
 	return type_map[in];
 }
 

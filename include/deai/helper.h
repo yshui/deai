@@ -218,17 +218,19 @@ int di_gmethod(struct di_object *o, const char *name, di_fn_t fn);
 		rc;                                                                 \
 	})
 
+#define di_tuple(...)                                                               \
+	((struct di_tuple){                                                         \
+	    VA_ARGS_LENGTH(__VA_ARGS__),                                            \
+	    (void *[]){LIST_APPLY(addressof, SEP_COMMA, __VA_ARGS__)},              \
+	    (di_type_t[]){LIST_APPLY(di_typeof, SEP_COMMA, __VA_ARGS__)}})
+
 #define di_call_callable(c, ...)                                                    \
 	({                                                                          \
 		int rc = 0;                                                         \
 		do {                                                                \
 			di_type_t rt;                                               \
 			void *ret;                                                  \
-			rc = c->call(c, &rt, &ret, VA_ARGS_LENGTH(__VA_ARGS__),     \
-			             (di_type_t[]){LIST_APPLY(di_typeof, SEP_COMMA, \
-			                                      __VA_ARGS__)},        \
-			             (const void *[]){LIST_APPLY(                   \
-			                 addressof, SEP_COMMA, __VA_ARGS__)});      \
+			rc = c->call(c, &rt, &ret, di_tuple(__VA_ARGS__));          \
 			if (rc != 0)                                                \
 				break;                                              \
 			di_free_value(rt, ret);                                     \
@@ -243,11 +245,7 @@ int di_gmethod(struct di_object *o, const char *name, di_fn_t fn);
 		do {                                                                \
 			di_type_t rt;                                               \
 			void *ret;                                                  \
-			rc = c->call(c, &rt, &ret, VA_ARGS_LENGTH(__VA_ARGS__),     \
-			             (di_type_t[]){LIST_APPLY(di_typeid, SEP_COMMA, \
-			                                      __VA_ARGS__)},        \
-			             (const void *[]){LIST_APPLY(                   \
-			                 addressof, SEP_COMMA, __VA_ARGS__)});      \
+			rc = c->call(c, &rt, &ret, di_tuple(__VA_ARGS__));          \
 			if (rc != 0)                                                \
 				break;                                              \
 			if (di_typeof(r) != rt) {                                   \
@@ -263,9 +261,7 @@ int di_gmethod(struct di_object *o, const char *name, di_fn_t fn);
 	})
 
 #define di_emit(o, name, ...)                                                       \
-	di_emitn((struct di_object *)o, name, VA_ARGS_LENGTH(__VA_ARGS__),          \
-	         (di_type_t[]){LIST_APPLY(di_typeof, SEP_COMMA, __VA_ARGS__)},      \
-	         (const void *[]){LIST_APPLY(addressof, SEP_COMMA, __VA_ARGS__)})
+	di_emitn((struct di_object *)o, name, di_tuple(__VA_ARGS__))
 
 #define di_field(o, name)                                                           \
 	di_add_ref_member((struct di_object *)(o), #name, false,                    \
@@ -289,6 +285,7 @@ int di_gmethod(struct di_object *o, const char *name, di_fn_t fn);
 #define TYPE_INIT(type)                                                             \
 	_Generic((type *)0, \
 	struct di_array *: DI_ARRAY_NIL, \
+	struct di_tuple *: DI_TUPLE_NIL, \
 	int *: 0, \
 	unsigned int *: 0, \
 	int64_t *: 0, \

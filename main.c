@@ -302,7 +302,7 @@ int main(int argc, char *argv[]) {
 
 	method = strdup(method + 1);
 
-	const void **di_args = calloc(argc - 2, sizeof(void *));
+	void **di_args = calloc(argc - 2, sizeof(void *));
 	di_type_t *di_types = calloc(argc - 2, sizeof(di_type_t));
 	int nargs = 0;
 	for (int i = 2; i < argc; i++) {
@@ -354,7 +354,8 @@ int main(int argc, char *argv[]) {
 
 	di_type_t rt;
 	void *retd = NULL;
-	ret = di_rawcallxn(mod, method, &rt, &retd, nargs, di_types, di_args);
+	ret = di_rawcallxn(mod, method, &rt, &retd,
+	                   (struct di_tuple){nargs, di_args, di_types});
 	if (ret != 0) {
 		fprintf(stderr, "Failed to call \"%s.%s\"\n", modname, method);
 		exit(EXIT_FAILURE);

@@ -49,7 +49,7 @@ static inline void *allocate_for_return(di_type_t rtype) {
 static int
 _di_typed_trampoline(ffi_cif *cif, di_fn_t fn, void *ret, const di_type_t *fnats,
                      int nargs0, const void *const *args0, int nargs,
-                     const di_type_t *ats, const void *const *args) {
+                     const di_type_t *ats, void *const *args) {
 	assert(nargs == 0 || args != NULL);
 	assert(nargs0 == 0 || args0 != NULL);
 	assert(nargs >= 0 && nargs0 >= 0);
@@ -70,9 +70,15 @@ _di_typed_trampoline(ffi_cif *cif, di_fn_t fn, void *ret, const di_type_t *fnats
 			if (ats[i - nargs0] == DI_TYPE_NIL) {
 				struct di_array *arr;
 				switch (fnats[i - nargs0]) {
-				case DI_TYPE_OBJECT: rc = 0; xargs[i] = &null_ptr; break;
+				case DI_TYPE_OBJECT:
+					rc = 0;
+					xargs[i] = &null_ptr;
+					break;
 				case DI_TYPE_STRING:
-				case DI_TYPE_POINTER: rc = 0; xargs[i] = &null_ptr; break;
+				case DI_TYPE_POINTER:
+					rc = 0;
+					xargs[i] = &null_ptr;
+					break;
 				case DI_TYPE_ARRAY:
 					arr = tmalloc(struct di_array, 1);
 					arr->length = 0;
@@ -100,14 +106,13 @@ out:
 	return rc;
 }
 
-static int
-method_trampoline(struct di_object *o, di_type_t *rtype, void **ret, int nargs,
-                  const di_type_t *ats, const void *const *args) {
+static int method_trampoline(struct di_object *o, di_type_t *rtype, void **ret,
+                             struct di_tuple t) {
 	if (!di_check_type(o, "method"))
 		return -EINVAL;
 
 	struct di_typed_method *tm = (void *)o;
-	if (nargs != tm->nargs)
+	if (t.length != tm->nargs)
 		return -EINVAL;
 
 	*rtype = tm->rtype;
@@ -119,17 +124,17 @@ method_trampoline(struct di_object *o, di_type_t *rtype, void **ret, int nargs,
 
 	void *this = tm->this;
 	return _di_typed_trampoline(&tm->cif, tm->fn, *ret, tm->atypes + 1, 1,
-	                            (const void *[]){&this}, tm->nargs, ats, args);
+	                            (const void *[]){&this}, tm->nargs, t.elem_type,
+	                            t.tuple);
 }
 
-static int
-closure_trampoline(struct di_object *o, di_type_t *rtype, void **ret, int nargs,
-                   const di_type_t *ats, const void *const *args) {
+static int closure_trampoline(struct di_object *o, di_type_t *rtype, void **ret,
+                              struct di_tuple t) {
 	if (!di_check_type(o, "closure"))
 		return -EINVAL;
 
 	struct di_closure *cl = (void *)o;
-	if (nargs != cl->nargs)
+	if (t.length != cl->nargs)
 		return -EINVAL;
 
 	*rtype = cl->rtype;
@@ -140,7 +145,8 @@ closure_trampoline(struct di_object *o, di_type_t *rtype, void **ret, int nargs,
 		*ret = NULL;
 
 	return _di_typed_trampoline(&cl->cif, cl->fn, *ret, cl->atypes + cl->nargs0,
-	                            cl->nargs0, cl->cargs, nargs, ats, args);
+	                            cl->nargs0, cl->cargs, t.length, t.elem_type,
+	                            t.tuple);
 }
 
 static void free_closure(struct di_object *o) {
@@ -265,35 +271,33 @@ di_call_objectv(struct di_object *o, di_type_t *rtype, void **ret, va_list ap) {
 		return -EINVAL;
 
 	va_list ap2;
-	void **args = NULL;
-	di_type_t *ats = NULL;
+	struct di_tuple tu = DI_TUPLE_NIL;
 
 	va_copy(ap2, ap);
-	unsigned int nargs = 0;
 	di_type_t t = va_arg(ap, di_type_t);
 	while (t < DI_LAST_TYPE) {
 		if (di_sizeof_type(t) == 0) {
 			va_end(ap2);
 			return -EINVAL;
 		}
-		nargs++;
+		tu.length++;
 		va_arg_with_di_type(ap, t, NULL);
 		t = va_arg(ap, di_type_t);
 	}
 
-	if (nargs > 0) {
-		args = alloca(sizeof(void *) * nargs);
-		ats = alloca(sizeof(di_type_t) * nargs);
-		for (unsigned int i = 0; i < nargs; i++) {
-			ats[i] = va_arg(ap2, di_type_t);
-			assert(di_sizeof_type(ats[i]) != 0);
-			args[i] = alloca(di_sizeof_type(ats[i]));
-			va_arg_with_di_type(ap2, ats[i], args[i]);
+	if (tu.length > 0) {
+		tu.tuple = alloca(sizeof(void *) * tu.length);
+		tu.elem_type = alloca(sizeof(di_type_t) * tu.length);
+		for (unsigned int i = 0; i < tu.length; i++) {
+			tu.elem_type[i] = va_arg(ap2, di_type_t);
+			assert(di_sizeof_type(tu.elem_type[i]) != 0);
+			tu.tuple[i] = alloca(di_sizeof_type(tu.elem_type[i]));
+			va_arg_with_di_type(ap2, tu.elem_type[i], tu.tuple[i]);
 		}
 		va_end(ap2);
 	}
 
-	return o->call(o, rtype, ret, nargs, ats, (const void *const *)args);
+	return o->call(o, rtype, ret, tu);
 }
 
 PUBLIC int di_call_object(struct di_object *o, di_type_t *rtype, void **ret, ...) {

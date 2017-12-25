@@ -172,17 +172,17 @@ static void lua_ref_dtor(struct di_lua_ref *t) {
 
 static void *di_lua_type_to_di(lua_State *L, int i, di_type_t *t);
 
-static int di_lua_table_get(struct di_object *m, di_type_t *rt, void **ret, int nargs,
-                            const di_type_t *ats, const void *const *args) {
+static int
+di_lua_table_get(struct di_object *m, di_type_t *rt, void **ret, struct di_tuple tu) {
 	struct lua_table_getter *g = (void *)m;
 	struct di_lua_ref *t = g->t;
-	if (nargs != 1)
+	if (tu.length != 1)
 		return -EINVAL;
 
-	if (ats[0] != DI_TYPE_STRING)
+	if (tu.elem_type[0] != DI_TYPE_STRING)
 		return -EINVAL;
 
-	const char *key = *(const char *const *)args[0];
+	const char *key = *(const char **)tu.tuple[0];
 
 	struct di_lua_script *s = t->s;
 	lua_State *L = t->s->L->L;
@@ -239,13 +239,15 @@ _di_lua_method_handler(lua_State *L, const char *name, struct di_object *m) {
 
 	int nargs = lua_gettop(L);
 
-	void **args = calloc(nargs - 1, sizeof(void *));
-	di_type_t *atypes = calloc(nargs - 1, sizeof(di_type_t));
+	struct di_tuple t;
+	t.tuple = calloc(nargs - 1, sizeof(void *));
+	t.elem_type = calloc(nargs - 1, sizeof(di_type_t));
+	t.length = nargs - 1;
 	int argi = 0;
 	// Translate lua arguments
 	for (int i = 2; i <= nargs; i++) {
-		args[i - 2] = di_lua_type_to_di(L, i, atypes + i - 2);
-		if (atypes[i - 2] >= DI_LAST_TYPE) {
+		t.tuple[i - 2] = di_lua_type_to_di(L, i, t.elem_type + i - 2);
+		if (t.elem_type[i - 2] >= DI_LAST_TYPE) {
 			argi = i;
 			goto err;
 		}
@@ -253,8 +255,7 @@ _di_lua_method_handler(lua_State *L, const char *name, struct di_object *m) {
 
 	void *ret;
 	di_type_t rtype;
-	int nret = m->call((void *)m, &rtype, &ret, nargs - 1, atypes,
-	                   (const void *const *)args);
+	int nret = m->call((void *)m, &rtype, &ret, t);
 
 	if (nret == 0) {
 		nret = di_lua_pushany(L, NULL, rtype, ret);
@@ -264,12 +265,7 @@ _di_lua_method_handler(lua_State *L, const char *name, struct di_object *m) {
 		argi = -1;
 
 err:
-	for (int i = 0; i < nargs - 1; i++) {
-		di_free_value(atypes[i], args[i]);
-		free(args[i]);
-	}
-	free(args);
-	free(atypes);
+	di_free_tuple(t);
 	if (argi > 0)
 		return luaL_argerror(L, argi, "Unhandled lua type");
 	else if (argi != 0)
@@ -515,9 +511,8 @@ static int di_lua_checkarray(lua_State *L, int index, di_type_t *elemt) {
 	return i - 1;
 }
 
-static int
-call_lua_function(struct di_lua_ref *ref, di_type_t *rt, void **ret, int nargs,
-                  const di_type_t *atypes, const void *const *args) {
+static int call_lua_function(struct di_lua_ref *ref, di_type_t *rt, void **ret,
+                             struct di_tuple t) {
 	if (!ref->s)
 		return -EBADF;
 
@@ -533,10 +528,10 @@ call_lua_function(struct di_lua_ref *ref, di_type_t *rt, void **ret, int nargs,
 	// Get the function
 	lua_rawgeti(L, LUA_REGISTRYINDEX, ref->tref);
 	// Push arguments
-	for (unsigned int i = 0; i < nargs; i++)
-		di_lua_pushany(L, NULL, atypes[i], args[i]);
+	for (unsigned int i = 0; i < t.length; i++)
+		di_lua_pushany(L, NULL, t.elem_type[i], t.tuple[i]);
 
-	lua_pcall(L, nargs, 1, -nargs - 2);
+	lua_pcall(L, t.length, 1, -t.length - 2);
 
 	di_lua_xchg_env(L, s);
 
@@ -720,27 +715,21 @@ int di_lua_emit_signal(lua_State *L) {
 	const char *signame = luaL_checkstring(L, 1);
 	int top = lua_gettop(L);
 
-	const void **args = tmalloc(const void *, top);
-	di_type_t *atypes = tmalloc(di_type_t, top);
+	struct di_tuple t;
+	t.length = top - 1;
+	t.tuple = tmalloc(void *, top - 1);
+	t.elem_type = tmalloc(di_type_t, top - 1);
 
 	for (int i = 2; i <= top; i++) {
-		void *dst = di_lua_type_to_di(L, i, &atypes[i - 1]);
-		args[i - 1] = dst;
+		void *dst = di_lua_type_to_di(L, i, &t.elem_type[i - 1]);
+		t.tuple[i - 2] = dst;
 	}
 
 	di_ref_object(o);
-	args[0] = &o;
-	atypes[0] = DI_TYPE_OBJECT;
-
-	int ret = di_emitn(o, signame, top, atypes, args);
-
+	int ret = di_emitn(o, signame, t);
 	di_unref_object(o);
-	for (int i = 1; i < top; i++) {
-		di_free_value(atypes[i], (void *)args[i]);
-		free((void *)args[i]);
-	}
-	free(atypes);
-	free(args);
+
+	di_free_tuple(t);
 
 	if (ret != 0)
 		return luaL_error(L, "Failed to emit signal %s", signame);
