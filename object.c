@@ -462,6 +462,9 @@ PUBLIC void di_copy_value(di_type_t t, void *dst, const void *src) {
 		ret.tuple = tmalloc(void *, tuple->length);
 		ret.elem_type = tmalloc(di_type_t, tuple->length);
 		ret.length = tuple->length;
+
+		memcpy(ret.elem_type, tuple->elem_type,
+		       sizeof(di_type_t) * tuple->length);
 		for (int i = 0; i < tuple->length; i++) {
 			ret.tuple[i] = calloc(1, di_sizeof_type(tuple->elem_type[i]));
 			di_copy_value(tuple->elem_type[i], ret.tuple[i],

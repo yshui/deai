@@ -222,9 +222,13 @@ static int _type_signature_length_of_di_value(di_type_t type, void *d) {
 	if (type == DI_TYPE_TUPLE) {
 		struct di_tuple *t = d;
 		int ret = 0;
-		for (int i = 0; i < t->length; i++)
-			ret += _type_signature_length_of_di_value(t->elem_type[i],
-			                                          t->tuple[i]);
+		for (int i = 0; i < t->length; i++) {
+			int tmp = _type_signature_length_of_di_value(t->elem_type[i],
+			                                             t->tuple[i]);
+			if (tmp < 0)
+				return tmp;
+			ret += tmp;
+		}
 		return ret + 2;
 	}
 	return -1;
