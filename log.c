@@ -4,9 +4,9 @@
 
 /* Copyright (c) 2017, Yuxuan Shui <yshuiv7@gmail.com> */
 
+#include <fcntl.h>
 #include <stdarg.h>
 #include <stdio.h>
-#include <fcntl.h>
 
 #include <deai/builtin/log.h>
 #include <deai/deai.h>
@@ -159,11 +159,11 @@ void di_init_log(struct deai *di) {
 		return;
 	l->log_level = DI_LOG_ERROR;
 
-	di_add_address_member((void *)l, "log_target", true, DI_TYPE_OBJECT,
-	                      &l->log_target);
+	di_add_ref_member((void *)l, "log_target", true, DI_TYPE_OBJECT,
+	                  &l->log_target);
 	l->call = di_log;
 	di_method(l, "file_target", file_target, char *, bool);
 	di_getter_setter(l, log_level, get_log_level, set_log_level);
-	    di_register_module(di, "log", (void *)l);
+	di_register_module(di, "log", (void *)l);
 	di_unref_object((void *)l);
 }

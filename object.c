@@ -81,6 +81,10 @@ di_setx(struct di_object *o, const char *name, di_type_t type, const void *val) 
 	else
 		rc = -EPERM;
 
+	// Internal names doesn't go through setter
+	if (strncmp(name, "__", 2) == 0)
+		return rc;
+
 	char *buf;
 	void *ret;
 	di_type_t rtype;
@@ -113,6 +117,8 @@ di_setx(struct di_object *o, const char *name, di_type_t type, const void *val) 
 PUBLIC int
 di_rawgetx(struct di_object *o, const char *name, di_type_t *type, const void **ret) {
 	auto m = di_lookup(o, name);
+
+	// nil type is treated as non-existent
 	if (!m)
 		return -ENOENT;
 
@@ -221,6 +227,26 @@ PUBLIC struct di_module *di_new_module(size_t size) {
 	return (void *)pm;
 }
 
+static void _di_remove_member(struct di_object *obj, struct di_member_internal *m) {
+	HASH_DEL(*(struct di_member_internal **)&obj->members, m);
+
+	di_free_value(m->type, m->data);
+
+	if (m->own)
+		free(m->data);
+	free(m->name);
+	free(m);
+}
+
+PUBLIC int di_remove_member(struct di_object *obj, const char *name) {
+	auto m = di_lookup(obj, name);
+	if (!m)
+		return -ENOENT;
+
+	_di_remove_member(obj, (void *)m);
+	return 0;
+}
+
 // Must be called holding external references. i.e.
 // __dtor shouldn't cause the reference count to drop to 0
 static void di_destroy_object(struct di_object *obj) {
@@ -247,14 +273,7 @@ static void di_destroy_object(struct di_object *obj) {
 			            ? (*(struct di_object **)m->data)->ref_count
 			            : -1);
 #endif
-		HASH_DEL(*(struct di_member_internal **)&obj->members, m);
-
-		di_free_value(m->type, m->data);
-
-		if (m->own)
-			free(m->data);
-		free(m->name);
-		free(m);
+		_di_remove_member(obj, m);
 		m = next_m;
 	}
 }
@@ -378,8 +397,8 @@ PUBLIC int di_add_value_member(struct di_object *o, const char *name, bool writa
 	return _di_add_member(o, name, writable, true, t, v);
 }
 
-PUBLIC int di_add_address_member(struct di_object *o, const char *name,
-                                 bool writable, di_type_t t, void *addr) {
+PUBLIC int di_add_ref_member(struct di_object *o, const char *name, bool writable,
+                             di_type_t t, void *addr) {
 	return _di_add_member(o, name, writable, false, t, addr);
 }
 
@@ -390,6 +409,13 @@ PUBLIC struct di_member *di_lookup(struct di_object *o, const char *name) {
 }
 
 #define chknull(v) if ((*(void **)(v)) != NULL)
+PUBLIC void di_free_tuple(struct di_tuple t) {
+	for (int i = 0; i < t.length; i++) {
+		di_free_value(t.elem_type[i], t.tuple[i]);
+		free(t.tuple[i]);
+	}
+	free(t.tuple);
+}
 
 PUBLIC void di_free_array(struct di_array arr) {
 	size_t step = di_sizeof_type(arr.elem_type);
@@ -412,6 +438,9 @@ PUBLIC void di_free_value(di_type_t t, void *ret) {
 PUBLIC void di_copy_value(di_type_t t, void *dst, const void *src) {
 	const struct di_array *arr;
 	void *d;
+
+	// dst and src only allowed to be null when t is nil
+	assert(t == DI_TYPE_NIL || (dst && src));
 	switch (t) {
 	case DI_TYPE_ARRAY:
 		arr = src;
@@ -430,6 +459,9 @@ PUBLIC void di_copy_value(di_type_t t, void *dst, const void *src) {
 	case DI_TYPE_OBJECT:
 		di_ref_object(*(struct di_object **)src);
 		*(struct di_object **)dst = *(struct di_object **)src;
+		break;
+	case DI_TYPE_NIL:
+		// nothing to do
 		break;
 	default: memmove(dst, src, di_sizeof_type(t)); break;
 	}
@@ -450,7 +482,13 @@ struct di_listener {
 	struct di_signal *signal;
 
 	struct list_head siblings;
+	bool once;
 };
+
+static struct di_object *di_get_owner_of_listener(struct di_listener *l) {
+	di_ref_object(l->signal->owner);
+	return l->signal->owner;
+}
 
 static struct di_listener *di_new_listener(void) {
 	struct di_listener *l = di_new_object_with_type(struct di_listener);
@@ -458,6 +496,7 @@ static struct di_listener *di_new_listener(void) {
 	// stop_listener should be set as dtor, because if a listener is
 	// alive, it's ref_count is guaranteed to be > 0
 	di_method(l, "stop", di_stop_listener);
+	di_getter(l, owner, di_get_owner_of_listener);
 
 	ABRT_IF_ERR(di_set_type((void *)l, "listener"));
 	return l;
@@ -468,8 +507,8 @@ static struct di_listener *di_new_listener(void) {
 // are not called for it
 #define is_destroy(n) (strcmp(n, "__destroyed") == 0)
 
-PUBLIC struct di_listener *
-di_listen_to(struct di_object *o, const char *name, struct di_object *h) {
+PUBLIC struct di_listener *di_listen_to_once(struct di_object *o, const char *name,
+                                             struct di_object *h, bool once) {
 	if (o->state != DI_OBJECT_STATE_HEALTHY)
 		return NULL;
 
@@ -491,6 +530,7 @@ di_listen_to(struct di_object *o, const char *name, struct di_object *h) {
 	auto l = di_new_listener();
 	l->handler = h;
 	l->signal = sig;
+	l->once = once;
 
 	di_ref_object(h);
 	di_ref_object((void *)l);
@@ -501,11 +541,16 @@ di_listen_to(struct di_object *o, const char *name, struct di_object *h) {
 	return l;
 }
 
+PUBLIC struct di_listener *
+di_listen_to(struct di_object *o, const char *name, struct di_object *h) {
+	return di_listen_to_once(o, name, h, false);
+}
+
 /**
  * Remove all listeners from an object.
  * @param o the object.
  */
-PUBLIC void di_clear_listener(struct di_object *o) {
+PUBLIC void di_clear_listeners(struct di_object *o) {
 	struct di_signal *sig, *tsig;
 	HASH_ITER (hh, o->signals, sig, tsig) {
 		if (!is_destroy(sig->name))
@@ -554,11 +599,8 @@ PUBLIC int di_stop_listener(struct di_listener *l) {
 
 static int di_emitn_internal(struct di_object *o, const char *name, int nargs,
                              const di_type_t *atypes, const void *const *args) {
-	if (nargs + 1 > MAX_NARGS)
+	if (nargs > MAX_NARGS)
 		return -E2BIG;
-
-	if (o != *(struct di_object **)args[0] || atypes[0] != DI_TYPE_OBJECT)
-		return -EINVAL;
 
 	assert(nargs == 0 || (atypes != NULL && args != NULL));
 
@@ -568,7 +610,8 @@ static int di_emitn_internal(struct di_object *o, const char *name, int nargs,
 		return 0;
 
 	int cnt = 0;
-	struct di_listener *l, **all_l = tmalloc(struct di_listener *, sig->nlisteners);
+	struct di_listener *l,
+	    **all_l = tmalloc(struct di_listener *, sig->nlisteners);
 
 	// Allow listeners to be removed during emission
 	// One usecase: There're two object, A, B, where A -> B.
@@ -589,13 +632,18 @@ static int di_emitn_internal(struct di_object *o, const char *name, int nargs,
 			goto next;
 		di_type_t rtype;
 		void *ret = NULL;
-		int rc = l->handler->call(l->handler, &rtype, &ret, nargs, atypes, args);
+		int rc =
+		    l->handler->call(l->handler, &rtype, &ret, nargs, atypes, args);
 
 		if (rc == 0) {
 			di_free_value(rtype, ret);
 			free(ret);
-		}
+		} else
+			fprintf(stderr, "Failed to call a listener callback: %s\n",
+			        strerror(-rc));
 	next:
+		if (l->once)
+			di_stop_listener(l);
 		di_unref_object((void *)l);
 	}
 	free(all_l);
@@ -632,9 +680,8 @@ PUBLIC void di_apoptosis(struct di_object *obj) {
 	  // apoptosis called by di_destroy_object, obj->state
 	  // is already set approperiately.
 
-	di_emitn_internal(obj, "__destroyed", 1, (di_type_t[]){DI_TYPE_OBJECT},
-	                  (const void *[]){&obj});
-	di_clear_listener(obj);
+	di_emitn_internal(obj, "__destroyed", 0, NULL, NULL);
+	di_clear_listeners(obj);
 	if (obj->state == DI_OBJECT_STATE_APOPTOSIS)
 		di_unref_object(obj);
 }

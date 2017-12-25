@@ -35,7 +35,7 @@ struct di_file_watch {
 	struct di_file_watch_entry *byname, *bywd;
 };
 
-static int di_file_ioev(struct di_file_watch *o, struct di_object *fd) {
+static int di_file_ioev(struct di_file_watch *o) {
 	char evbuf[sizeof(struct inotify_event) + NAME_MAX + 1];
 	struct inotify_event *ev = (void *)evbuf;
 	int ret = read(o->fd, evbuf, sizeof(evbuf));
@@ -123,7 +123,7 @@ static void stop_file_watcher(struct di_file_watch *fw) {
 	close(fw->fd);
 
 	struct di_file_watch_entry *we, *twe;
-	HASH_ITER(hh, fw->bywd, we, twe) {
+	HASH_ITER (hh, fw->bywd, we, twe) {
 		HASH_DEL(fw->bywd, we);
 		HASH_DELETE(hh2, fw->byname, we);
 		free(we->fname);
@@ -138,7 +138,7 @@ static void stop_file_watcher(struct di_file_watch *fw) {
 	di_stop_listener(fw->fdev_listener);
 	di_unref_object((void *)fw->fdev_listener);
 
-	di_clear_listener((void *)fw);
+	di_clear_listeners((void *)fw);
 }
 
 static struct di_object *di_file_new_watch(struct di_file *f, struct di_array paths) {
@@ -161,9 +161,10 @@ static struct di_object *di_file_new_watch(struct di_file *f, struct di_array pa
 	di_callr(eventm, "fdevent", fw->fdev, fw->fd, IOEV_READ);
 
 	struct di_object *tmpo = (void *)fw;
-	auto cl = di_closure(di_file_ioev, true, (tmpo), struct di_object *);
+	auto cl = di_closure(di_file_ioev, true, (tmpo));
 	fw->fdev_listener = di_listen_to(fw->fdev, "read", (void *)cl);
-	di_set_detach(fw->fdev_listener, (di_detach_fn_t)stop_file_watcher, (void *)fw);
+	di_set_detach(fw->fdev_listener, (di_detach_fn_t)stop_file_watcher,
+	              (void *)fw);
 	di_unref_object((void *)cl);
 
 	const char **arr = paths.arr;

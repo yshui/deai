@@ -156,7 +156,7 @@ struct lua_table_getter {
 	struct di_lua_ref *t;
 };
 
-static void lua_ref_cleanup(struct di_lua_ref *t, struct di_object *o) {
+static void lua_ref_cleanup(struct di_lua_ref *t) {
 	di_stop_unref_listenerp(&t->d);
 	if (t->s) {
 		luaL_unref(t->s->L->L, LUA_REGISTRYINDEX, t->tref);
@@ -167,7 +167,7 @@ static void lua_ref_cleanup(struct di_lua_ref *t, struct di_object *o) {
 }
 
 static void lua_ref_dtor(struct di_lua_ref *t) {
-	lua_ref_cleanup(t, NULL);
+	lua_ref_cleanup(t);
 }
 
 static void *di_lua_type_to_di(lua_State *L, int i, di_type_t *t);
@@ -222,7 +222,8 @@ _lua_type_to_di_object(lua_State *L, int i, void *call, size_t sz) {
 	di_unref_object((void *)getter);
 	o->dtor = (void *)lua_ref_dtor;
 	o->call = call;
-	o->d = di_listen_to_destroyed((void *)s->L, (void *)lua_ref_cleanup, (void *)o);
+	o->d =
+	    di_listen_to_destroyed((void *)s->L, (void *)lua_ref_cleanup, (void *)o);
 
 	return (void *)o;
 }
@@ -272,8 +273,8 @@ err:
 	if (argi > 0)
 		return luaL_argerror(L, argi, "Unhandled lua type");
 	else if (argi != 0)
-		return luaL_error(L, "Failed to call function \"%s\": %d %s", name, argi,
-		                  strerror(-nret));
+		return luaL_error(L, "Failed to call function \"%s\": %d %s", name,
+		                  argi, strerror(-nret));
 	else
 		return nret;
 }
@@ -660,6 +661,7 @@ static int di_lua_pushany(lua_State *L, const char *name, di_type_t t, const voi
 	lua_Integer i;
 	lua_Number n;
 	struct di_array *arr;
+	struct di_tuple *tuple;
 	int step;
 	switch (t) {
 	case DI_TYPE_NUINT: i = *(unsigned int *)d; goto pushint;
@@ -685,6 +687,14 @@ static int di_lua_pushany(lua_State *L, const char *name, di_type_t t, const voi
 		lua_createtable(L, arr->length, 0);
 		for (int i = 0; i < arr->length; i++) {
 			di_lua_pushany(L, NULL, arr->elem_type, arr->arr + step * i);
+			lua_rawseti(L, -2, i + 1);
+		}
+		return 1;
+	case DI_TYPE_TUPLE:
+		tuple = (struct di_tuple *)d;
+		lua_createtable(L, tuple->length, 0);
+		for (int i = 0; i < tuple->length; i++) {
+			di_lua_pushany(L, NULL, tuple->elem_type[i], tuple->tuple[i]);
 			lua_rawseti(L, -2, i + 1);
 		}
 		return 1;

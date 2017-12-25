@@ -29,6 +29,7 @@ typedef enum di_type {
 	DI_TYPE_STRING,         // utf-8 string, char *
 	DI_TYPE_STRING_LITERAL,        // utf-8 string literal, const char *
 	DI_TYPE_ARRAY,                 // struct di_array
+	DI_TYPE_TUPLE,                 // array with variable element type
 	DI_TYPE_NIL,
 	DI_LAST_TYPE
 } di_type_t;
@@ -38,11 +39,6 @@ enum di_object_state {
 	DI_OBJECT_STATE_APOPTOSIS,
 	DI_OBJECT_STATE_ORPHANED,
 	DI_OBJECT_STATE_DEAD,
-};
-
-static const char *_Nonnull di_type_name[] = {
-    "void",  "bool",    "nint",   "nuint",  "uint",  "int",
-    "float", "pointer", "object", "string", "array",
 };
 
 struct di_object;
@@ -69,7 +65,13 @@ struct di_object {
 struct di_array {
 	uint64_t length;
 	void *_Nullable arr;
-	uint8_t elem_type;
+	di_type_t elem_type;
+};
+
+struct di_tuple {
+	uint64_t length;
+	void *_Nonnull *_Nullable tuple;
+	di_type_t *_Nullable elem_type;
 };
 
 struct di_module {
@@ -96,7 +98,7 @@ int di_rawcallxn(struct di_object *_Nonnull o, const char *_Nonnull name,
                  const void *_Nonnull const *_Nullable args);
 
 int di_setx(struct di_object *_Nonnull o, const char *_Nonnull prop, di_type_t type,
-            const void *_Nonnull val);
+            const void *_Nullable val);
 int di_rawgetx(struct di_object *_Nonnull o, const char *_Nonnull prop,
                di_type_t *_Nonnull type, const void *_Nullable *_Nonnull ret);
 int di_rawgetxt(struct di_object *_Nonnull o, const char *_Nonnull prop,
@@ -110,29 +112,36 @@ int di_set_type(struct di_object *_Nonnull o, const char *_Nonnull type);
 const char *_Nonnull di_get_type(struct di_object *_Nonnull o);
 bool di_check_type(struct di_object *_Nonnull o, const char *_Nonnull type);
 
-int di_add_address_member(struct di_object *_Nonnull o, const char *_Nonnull name,
-                          bool writable, di_type_t t, void *_Nonnull address);
+int di_add_ref_member(struct di_object *_Nonnull o, const char *_Nonnull name,
+                      bool writable, di_type_t t, void *_Nonnull address);
 int di_add_value_member(struct di_object *_Nonnull o, const char *_Nonnull name,
                         bool writable, di_type_t t, ...);
+int di_remove_member(struct di_object *_Nonnull o, const char *_Nonnull name);
 struct di_member *_Nullable di_lookup(struct di_object *_Nonnull o,
                                       const char *_Nonnull name);
 struct di_object *_Nullable di_new_object(size_t sz);
 
-struct di_listener *_Nullable
-di_listen_to(struct di_object *_Nonnull o, const char *_Nonnull name, struct di_object *_Nonnull h);
+struct di_listener *_Nullable di_listen_to(struct di_object *_Nonnull o,
+                                           const char *_Nonnull name,
+                                           struct di_object *_Nonnull h);
+struct di_listener *_Nullable di_listen_to_once(struct di_object *_Nonnull o,
+                                                const char *_Nonnull name,
+                                                struct di_object *_Nonnull h,
+                                                bool once);
 int di_stop_listener(struct di_listener *_Nullable);
 int di_emitn(struct di_object *_Nonnull, const char *_Nonnull name, int nargs,
              const di_type_t *_Nullable, const void *_Nonnull const *_Nullable args);
 void di_apoptosis(struct di_object *_Nonnull);
 
-void di_clear_listener(struct di_object *_Nonnull);
+void di_clear_listeners(struct di_object *_Nonnull);
 
 void di_ref_object(struct di_object *_Nonnull);
 void di_unref_object(struct di_object *_Nonnull);
 
+void di_free_tuple(struct di_tuple);
 void di_free_array(struct di_array);
 void di_free_value(di_type_t, void *_Nonnull);
-void di_copy_value(di_type_t t, void *_Nonnull dest, const void *_Nonnull src);
+void di_copy_value(di_type_t t, void *_Nullable dest, const void *_Nullable src);
 
 static inline size_t di_sizeof_type(di_type_t t) {
 	switch (t) {
@@ -142,6 +151,7 @@ static inline size_t di_sizeof_type(di_type_t t) {
 	default: return 0;
 	case DI_TYPE_FLOAT: return sizeof(double);
 	case DI_TYPE_ARRAY: return sizeof(struct di_array);
+	case DI_TYPE_TUPLE: return sizeof(struct di_tuple);
 	case DI_TYPE_UINT:
 	case DI_TYPE_INT: return 8;
 	case DI_TYPE_NUINT: return sizeof(unsigned int);
@@ -154,18 +164,12 @@ static inline size_t di_sizeof_type(di_type_t t) {
 	}
 }
 
-static inline int di_string_to_type(const char *_Nonnull type) {
-	for (int i = 0; i < DI_LAST_TYPE; i++)
-		if (strcmp(type, di_type_name[i]) == 0)
-			return i;
-	return DI_LAST_TYPE;
-}
-
 // Workaround for _Generic limitations, see:
 // http://www.open-std.org/jtc1/sc22/wg14/www/docs/n1930.htm
 #define di_typeid(x)                                                                \
 	_Generic((x*)0, \
 	struct di_array *: DI_TYPE_ARRAY, \
+	struct di_tuple *: DI_TYPE_TUPLE, \
 	int *: DI_TYPE_NINT, \
 	unsigned int *: DI_TYPE_NUINT, \
 	int64_t *: DI_TYPE_INT, \

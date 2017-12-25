@@ -32,7 +32,7 @@ PUBLIC struct di_object *di_new_error(const char *fmt, ...) {
 	struct di_error *err = di_new_object_with_type(struct di_error);
 	err->msg = errmsg;
 
-	di_add_address_member((void *)err, "errmsg", false, DI_TYPE_STRING, &err->msg);
+	di_add_ref_member((void *)err, "errmsg", false, DI_TYPE_STRING, &err->msg);
 	return (void *)err;
 }
 

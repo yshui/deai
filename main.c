@@ -184,6 +184,8 @@ static void setproctitle_init(int argc, char **argv, struct deai *p) {
 	// fprintf(stderr, "%p, %lu\n", p->proctitle, p->proctitle_end -
 	// p->proctitle);
 }
+static void setproctitle_deinit(void) {
+}
 static void di_set_pr_name(struct deai *p, const char *name) {
 	if (name) {
 		memset(p->proctitle, 0, p->proctitle_end - p->proctitle);
@@ -199,6 +201,8 @@ static void di_set_pr_name(struct deai *p, const char *name) {
 static void setproctitle_init(int argc, struct deai *p) {
 }
 static void di_set_pr_name(struct deai *p, const char *name) {
+}
+static void setproctitle_deinit(void) {
 }
 #endif
 
@@ -272,8 +276,8 @@ int main(int argc, char *argv[]) {
 	di_method(p, "__set_proctitle", di_set_pr_name, char *);
 	di_method(p, "__get_argv", di_get_argv);
 
-	di_add_address_member((void *)p, "proctitle", false, DI_TYPE_STRING_LITERAL,
-	                      &p->proctitle);
+	di_add_ref_member((void *)p, "proctitle", false, DI_TYPE_STRING_LITERAL,
+	                  &p->proctitle);
 
 	struct di_ev_signal sigintw;
 	sigintw.ud = p;
@@ -375,5 +379,6 @@ int main(int argc, char *argv[]) {
 	if (!quit)
 		ev_run(p->loop, 0);
 
+	setproctitle_deinit();
 	return 0;
 }

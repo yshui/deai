@@ -35,7 +35,7 @@ void di_xorg_free_sub(struct di_xorg_ext *x) {
 		di_unref_object((void *)x->dc);
 		x->dc = NULL;
 	}
-	di_clear_listener((void *)x);
+	di_clear_listeners((void *)x);
 }
 
 static void xorg_disconnect(struct di_xorg_connection *xc) {
@@ -47,14 +47,12 @@ static void xorg_disconnect(struct di_xorg_connection *xc) {
 
 	// free_sub might need the connection, don't disconnect now
 	struct di_xorg_ext *ext, *text;
-	HASH_ITER(hh, xc->xext, ext, text) {
-		di_xorg_free_sub(ext);
-	}
+	HASH_ITER (hh, xc->xext, ext, text) { di_xorg_free_sub(ext); }
 	xcb_disconnect(xc->c);
 	xc->x = NULL;
 
 	struct di_atom_entry *ae, *tae;
-	HASH_ITER(hh, xc->a_byatom, ae, tae) {
+	HASH_ITER (hh, xc->a_byatom, ae, tae) {
 		HASH_DEL(xc->a_byatom, ae);
 		HASH_DELETE(hh2, xc->a_byname, ae);
 		free(ae->name);
@@ -66,7 +64,7 @@ static void xorg_disconnect(struct di_xorg_connection *xc) {
 	di_apoptosis((void *)xc);
 }
 
-static void di_xorg_ioev(struct di_xorg_connection *dc, struct di_object *fd) {
+static void di_xorg_ioev(struct di_xorg_connection *dc) {
 	// di_get_log(dc->x->di);
 	// di_log_va((void *)log, DI_LOG_DEBUG, "xcb ioev\n");
 
@@ -76,7 +74,7 @@ static void di_xorg_ioev(struct di_xorg_connection *dc, struct di_object *fd) {
 		// handle event
 
 		struct di_xorg_ext *ex, *tmp;
-		HASH_ITER(hh, dc->xext, ex, tmp) {
+		HASH_ITER (hh, dc->xext, ex, tmp) {
 			int status = ex->handle_event(ex, ev);
 			if (status != 1)
 				break;
@@ -178,10 +176,7 @@ struct _xext {
 	const char *name;
 	struct di_xorg_ext *(*new)(struct di_xorg_connection *xc);
 } xext_reg[] = {
-    {"xinput", new_xinput},
-    {"randr", new_randr},
-    {"key", new_key},
-    {NULL, NULL},
+    {"xinput", new_xinput}, {"randr", new_randr}, {"key", new_key}, {NULL, NULL},
 };
 
 static struct di_object *
@@ -216,9 +211,8 @@ static struct di_object *get_screen(struct di_xorg_connection *dc) {
 	ret->height = scrn->height_in_pixels;
 	ret->width = scrn->width_in_pixels;
 
-	di_add_address_member((void *)ret, "height", false, DI_TYPE_UINT,
-	                      &ret->height);
-	di_add_address_member((void *)ret, "width", false, DI_TYPE_UINT, &ret->width);
+	di_field(ret, height);
+	di_field(ret, width);
 
 	return (void *)ret;
 }
@@ -248,7 +242,7 @@ di_xorg_connect_to(struct di_xorg *x, const char *displayname) {
 	         IOEV_READ);
 
 	struct di_object *odc = (void *)dc;
-	auto cl = di_closure(di_xorg_ioev, true, (odc), struct di_object *);
+	auto cl = di_closure(di_xorg_ioev, true, (odc));
 	dc->xcb_fdlistener = di_listen_to(dc->xcb_fd, "read", (void *)cl);
 	di_unref_object((void *)cl);
 

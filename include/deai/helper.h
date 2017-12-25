@@ -129,7 +129,7 @@ int di_gmethod(struct di_object *o, const char *name, di_fn_t fn);
 
 #define STRINGIFY(x) #x
 
-#define addressof(x) (&(x))
+#define addressof(x) (&((typeof(x)[]){x}))
 
 #define di_type_pair(v) di_typeof(v), v,
 #define di_arg_list(...) LIST_APPLY(di_type_pair, SEP_NONE, __VA_ARGS__) DI_LAST_TYPE
@@ -168,6 +168,17 @@ int di_gmethod(struct di_object *o, const char *name, di_fn_t fn);
 #define di_getm(di, modn, on_err) _di_getm(di, modn, return (on_err))
 #define di_getmi(di, modn) _di_getm(di, modn, break)
 
+#define di_schedule_call(di, fn, cap)                                               \
+	do {                                                                        \
+		di_getmi(di, event);                                                \
+		if (!eventm)                                                        \
+			break;                                                      \
+		auto cl = di_closure(fn, true, cap);                                \
+		auto l = di_listen_to_once(eventm, "prepare", (void *)cl, true);    \
+		di_unref_object((void *)cl);                                        \
+		di_unref_object((void *)l);                                         \
+	} while (0)
+
 // call but ignore return
 #define di_call(o, name, ...)                                                       \
 	({                                                                          \
@@ -196,8 +207,52 @@ int di_gmethod(struct di_object *o, const char *name, di_fn_t fn);
 			if (rc != 0)                                                \
 				break;                                              \
 			if (di_typeof(r) != rtype) {                                \
-				di_free_value(rtype, (void *)ret);                  \
-				free((void *)ret);                                  \
+				di_free_value(rtype, ret);                          \
+				free(ret);                                          \
+				rc = -EINVAL;                                       \
+				break;                                              \
+			}                                                           \
+			(r) = *(typeof(r) *)ret;                                    \
+			free(ret);                                                  \
+		} while (0);                                                        \
+		rc;                                                                 \
+	})
+
+#define di_call_callable(c, ...)                                                    \
+	({                                                                          \
+		int rc = 0;                                                         \
+		do {                                                                \
+			di_type_t rt;                                               \
+			void *ret;                                                  \
+			rc = c->call(c, &rt, &ret, VA_ARGS_LENGTH(__VA_ARGS__),     \
+			             (di_type_t[]){LIST_APPLY(di_typeof, SEP_COMMA, \
+			                                      __VA_ARGS__)},        \
+			             (const void *[]){LIST_APPLY(                   \
+			                 addressof, SEP_COMMA, __VA_ARGS__)});      \
+			if (rc != 0)                                                \
+				break;                                              \
+			di_free_value(rt, ret);                                     \
+			free(ret);                                                  \
+		} while (0);                                                        \
+		rc;                                                                 \
+	})
+
+#define di_callr_callable(c, r, ...)                                                \
+	({                                                                          \
+		int rc = 0;                                                         \
+		do {                                                                \
+			di_type_t rt;                                               \
+			void *ret;                                                  \
+			rc = c->call(c, &rt, &ret, VA_ARGS_LENGTH(__VA_ARGS__),     \
+			             (di_type_t[]){LIST_APPLY(di_typeid, SEP_COMMA, \
+			                                      __VA_ARGS__)},        \
+			             (const void *[]){LIST_APPLY(                   \
+			                 addressof, SEP_COMMA, __VA_ARGS__)});      \
+			if (rc != 0)                                                \
+				break;                                              \
+			if (di_typeof(r) != rt) {                                   \
+				di_free_value(rt, ret);                             \
+				free(ret);                                          \
 				rc = -EINVAL;                                       \
 				break;                                              \
 			}                                                           \
@@ -208,14 +263,13 @@ int di_gmethod(struct di_object *o, const char *name, di_fn_t fn);
 	})
 
 #define di_emit(o, name, ...)                                                       \
-	di_emitn((struct di_object *)o, name, VA_ARGS_LENGTH(__VA_ARGS__) + 1,      \
-	         (di_type_t[]){DI_TYPE_OBJECT,                                      \
-	                       LIST_APPLY(di_typeof, SEP_COMMA, __VA_ARGS__)},      \
-	         (const void *[]){&o, LIST_APPLY(addressof, SEP_COMMA, __VA_ARGS__)})
+	di_emitn((struct di_object *)o, name, VA_ARGS_LENGTH(__VA_ARGS__),          \
+	         (di_type_t[]){LIST_APPLY(di_typeof, SEP_COMMA, __VA_ARGS__)},      \
+	         (const void *[]){LIST_APPLY(addressof, SEP_COMMA, __VA_ARGS__)})
 
 #define di_field(o, name)                                                           \
-	di_add_address_member((struct di_object *)(o), #name, false,                \
-	                      di_typeof((o)->name), &((o)->name))
+	di_add_ref_member((struct di_object *)(o), #name, false,                    \
+	                  di_typeof((o)->name), &((o)->name))
 
 #define di_getter(o, name, g) di_method(o, STRINGIFY(__get_##name), g)
 
@@ -264,27 +318,32 @@ int di_gmethod(struct di_object *o, const char *name, di_fn_t fn);
 	         di_return_typeid(fn, struct di_object *, ##__VA_ARGS__)            \
 	             LIST_APPLY_pre(di_typeid, SEP_COMMA, ##__VA_ARGS__))
 
+#define MAKE_VARIANT(x) di_make_variant(di_typeid(x), x)
+
+#define MAKE_VARIANT_LIST(...) LIST_APPLY(MAKE_VARIANT, SEP_COMMA, ##__VA_ARGS__)
+
+#define di_make_tuple(...)                                                          \
+	((struct di_tuple){VA_ARGS_LENGTH(__VA_ARGS__),                             \
+	                   (struct di_variant[]){MAKE_VARIANT_LIST(__VA_ARGS__)}})
+
 static inline void __free_objp(struct di_object **p) {
 	if (*p)
 		di_unref_object(*p);
 	*p = NULL;
 }
 
-static void __attribute__((unused))
-trivial_destroyed_handler(struct di_object *o, struct di_object *o2) {
+static void __attribute__((unused)) trivial_destroyed_handler(struct di_object *o) {
 	di_apoptosis(o);
 }
 
-static void __attribute__((unused))
-trivial_detach(struct di_object *o) {
+static void __attribute__((unused)) trivial_detach(struct di_object *o) {
 	di_apoptosis(o);
 }
 
 static inline struct di_listener *
-di_listen_to_destroyed(struct di_object *o,
-                       void (*fn)(struct di_object *, struct di_object *),
+di_listen_to_destroyed(struct di_object *o, void (*fn)(struct di_object *),
                        struct di_object *o2) {
-	struct di_closure *cl = di_closure(fn, true, (o2), struct di_object *);
+	struct di_closure *cl = di_closure(fn, true, (o2));
 	struct di_listener *ret = di_listen_to(o, "__destroyed", (void *)cl);
 	di_unref_object((void *)cl);
 	return ret;
@@ -295,14 +354,12 @@ typedef void (*di_detach_fn_t)(struct di_object *);
 static inline int
 di_set_detach(struct di_listener *l, di_detach_fn_t fn, struct di_object *o) {
 	struct di_closure *cl = di_closure(fn, true, (o));
-	int ret =
-	    di_add_value_member((void *)l, "__detach", false, DI_TYPE_OBJECT, cl);
+	int ret = di_set((void *)l, "__detach", (struct di_object *)cl);
 	di_unref_object((void *)cl);
 	return ret;
 }
 
-static inline void
-di_stop_unref_listenerp(struct di_listener **l) {
+static inline void di_stop_unref_listenerp(struct di_listener **l) {
 	if (*l) {
 		struct di_listener *tmp = *l;
 		*l = NULL;

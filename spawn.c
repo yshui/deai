@@ -35,7 +35,8 @@ struct di_spawn {
 	struct child *children;
 };
 
-static inline void child_cleanup(EV_P_ struct child *c) {
+static inline void child_cleanup(struct child *c) {
+	EV_P = c->di->loop;
 	ev_child_stop(EV_A_ & c->w);
 	if (c->out) {
 		ev_io_stop(EV_A_ & c->outw);
@@ -48,7 +49,7 @@ static inline void child_cleanup(EV_P_ struct child *c) {
 		free(c->err);
 	}
 	di_unref_object((void *)c->d);
-	di_clear_listener((void *)c);
+	di_clear_listeners((void *)c);
 
 	struct deai *di = c->di;
 	di_unref_object((void *)c);
@@ -78,7 +79,7 @@ static void sigchld_handler(EV_P_ ev_child *w, int revents) {
 	}
 	di_emit(c, "exit", ec, sig);
 
-	child_cleanup(EV_A_ c);
+	child_cleanup(c);
 }
 
 static void
@@ -108,13 +109,13 @@ output_handler(struct child *c, int fd, struct string_buf *b, const char *ev) {
 	}
 }
 
-static void child_destroy(struct child *c, struct deai *di) {
+static void child_destroy(struct child *c) {
 	kill(c->pid, SIGTERM);
 	if (c->err)
 		string_buf_clear(c->err);
 	if (c->out)
 		string_buf_clear(c->out);
-	child_cleanup(di->loop, c);
+	child_cleanup(c);
 }
 
 static void stdout_cb(EV_P_ ev_io *w, int revents) {
