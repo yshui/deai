@@ -28,6 +28,7 @@ cflag_check_and_apply(DI_CFLAGS -Werror=incompatible-pointer-types)
 cflag_check_and_apply(DI_CFLAGS -Werror=int-conversion)
 cflag_check_and_apply(DI_CFLAGS -Werror=nonnull)
 cflag_check_and_apply(DI_CFLAGS -Werror=implicit)
+cflag_check_and_apply(DI_CFLAGS -Werror=implicit-fallthrough)
 cflag_check_and_apply(DI_CFLAGS -Wall)
 
 set(DI_PLUGIN_INSTALL_DIR "lib/deai" CACHE FILEPATH "Install path for plugins.")
