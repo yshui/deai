@@ -30,7 +30,6 @@ cflag_check_and_apply(DI_CFLAGS -Werror=nonnull)
 cflag_check_and_apply(DI_CFLAGS -Werror=implicit)
 cflag_check_and_apply(DI_CFLAGS -Wall)
 
-
 set(DI_PLUGIN_INSTALL_DIR "lib/deai" CACHE FILEPATH "Install path for plugins.")
 option(DI_REFCOUNT_DEBUG "enable reference count debugging" off)
 if (${CMAKE_SYSTEM_NAME} STREQUAL "Linux")
@@ -47,6 +46,7 @@ configure_file(config.h.in config.h)
 
 add_subdirectory(scripts)
 add_subdirectory(plugins)
+add_subdirectory(githooks)
 
 set(SRC
 	main.c
