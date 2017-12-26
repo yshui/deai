@@ -34,13 +34,6 @@ typedef enum di_type {
 	DI_LAST_TYPE
 } di_type_t;
 
-enum di_object_state {
-	DI_OBJECT_STATE_HEALTHY,
-	DI_OBJECT_STATE_APOPTOSIS,
-	DI_OBJECT_STATE_ORPHANED,
-	DI_OBJECT_STATE_DEAD,
-};
-
 struct di_tuple;
 struct di_object;
 typedef void (*di_fn_t)(void);
@@ -57,7 +50,7 @@ struct di_object {
 	di_call_fn_t _Nullable call;
 
 	uint64_t ref_count;
-	uint16_t state;
+	uint8_t destroyed;
 };
 
 struct di_array {
@@ -97,13 +90,13 @@ int di_rawcallxn(struct di_object *_Nonnull o, const char *_Nonnull name,
 int di_setx(struct di_object *_Nonnull o, const char *_Nonnull prop, di_type_t type,
             void *_Nullable val);
 int di_rawgetx(struct di_object *_Nonnull o, const char *_Nonnull prop,
-               di_type_t *_Nonnull type, const void *_Nullable *_Nonnull ret);
+               di_type_t *_Nonnull type, void *_Nullable *_Nonnull ret);
 int di_rawgetxt(struct di_object *_Nonnull o, const char *_Nonnull prop,
-                di_type_t type, const void *_Nullable *_Nonnull ret);
+                di_type_t type, void *_Nullable *_Nonnull ret);
 int di_getx(struct di_object *_Nonnull no, const char *_Nonnull prop,
-            di_type_t *_Nonnull type, const void *_Nullable *_Nonnull ret);
+            di_type_t *_Nonnull type, void *_Nullable *_Nonnull ret);
 int di_getxt(struct di_object *_Nonnull o, const char *_Nonnull prop, di_type_t type,
-             const void *_Nullable *_Nonnull ret);
+             void *_Nullable *_Nonnull ret);
 
 int di_set_type(struct di_object *_Nonnull o, const char *_Nonnull type);
 const char *_Nonnull di_get_type(struct di_object *_Nonnull o);
@@ -120,18 +113,24 @@ struct di_object *_Nullable di_new_object(size_t sz);
 
 struct di_listener *_Nullable di_listen_to(struct di_object *_Nonnull o,
                                            const char *_Nonnull name,
-                                           struct di_object *_Nonnull h);
+                                           struct di_object *_Nullable h);
 struct di_listener *_Nullable di_listen_to_once(struct di_object *_Nonnull o,
                                                 const char *_Nonnull name,
-                                                struct di_object *_Nonnull h,
+                                                struct di_object *_Nullable h,
                                                 bool once);
+
+// Unscribe from a signal from the listener side. __detach is not called in this case
 int di_stop_listener(struct di_listener *_Nullable);
 int di_emitn(struct di_object *_Nonnull, const char *_Nonnull name, struct di_tuple);
-void di_apoptosis(struct di_object *_Nonnull);
+// Call object dtor, remove all listeners and members from the object. And free the
+// memory
+// if the ref count drop to 0 after this process
+void di_destroy_object(struct di_object *_Nonnull);
 
+// Detach all listeners attached to object, __detach of listeners will be called
 void di_clear_listeners(struct di_object *_Nonnull);
 
-void di_ref_object(struct di_object *_Nonnull);
+struct di_object *di_ref_object(struct di_object *_Nonnull);
 void di_unref_object(struct di_object *_Nonnull);
 
 void di_free_tuple(struct di_tuple);

@@ -13,17 +13,16 @@
 
 #include "common.h"
 
-static inline void
-typed_alloc_copy(di_type_t type, const void **dest, const void *src) {
+static inline void typed_alloc_copy(di_type_t type, const void *src, void **dest) {
 	void *ret = calloc(1, di_sizeof_type(type));
 	memcpy(ret, src, di_sizeof_type(type));
 	*dest = ret;
 }
 
-static inline int integer_conversion(di_type_t inty, const void *inp,
-                                     di_type_t outty, const void **outp) {
+static inline int
+integer_conversion(di_type_t inty, const void *inp, di_type_t outty, void **outp) {
 	if (inty == outty) {
-		typed_alloc_copy(inty, outp, inp);
+		typed_alloc_copy(inty, inp, outp);
 		return 0;
 	}
 
@@ -80,10 +79,10 @@ static inline bool is_integer(di_type_t t) {
 	       t == DI_TYPE_NUINT;
 }
 
-static inline int di_type_conversion(di_type_t inty, const void *inp,
-                                     di_type_t outty, const void **outp) {
+static inline int
+di_type_conversion(di_type_t inty, const void *inp, di_type_t outty, void **outp) {
 	if (inty == outty) {
-		typed_alloc_copy(inty, outp, inp);
+		typed_alloc_copy(inty, inp, outp);
 		return 0;
 	}
 

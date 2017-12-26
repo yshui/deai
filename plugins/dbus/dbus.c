@@ -68,7 +68,9 @@ static struct di_object *di_dbus_send(struct di_dbus_connection *c, DBusMessage 
 static struct di_object *_dbus_introspect(struct di_dbus_object *o) {
 	DBusMessage *msg = dbus_message_new_method_call(
 	    o->bus, o->obj, DBUS_INTROSPECT_IFACE, "Introspect");
-	return di_dbus_send(o->c, msg);
+	auto ret = di_dbus_send(o->c, msg);
+	dbus_message_unref(msg);
+	return ret;
 }
 
 static void _dbus_lookup_method_cb(char *method, struct di_object *cb, void *msg) {
@@ -110,6 +112,7 @@ static void _dbus_lookup_method_cb(char *method, struct di_object *cb, void *msg
 				if (strcmp(name, method) == 0) {
 					di_call_callable(cb, current_interface,
 					                 (struct di_object *)NULL);
+					free(current_interface);
 					dbus_message_unref(msg);
 					return;
 				}
@@ -139,9 +142,9 @@ static void _dbus_lookup_method(struct di_dbus_object *o, const char *method,
 
 	auto cl =
 	    di_closure(_dbus_lookup_method_cb, false, (method, closure), void *);
-	auto l = di_listen_to_once(p, "reply", (void *)cl, true);
-	di_unref_object((void *)l);
+	di_listen_to_once(p, "reply", (void *)cl, true);
 	di_unref_object((void *)cl);
+	di_unref_object(p);
 }
 
 static void _dbus_call_method_reply_cb(struct di_object *sig, void *msg) {
@@ -171,10 +174,10 @@ _dbus_call_method_step2(struct di_dbus_object *dobj, struct di_object *sig,
 	_dbus_serialize_tuple(&i, t);
 	auto p = di_dbus_send(dobj->c, msg);
 	auto cl = di_closure(_dbus_call_method_reply_cb, false, (sig), void *);
-	auto l = di_listen_to_once(p, "reply", (void *)cl, true);
-	di_unref_object((void *)l);
+	di_listen_to_once(p, "reply", (void *)cl, true);
 	di_unref_object((void *)cl);
 	di_unref_object((void *)p);
+	dbus_message_unref(msg);
 }
 
 static void di_free_dbus_object(struct di_object *o) {
@@ -209,8 +212,8 @@ static void di_dbus_free_method(struct di_dbus_method *o) {
 static int call_dbus_method(struct di_dbus_method *m, di_type_t *rt, void **ret,
                             struct di_tuple t) {
 	*rt = DI_TYPE_OBJECT;
-	void *retd = tmalloc(void *, 1);
-	*(struct di_object **)retd = di_dbus_call_method(m->dobj, m->method, t);
+	auto retd = tmalloc(struct di_object *, 1);
+	*retd = di_dbus_call_method(m->dobj, m->method, t);
 	*ret = retd;
 	return 0;
 }
@@ -251,21 +254,21 @@ static void ioev_callback(void *conn, void *ptr, int event) {
 		dbus_watch_handle(ptr, DBUS_WATCH_WRITABLE);
 }
 
-static void _di_dbus_shutdown(struct di_dbus_connection *conn) {
-	if (!conn->conn)
-		return;
-	dbus_connection_close(conn->conn);
-	dbus_connection_unref(conn->conn);
-	conn->conn = NULL;
-	di_unref_object((void *)conn->di);
-	conn->di = NULL;
+static void _dbus_shutdown(DBusConnection *conn) {
+	dbus_connection_close(conn);
+	dbus_connection_unref(conn);
 }
 
 static void di_dbus_shutdown(struct di_dbus_connection *conn) {
+	if (!conn->conn)
+		return;
 	// this function might be called in dbus dispatch function,
 	// closing connection in that context is bad.
 	// so delay the shutdown until we return to mainloop
-	di_schedule_call(conn->di, _di_dbus_shutdown, ((struct di_object *)conn));
+	di_schedule_call(conn->di, _dbus_shutdown, ((void *)conn->conn));
+	conn->conn = NULL;
+	di_unref_object((void *)conn->di);
+	conn->di = NULL;
 }
 
 static unsigned int _dbus_add_watch(DBusWatch *w, void *ud) {
@@ -294,13 +297,8 @@ static unsigned int _dbus_add_watch(DBusWatch *w, void *ud) {
 
 	dbus_watch_set_data(w, l, (void *)di_stop_listener);
 
-	di_set_detach(l, (void *)_di_dbus_shutdown, (void *)oc);
+	di_set_detach(l, (void *)di_dbus_shutdown, (void *)oc);
 	return true;
-}
-
-static void _dbus_remove_watch(DBusWatch *w, void *ud) {
-	struct di_object *l = dbus_watch_get_data(w);
-	di_remove_member(l, "__detach");
 }
 
 static void _dbus_toggle_watch(DBusWatch *w, void *ud) {
@@ -329,7 +327,7 @@ static struct di_object *di_dbus_get_session_bus(struct di_object *o) {
 	di_ref_object((void *)m->di);
 	di_method(ret, "get", di_dbus_get_object, const char *, const char *);
 
-	dbus_connection_set_watch_functions(conn, _dbus_add_watch, _dbus_remove_watch,
+	dbus_connection_set_watch_functions(conn, _dbus_add_watch, NULL,
 	                                    _dbus_toggle_watch, ret, NULL);
 
 	ret->dtor = (void *)di_dbus_shutdown;

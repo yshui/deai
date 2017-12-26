@@ -48,7 +48,6 @@ static inline void child_cleanup(struct child *c) {
 		close(c->errw.fd);
 		free(c->err);
 	}
-	di_unref_object((void *)c->d);
 	di_clear_listeners((void *)c);
 
 	struct deai *di = c->di;
@@ -225,5 +224,4 @@ void di_init_spawn(struct deai *di) {
 	di_method(m, "run", di_spawn_run, struct di_array, bool);
 
 	di_register_module(di, "spawn", (void *)m);
-	di_unref_object((void *)m);
 }

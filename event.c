@@ -100,7 +100,7 @@ static void di_toggle_ioev(struct di_object *obj) {
 
 static void di_ioev_dtor(struct di_object *obj) {
 	struct di_ioev *ev = (void *)obj;
-	di_stop_unref_listenerp(&ev->d);
+	di_stop_listener(ev->d);
 	ev_io_stop(ev->di->loop, &ev->evh);
 	di_unref_object((void *)ev->di);
 	ev->di = NULL;
@@ -134,7 +134,7 @@ static struct di_object *di_create_ioev(struct di_object *obj, int fd, int t) {
 
 static void di_timer_dtor(struct di_object *obj) {
 	struct di_timer *ev = (void *)obj;
-	di_stop_unref_listenerp(&ev->d);
+	di_stop_listener(ev->d);
 	ev_timer_stop(ev->di->loop, &ev->evt);
 	di_unref_object((void *)ev->di);
 	ev->di = NULL;
@@ -177,7 +177,7 @@ static struct di_object *di_create_timer(struct di_object *obj, uint64_t timeout
 }
 
 static void periodic_dtor(struct di_periodic *p) {
-	di_stop_unref_listenerp(&p->d);
+	di_stop_listener(p->d);
 	ev_periodic_stop(p->di->loop, &p->pt);
 	di_unref_object((void *)p->di);
 	p->di = NULL;
@@ -231,5 +231,4 @@ void di_init_event(struct deai *di) {
 	ev_prepare_start(di->loop, (ev_prepare *)dep);
 
 	di_register_module(di, "event", (void *)em);
-	di_unref_object((void *)em);
 }

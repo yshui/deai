@@ -5,7 +5,7 @@ cmake_install.cmake
 *.a
 *.so
 piped
-test.lua
 install_manifest.txt
 deai.d
 .gdb_history
+*.lua

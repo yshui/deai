@@ -179,6 +179,5 @@ PUBLIC int di_plugin_init(struct deai *di) {
 	fm->di = di;
 	di_method(fm, "watch", di_file_new_watch, struct di_array);
 	di_register_module(di, "file", (void *)fm);
-	di_unref_object((void *)fm);
 	return 0;
 }

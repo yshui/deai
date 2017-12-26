@@ -49,7 +49,7 @@ int di_gmethod(struct di_object *o, const char *name, di_fn_t fn);
 #define di_get(o, prop, r)                                                          \
 	({                                                                          \
 		int rc;                                                             \
-		const void *ret;                                                    \
+		void *ret;                                                          \
 		do {                                                                \
 			rc = di_getxt((void *)o, prop, di_typeof(r), &ret);         \
 			if (rc != 0)                                                \
@@ -174,9 +174,8 @@ int di_gmethod(struct di_object *o, const char *name, di_fn_t fn);
 		if (!eventm)                                                        \
 			break;                                                      \
 		auto cl = di_closure(fn, true, cap);                                \
-		auto l = di_listen_to_once(eventm, "prepare", (void *)cl, true);    \
+		di_listen_to_once(eventm, "prepare", (void *)cl, true);             \
 		di_unref_object((void *)cl);                                        \
-		di_unref_object((void *)l);                                         \
 	} while (0)
 
 // call but ignore return
@@ -330,20 +329,11 @@ static inline void __free_objp(struct di_object **p) {
 }
 
 static void __attribute__((unused)) trivial_destroyed_handler(struct di_object *o) {
-	di_apoptosis(o);
+	di_destroy_object(o);
 }
 
 static void __attribute__((unused)) trivial_detach(struct di_object *o) {
-	di_apoptosis(o);
-}
-
-static inline struct di_listener *
-di_listen_to_destroyed(struct di_object *o, void (*fn)(struct di_object *),
-                       struct di_object *o2) {
-	struct di_closure *cl = di_closure(fn, true, (o2));
-	struct di_listener *ret = di_listen_to(o, "__destroyed", (void *)cl);
-	di_unref_object((void *)cl);
-	return ret;
+	di_destroy_object(o);
 }
 
 typedef void (*di_detach_fn_t)(struct di_object *);
@@ -351,19 +341,16 @@ typedef void (*di_detach_fn_t)(struct di_object *);
 static inline int
 di_set_detach(struct di_listener *l, di_detach_fn_t fn, struct di_object *o) {
 	struct di_closure *cl = di_closure(fn, true, (o));
-	int ret = di_set((void *)l, "__detach", (struct di_object *)cl);
+	int ret = di_add_value_member((struct di_object *)l, "__detach", false,
+	                              DI_TYPE_OBJECT, cl);
 	di_unref_object((void *)cl);
 	return ret;
 }
 
-static inline void di_stop_unref_listenerp(struct di_listener **l) {
-	if (*l) {
-		struct di_listener *tmp = *l;
-		*l = NULL;
-		di_stop_listener(tmp);
-		di_unref_object((void *)tmp);
-	}
+static inline struct di_listener *
+di_listen_to_destroyed(struct di_object *_Nonnull o, void (*fn)(struct di_object *),
+                       struct di_object *o2) {
+	struct di_listener *ret = di_listen_to(o, "__destroyed", NULL);
+	di_set_detach(ret, fn, o2);
+	return ret;
 }
-
-// TODO maybe
-// macro to generate c wrapper for di functions

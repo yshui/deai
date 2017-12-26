@@ -129,7 +129,7 @@ struct di_ev_prepare {
 
 void di_quit_cb(EV_P_ ev_prepare *w, int revents) {
 	struct di_ev_prepare *evp = (void *)w;
-	di_apoptosis((void *)evp->di);
+	di_destroy_object((void *)evp->di);
 }
 
 void di_prepare_quit(struct deai *di) {
@@ -220,7 +220,9 @@ static struct di_array di_get_argv(struct deai *p) {
 }
 
 PUBLIC int di_register_module(struct deai *p, const char *name, struct di_module *m) {
-	return di_add_value_member((void *)p, name, false, DI_TYPE_OBJECT, m);
+	int ret = di_add_value_member((void *)p, name, false, DI_TYPE_OBJECT, m);
+	di_unref_object((void *)m);
+	return ret;
 }
 
 define_trivial_cleanup(char *, free_charpp);

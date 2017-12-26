@@ -30,5 +30,4 @@ void di_init_env(struct deai *p) {
 	di_method(m, "__set", di_env_set, char *, char *);
 
 	di_register_module(p, "env", m);
-	di_unref_object((void *)m);
 }

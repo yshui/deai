@@ -56,7 +56,7 @@ _di_typed_trampoline(ffi_cif *cif, di_fn_t fn, void *ret, const di_type_t *fnats
 	assert(nargs + nargs0 <= MAX_NARGS);
 
 	void *null_ptr = NULL;
-	const void **xargs = alloca((nargs0 + nargs) * sizeof(void *));
+	void **xargs = alloca((nargs0 + nargs) * sizeof(void *));
 	memcpy(xargs, args0, sizeof(void *) * nargs0);
 
 	int rc = 0;

@@ -24,7 +24,7 @@ struct xorg_key {
 struct keybinding {
 	struct di_object;
 
-	xcb_keysym_t keysym; // really needed?
+	xcb_keysym_t keysym;        // really needed?
 	xcb_keycode_t *keycodes;
 	uint16_t modifiers;
 	struct xorg_key *k;
@@ -62,14 +62,11 @@ static void ungrab(struct keybinding *kb) {
 }
 
 static void binding_dtor(struct keybinding *kb) {
-	if (kb->k) {
-		ungrab(kb);
-		free(kb->keycodes);
-		list_del(&kb->siblings);
-		di_unref_object((void *)kb->k);
-		kb->k = NULL;
-	}
-	di_apoptosis((void *)kb);
+	ungrab(kb);
+	free(kb->keycodes);
+	list_del(&kb->siblings);
+	di_unref_object((void *)kb->k);
+	kb->k = NULL;
 }
 
 static int refresh_binding(struct keybinding *kb) {
@@ -89,13 +86,14 @@ static int refresh_binding(struct keybinding *kb) {
 	auto s = screen_of_display(dc->c, dc->dflt_scrn);
 	for (int i = 0; kb->keycodes[i] != XCB_NO_SYMBOL; i++) {
 		auto err = xcb_request_check(
-		    dc->c, xcb_grab_key_checked(
-		                  dc->c, true, s->root, kb->modifiers, kb->keycodes[i],
-		                  XCB_GRAB_MODE_ASYNC, XCB_GRAB_MODE_SYNC));
+		    dc->c, xcb_grab_key_checked(dc->c, true, s->root, kb->modifiers,
+		                                kb->keycodes[i], XCB_GRAB_MODE_ASYNC,
+		                                XCB_GRAB_MODE_SYNC));
 		if (err) {
 			di_getmi(dc->x->di, log);
 			if (logm)
-				di_log_va(logm, DI_LOG_ERROR, "Cannot grab %c", kb->keycodes[i]);
+				di_log_va(logm, DI_LOG_ERROR, "Cannot grab %c",
+				          kb->keycodes[i]);
 			free(err);
 		}
 	}
@@ -138,7 +136,7 @@ new_binding(struct xorg_key *k, struct di_array modifiers, char *key, bool repla
 		return di_new_error("Failed to setup key grab");
 	}
 
-	di_method(kb, "stop", binding_dtor);
+	di_method(kb, "stop", di_destroy_object);
 	return (void *)kb;
 }
 
@@ -194,7 +192,7 @@ static int handle_key(struct di_xorg_ext *ext, xcb_generic_event_t *ev) {
 			return 1;
 		if (xcb_refresh_keyboard_mapping(k->keysyms, me) == 1) {
 			struct keybinding *kb;
-			list_for_each_entry(kb, &k->bindings, siblings) {
+			list_for_each_entry (kb, &k->bindings, siblings) {
 				int ret = refresh_binding(kb);
 				if (ret != 0)
 					binding_dtor(kb);
@@ -205,11 +203,11 @@ static int handle_key(struct di_xorg_ext *ext, xcb_generic_event_t *ev) {
 	}
 
 	struct keybinding *kb, *nkb;
-	list_for_each_entry(kb, &k->bindings, siblings)
+	list_for_each_entry (kb, &k->bindings, siblings)
 		di_ref_object((void *)kb);
 
 	bool replay = true;
-	list_for_each_entry_safe(kb, nkb, &k->bindings, siblings) {
+	list_for_each_entry_safe (kb, nkb, &k->bindings, siblings) {
 		__label__ match, end;
 		if (kb->modifiers != mod)
 			continue;
@@ -226,9 +224,11 @@ static int handle_key(struct di_xorg_ext *ext, xcb_generic_event_t *ev) {
 	}
 
 	if (replay)
-		xcb_allow_events(ext->dc->c, XCB_ALLOW_REPLAY_KEYBOARD, XCB_CURRENT_TIME);
+		xcb_allow_events(ext->dc->c, XCB_ALLOW_REPLAY_KEYBOARD,
+		                 XCB_CURRENT_TIME);
 	else
-		xcb_allow_events(ext->dc->c, XCB_ALLOW_SYNC_KEYBOARD, XCB_CURRENT_TIME);
+		xcb_allow_events(ext->dc->c, XCB_ALLOW_SYNC_KEYBOARD,
+		                 XCB_CURRENT_TIME);
 	xcb_flush(ext->dc->c);
 	return 0;
 }

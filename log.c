@@ -164,5 +164,4 @@ void di_init_log(struct deai *di) {
 	di_method(l, "file_target", file_target, char *, bool);
 	di_getter_setter(l, log_level, get_log_level, set_log_level);
 	di_register_module(di, "log", (void *)l);
-	di_unref_object((void *)l);
 }

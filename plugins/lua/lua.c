@@ -56,7 +56,6 @@ struct di_lua_state {
 	// and access in lua again as module.
 	//
 	// lua_state -> di_module/di_lua_ref -> lua_script -> lua_state
-	// Need to use di_apoptosis
 	struct di_object;
 	lua_State *L;
 	struct di_lua_module *m;
@@ -68,12 +67,7 @@ struct di_lua_ref {
 	int tref;
 	struct di_lua_script *s;
 	struct di_listener *d;
-};
-
-struct di_lua_handler {
-	struct di_lua_ref;
-
-	struct di_lua_listener *ll;
+	struct di_listener *attached_listener;
 };
 
 struct di_lua_script {
@@ -156,18 +150,15 @@ struct lua_table_getter {
 	struct di_lua_ref *t;
 };
 
-static void lua_ref_cleanup(struct di_lua_ref *t) {
-	di_stop_unref_listenerp(&t->d);
-	if (t->s) {
-		luaL_unref(t->s->L->L, LUA_REGISTRYINDEX, t->tref);
-		di_unref_object((void *)t->s);
-		t->s = NULL;
-	}
-	di_apoptosis((void *)t);
-}
-
 static void lua_ref_dtor(struct di_lua_ref *t) {
-	lua_ref_cleanup(t);
+	di_stop_listener(t->d);
+	luaL_unref(t->s->L->L, LUA_REGISTRYINDEX, t->tref);
+	di_unref_object((void *)t->s);
+	if (t->attached_listener) {
+		di_stop_listener(t->attached_listener);
+		t->attached_listener = NULL;
+	}
+	t->s = NULL;
 }
 
 static void *di_lua_type_to_di(lua_State *L, int i, di_type_t *t);
@@ -198,10 +189,8 @@ di_lua_table_get(struct di_object *m, di_type_t *rt, void **ret, struct di_tuple
 	return 0;
 }
 
-static struct di_object *
-_lua_type_to_di_object(lua_State *L, int i, void *call, size_t sz) {
+static struct di_lua_ref *lua_type_to_di_object(lua_State *L, int i, void *call) {
 	// TODO need to make sure that same lua object get same di object
-	assert(sz >= sizeof(struct di_lua_ref));
 	struct di_lua_script *s;
 
 	lua_pushliteral(L, DI_LUA_REGISTRY_SCRIPT_OBJECT_KEY);
@@ -209,7 +198,7 @@ _lua_type_to_di_object(lua_State *L, int i, void *call, size_t sz) {
 	s = lua_touserdata(L, -1);
 	lua_pop(L, 1);
 
-	struct di_lua_ref *o = (void *)di_new_object(sz);
+	auto o = di_new_object_with_type(struct di_lua_ref);
 	o->tref = luaL_ref(L, LUA_REGISTRYINDEX);
 	o->s = s;
 	di_ref_object((void *)s);
@@ -222,14 +211,10 @@ _lua_type_to_di_object(lua_State *L, int i, void *call, size_t sz) {
 	di_unref_object((void *)getter);
 	o->dtor = (void *)lua_ref_dtor;
 	o->call = call;
-	o->d =
-	    di_listen_to_destroyed((void *)s->L, (void *)lua_ref_cleanup, (void *)o);
+	o->d = di_listen_to_destroyed((void *)s->L, trivial_destroyed_handler,
+	                              (void *)o);
 
-	return (void *)o;
-}
-
-static struct di_object *lua_type_to_di_object(lua_State *L, int i, void *call) {
-	return _lua_type_to_di_object(L, i, call, sizeof(struct di_lua_ref));
+	return o;
 }
 
 static int
@@ -335,7 +320,7 @@ const luaL_Reg di_lua_di_methods[] = {
 };
 
 static void lua_state_dtor(struct di_lua_state *obj) {
-	di_stop_unref_listenerp(&obj->d);
+	di_stop_listener(obj->d);
 	obj->m->L = NULL;
 	lua_close(obj->L);
 }
@@ -551,7 +536,8 @@ static void *di_lua_type_to_di(lua_State *L, int i, di_type_t *t) {
 		return __ret;                                                       \
 	} while (0)
 #define tostringdup(L, i) strdup(lua_tostring(L, i))
-#define todiobj(L, i) lua_type_to_di_object(L, i, call_lua_function)
+#define todiobj(L, i)                                                               \
+	(struct di_object *)lua_type_to_di_object(L, i, call_lua_function)
 #define toobjref(L, i)                                                              \
 	({                                                                          \
 		struct di_object *x = *(void **)lua_touserdata(L, i);               \
@@ -597,6 +583,20 @@ static void *di_lua_type_to_di(lua_State *L, int i, di_type_t *t) {
 #undef todiobj
 }
 
+static int di_lua_listener_gc(lua_State *L) {
+	struct di_object *o = di_lua_checkobject(L, 1);
+	// fprintf(stderr, "lua gc %p\n", lo);
+	di_stop_listener((struct di_listener *)o);
+	return 0;
+}
+
+const luaL_Reg di_lua_listener_methods[] = {
+    {"__index", di_lua_getter},
+    {"__newindex", di_lua_setter},
+    {"__gc", di_lua_listener_gc},
+    {0, 0},
+};
+
 static int di_lua_add_listener(lua_State *L) {
 	if (lua_gettop(L) != 2)
 		return luaL_error(L, "'on' only takes 2 arguments");
@@ -606,18 +606,16 @@ static int di_lua_add_listener(lua_State *L) {
 	if (lua_type(L, -1) != LUA_TFUNCTION)
 		return luaL_argerror(L, 2, "not a function");
 
-	struct di_lua_handler *h =
-	    (void *)lua_type_to_di_object(L, -1, call_lua_function);
+	auto h = lua_type_to_di_object(L, -1, call_lua_function);
 
 	auto l = di_listen_to(o, signame, (void *)h);
 	if (IS_ERR(l))
 		return luaL_error(L, "failed to add listener %s",
 		                  strerror(PTR_ERR(l)));
-	// ABRT_IF_ERR(di_hold_object(s->m->listeners, (void *)l));
+	h->attached_listener = l;
 	di_unref_object((void *)h);
 
-	di_lua_pushany(L, NULL, DI_TYPE_OBJECT, &l);
-	di_unref_object((void *)l);
+	di_lua_pushobject(L, NULL, (void *)l, di_lua_methods);
 	return 1;
 }
 
@@ -767,7 +765,7 @@ static int di_lua_getter(lua_State *L) {
 	}
 
 	di_type_t rt;
-	const void *ret;
+	void *ret;
 	int rc = di_getx(ud, key, &rt, &ret);
 	if (rc != 0) {
 		lua_pushnil(L);
@@ -818,6 +816,5 @@ PUBLIC int di_plugin_init(struct deai *di) {
 	di_method(m, "load_script", di_lua_load_script, char *);
 
 	di_register_module(di, "lua", (void *)m);
-	di_unref_object((void *)m);
 	return 0;
 }
