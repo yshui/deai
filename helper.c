@@ -36,7 +36,7 @@ PUBLIC struct di_object *di_new_error(const char *fmt, ...) {
 	return (void *)err;
 }
 
-PUBLIC int di_gmethod(struct di_object *o, const char *name, di_fn_t fn) {
+PUBLIC int di_gmethod(struct di_object *o, const char *name, void (*fn)(void)) {
 	with_object_cleanup(di_object) m = di_new_object_with_type(struct di_object);
 	m->call = (void *)fn;
 

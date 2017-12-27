@@ -36,7 +36,6 @@ typedef enum di_type {
 
 struct di_tuple;
 struct di_object;
-typedef void (*di_fn_t)(void);
 typedef int (*di_call_fn_t)(struct di_object *_Nonnull, di_type_t *_Nonnull rt,
                             void *_Nullable *_Nonnull ret, struct di_tuple);
 struct di_signal;
@@ -130,7 +129,7 @@ void di_destroy_object(struct di_object *_Nonnull);
 // Detach all listeners attached to object, __detach of listeners will be called
 void di_clear_listeners(struct di_object *_Nonnull);
 
-struct di_object *di_ref_object(struct di_object *_Nonnull);
+struct di_object *_Nonnull di_ref_object(struct di_object *_Nonnull);
 void di_unref_object(struct di_object *_Nonnull);
 
 void di_free_tuple(struct di_tuple);

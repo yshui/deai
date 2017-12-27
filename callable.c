@@ -17,7 +17,7 @@ struct di_typed_method {
 	struct di_object;
 
 	struct di_object *this;
-	di_fn_t fn;
+	void (*Nonnull fn)(void);
 
 	int nargs;
 	di_type_t rtype;
@@ -29,7 +29,7 @@ struct di_closure {
 	struct di_object;
 
 	const void **cargs;
-	di_fn_t fn;
+	void (*Nonnull fn)(void);
 
 	int nargs;
 	int nargs0;
@@ -47,9 +47,9 @@ static inline void *allocate_for_return(di_type_t rtype) {
 }
 
 static int
-_di_typed_trampoline(ffi_cif *cif, di_fn_t fn, void *ret, const di_type_t *fnats,
-                     int nargs0, const void *const *args0, int nargs,
-                     const di_type_t *ats, void *const *args) {
+_di_typed_trampoline(ffi_cif *cif, void (*fn)(void), void *ret,
+                     const di_type_t *fnats, int nargs0, const void *const *args0,
+                     int nargs, const di_type_t *ats, void *const *args) {
 	assert(nargs == 0 || args != NULL);
 	assert(nargs0 == 0 || args0 != NULL);
 	assert(nargs >= 0 && nargs0 >= 0);
@@ -163,9 +163,9 @@ static void free_closure(struct di_object *o) {
 }
 
 PUBLIC struct di_closure *
-di_create_closure(di_fn_t fn, di_type_t rtype, int nargs0, const di_type_t *cats,
-                  const void *const *cargs, int nargs, const di_type_t *ats,
-                  bool weak_capture) {
+di_create_closure(void (*fn)(void), di_type_t rtype, int nargs0,
+                  const di_type_t *cats, const void *const *cargs, int nargs,
+                  const di_type_t *ats, bool weak_capture) {
 	if (nargs0 < 0 || nargs < 0 || nargs0 + nargs > MAX_NARGS)
 		return ERR_PTR(-E2BIG);
 
@@ -221,7 +221,7 @@ static void free_method(struct di_typed_method *tm) {
 	free(tm->cif.arg_types);
 }
 
-PUBLIC int di_add_method(struct di_object *o, const char *name, di_fn_t fn,
+PUBLIC int di_add_method(struct di_object *o, const char *name, void (*fn)(void),
                          di_type_t rtype, int nargs, ...) {
 	// TODO: convert to use closure
 	if (nargs < 0 || nargs + 1 > MAX_NARGS)

@@ -14,18 +14,16 @@
 #include <stddef.h>
 #include <stdint.h>
 
-struct di_object *di_new_error(const char *fmt, ...);
+#include "common.h"
 
-int di_register_signal(struct di_object *r, const char *name, int nargs,
-                       di_type_t *types);
-int di_new_value_with_address(struct di_object *o, const char *name, bool writable,
-                              bool own, di_type_t t, void *v);
-int di_new_value(struct di_object *o, const char *name, bool writable, di_type_t t,
-                 ...);
-int di_gmethod(struct di_object *o, const char *name, di_fn_t fn);
+struct di_object *ret_nonnull di_new_error(const char *Nonnull fmt, ...);
 
-int di_proxy_signal(struct di_object *src, const char *srcsig,
-                    struct di_object *proxy, const char *proxysig);
+int di_gmethod(struct di_object *Nonnull o, const char *Nonnull name,
+               void (*Nonnull fn)(void)) nonnull_args(1, 2, 3);
+
+int di_proxy_signal(struct di_object *Nonnull src, const char *Nonnull srcsig,
+                    struct di_object *Nonnull proxy, const char *Nonnull proxysig)
+    nonnull_args(1, 2, 3, 4);
 
 #define DTOR(o) ((struct di_object *)o)->dtor
 
@@ -150,7 +148,7 @@ int di_proxy_signal(struct di_object *src, const char *srcsig,
 
 #define di_closure(fn, weak, caps, ...)                                             \
 	di_create_closure(                                                          \
-	    (di_fn_t)fn, di_return_typeid(fn capture_types caps, ##__VA_ARGS__),    \
+	    (void *)fn, di_return_typeid(fn capture_types caps, ##__VA_ARGS__),     \
 	    capture caps, VA_ARGS_LENGTH(__VA_ARGS__),                              \
 	    (di_type_t[]){LIST_APPLY(di_typeid, SEP_COMMA, __VA_ARGS__)}, weak)
 
@@ -305,7 +303,7 @@ int di_proxy_signal(struct di_object *src, const char *srcsig,
 #define di_return_typeid(fn, ...) di_typeid(di_return_typeof(fn, ##__VA_ARGS__))
 
 #define di_register_typed_method(o, name, fn, rtype, ...)                           \
-	di_add_method((struct di_object *)(o), (name), (di_fn_t)(fn), (rtype),      \
+	di_add_method((struct di_object *)(o), (name), (void *)(fn), (rtype),       \
 	              VA_ARGS_LENGTH(__VA_ARGS__), ##__VA_ARGS__)
 
 #define INDIRECT(fn, ...) fn(__VA_ARGS__)
@@ -325,24 +323,27 @@ int di_proxy_signal(struct di_object *src, const char *srcsig,
 	((struct di_tuple){VA_ARGS_LENGTH(__VA_ARGS__),                             \
 	                   (struct di_variant[]){MAKE_VARIANT_LIST(__VA_ARGS__)}})
 
-static inline void __free_objp(struct di_object **p) {
+static inline void nonnull_args(1) __free_objp(struct di_object *Nullable *Nonnull p) {
 	if (*p)
 		di_unref_object(*p);
 	*p = NULL;
 }
 
-static void __attribute__((unused)) trivial_destroyed_handler(struct di_object *o) {
+static void __attribute__((unused)) nonnull_args(1)
+    trivial_destroyed_handler(struct di_object *Nonnull o) {
 	di_destroy_object(o);
 }
 
-static void __attribute__((unused)) trivial_detach(struct di_object *o) {
+static void __attribute__((unused)) nonnull_args(1)
+    trivial_detach(struct di_object *Nonnull o) {
 	di_destroy_object(o);
 }
 
-typedef void (*di_detach_fn_t)(struct di_object *);
+typedef void (*_Nonnull di_detach_fn_t)(struct di_object *_Nonnull);
 
-static inline int
-di_set_detach(struct di_listener *l, di_detach_fn_t fn, struct di_object *o) {
+static inline int nonnull_args(1, 2, 3)
+    di_set_detach(struct di_listener *_Nonnull l, di_detach_fn_t fn,
+                  struct di_object *_Nonnull o) {
 	struct di_closure *cl = di_closure(fn, true, (o));
 	int ret = di_add_value_member((struct di_object *)l, "__detach", false,
 	                              DI_TYPE_OBJECT, cl);
@@ -350,9 +351,9 @@ di_set_detach(struct di_listener *l, di_detach_fn_t fn, struct di_object *o) {
 	return ret;
 }
 
-static inline struct di_listener *
-di_listen_to_destroyed(struct di_object *_Nonnull o, void (*fn)(struct di_object *),
-                       struct di_object *o2) {
+static inline struct di_listener *ret_nonnull nonnull_args(1, 2, 3)
+    di_listen_to_destroyed(struct di_object *Nonnull o, di_detach_fn_t fn,
+                           struct di_object *Nonnull o2) {
 	struct di_listener *ret = di_listen_to(o, "__destroyed", NULL);
 	di_set_detach(ret, fn, o2);
 	return ret;
