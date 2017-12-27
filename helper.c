@@ -63,12 +63,15 @@ static void _free_proxied_signal(struct di_object *_sig) {
 	di_stop_listener(sig->l);
 }
 
-PUBLIC int di_proxy_signal(struct di_object *src, struct di_object *proxy,
-                           const char *srcsig, const char *proxysig) {
+// Add a listener to src for "srcsig". When "srcsig" is emitted, the proxy will emit
+// "proxysig"
+// This is intended to be called in proxy's "__new_signal" method
+PUBLIC int di_proxy_signal(struct di_object *src, const char *srcsig,
+                           struct di_object *proxy, const char *proxysig) {
 	if (strncmp(srcsig, "__", 2) == 0)
 		return -EPERM;
 
-	auto c = di_new_module_with_type(_di_proxied_signal);
+	auto c = di_new_object_with_type(_di_proxied_signal);
 	c->dtor = _free_proxied_signal;
 	c->signal = strdup(proxysig);
 	c->proxy = proxy;        // proxied signal should die when proxy die
@@ -89,5 +92,6 @@ PUBLIC int di_proxy_signal(struct di_object *src, struct di_object *proxy,
 
 	auto l = di_listen_to(src, srcsig, (void *)c);
 	di_set_detach(l, _free_proxied_signal, (void *)c);
+	c->l = l;
 	return 0;
 }

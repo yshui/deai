@@ -24,6 +24,9 @@ int di_new_value(struct di_object *o, const char *name, bool writable, di_type_t
                  ...);
 int di_gmethod(struct di_object *o, const char *name, di_fn_t fn);
 
+int di_proxy_signal(struct di_object *src, const char *srcsig,
+                    struct di_object *proxy, const char *proxysig);
+
 #define DTOR(o) ((struct di_object *)o)->dtor
 
 #define RET_IF_ERR(expr)                                                            \
