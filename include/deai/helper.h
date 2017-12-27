@@ -172,8 +172,7 @@ int di_proxy_signal(struct di_object *Nonnull src, const char *Nonnull srcsig,
 #define di_schedule_call(di, fn, cap)                                               \
 	do {                                                                        \
 		di_getmi(di, event);                                                \
-		if (!eventm)                                                        \
-			break;                                                      \
+		assert(eventm);                                                     \
 		auto cl = di_closure(fn, true, cap);                                \
 		di_listen_to_once(eventm, "prepare", (void *)cl, true);             \
 		di_unref_object((void *)cl);                                        \

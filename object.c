@@ -581,10 +581,19 @@ PUBLIC void di_clear_listeners(struct di_object *o) {
 			call_handler_with_fallback(o, "__del_signal", sig->name,
 			                           DI_LAST_TYPE, NULL, NULL, NULL);
 
+		// unrefing object, calling detach might cause some other listeners
+		// in the linked list to be stopped, which is not accounted for by
+		// list_for_each_entry_safe. So we need to clear listeners in 2
+		// stages
 		struct di_listener *l, *nl;
+
+		// First, set ->signal to NULL, so di_stop_listener won't do anything
+		list_for_each_entry (l, &sig->listeners, siblings)
+			l->signal = NULL;
+
+		// Then, actually do the cleaning work
 		list_for_each_entry_safe (l, nl, &sig->listeners, siblings) {
 			list_del(&l->siblings);
-			l->signal = NULL;
 			if (l->handler)
 				di_unref_object(l->handler);
 			di_call(l, "__detach");
@@ -600,6 +609,13 @@ PUBLIC void di_clear_listeners(struct di_object *o) {
 }
 
 PUBLIC int di_stop_listener(struct di_listener *l) {
+	// The caller announce the intention to stop this listener
+	// meaning they don't want the __detach to be called anymore
+	//
+	// Better remove it here even though another stop operation
+	// might be in progress (indicated by ->signal == NULL)
+	di_remove_member((struct di_object *)l, "__detach");
+
 	if (!l->signal)
 		return -ENOENT;
 

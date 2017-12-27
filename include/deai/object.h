@@ -119,6 +119,8 @@ struct di_listener *_Nullable di_listen_to_once(struct di_object *_Nonnull o,
                                                 bool once);
 
 // Unscribe from a signal from the listener side. __detach is not called in this case
+// It's guaranteed after calling this, the handler and __detach method will never be
+// called
 int di_stop_listener(struct di_listener *_Nullable);
 int di_emitn(struct di_object *_Nonnull, const char *_Nonnull name, struct di_tuple);
 // Call object dtor, remove all listeners and members from the object. And free the

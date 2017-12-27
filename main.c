@@ -127,16 +127,12 @@ struct di_ev_prepare {
 	struct deai *di;
 };
 
-void di_quit_cb(EV_P_ ev_prepare *w, int revents) {
-	struct di_ev_prepare *evp = (void *)w;
-	di_destroy_object((void *)evp->di);
+void di_quit_cb(struct deai *di) {
+	di_destroy_object((void *)di);
 }
 
 void di_prepare_quit(struct deai *di) {
-	auto evp = tmalloc(struct di_ev_prepare, 1);
-	evp->di = di;
-	ev_prepare_init(evp, di_quit_cb);
-	ev_prepare_start(di->loop, (void *)evp);
+	di_schedule_call(di, di_quit_cb, ((struct di_object *)di));
 }
 
 struct di_ev_signal {
