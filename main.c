@@ -221,6 +221,12 @@ PUBLIC int di_register_module(struct deai *p, const char *name, struct di_module
 	return ret;
 }
 
+// Don't consumer the ref, because it breaks the usual method call sementics
+static int
+di_register_module_method(struct deai *p, const char *name, struct di_module *m) {
+	return di_add_value_member((void *)p, name, false, DI_TYPE_OBJECT, m);
+}
+
 define_trivial_cleanup(char *, free_charpp);
 
 int di_exec(struct deai *p, struct di_array argv) {
@@ -259,7 +265,7 @@ int main(int argc, char *argv[]) {
 
 	di_method(p, "load_plugin_from_dir", load_plugin_dir, char *);
 	di_method(p, "load_plugin", load_plugin, char *);
-	di_method(p, "register_module", di_register_module, char *,
+	di_method(p, "register_module", di_register_module_method, char *,
 	          struct di_object *);
 	di_method(p, "chdir", di_chdir, char *);
 	di_method(p, "exec", di_exec, struct di_array);
