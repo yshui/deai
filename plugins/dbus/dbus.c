@@ -480,7 +480,7 @@ static void di_dbus_new_signal(_di_dbus_connection *c, const char *name) {
 
 static void di_dbus_del_signal(_di_dbus_connection *c, const char *name) {
 	if (*name == '%') {
-		auto match = _to_dbus_match_rule(name);
+		auto match = _to_dbus_match_rule(name + 1);
 		if (!match)
 			return;
 		dbus_bus_remove_match(c->conn, match, NULL);
