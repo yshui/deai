@@ -133,6 +133,6 @@ xc.randr.on("view-change", function(v)
         print("\t",v.name)
     end
 end)
-o = get_output("eDP1")
+o = get_output("HDMI-A-0")
 o.backlight = o.max_backlight
 o = nil
