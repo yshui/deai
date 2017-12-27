@@ -598,17 +598,23 @@ const luaL_Reg di_lua_listener_methods[] = {
 };
 
 static int di_lua_add_listener(lua_State *L) {
+	bool once = false;
+	if (lua_gettop(L) == 3) {
+		once = lua_toboolean(L, 2);
+		lua_remove(L, 2);
+	}
 	if (lua_gettop(L) != 2)
-		return luaL_error(L, "'on' only takes 2 arguments");
+		return luaL_error(L, "'on' takes 2 or 3 arguments");
 
 	struct di_object *o = lua_touserdata(L, lua_upvalueindex(1));
+
 	const char *signame = luaL_checklstring(L, 1, NULL);
 	if (lua_type(L, -1) != LUA_TFUNCTION)
 		return luaL_argerror(L, 2, "not a function");
 
 	auto h = lua_type_to_di_object(L, -1, call_lua_function);
 
-	auto l = di_listen_to(o, signame, (void *)h);
+	auto l = di_listen_to_once(o, signame, (void *)h, once);
 	if (IS_ERR(l))
 		return luaL_error(L, "failed to add listener %s",
 		                  strerror(PTR_ERR(l)));

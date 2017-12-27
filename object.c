@@ -617,9 +617,9 @@ PUBLIC int di_stop_listener(struct di_listener *l) {
 		free(l->signal);
 	}
 
+	l->signal = NULL;
 	if (l->handler)
 		di_unref_object(l->handler);
-	l->signal = NULL;
 	l->handler = NULL;
 	di_unref_object((void *)l);
 	return 0;

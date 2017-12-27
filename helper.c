@@ -57,10 +57,16 @@ static int _emit_proxied_signal(struct di_object *o, di_type_t *rt, void **ret,
 	return 0;
 }
 
-static void _free_proxied_signal(struct di_object *_sig) {
+static void _del_proxied_signal(struct di_object *_sig) {
 	auto sig = (_di_proxied_signal *)_sig;
-	free(sig->signal);
 	di_stop_listener(sig->l);
+	free(sig->signal);
+
+	// Remove the __del_signal, this should free the proxied_signal object
+	char *buf;
+	asprintf(&buf, "__del_signal_%s", sig->signal);
+	di_remove_member(sig->proxy, buf);
+	free(buf);
 }
 
 // Add a listener to src for "srcsig". When "srcsig" is emitted, the proxy will emit
@@ -72,7 +78,6 @@ PUBLIC int di_proxy_signal(struct di_object *src, const char *srcsig,
 		return -EPERM;
 
 	auto c = di_new_object_with_type(_di_proxied_signal);
-	c->dtor = _free_proxied_signal;
 	c->signal = strdup(proxysig);
 	c->proxy = proxy;        // proxied signal should die when proxy die
 	c->call = _emit_proxied_signal;
@@ -80,18 +85,18 @@ PUBLIC int di_proxy_signal(struct di_object *src, const char *srcsig,
 	char *buf;
 	asprintf(&buf, "__del_signal_%s", proxysig);
 
-	auto cl = di_closure(_free_proxied_signal, true, ((struct di_object *)c));
+	// Let the __del_signal method hold the only ref to proxied_signal
+	auto cl = di_closure(_del_proxied_signal, false, ((struct di_object *)c));
 	int ret = di_add_value_member(proxy, buf, false, DI_TYPE_OBJECT, cl);
 	di_unref_object((void *)cl);
+	di_unref_object((void *)c);
 	free(buf);
 
-	if (ret != 0) {
-		di_unref_object((void *)c);
+	if (ret != 0)
 		return ret;
-	}
 
 	auto l = di_listen_to(src, srcsig, (void *)c);
-	di_set_detach(l, _free_proxied_signal, (void *)c);
+	di_set_detach(l, _del_proxied_signal, (void *)c);
 	c->l = l;
 	return 0;
 }
