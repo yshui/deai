@@ -7,10 +7,13 @@ jobs:
       - checkout
       - run:
           name: install dependencies
-          command: yum install -y libev-devel libffi-devel meson lua-devel ninja-build libxcb-devel libxkbcommon-devel pkg-config gcc xcb-util-keysyms-devel dbus-devel
+          command: yum install -y libev-devel libffi-devel meson lua-devel ninja-build libxcb-devel libxkbcommon-devel pkg-config gcc xcb-util-keysyms-devel dbus-devel findutils
       - run:
           name: Build
           command: meson -Db_coverage=true builddir && ninja -C builddir
       - run:
           name: Test
           command: ninja -C builddir test
+      - run:
+          name: codecov
+          command: bash <(curl -s https://codecov.io/bash)
