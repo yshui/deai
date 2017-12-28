@@ -27,9 +27,7 @@ struct deai {
 
 	char *proctitle, *proctitle_end;
 
-	// The quit flag can't be stored in struct deai, because it's only set
-	// in deai's dtor, meaning it will be freed right after being set.
-	bool *quit;
+	int *exit_code;
 };
 
 struct di_module_internal {

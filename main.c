@@ -107,7 +107,6 @@ int di_chdir(struct di_object *p, const char *dir) {
 }
 
 void di_dtor(struct deai *di) {
-	*di->quit = true;
 #ifdef HAVE_SETPROCTITLE
 	for (int i = 0; i < di->argc; i++)
 		free(di->argv[i]);
@@ -126,12 +125,13 @@ struct di_ev_prepare {
 	struct deai *di;
 };
 
-void di_quit_cb(struct deai *di) {
-	di_destroy_object((void *)di);
+void di_prepare_quit(struct deai *di) {
+	di_schedule_call(di, di_destroy_object, ((struct di_object *)di));
 }
 
-void di_prepare_quit(struct deai *di) {
-	di_schedule_call(di, di_quit_cb, ((struct di_object *)di));
+void di_prepare_exit(struct deai *di, int ec) {
+	*di->exit_code = ec;
+	di_schedule_call(di, di_destroy_object, ((struct di_object *)di));
 }
 
 struct di_ev_signal {
@@ -179,8 +179,6 @@ static void setproctitle_init(int argc, char **argv, struct deai *p) {
 	// fprintf(stderr, "%p, %lu\n", p->proctitle, p->proctitle_end -
 	// p->proctitle);
 }
-static void setproctitle_deinit(void) {
-}
 static void di_set_pr_name(struct deai *p, const char *name) {
 	if (name) {
 		memset(p->proctitle, 0, p->proctitle_end - p->proctitle);
@@ -196,8 +194,6 @@ static void di_set_pr_name(struct deai *p, const char *name) {
 static void setproctitle_init(int argc, struct deai *p) {
 }
 static void di_set_pr_name(struct deai *p, const char *name) {
-}
-static void setproctitle_deinit(void) {
 }
 #endif
 
@@ -246,7 +242,9 @@ void di_terminate(struct deai *p) {
 
 int main(int argc, char *argv[]) {
 	struct deai *p = di_new_object_with_type(struct deai);
+	int exit_code = 0;
 	p->loop = EV_DEFAULT;
+	p->exit_code = &exit_code;
 
 	// We want to be our own process group leader
 	setpgid(0, 0);
@@ -275,6 +273,7 @@ int main(int argc, char *argv[]) {
 	 * else's stack frame
 	 */
 	di_method(p, "quit", di_prepare_quit);
+	di_method(p, "exit", di_prepare_exit, int);
 	di_method(p, "terminate", di_terminate);
 	di_method(p, "__set_proctitle", di_set_pr_name, char *);
 	di_method(p, "__get_argv", di_get_argv);
@@ -378,11 +377,9 @@ int main(int argc, char *argv[]) {
 	// (4) Start mainloop
 	bool quit = false;
 	p->dtor = (void *)di_dtor;
-	p->quit = &quit;
 	di_unref_object((void *)p);
 	if (!quit)
 		ev_run(p->loop, 0);
 
-	setproctitle_deinit();
-	return 0;
+	return exit_code;
 }
