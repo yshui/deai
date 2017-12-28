@@ -6,8 +6,7 @@ endif
 if not cc.has_header('ev.h')
   error('libev header not found')
 endif
-base_c_args = cc.get_supported_arguments(
-  [
+test_c_args = [
     '-fno-strict-aliasing',
     '-fplan9-extensions',
     '-Wno-microsoft-anon-tag',
@@ -18,8 +17,14 @@ base_c_args = cc.get_supported_arguments(
     '-Werror=implicit',
     '-Werror=implicit-fallthrough',
     '-Wall'
-  ])
-base_c_args = base_c_args + [ '-fvisibility=hidden', '-fms-extensions' ]
+]
+base_c_args = []
+foreach arg: test_c_args
+  if cc.has_argument(arg)
+    base_c_args = base_c_args + [ arg ]
+  endif
+endforeach
+base_c_args = base_c_args + [ '-fvisibility=hidden', '-fms-extensions', '-D_GNU_SOURCE' ]
 base_ld_args = [ '-rdynamic' ]
 plugin_install_dir = get_option('libdir')+'/deai'
 if host_machine.system() == 'linux'
@@ -27,6 +32,7 @@ if host_machine.system() == 'linux'
 endif
 libev = cc.find_library('ev', required: true)
 libffi = dependency('libffi', version: '>=3.0', required: true)
+dl = cc.find_library('dl', required: true)
 subdir('include')
 incs = [deai_inc, include_directories('.')]
 conf = configuration_data()
@@ -47,10 +53,11 @@ deai_exe = executable('deai', [
   'spawn.c',
   'string_buf.c'
 ], c_args: base_c_args
-, dependencies: [libev, libffi]
+, dependencies: [libev, libffi, dl]
 , include_directories: incs
 , link_args: base_ld_args
 , install: true)
+subdir('tests')
 
 base_headers = [
   'include/deai/callable.h',
@@ -64,12 +71,6 @@ builtin_module_headers = [
   'include/deai/builtin/log.h',
   'include/deai/builtin/spawn.h'
 ]
-# target_include_directories(['deai', 'PUBLIC', 'include', cmake_binary_dir])
-# set_target_properties(['deai', 'PROPERTIES', 'LINK_FLAGS', '-rdynamic'])
-# find_path(['LIBEV_INCLUDE_DIR', 'ev.h'])
-# target_link_libraries(['deai', 'dl'])
-# install(['TARGETS', 'deai', 'RUNTIME', 'DESTINATION', 'bin'])
-# install(['DIRECTORY', 'include/deai', 'DESTINATION', 'include/deai'])
 install_data('desktop/deai.desktop', install_dir:'share/xsessions', install_mode: 'rw-r--r--')
 install_headers(base_headers, subdir: 'deai')
 install_headers(builtin_module_headers, subdir: 'deai/builtin')

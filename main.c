@@ -296,15 +296,13 @@ int main(int argc, char *argv[]) {
 	ev_signal_start(p->loop, (void *)&sigtermw);
 
 	// (2) Parse commandline
+	char *modname = NULL;
 	char *method = strchr(argv[1], '.');
-	if (!method) {
-		fprintf(stderr, "Malformed module.method name\n");
-		exit(EXIT_FAILURE);
-	}
-
-	auto modname = strndup(argv[1], method - argv[1]);
-
-	method = strdup(method + 1);
+	if (method) {
+		modname = strndup(argv[1], method - argv[1]);
+		method = strdup(method + 1);
+	} else
+		method = strdup(argv[1]);
 
 	void **di_args = calloc(argc - 2, sizeof(void *));
 	di_type_t *di_types = calloc(argc - 2, sizeof(di_type_t));
@@ -344,24 +342,25 @@ int main(int argc, char *argv[]) {
 
 	// (3) Load default plugins
 	int ret = load_plugin_dir(p, DI_PLUGIN_INSTALL_DIR);
-	if (ret != 0) {
+	if (ret != 0)
 		fprintf(stderr, "Failed to load plugins\n");
-		exit(EXIT_FAILURE);
-	}
 
-	struct di_object *mod;
-	ret = di_get(p, modname, mod);
-	if (ret != 0) {
-		fprintf(stderr, "Module \"%s\" not found\n", modname);
-		exit(EXIT_FAILURE);
-	}
+	struct di_object *mod = NULL;
+	if (modname) {
+		ret = di_get(p, modname, mod);
+		if (ret != 0) {
+			fprintf(stderr, "Module \"%s\" not found\n", modname);
+			exit(EXIT_FAILURE);
+		}
+	} else
+		mod = di_ref_object(p);
 
 	di_type_t rt;
 	void *retd = NULL;
 	ret = di_rawcallxn(mod, method, &rt, &retd,
 	                   (struct di_tuple){nargs, di_args, di_types});
 	if (ret != 0) {
-		fprintf(stderr, "Failed to call \"%s.%s\"\n", modname, method);
+		fprintf(stderr, "Failed to call \"%s.%s\"\n", modname ? modname : "", method);
 		exit(EXIT_FAILURE);
 	}
 
@@ -374,6 +373,7 @@ int main(int argc, char *argv[]) {
 		free((void *)di_args[i]);
 	free(di_args);
 	free(di_types);
+
 	di_unref_object(mod);
 
 	// (4) Start mainloop
