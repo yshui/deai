@@ -1,0 +1,7 @@
+# include_directories('../include')
+# include_directories('..')
+# include_directories(libffi_include_dirs)
+subdir('lua')
+subdir('xorg')
+subdir('file')
+subdir('dbus')

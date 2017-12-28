@@ -1,7 +1,0 @@
-include_directories(../include)
-include_directories(..)
-include_directories(${LIBFFI_INCLUDE_DIRS})
-add_subdirectory(lua)
-add_subdirectory(xorg)
-add_subdirectory(file)
-add_subdirectory(dbus)

@@ -1,9 +1,0 @@
-#!/bin/bash
-
-"@PYTHON_EXECUTABLE@" \
-	"@GCF_SCRIPT@" \
-	"--pre-commit" \
-	"@GIT_EXECUTABLE@" \
-	"@CLANG_FORMAT_EXECUTABLE@" \
-	"-style=@GCF_CLANGFORMAT_STYLE@" \
-	"-ignore=@GCF_IGNORE_LIST@"

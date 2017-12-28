@@ -1,5 +1,5 @@
 #pragma once
-#define DI_PLUGIN_INSTALL_DIR "${CMAKE_INSTALL_PREFIX}/${DI_PLUGIN_INSTALL_DIR}"
+#define DI_PLUGIN_INSTALL_DIR "@plugin_install_dir@"
 
-#cmakedefine HAVE_SETPROCTITLE
+#mesondefine HAVE_SETPROCTITLE
 //#cmakedefine DI_REFCOUNT_DEBUG
