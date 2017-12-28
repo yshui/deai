@@ -13,7 +13,7 @@ jobs:
           command: meson -Db_coverage=true builddir && ninja -C builddir
       - run:
           name: Test
-          command: ninja -C builddir test
+          command: ninja -C builddir test && cat builddir/meson-logs/testlog.txt
       - run:
           name: codecov
           command: bash <(curl -s https://codecov.io/bash)
