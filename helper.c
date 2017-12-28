@@ -4,7 +4,6 @@
 
 /* Copyright (c) 2017, Yuxuan Shui <yshuiv7@gmail.com> */
 
-#define _GNU_SOURCE
 #include <deai/deai.h>
 #include <deai/helper.h>
 

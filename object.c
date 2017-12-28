@@ -4,8 +4,6 @@
 
 /* Copyright (c) 2017, Yuxuan Shui <yshuiv7@gmail.com> */
 
-#define _GNU_SOURCE
-
 #include <deai/callable.h>
 #include <deai/helper.h>
 #include <deai/object.h>
