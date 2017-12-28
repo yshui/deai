@@ -57,30 +57,6 @@ static inline void child_cleanup(struct child *c) {
 	di_unref_object((void *)di);
 }
 
-static void sigchld_handler(EV_P_ ev_child *w, int revents) {
-	struct child *c = container_of(w, struct child, w);
-	di_stop_listener(c->d);
-
-	int sig = 0;
-	if (WIFSIGNALED(w->rstatus))
-		sig = WTERMSIG(w->rstatus);
-
-	int ec = WEXITSTATUS(w->rstatus);
-	if (c->out && !string_buf_is_empty(c->out)) {
-		char *o = string_buf_dump(c->out);
-		di_emit(c, "stdout_line", o);
-		free(o);
-	}
-	if (c->err && !string_buf_is_empty(c->err)) {
-		char *o = string_buf_dump(c->err);
-		di_emit(c, "stderr_line", o);
-		free(o);
-	}
-	di_emit(c, "exit", ec, sig);
-
-	child_cleanup(c);
-}
-
 static void
 output_handler(struct child *c, int fd, struct string_buf *b, const char *ev) {
 	static char buf[4096];
@@ -106,6 +82,32 @@ output_handler(struct child *c, int fd, struct string_buf *b, const char *ev) {
 			}
 		}
 	}
+}
+
+static void sigchld_handler(EV_P_ ev_child *w, int revents) {
+	struct child *c = container_of(w, struct child, w);
+	di_stop_listener(c->d);
+
+	int sig = 0;
+	if (WIFSIGNALED(w->rstatus))
+		sig = WTERMSIG(w->rstatus);
+
+	int ec = WEXITSTATUS(w->rstatus);
+	output_handler(c, c->outw.fd, c->out, "stdout_line");
+	if (c->out && !string_buf_is_empty(c->out)) {
+		char *o = string_buf_dump(c->out);
+		di_emit(c, "stdout_line", o);
+		free(o);
+	}
+	output_handler(c, c->errw.fd, c->err, "stderr_line");
+	if (c->err && !string_buf_is_empty(c->err)) {
+		char *o = string_buf_dump(c->err);
+		di_emit(c, "stderr_line", o);
+		free(o);
+	}
+	di_emit(c, "exit", ec, sig);
+
+	child_cleanup(c);
 }
 
 static void child_destroy(struct child *c) {
@@ -152,7 +154,7 @@ di_spawn_run(struct di_spawn *p, struct di_array argv, bool ignore_output) {
 		    fcntl(epfds[0], F_SETFD, FD_CLOEXEC) < 0)
 			return di_new_error("Can't set cloexec");
 
-		if (fcntl(epfds[0], F_SETFL, O_NONBLOCK) < 0 ||
+		if (fcntl(opfds[0], F_SETFL, O_NONBLOCK) < 0 ||
 		    fcntl(epfds[0], F_SETFL, O_NONBLOCK) < 0)
 			return di_new_error("Can't set non block");
 	} else {
