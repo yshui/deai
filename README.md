@@ -1,6 +1,6 @@
 # deai
 
-[![Codecov](https://img.shields.io/codecov/c/github/yshui/deai.svg)](https://codecov.io/gh/yshui/deai)  [![Gitter](https://img.shields.io/gitter/room/nwjs/nw.js.svg)](https://gitter.im/deai/Lobby?utm_source=share-link&utm_medium=link&utm_campaign=share-link)
+[![Codecov](https://img.shields.io/codecov/c/github/yshui/deai.svg)](https://codecov.io/gh/yshui/deai) [![CircleCI](https://circleci.com/gh/yshui/deai.svg?style=shield&circle-token=75b416f5709a1179e1a817e7fb5568c5814d51ee)](https://circleci.com/gh/yshui/deai) [![Gitter](https://img.shields.io/gitter/room/nwjs/nw.js.svg)](https://gitter.im/deai/Lobby?utm_source=share-link&utm_medium=link&utm_campaign=share-link)
 
 **deai** is a tool to automate your Linux desktop. It has similar goals as [hammerspoon](https://github.com/Hammerspoon/hammerspoon). But it aims to be more extensible and support for more language.
 
