@@ -1,12 +1,20 @@
 di.load_plugin("./plugins/dbus/di_dbus.so")
 di.env.DBUS_SESSION_BUS_PID = nil
 di.env.DBUS_SESSION_BUS_ADDRESS = nil
+di.env.DISPLAY = nil
 local dbusl = di.spawn.run({"dbus-daemon", "--print-address=1", "--print-pid=2", "--session", "--fork"}, false)
 dbusl.on("stdout_line", function(l)
+    -- remove new line
+    if l == "" then
+        return
+    end
     print(l)
     di.env.DBUS_SESSION_BUS_ADDRESS = l
 end)
 dbusl.on("stderr_line", function(l)
+    if l == "" then
+        return
+    end
     print(l)
     di.env.DBUS_SESSION_BUS_PID = l
 end)
