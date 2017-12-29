@@ -39,7 +39,8 @@ function run_one(i)
         if i < #cmds then
             c.on("exit", true, run_one(i+1))
         else
-            di.quit()
+            w.remove("testdir")
+            w.stop()
         end
     end
 end

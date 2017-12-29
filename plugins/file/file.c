@@ -136,8 +136,6 @@ static void stop_file_watcher(struct di_file_watch *fw) {
 	// because unref listeners might cause the object
 	// itself to be unref'd
 	di_stop_listener(fw->fdev_listener);
-
-	di_clear_listeners((void *)fw);
 }
 
 static struct di_object *di_file_new_watch(struct di_file *f, struct di_array paths) {
@@ -155,15 +153,14 @@ static struct di_object *di_file_new_watch(struct di_file *f, struct di_array pa
 	di_method(fw, "add", di_file_add_many_watch, struct di_array);
 	di_method(fw, "add_one", di_file_add_watch, char *);
 	di_method(fw, "remove", di_file_rm_watch, char *);
-	di_method(fw, "stop", stop_file_watcher);
+	di_method(fw, "stop", di_destroy_object);
 	di_getm(f->di, event, di_new_error("Can't find event module"));
 	di_callr(eventm, "fdevent", fw->fdev, fw->fd, IOEV_READ);
 
 	struct di_object *tmpo = (void *)fw;
 	auto cl = di_closure(di_file_ioev, true, (tmpo));
 	fw->fdev_listener = di_listen_to(fw->fdev, "read", (void *)cl);
-	di_set_detach(fw->fdev_listener, (di_detach_fn_t)stop_file_watcher,
-	              (void *)fw);
+	di_set_detach(fw->fdev_listener, trivial_destroyed_handler, (void *)fw);
 	di_unref_object((void *)cl);
 
 	const char **arr = paths.arr;
