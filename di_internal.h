@@ -28,6 +28,7 @@ struct deai {
 	char *proctitle, *proctitle_end;
 
 	int *exit_code;
+	bool *quit;
 };
 
 struct di_module_internal {

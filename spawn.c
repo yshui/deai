@@ -93,17 +93,21 @@ static void sigchld_handler(EV_P_ ev_child *w, int revents) {
 		sig = WTERMSIG(w->rstatus);
 
 	int ec = WEXITSTATUS(w->rstatus);
-	output_handler(c, c->outw.fd, c->out, "stdout_line");
-	if (c->out && !string_buf_is_empty(c->out)) {
-		char *o = string_buf_dump(c->out);
-		di_emit(c, "stdout_line", o);
-		free(o);
+	if (c->out) {
+		output_handler(c, c->outw.fd, c->out, "stdout_line");
+		if (!string_buf_is_empty(c->out)) {
+			char *o = string_buf_dump(c->out);
+			di_emit(c, "stdout_line", o);
+			free(o);
+		}
 	}
-	output_handler(c, c->errw.fd, c->err, "stderr_line");
-	if (c->err && !string_buf_is_empty(c->err)) {
-		char *o = string_buf_dump(c->err);
-		di_emit(c, "stderr_line", o);
-		free(o);
+	if (c->err) {
+		output_handler(c, c->errw.fd, c->err, "stderr_line");
+		if (!string_buf_is_empty(c->err)) {
+			char *o = string_buf_dump(c->err);
+			di_emit(c, "stderr_line", o);
+			free(o);
+		}
 	}
 	di_emit(c, "exit", ec, sig);
 

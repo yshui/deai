@@ -107,6 +107,7 @@ int di_chdir(struct di_object *p, const char *dir) {
 }
 
 void di_dtor(struct deai *di) {
+	*di->quit = true;
 #ifdef HAVE_SETPROCTITLE
 	for (int i = 0; i < di->argc; i++)
 		free(di->argv[i]);
@@ -243,8 +244,11 @@ void di_terminate(struct deai *p) {
 int main(int argc, char *argv[]) {
 	struct deai *p = di_new_object_with_type(struct deai);
 	int exit_code = 0;
+	bool quit = false;
 	p->loop = EV_DEFAULT;
 	p->exit_code = &exit_code;
+	p->quit = &quit;
+	p->dtor = (void *)di_dtor;
 
 	// We want to be our own process group leader
 	setpgid(0, 0);
@@ -375,8 +379,6 @@ int main(int argc, char *argv[]) {
 	di_unref_object(mod);
 
 	// (4) Start mainloop
-	bool quit = false;
-	p->dtor = (void *)di_dtor;
 	di_unref_object((void *)p);
 	if (!quit)
 		ev_run(p->loop, 0);
