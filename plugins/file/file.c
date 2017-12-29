@@ -136,7 +136,6 @@ static void stop_file_watcher(struct di_file_watch *fw) {
 	// because unref listeners might cause the object
 	// itself to be unref'd
 	di_stop_listener(fw->fdev_listener);
-	di_unref_object((void *)fw->fdev_listener);
 
 	di_clear_listeners((void *)fw);
 }
