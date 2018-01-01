@@ -118,7 +118,7 @@ static void kill_all_descendants(pid_t pid) {
 	};
 
 	struct _childp *ps = NULL;
-	struct _childp *root = NULL;
+	struct _childp *self = NULL;
 
 	// New child can appear while we are reading /proc
 	// they won't be killed
@@ -168,32 +168,30 @@ static void kill_all_descendants(pid_t pid) {
 		INIT_LIST_HEAD(&np->ll);
 		HASH_ADD_INT(ps, pid, np);
 		if (cpid == pid)
-			root = np;
+			self = np;
 	next:;
 	}
 	closedir(dir);
 
 	// Link the process tree into pre-order traversal list
 	struct _childp *i, *ni;
+	struct _childp sentinel;
+	INIT_LIST_HEAD(&sentinel.ll);
 	HASH_ITER(hh, ps, i, ni) {
 		struct _childp *pp;
 		HASH_FIND_INT(ps, &i->ppid, pp);
 		if (!pp)
-			continue;
+			pp = &sentinel;
 		i->pp = pp;
 		__list_splice(&i->ll, &pp->ll, pp->ll.next);
 	}
 
 	// Traversal the tree, starting from ourself
-	root->visited = true;
-	struct _childp *curr = root;
+	self->visited = true;
+	sentinel.visited = false;
+	struct _childp *curr = self;
 	while (1) {
 		curr = container_of(curr->ll.next, struct _childp, ll);
-		// Rare case that our parent disappeared
-		if (curr == root)
-			break;
-		assert(curr->pp);
-
 		// We got out of our subtree
 		if (!curr->pp->visited)
 			break;

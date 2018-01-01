@@ -1,4 +1,5 @@
 t = di.event.timer(1)
 t.on("elapsed", function()
+    print("elapsed")
     di.quit()
 end)
