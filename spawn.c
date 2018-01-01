@@ -140,6 +140,10 @@ static uint64_t get_child_pid(struct child *c) {
 	return (uint64_t)c->pid;
 }
 
+static void kill_child(struct child *c, int sig) {
+	kill(c->pid, sig);
+}
+
 define_trivial_cleanup(char *, free_charpp);
 
 struct di_object *
@@ -196,6 +200,7 @@ di_spawn_run(struct di_spawn *p, struct di_array argv, bool ignore_output) {
 
 	auto cp = di_new_object_with_type(struct child);
 	di_method(cp, "__get_pid", get_child_pid);
+	di_method(cp, "kill", kill_child, int);
 	cp->pid = pid;
 	if (!ignore_output) {
 		cp->out = string_buf_new();
