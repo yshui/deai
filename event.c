@@ -174,7 +174,7 @@ static struct di_object *di_create_timer(struct di_object *obj, uint64_t timeout
 
 	ev_init(&ret->evt, di_timer_callback);
 	ret->evt.repeat = timeout;
-	ev_timer_start(em->di->loop, &ret->evt);
+	ev_timer_again(em->di->loop, &ret->evt);
 	return (void *)ret;
 }
 
