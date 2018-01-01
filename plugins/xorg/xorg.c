@@ -245,8 +245,6 @@ di_xorg_connect_to(struct di_xorg *x, const char *displayname) {
 	ABRT_IF_ERR(di_set_detach(dc->xcb_fdlistener,
 	                          (di_detach_fn_t)xorg_disconnect, (void *)dc));
 
-	di_call(dc->xcb_fd, "start");
-
 	di_method(dc, "__get", di_xorg_get_ext, char *);
 	di_method(dc, "__get_xrdb", di_xorg_get_resource);
 	di_method(dc, "__set_xrdb", di_xorg_set_resource, char *);

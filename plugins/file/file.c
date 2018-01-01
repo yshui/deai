@@ -167,7 +167,6 @@ static struct di_object *di_file_new_watch(struct di_file *f, struct di_array pa
 	for (int i = 0; i < paths.length; i++)
 		di_file_add_watch(fw, arr[i]);
 
-	di_call(fw->fdev, "start");
 	return (void *)fw;
 }
 PUBLIC int di_plugin_init(struct deai *di) {

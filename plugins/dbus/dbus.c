@@ -356,6 +356,7 @@ di_dbus_get_object(struct di_object *o, const char *bus, const char *obj) {
 	di_dbus_watch_name(oc, bus);
 	ret->bus = strdup(bus);
 	ret->obj = strdup(obj);
+	di_method(ret, "put", di_destroy_object);
 	di_method(ret, "__get", di_dbus_object_getter, const char *);
 	di_method(ret, "__new_signal", di_dbus_object_new_signal, const char *);
 
@@ -416,8 +417,8 @@ static unsigned int _dbus_add_watch(DBusWatch *w, void *ud) {
 	auto l = di_listen_to(ioev, "io", (void *)cl);
 	di_unref_object((void *)cl);
 
-	if (dbus_watch_get_enabled(w))
-		di_call(ioev, "start");
+	if (!dbus_watch_get_enabled(w))
+		di_call(ioev, "stop");
 	di_unref_object(ioev);
 
 	dbus_watch_set_data(w, l, (void *)di_stop_listener);

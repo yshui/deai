@@ -117,6 +117,7 @@ static struct di_object *di_create_ioev(struct di_object *obj, int fd, int t) {
 		flags |= EV_WRITE;
 
 	ev_io_init(&ret->evh, di_ioev_callback, fd, flags);
+	ev_io_start(em->di->loop, &ret->evh);
 	ret->di = em->di;
 	di_ref_object((void *)ret->di);
 
@@ -126,9 +127,10 @@ static struct di_object *di_create_ioev(struct di_object *obj, int fd, int t) {
 	di_method(ret, "start", di_start_ioev);
 	di_method(ret, "stop", di_stop_ioev);
 	di_method(ret, "toggle", di_toggle_ioev);
+	di_method(ret, "close", di_destroy_object);
 
 	ret->dtor = di_ioev_dtor;
-	ret->running = false;
+	ret->running = true;
 	return (void *)ret;
 }
 
@@ -162,7 +164,6 @@ static struct di_object *di_create_timer(struct di_object *obj, uint64_t timeout
 	di_ref_object((void *)ret->di);
 
 	ret->dtor = di_timer_dtor;
-	di_method(ret, "start", di_timer_again);
 	di_method(ret, "again", di_timer_again);
 
 	// Set the timeout and restart the timer
@@ -173,6 +174,7 @@ static struct di_object *di_create_timer(struct di_object *obj, uint64_t timeout
 
 	ev_init(&ret->evt, di_timer_callback);
 	ret->evt.repeat = timeout;
+	ev_timer_start(em->di->loop, &ret->evt);
 	return (void *)ret;
 }
 
