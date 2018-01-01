@@ -16,4 +16,4 @@ jobs:
           command: ninja -C builddir test && cat builddir/meson-logs/testlog.txt
       - run:
           name: codecov
-          command: bash <(curl -s https://codecov.io/bash)
+          command: cd builddir && curl -o codecov https://codecov.io/bash && chmod +x codecov && ./codecov -R .. -y .codecov.yml

@@ -8,3 +8,4 @@ piped
 install_manifest.txt
 deai.d
 .gdb_history
+*.lua
