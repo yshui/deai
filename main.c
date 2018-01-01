@@ -4,6 +4,7 @@
 
 /* Copyright (c) 2017, Yuxuan Shui <yshuiv7@gmail.com> */
 
+#include <ctype.h>
 #include <dirent.h>
 #include <dlfcn.h>
 #include <ev.h>
@@ -106,6 +107,105 @@ int di_chdir(struct di_object *p, const char *dir) {
 	return ret;
 }
 
+static void kill_all_descendants(pid_t pid) {
+	// Best effort attempt to kill all descendants of pid
+	struct _childp {
+		pid_t pid, ppid;
+		bool visited;
+		struct _childp *pp;
+		struct list_head ll;
+		UT_hash_handle hh;
+	};
+
+	struct _childp *ps = NULL;
+	struct _childp *root = NULL;
+
+	// New child can appear while we are reading /proc
+	// they won't be killed
+	auto dir = opendir("/proc");
+	if (!dir)
+		return;
+	struct dirent *dent;
+	char pathbuf[PATH_MAX];
+	char textbuf[4096];
+	while ((dent = readdir(dir))) {
+		__label__ next;
+		if (dent->d_type != DT_DIR)
+			continue;
+		char *name = dent->d_name;
+		while(*name)
+			if (!isdigit(*name++))
+				goto next;
+		snprintf(pathbuf, PATH_MAX, "/proc/%s/stat", dent->d_name);
+		pid_t cpid = atoi(dent->d_name);
+		int fd = open(pathbuf, O_RDONLY);
+		if (fd < 0)
+			continue;
+		ssize_t ret;
+		size_t cap = 0;
+		char *stattext = NULL;
+		while ((ret = read(fd, textbuf, sizeof(textbuf))) > 0) {
+			stattext = realloc(stattext, cap+ret+1);
+			memcpy(stattext+cap, textbuf, ret);
+			cap += ret;
+		}
+		close(fd);
+		if (!stattext)
+			continue;
+		stattext[cap] = '\0';
+
+		// End of comm
+		char *sep1 = strrchr(stattext, ')');
+		// Skip ') %c ', and find the end of ppid
+		char *ppid_end = strchr(sep1+4, ' ');
+		*ppid_end = '\0';
+		pid_t ppid = atoi(sep1+4);
+		free(stattext);
+
+		auto np = tmalloc(struct _childp, 1);
+		np->pid = cpid;
+		np->ppid = ppid;
+		INIT_LIST_HEAD(&np->ll);
+		HASH_ADD_INT(ps, pid, np);
+		if (cpid == pid)
+			root = np;
+	next:;
+	}
+	closedir(dir);
+
+	// Link the process tree into pre-order traversal list
+	struct _childp *i, *ni;
+	HASH_ITER(hh, ps, i, ni) {
+		struct _childp *pp;
+		HASH_FIND_INT(ps, &i->ppid, pp);
+		if (!pp)
+			continue;
+		i->pp = pp;
+		__list_splice(&i->ll, &pp->ll, pp->ll.next);
+	}
+
+	// Traversal the tree, starting from ourself
+	root->visited = true;
+	struct _childp *curr = root;
+	while (1) {
+		curr = container_of(curr->ll.next, struct _childp, ll);
+		// Rare case that our parent disappeared
+		if (curr == root)
+			break;
+		assert(curr->pp);
+
+		// We got out of our subtree
+		if (!curr->pp->visited)
+			break;
+		kill(curr->pid, SIGTERM);
+		curr->visited = true;
+	}
+	HASH_ITER(hh, ps, i, ni) {
+		HASH_DEL(ps, i);
+		free(i);
+	}
+}
+
 void di_dtor(struct deai *di) {
 	*di->quit = true;
 #ifdef HAVE_SETPROCTITLE
@@ -118,6 +218,7 @@ void di_dtor(struct deai *di) {
 	for (int i = 0; di->env_copy[i]; i++)
 		free(di->env_copy[i]);
 	free(di->env_copy);
+	kill_all_descendants(getpid());
 	ev_break(di->loop, EVBREAK_ALL);
 }
 

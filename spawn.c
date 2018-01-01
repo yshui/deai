@@ -7,6 +7,7 @@
 #include <ev.h>
 #include <fcntl.h>
 #include <unistd.h>
+#include <sys/prctl.h>
 
 #include <deai/builtin/spawn.h>
 #include <deai/helper.h>
@@ -222,6 +223,11 @@ di_spawn_run(struct di_spawn *p, struct di_array argv, bool ignore_output) {
 }
 
 void di_init_spawn(struct deai *di) {
+	// Become subreaper
+	int ret = prctl(PR_SET_CHILD_SUBREAPER, 1);
+	if (ret != 0)
+		return;
+
 	auto m = di_new_module_with_type(struct di_spawn);
 	m->di = di;
 
