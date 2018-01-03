@@ -178,8 +178,10 @@ di_spawn_run(struct di_spawn *p, struct di_array argv, bool ignore_output) {
 
 	auto pid = fork();
 	if (pid == 0) {
-		close(opfds[0]);
-		close(epfds[0]);
+		if (!ignore_output) {
+			close(opfds[0]);
+			close(epfds[0]);
+		}
 		if (dup2(ifd, STDIN_FILENO) < 0 || dup2(opfds[1], STDOUT_FILENO) < 0 ||
 		    dup2(epfds[1], STDERR_FILENO) < 0)
 			_exit(1);
