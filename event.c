@@ -149,7 +149,7 @@ static void di_timer_again(struct di_timer *obj) {
 	ev_timer_again(obj->di->loop, &obj->evt);
 }
 
-static void di_timer_set(struct di_timer *obj, uint64_t t) {
+static void di_timer_set(struct di_timer *obj, double t) {
 	if (!obj->di)
 		return;
 
@@ -157,7 +157,7 @@ static void di_timer_set(struct di_timer *obj, uint64_t t) {
 	ev_timer_again(obj->di->loop, &obj->evt);
 }
 
-static struct di_object *di_create_timer(struct di_object *obj, uint64_t timeout) {
+static struct di_object *di_create_timer(struct di_object *obj, double timeout) {
 	struct di_evmodule *em = (void *)obj;
 	auto ret = di_new_object_with_type(struct di_timer);
 	ret->di = em->di;
@@ -167,7 +167,7 @@ static struct di_object *di_create_timer(struct di_object *obj, uint64_t timeout
 	di_method(ret, "again", di_timer_again);
 
 	// Set the timeout and restart the timer
-	di_method(ret, "__set_timeout", di_timer_set, uint64_t);
+	di_method(ret, "__set_timeout", di_timer_set, double);
 
 	ret->d = di_listen_to_destroyed((void *)em->di, trivial_destroyed_handler,
 	                                (void *)ret);
@@ -224,7 +224,7 @@ void di_init_event(struct deai *di) {
 	em->di = di;
 
 	di_method(em, "fdevent", di_create_ioev, int, int);
-	di_method(em, "timer", di_create_timer, unsigned int);
+	di_method(em, "timer", di_create_timer, double);
 	di_method(em, "periodic", di_create_periodic, double, double);
 
 	auto dep = tmalloc(struct di_prepare, 1);
