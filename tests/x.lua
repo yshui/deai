@@ -18,6 +18,9 @@ di.event.timer(0.2).on("elapsed", true, function()
     xi = o.xinput
     xi.on("new-device", function(dev)
         print(string.format("new device %s %s %s %d", dev.type, dev.use, dev.name, dev.id))
+        print("enabled:", dev.props["Device Enabled"][1])
+        dev.props["Coordinate Transformation Matrix"] = {2, 0, 0, 0, 2, 0, 0, 0, 2}
+        print("matrix:", table.unpack(dev.props["Coordinate Transformation Matrix"]))
     end)
 
     o.key.new({"mod4"}, "d", false).on("pressed", function()
@@ -28,6 +31,7 @@ di.event.timer(0.2).on("elapsed", true, function()
     di.spawn.run({"xinput", "create-master", "b"}, true)
     -- test key events
     di.spawn.run({"xdotool", "key", "super+d"}, true)
+    di.spawn.run({"xrandr", "--output", "screen", "--off"}, true)
 
     o.randr.on("view-change", function()
         print("view-change")
@@ -36,18 +40,18 @@ di.event.timer(0.2).on("elapsed", true, function()
         print("output-change")
     end)
 
+    print("Modes:")
+    modes = o.randr.modes
+    for _, i in pairs(modes) do
+        print(i.width, i.height, i.id)
+    end
     outs = o.randr.outputs
     for _, i in pairs(outs) do
         print(i.name, i.backlight, i.max_backlight)
         vc = i.view.config
         print(vc.x, vc.y, vc.width, vc.height, vc.rotation, vc.reflection)
-        i.view.config = vc
+        i.view.config = {x=vc.x, y=vc.y, rotation=vc.rotation, reflection=vc.reflection, mode=modes[1].id}
         print(i.view.outputs[1].name)
-    end
-    print("Modes:")
-    modes = o.randr.modes
-    for _, i in pairs(modes) do
-        print(i.width, i.height, i.id)
     end
 
     di.event.timer(1).on("elapsed", true, function()
