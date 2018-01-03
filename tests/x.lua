@@ -31,7 +31,6 @@ di.event.timer(0.2).on("elapsed", true, function()
     di.spawn.run({"xinput", "create-master", "b"}, true)
     -- test key events
     di.spawn.run({"xdotool", "key", "super+d"}, true)
-    di.spawn.run({"xrandr", "--output", "screen", "--off"}, true)
 
     o.randr.on("view-change", function()
         print("view-change")
@@ -54,7 +53,14 @@ di.event.timer(0.2).on("elapsed", true, function()
         print(i.view.outputs[1].name)
     end
 
+    di.spawn.run({"xrandr", "--output", "screen", "--off"}, true)
+
     di.event.timer(1).on("elapsed", true, function()
+        devs = xi.devices
+        for _, d in pairs(devs) do
+            print(string.format("device: %s %s %s %d", d.type, d.use, d.name, d.id))
+        end
+
         o.disconnect()
         o = di.xorg.connect_to(":2")
         if o.errmsg then
