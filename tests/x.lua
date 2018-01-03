@@ -1,3 +1,4 @@
+di.load_plugin("./plugins/xorg/di_xorg.so")
 di.spawn.run({"Xvfb", ":1", "-screen", "0", "1600x1200x24+32"}, true)
 di.spawn.run({"Xvfb", ":2", "-screen", "0", "1600x1200x24+32"}, true)
 di.env.DISPLAY=":1"
