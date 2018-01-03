@@ -144,7 +144,7 @@ static void free_key(struct xorg_key *k) {
 	xcb_key_symbols_free(k->keysyms);
 	struct keybinding *kb, *nkb;
 	list_for_each_entry_safe (kb, nkb, &k->bindings, siblings)
-		binding_dtor(kb);
+		di_destroy_object((void *)kb);
 }
 define_trivial_cleanup_t(xcb_get_modifier_mapping_reply_t);
 uint16_t mod_from_keycode(struct di_xorg_connection *dc, xcb_keycode_t kc) {
@@ -195,7 +195,7 @@ static int handle_key(struct di_xorg_ext *ext, xcb_generic_event_t *ev) {
 			list_for_each_entry (kb, &k->bindings, siblings) {
 				int ret = refresh_binding(kb);
 				if (ret != 0)
-					binding_dtor(kb);
+					di_destroy_object((void *)kb);
 			}
 		}
 		return 1;
