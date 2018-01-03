@@ -27,7 +27,7 @@ struct di_atom_entry {
 
 define_trivial_cleanup_t(xcb_generic_error_t);
 
-void di_xorg_free_sub(struct di_xorg_ext *x) {
+static void di_xorg_free_sub(struct di_xorg_ext *x) {
 	if (x->dc) {
 		if (x->free)
 			x->free(x);
@@ -35,7 +35,6 @@ void di_xorg_free_sub(struct di_xorg_ext *x) {
 		di_unref_object((void *)x->dc);
 		x->dc = NULL;
 	}
-	di_clear_listeners((void *)x);
 }
 
 static void xorg_disconnect(struct di_xorg_connection *xc) {
@@ -48,7 +47,7 @@ static void xorg_disconnect(struct di_xorg_connection *xc) {
 
 	// free_sub might need the connection, don't disconnect now
 	struct di_xorg_ext *ext, *text;
-	HASH_ITER (hh, xc->xext, ext, text) { di_xorg_free_sub(ext); }
+	HASH_ITER (hh, xc->xext, ext, text) { di_destroy_object((void *)ext); }
 	xcb_disconnect(xc->c);
 	xc->x = NULL;
 
