@@ -206,3 +206,5 @@ static inline size_t di_sizeof_type(di_type_t t) {
 		*ptr = NULL;                                                        \
 	}
 #define with_object_cleanup(t) with_cleanup(free_##t) struct t *
+
+define_object_cleanup(di_object);

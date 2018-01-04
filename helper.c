@@ -12,8 +12,6 @@
 
 #include "utils.h"
 
-define_object_cleanup(di_object);
-
 struct di_error {
 	struct di_object;
 	char *msg;

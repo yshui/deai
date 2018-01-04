@@ -63,7 +63,7 @@ static int di_log(struct di_object *o, di_type_t *rt, void **ret, struct di_tupl
 	if (level_lookup(log_level) > l->log_level)
 		return 0;
 
-	struct di_object *ltgt = NULL;
+	with_object_cleanup(di_object) ltgt = NULL;
 	if (di_get(l, "log_target", ltgt) != 0) {
 		*res = 0;
 		return 0;

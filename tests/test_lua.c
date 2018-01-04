@@ -18,5 +18,6 @@ PUBLIC int di_plugin_init(struct deai *di) {
 			break;
 		}
 	}
+	di_free_value(DI_TYPE_ARRAY, &dargv);
 	return 0;
 }

@@ -94,8 +94,10 @@ ret:
 		if (ret && rtype) {
 			*rtype = rtype2;
 			*ret = ret2;
-		} else
+		} else {
 			di_free_value(rtype2, ret2);
+			free(ret2);
+		}
 	}
 	return rc2;
 }
@@ -108,7 +110,8 @@ PUBLIC int di_setx(struct di_object *o, const char *name, di_type_t type, void *
 		rc = di_type_conversion(type, val, mem->type, &val2);
 		if (rc != 0)
 			return rc;
-		di_free_value(mem->type, mem->data);
+		if (mem->own)
+			di_free_value(mem->type, mem->data);
 		di_copy_value(mem->type, mem->data, val2);
 		free((void *)val2);
 		return 0;
@@ -198,6 +201,10 @@ PUBLIC bool di_check_type(struct di_object *o, const char *tyname) {
 	return strcmp(ot, tyname) == 0;
 }
 
+PUBLIC struct di_array di_get_keys_of_object(struct di_object *o) {
+	return DI_ARRAY_NIL;
+}
+
 PUBLIC struct di_object *di_new_object(size_t sz) {
 	if (sz < sizeof(struct di_object))
 		return NULL;
@@ -205,6 +212,7 @@ PUBLIC struct di_object *di_new_object(size_t sz) {
 	struct di_object *obj = calloc(1, sz);
 	obj->ref_count = 1;
 	obj->destroyed = 0;
+
 	return obj;
 }
 
