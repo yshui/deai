@@ -26,6 +26,10 @@ dbusl.on("exit", function()
     end
     di.dbus.session_bus.get("org.freedesktop.DBus", "/org/freedesktop/DBus").Introspect().on("reply", function(s)
         print(s)
-        collectgarbage()
+    end)
+    di.dbus.session_bus.get("org.freedesktop.DBus", "/org/freedesktop/DBus").ListNames().on("reply", function(s)
+        for _, i in pairs(s) do
+            print(i)
+        end
     end)
 end)

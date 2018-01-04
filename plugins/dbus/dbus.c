@@ -85,13 +85,13 @@ static void di_dbus_update_name(_di_dbus_connection *c, const char *wk,
 			if (strcmp(wk, i->well_known))
 				continue;
 
-			fprintf(stderr, "remove old %s -> %s\n", wk, i->unique);
+			//fprintf(stderr, "remove old %s -> %s\n", wk, i->unique);
 			list_del(&i->sibling);
 			free(i);
 		}
 	}
 	if (*unique != '\0') {
-		fprintf(stderr, "%s -> %s\n", wk, unique);
+		//fprintf(stderr, "%s -> %s\n", wk, unique);
 		auto wklen = strlen(wk);
 		_bus_name *newi =
 		    malloc(sizeof(_bus_name) + wklen + strlen(unique) + 2);
@@ -100,8 +100,7 @@ static void di_dbus_update_name(_di_dbus_connection *c, const char *wk,
 		strcpy(newi->well_known, wk);
 		strcpy(newi->unique, unique);
 		list_add(&newi->sibling, &c->known_names);
-	} else
-		fprintf(stderr, "%s -> none\n", wk);
+	}
 }
 
 static void
@@ -203,7 +202,7 @@ static void _dbus_lookup_member_cb(char *method, bool is_signal,
 					r2 = yxml_parse(&t, *reply++);
 				} while (r2 != YXML_ATTREND);
 			}
-			fprintf(stderr, "%s: %s\n", t.elem, name);
+			//fprintf(stderr, "%s: %s\n", t.elem, name);
 			if (strcmp(t.elem, mtype) == 0) {
 				if (strcmp(name, method) == 0) {
 					di_call_callable(cb, current_interface,
