@@ -17,7 +17,7 @@ struct di_typed_method {
 	struct di_object;
 
 	struct di_object *this;
-	void (*Nonnull fn)(void);
+	void (*nonnull fn)(void);
 
 	int nargs;
 	di_type_t rtype;
@@ -29,7 +29,7 @@ struct di_closure {
 	struct di_object;
 
 	const void **cargs;
-	void (*Nonnull fn)(void);
+	void (*nonnull fn)(void);
 
 	int nargs;
 	int nargs0;

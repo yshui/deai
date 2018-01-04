@@ -87,7 +87,7 @@ static void enable_hierarchy_event(struct di_xorg_xinput *xi) {
 	di_xorg_xi_start_listen_for_event(xi, XCB_INPUT_HIERARCHY);
 }
 
-static void UNUSED disable_hierarchy_event(struct di_xorg_xinput *xi) {
+static void unused disable_hierarchy_event(struct di_xorg_xinput *xi) {
 	di_xorg_xi_stop_listen_for_event(xi, XCB_INPUT_HIERARCHY);
 }
 

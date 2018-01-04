@@ -9,6 +9,7 @@
 #include <stdint.h>
 #include <stdlib.h>
 
+#include <deai/compiler.h>
 #include <deai/object.h>
 #include <deai/callable.h>
 

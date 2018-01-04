@@ -46,7 +46,7 @@ PUBLIC int di_rawcallxn(struct di_object *o, const char *name, di_type_t *rt,
 	if (rc != 0)
 		return rc;
 
-	auto m = *(struct di_object * _Nonnull *)val;
+	auto m = *(struct di_object * nonnull *)val;
 	free((void *)val);
 
 	if (!m->call)
@@ -364,7 +364,7 @@ static int di_insert_member(struct di_object *r, struct di_member_internal *m) {
 	return 0;
 }
 
-static int _di_add_member(struct di_object *o, const char *name, bool writable,
+PUBLIC int di_add_member(struct di_object *o, const char *name, bool writable,
                           bool own, di_type_t t, void *v) {
 	if (!name)
 		return -EINVAL;
@@ -395,12 +395,12 @@ PUBLIC int di_add_value_member(struct di_object *o, const char *name, bool writa
 	di_copy_value(t, v, nv);
 	free(nv);
 
-	return _di_add_member(o, name, writable, true, t, v);
+	return di_add_member(o, name, writable, true, t, v);
 }
 
 PUBLIC int di_add_ref_member(struct di_object *o, const char *name, bool writable,
                              di_type_t t, void *addr) {
-	return _di_add_member(o, name, writable, false, t, addr);
+	return di_add_member(o, name, writable, false, t, addr);
 }
 
 PUBLIC struct di_member *di_lookup(struct di_object *o, const char *name) {

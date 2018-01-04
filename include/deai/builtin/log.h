@@ -16,5 +16,5 @@ enum di_log_level {
 	DI_LOG_DEBUG,
 };
 
-int di_log_va(struct di_object *_Nonnull o, int log_level, const char *_Nonnull fmt, ...);
-int di_set_log_level(struct di_object *_Nonnull o, int log_level);
+int di_log_va(struct di_object *nonnull o, int log_level, const char *nonnull fmt, ...);
+int di_set_log_level(struct di_object *nonnull o, int log_level);

@@ -25,7 +25,7 @@
 	})
 
 #define define_trivial_cleanup(type, name)                                          \
-	static inline UNUSED void name(type **ptr) {                                \
+	static inline unused void name(type **ptr) {                                \
 		free(*ptr);                                                         \
 		*ptr = NULL;                                                        \
 	}
@@ -33,12 +33,6 @@
 
 #define with_cleanup_t(type) __attribute__((cleanup(free_##type##p))) type *
 #define with_cleanup(func) __attribute__((cleanup(func)))
-
-#define Nonnull _Nonnull
-#define Nullable _Nullable
-#define nonnull_args(...) __attribute__((nonnull(__VA_ARGS__)))
-#define nonnull_all __attribute__((nonnull))
-#define ret_nonnull _Nonnull __attribute__((returns_nonnull))
 
 #define PUBLIC __attribute__((visibility("default")))
 

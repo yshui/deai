@@ -8,16 +8,23 @@
 
 //TODO: Check compiler versions
 
-#define NONNULL_ARG(...) __attribute__((nonnull(__VA_ARGS__)))
-#define NONNULL_ALL __attribute__((nonnull))
-#define UNUSED __attribute__((unused))
+#define vattr(name, ...) __attribute__((name(__VA_ARGS__)))
+
+#define nonnull_args(...) vattr(__nonnull__, __VA_ARGS__)
+#define nonnull_all __attribute__((__nonnull__))
+#define unused __attribute__((unused))
+#define ret_nonnull nonnull __attribute__((returns_nonnull))
 
 #ifndef __has_feature
 # define __has_feature(x) 0
 #endif
 
 #if !__has_feature(nullability)
-# define _Nonnull
-# define _Nullable
-# define _Null_unspecified
+# define nonnull
+# define nullable
+# define null_unspecified
+#else
+# define nonnull _Nonnull
+# define nullable _Nullable
+# define null_unspecified _Null_unspecified
 #endif

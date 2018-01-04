@@ -14,12 +14,12 @@ enum { MAX_NARGS = 128,
 
 struct di_closure;
 
-int di_call_objectv(struct di_object *_Nonnull obj, di_type_t *_Nonnull rtype,
-                    void *_Nullable *_Nonnull ret, va_list);
-struct di_closure *_Nullable di_create_closure(
-    void (*_Nonnull fn)(void), di_type_t rtype, int ncaptures,
-    const di_type_t *_Nullable captypes,
-    const void *_Nonnull const *_Nullable captures, int nargs,
-    const di_type_t *_Nullable argtypes, bool weak_capture);
-int di_add_method(struct di_object *_Nonnull object, const char *_Nonnull name,
-                  void (*_Nonnull fn)(void), di_type_t rtype, int nargs, ...);
+int di_call_objectv(struct di_object *nonnull obj, di_type_t *nonnull rtype,
+                    void *nullable *nonnull ret, va_list);
+struct di_closure *nullable di_create_closure(
+    void (*nonnull fn)(void), di_type_t rtype, int ncaptures,
+    const di_type_t *nullable captypes,
+    const void *nonnull const *nullable captures, int nargs,
+    const di_type_t *nullable argtypes, bool weak_capture);
+int di_add_method(struct di_object *nonnull object, const char *nonnull name,
+                  void (*nonnull fn)(void), di_type_t rtype, int nargs, ...);

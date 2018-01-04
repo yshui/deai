@@ -16,13 +16,13 @@
 
 #include "common.h"
 
-struct di_object *ret_nonnull di_new_error(const char *Nonnull fmt, ...);
+struct di_object *ret_nonnull di_new_error(const char *nonnull fmt, ...);
 
-int di_gmethod(struct di_object *Nonnull o, const char *Nonnull name,
-               void (*Nonnull fn)(void)) nonnull_args(1, 2, 3);
+int di_gmethod(struct di_object *nonnull o, const char *nonnull name,
+               void (*nonnull fn)(void)) nonnull_args(1, 2, 3);
 
-int di_proxy_signal(struct di_object *Nonnull src, const char *Nonnull srcsig,
-                    struct di_object *Nonnull proxy, const char *Nonnull proxysig)
+int di_proxy_signal(struct di_object *nonnull src, const char *nonnull srcsig,
+                    struct di_object *nonnull proxy, const char *nonnull proxysig)
     nonnull_args(1, 2, 3, 4);
 
 #define DTOR(o) ((struct di_object *)o)->dtor
@@ -322,27 +322,27 @@ int di_proxy_signal(struct di_object *Nonnull src, const char *Nonnull srcsig,
 	((struct di_tuple){VA_ARGS_LENGTH(__VA_ARGS__),                             \
 	                   (struct di_variant[]){MAKE_VARIANT_LIST(__VA_ARGS__)}})
 
-static inline void nonnull_args(1) __free_objp(struct di_object *Nullable *Nonnull p) {
+static inline void nonnull_args(1) __free_objp(struct di_object *nullable *nonnull p) {
 	if (*p)
 		di_unref_object(*p);
 	*p = NULL;
 }
 
-static void __attribute__((unused)) nonnull_args(1)
-    trivial_destroyed_handler(struct di_object *Nonnull o) {
+static void unused nonnull_all
+    trivial_destroyed_handler(struct di_object *nonnull o) {
 	di_destroy_object(o);
 }
 
-static void __attribute__((unused)) nonnull_args(1)
-    trivial_detach(struct di_object *Nonnull o) {
+static void unused nonnull_all
+    trivial_detach(struct di_object *nonnull o) {
 	di_destroy_object(o);
 }
 
-typedef void (*_Nonnull di_detach_fn_t)(struct di_object *_Nonnull);
+typedef void (*nonnull di_detach_fn_t)(struct di_object *nonnull);
 
-static inline int nonnull_args(1, 2, 3)
-    di_set_detach(struct di_listener *_Nonnull l, di_detach_fn_t fn,
-                  struct di_object *_Nonnull o) {
+static inline int nonnull_all
+    di_set_detach(struct di_listener *nonnull l, di_detach_fn_t fn,
+                  struct di_object *nonnull o) {
 	struct di_closure *cl = di_closure(fn, true, (o));
 	int ret = di_add_value_member((struct di_object *)l, "__detach", false,
 	                              DI_TYPE_OBJECT, cl);
@@ -350,9 +350,9 @@ static inline int nonnull_args(1, 2, 3)
 	return ret;
 }
 
-static inline struct di_listener *ret_nonnull nonnull_args(1, 2, 3)
-    di_listen_to_destroyed(struct di_object *Nonnull o, di_detach_fn_t fn,
-                           struct di_object *Nonnull o2) {
+static inline struct di_listener *ret_nonnull nonnull_all
+    di_listen_to_destroyed(struct di_object *nonnull o, di_detach_fn_t fn,
+                           struct di_object *nonnull o2) {
 	struct di_listener *ret = di_listen_to(o, "__destroyed", NULL);
 	di_set_detach(ret, fn, o2);
 	return ret;

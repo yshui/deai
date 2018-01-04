@@ -124,15 +124,21 @@ void _dbus_deserialize_tuple(DBusMessageIter *i, void *retp) {
 		t.tuple[x] = calloc(1, di_sizeof_type(t.elem_type[x]));
 		di_type_t rtype;
 		_dbus_deserialize_one(i, t.tuple[x], &rtype, type);
+
+		// Dict type can't be discerned from the outer type alone (which
+		// would be array).
+		// If deserialize_one returns an object and we expect an array,
+		// that means it's a dbus dict.
+		if (rtype == DI_TYPE_OBJECT && t.elem_type[x] == DI_TYPE_ARRAY)
+			t.elem_type[x] = rtype;
 		assert(rtype == t.elem_type[x]);
 		dbus_message_iter_next(i);
 	}
 	*(struct di_tuple *)retp = t;
 }
 
-static void _dbus_deserialize_dict(DBusMessageIter *i, void *retp) {
+static void _dbus_deserialize_dict(DBusMessageIter *i, void *retp, int length) {
 	auto o = di_new_object_with_type(struct di_object);
-	int length = dbus_message_iter_get_element_count(i);
 	for (int x = 0; x < length; x++) {
 		struct di_tuple t;
 		DBusMessageIter i2;
@@ -163,7 +169,7 @@ _dbus_deserialize_one(DBusMessageIter *i, void *retp, di_type_t *otype, int type
 			int type3 = dbus_message_iter_get_arg_type(&i3);
 			if (type3 == DBUS_TYPE_STRING) {
 				*otype = DI_TYPE_OBJECT;
-				return _dbus_deserialize_dict(&i2, retp);
+				return _dbus_deserialize_dict(&i2, retp, dbus_message_iter_get_element_count(i));
 			}
 		}
 		*otype = DI_TYPE_ARRAY;
