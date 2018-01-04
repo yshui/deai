@@ -381,7 +381,16 @@ static int di_add_member(struct di_object *o, const char *name, bool writable,
 	m->writable = writable;
 	m->own = own;
 
-	return di_insert_member(o, m);
+	int ret = di_insert_member(o, m);
+	if (ret != 0) {
+		if (own) {
+			di_free_value(t, v);
+			free(v);
+		}
+		free(m->name);
+		free(m);
+	}
+	return ret;
 }
 
 PUBLIC int di_add_member_clone(struct di_object *o, const char *name, bool writable,
