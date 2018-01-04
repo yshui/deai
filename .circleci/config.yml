@@ -19,4 +19,4 @@ jobs:
           command: cd builddir && curl -o codecov https://codecov.io/bash && chmod +x codecov && ./codecov -R .. -y .codecov.yml
       - run:
           name: Valgrind
-          command: cd builddir && meson test --wrap='valgrind --leak-check=full' && cat meson-logs/testlog-valgrind.txt
+          command: cd builddir && meson test --wrap='valgrind --leak-check=full --suppressions=../valgrind.supp' && cat meson-logs/testlog-valgrind.txt

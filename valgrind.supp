@@ -1,0 +1,8 @@
+{
+   Copy of environ and argv
+   Memcheck:Leak
+   match-leak-kinds: definite
+   ...
+   fun:setproctitle_init
+   fun:main
+}
