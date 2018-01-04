@@ -1,4 +1,4 @@
-src = ['dbus.c', 'yxml.c', 'sedes.c']
+src = ['dbus.c', 'sedes.c']
 dbus = dependency('dbus-1', required: true)
 di_dbus_lib = shared_library('di_dbus', src,
   include_directories: incs,

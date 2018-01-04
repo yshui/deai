@@ -9,7 +9,6 @@
 #include "common.h"
 #include "list.h"
 #include "sedes.h"
-#include "yxml.h"
 
 #define DBUS_INTROSPECT_IFACE "org.freedesktop.DBus.Introspectable"
 
@@ -157,6 +156,7 @@ static void di_dbus_unwatch_name(_di_dbus_connection *c, const char *busname) {
 	free(match);
 }
 
+#if 0
 static struct di_object *_dbus_introspect(_di_dbus_object *o) {
 	DBusMessage *msg = dbus_message_new_method_call(
 	    o->bus, o->obj, DBUS_INTROSPECT_IFACE, "Introspect");
@@ -241,6 +241,7 @@ static void _dbus_lookup_member(_di_dbus_object *o, const char *method,
 	di_unref_object((void *)cl);
 	di_unref_object(p);
 }
+#endif
 
 static void _dbus_call_method_reply_cb(struct di_object *sig, void *msg) {
 	struct di_tuple t;
@@ -259,33 +260,24 @@ static void _dbus_call_method_reply_cb(struct di_object *sig, void *msg) {
 	di_destroy_object(sig);
 }
 
-static void _dbus_call_method_step2(_di_dbus_object *dobj, struct di_object *sig,
-                                    char *method, struct di_tuple t,
-                                    const char *interface, struct di_object *err) {
-	if (err) {
-		char *msg;
-		int ret = di_get(err, "errmsg", msg);
-		if (ret == 0) {
-			di_emit(sig, "error", msg);
-			free(msg);
-		} else {
-			msg = "Unknown error";
-			di_emit(sig, "error", msg);
-		}
-	}
+static struct di_object *
+_dbus_call_method(_di_dbus_object *dobj, const char *iface, const char *method,
+                  struct di_tuple t) {
 
+	auto ret = di_new_object_with_type(struct di_object);
 	DBusMessage *msg =
-	    dbus_message_new_method_call(dobj->bus, dobj->obj, interface, method);
+	    dbus_message_new_method_call(dobj->bus, dobj->obj, iface, method);
 	DBusMessageIter i;
 	dbus_message_iter_init_append(msg, &i);
 
 	_dbus_serialize_tuple(&i, t);
 	auto p = di_dbus_send(dobj->c, msg);
-	auto cl = di_closure(_dbus_call_method_reply_cb, false, (sig), void *);
+	auto cl = di_closure(_dbus_call_method_reply_cb, false, (ret), void *);
 	di_listen_to_once(p, "reply", (void *)cl, true);
 	di_unref_object((void *)cl);
 	di_unref_object((void *)p);
 	dbus_message_unref(msg);
+	return ret;
 }
 
 static void di_free_dbus_object(struct di_object *o) {
@@ -296,25 +288,16 @@ static void di_free_dbus_object(struct di_object *o) {
 	di_unref_object((void *)od->c);
 }
 
-static struct di_object *
-di_dbus_call_method(_di_dbus_object *dobj, char *method, struct di_tuple t) {
-	auto ret = di_new_object_with_type(struct di_object);
-	auto cl = di_closure(_dbus_call_method_step2, false,
-	                     ((struct di_object *)dobj, ret, method, t),
-	                     const char *, struct di_object *);
-	_dbus_lookup_member(dobj, method, false, (void *)cl);
-	di_unref_object((void *)cl);
-	return ret;
-}
-
 typedef struct {
 	struct di_object;
 	_di_dbus_object *dobj;
 	char *method;
+	char *interface;
 } _di_dbus_method;
 
 static void di_dbus_free_method(_di_dbus_method *o) {
 	free(o->method);
+	free(o->interface);
 	di_unref_object((void *)o->dobj);
 }
 
@@ -322,15 +305,31 @@ static int
 call_dbus_method(_di_dbus_method *m, di_type_t *rt, void **ret, struct di_tuple t) {
 	*rt = DI_TYPE_OBJECT;
 	auto retd = tmalloc(struct di_object *, 1);
-	*retd = di_dbus_call_method(m->dobj, m->method, t);
+	*retd = _dbus_call_method(m->dobj, m->interface, m->method, t);
 	*ret = retd;
 	return 0;
 }
 
 static struct di_object *
 di_dbus_object_getter(_di_dbus_object *dobj, const char *method) {
+	const char *dot = strrchr(method, '.');
+	char *ifc, *m;
+	if (dot) {
+		const char *dot2 = strchr(method, '.');
+		if (dot == method || !*(dot+1))
+			return di_new_error("Method name or interface name is empty");
+		if (dot2 == dot)
+			return di_new_error("Invalid interface name");
+		ifc = strndup(method, dot-method);
+		m = strdup(dot+1);
+	} else {
+		ifc = NULL;
+		m = strdup(method);
+	}
+
 	auto ret = di_new_object_with_type(_di_dbus_method);
-	ret->method = strdup(method);
+	ret->method = m;
+	ret->interface = ifc;
 	ret->dobj = dobj;
 	di_ref_object((void *)dobj);
 
