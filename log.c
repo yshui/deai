@@ -19,7 +19,6 @@
 struct di_log {
 	struct di_module;
 
-	struct di_object *log_target;
 	int log_level;
 };
 
@@ -63,11 +62,14 @@ static int di_log(struct di_object *o, di_type_t *rt, void **ret, struct di_tupl
 	struct di_log *l = (void *)o;
 	if (level_lookup(log_level) > l->log_level)
 		return 0;
-	if (!l->log_target)
-		*res = fputs(str, stderr);
-	else {
+
+	struct di_object *ltgt = NULL;
+	if (di_get(l, "log_target", ltgt) != 0) {
+		*res = 0;
+		return 0;
+	} else {
 		int wrc = 0;
-		int rc = di_callr(l->log_target, "write", wrc, str);
+		int rc = di_callr(ltgt, "write", wrc, str);
 		if (rc != 0)
 			*res = rc;
 		else
@@ -80,6 +82,10 @@ struct log_file {
 	struct di_object;
 	FILE *f;
 };
+
+static int _stderr_write(struct di_object *t, char *log) {
+	return fputs(log, stderr);
+}
 
 static int file_target_write(struct log_file *lf, char *log) {
 	auto rc = fputs(log, lf->f);
@@ -160,8 +166,10 @@ void di_init_log(struct deai *di) {
 	struct di_log *l = (void *)lm;
 	l->log_level = DI_LOG_ERROR;
 
-	di_add_member_ref((void *)l, "log_target", true, DI_TYPE_OBJECT,
-	                  &l->log_target);
+	auto dtgt = di_new_object_with_type(struct di_object);
+	di_method(dtgt, "write", _stderr_write, char *);
+
+	di_add_member_move((struct di_object *)l, "log_target", true, (di_type_t[]){DI_TYPE_OBJECT}, &dtgt);
 	l->call = di_log;
 	di_method(l, "file_target", file_target, char *, bool);
 	di_getter_setter(l, log_level, get_log_level, set_log_level);

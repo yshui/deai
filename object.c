@@ -222,10 +222,10 @@ PUBLIC struct di_module *di_new_module(size_t size) {
 static void _di_remove_member(struct di_object *obj, struct di_member_internal *m) {
 	HASH_DEL(*(struct di_member_internal **)&obj->members, m);
 
-	di_free_value(m->type, m->data);
-
-	if (m->own)
+	if (m->own) {
+		di_free_value(m->type, m->data);
 		free(m->data);
+	}
 	free(m->name);
 	free(m);
 }
@@ -364,6 +364,11 @@ static int di_insert_member(struct di_object *r, struct di_member_internal *m) {
 	return 0;
 }
 
+// `own` actually have 2 meanings: 1) do we own the value `*v` points to (e.g. do
+// we hold a ref to a di_object) 2) do we own the memory location of `v`
+//
+// right now, own = true means we own both of those, and own = false means we own
+// neither
 static int di_add_member(struct di_object *o, const char *name, bool writable,
                          bool own, di_type_t t, void *v) {
 	if (!name)
