@@ -294,7 +294,7 @@ _type_signature_of_di_value_to_buffer(di_type_t type, void *d, char *buffer) {
 		struct di_array *arr = d;
 		auto res = _type_signature_of_di_value_to_buffer(
 		    arr->elem_type, arr->arr, buffer + 1);
-		auto v = _verify_type_signature(type, d, buffer + 1);
+		auto v = _verify_type_signature(type, d, buffer);
 		if (!v) {
 			free_dbus_signature(res);
 			return (struct _dbus_signature){NULL, -EINVAL, 0, NULL};
@@ -366,10 +366,12 @@ static int _dbus_serialize_with_signature(DBusMessageIter *i, di_type_t type,
 			assert(atype == *si2.current);
 			DBusMessageIter i2;
 			bool ret = dbus_message_iter_open_container(
-			    i, dtype, (char[]){atype}, &i2);
+			    i, dtype, (char[]){atype, 0}, &i2);
 			if (!ret)
 				return -ENOMEM;
-			dbus_message_iter_append_fixed_array(&i2, atype, arr->arr,
+
+			// append_fixed_array takes pointer to pointer, makes 0 sense
+			dbus_message_iter_append_fixed_array(&i2, atype, &arr->arr,
 			                                     arr->length);
 			dbus_message_iter_close_container(i, &i2);
 			return 0;

@@ -18,6 +18,16 @@ dbusl.on("stderr_line", function(l)
     print(l)
     di.env.DBUS_SESSION_BUS_PID = l
 end)
+function call_with_error(o, name, ...)
+    t = o[name](...)
+    if t.errmsg then
+        print(t.errmsg)
+        di.exit(1)
+    end
+    t.on("error", function(e)
+        print(e)
+    end)
+end
 dbusl.on("exit", function()
     b = di.dbus.session_bus
     if b.errmsg then
@@ -38,13 +48,7 @@ dbusl.on("exit", function()
     end)
 
     -- Use non-existent method to test message serialization
-    o["org.dummy.Dummy"]({1,2,3}).on("error", function(e)
-        print(e)
-    end)
-    o["org.dummy.Dummy"](1).on("error", function(e)
-        print(e)
-    end)
-    o["org.dummy.Dummy"]("asdasf").on("error", function(e)
-        print(e)
-    end)
+    call_with_error(o, "org.dummy.Dummy", {1,2,3})
+    call_with_error(o, "org.dummy.Dummy", 1)
+    call_with_error(o, "org.dummy.Dummy", "asdf")
 end)

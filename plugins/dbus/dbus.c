@@ -120,6 +120,9 @@ di_dbus_update_name_from_msg(_di_dbus_connection *c, char *wk, DBusMessage *msg)
 
 static void di_dbus_watch_name(_di_dbus_connection *c, const char *busname) {
 	// watch for name changes
+	if (!c->conn)
+		return;
+
 	char *match;
 	asprintf(&match,
 	         "type='signal',sender='" DBUS_SERVICE_DBUS "',path='" DBUS_PATH_DBUS
@@ -144,7 +147,10 @@ static void di_dbus_watch_name(_di_dbus_connection *c, const char *busname) {
 }
 
 static void di_dbus_unwatch_name(_di_dbus_connection *c, const char *busname) {
-	// watch for name changes
+	// stop watching for name changes
+	if (!c->conn)
+		return;
+
 	char *match;
 	asprintf(&match,
 	         "type='signal',sender='" DBUS_SERVICE_DBUS "',path='" DBUS_PATH_DBUS
@@ -264,13 +270,19 @@ static struct di_object *
 _dbus_call_method(_di_dbus_object *dobj, const char *iface, const char *method,
                   struct di_tuple t) {
 
-	auto ret = di_new_object_with_type(struct di_object);
+	// XXX: probably better to destroy all objects when disconnect from bus
+	if (!dobj->c->conn)
+		return NULL;
+
 	DBusMessage *msg =
 	    dbus_message_new_method_call(dobj->bus, dobj->obj, iface, method);
 	DBusMessageIter i;
 	dbus_message_iter_init_append(msg, &i);
 
-	_dbus_serialize_tuple(&i, t);
+	if (_dbus_serialize_tuple(&i, t) < 0)
+		return di_new_error("Can't serialize arguments");
+
+	auto ret = di_new_object_with_type(struct di_object);
 	auto p = di_dbus_send(dobj->c, msg);
 	auto cl = di_closure(_dbus_call_method_reply_cb, false, (ret), void *);
 	di_listen_to_once(p, "reply", (void *)cl, true);
@@ -468,6 +480,9 @@ static char *_to_dbus_match_rule(const char *name) {
 }
 
 static void di_dbus_new_signal(_di_dbus_connection *c, const char *name) {
+	if (!c->conn)
+		return;
+
 	if (*name == '%') {
 		auto match = _to_dbus_match_rule(name + 1);
 		if (!match)
@@ -478,6 +493,9 @@ static void di_dbus_new_signal(_di_dbus_connection *c, const char *name) {
 }
 
 static void di_dbus_del_signal(_di_dbus_connection *c, const char *name) {
+	if (!c->conn)
+		return;
+
 	if (*name == '%') {
 		auto match = _to_dbus_match_rule(name + 1);
 		if (!match)
