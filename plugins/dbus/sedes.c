@@ -1,4 +1,5 @@
 #include <assert.h>
+#include <deai/helper.h>
 
 #include "common.h"
 #include "list.h"
@@ -149,6 +150,7 @@ static void _dbus_deserialize_dict(DBusMessageIter *i, void *retp, int length) {
 		di_add_member_move(o, *(const char **)t.tuple[0], false,
 		                   &t.elem_type[1], t.tuple[1]);
 		di_free_tuple(t);
+		dbus_message_iter_next(i);
 	}
 	*(struct di_object **)retp = o;
 }
