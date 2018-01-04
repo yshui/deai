@@ -310,16 +310,15 @@ static struct di_array di_get_argv(struct deai *p) {
 	return ret;
 }
 
-PUBLIC int di_register_module(struct deai *p, const char *name, struct di_module *m) {
-	int ret = di_add_value_member((void *)p, name, false, DI_TYPE_OBJECT, m);
-	di_unref_object((void *)m);
+PUBLIC int di_register_module(struct deai *p, const char *name, struct di_module **m) {
+	int ret = di_add_member_move((void *)p, name, false, (di_type_t[]){DI_TYPE_OBJECT}, (void **)m);
 	return ret;
 }
 
 // Don't consumer the ref, because it breaks the usual method call sementics
 static int
 di_register_module_method(struct deai *p, const char *name, struct di_module *m) {
-	return di_add_value_member((void *)p, name, false, DI_TYPE_OBJECT, m);
+	return di_add_member_clone((void *)p, name, false, DI_TYPE_OBJECT, m);
 }
 
 define_trivial_cleanup(char *, free_charpp);
@@ -381,7 +380,7 @@ int main(int argc, char *argv[]) {
 	di_method(p, "__set_proctitle", di_set_pr_name, char *);
 	di_method(p, "__get_argv", di_get_argv);
 
-	di_add_ref_member((void *)p, "proctitle", false, DI_TYPE_STRING_LITERAL,
+	di_add_member_ref((void *)p, "proctitle", false, DI_TYPE_STRING_LITERAL,
 	                  &p->proctitle);
 
 	struct di_ev_signal sigintw;

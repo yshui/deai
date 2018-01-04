@@ -211,7 +211,7 @@ di_create_periodic(struct di_evmodule *evm, double interval, double offset) {
 
 struct di_prepare {
 	ev_prepare;
-	struct di_evmodule *evm;
+	struct di_module *evm;
 };
 
 static void di_prepare(EV_P_ ev_prepare *w, int revents) {
@@ -232,5 +232,5 @@ void di_init_event(struct deai *di) {
 	ev_prepare_init(dep, di_prepare);
 	ev_prepare_start(di->loop, (ev_prepare *)dep);
 
-	di_register_module(di, "event", (void *)em);
+	di_register_module(di, "event", &em);
 }

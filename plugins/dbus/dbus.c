@@ -586,6 +586,6 @@ PUBLIC int di_plugin_init(struct deai *di) {
 
 	di_getter(m, session_bus, di_dbus_get_session_bus);
 
-	di_register_module(di, "dbus", (void *)m);
+	di_register_module(di, "dbus", &m);
 	return 0;
 }

@@ -264,6 +264,6 @@ PUBLIC int di_plugin_init(struct deai *di) {
 	di_method(x, "connect", di_xorg_connect);
 	di_method(x, "connect_to", di_xorg_connect_to, char *);
 
-	di_register_module(di, "xorg", (void *)x);
+	di_register_module(di, "xorg", &x);
 	return 0;
 }

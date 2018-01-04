@@ -173,6 +173,6 @@ PUBLIC int di_plugin_init(struct deai *di) {
 	auto fm = di_new_module_with_type(struct di_file);
 	fm->di = di;
 	di_method(fm, "watch", di_file_new_watch, struct di_array);
-	di_register_module(di, "file", (void *)fm);
+	di_register_module(di, "file", &fm);
 	return 0;
 }

@@ -31,7 +31,7 @@ PUBLIC struct di_object *di_new_error(const char *fmt, ...) {
 	struct di_error *err = di_new_object_with_type(struct di_error);
 	err->msg = errmsg;
 
-	di_add_ref_member((void *)err, "errmsg", false, DI_TYPE_STRING, &err->msg);
+	di_add_member_ref((void *)err, "errmsg", false, DI_TYPE_STRING, &err->msg);
 	return (void *)err;
 }
 
@@ -39,7 +39,7 @@ PUBLIC int di_gmethod(struct di_object *o, const char *name, void (*fn)(void)) {
 	with_object_cleanup(di_object) m = di_new_object_with_type(struct di_object);
 	m->call = (void *)fn;
 
-	return di_add_value_member(o, name, false, DI_TYPE_OBJECT, m);
+	return di_add_member_clone(o, name, false, DI_TYPE_OBJECT, m);
 }
 
 typedef struct {
@@ -86,8 +86,7 @@ PUBLIC int di_proxy_signal(struct di_object *src, const char *srcsig,
 
 	// Let the __del_signal method hold the only ref to proxied_signal
 	auto cl = di_closure(_del_proxied_signal, false, ((struct di_object *)c));
-	int ret = di_add_value_member(proxy, buf, false, DI_TYPE_OBJECT, cl);
-	di_unref_object((void *)cl);
+	int ret = di_add_member_move(proxy, buf, false, (di_type_t[]){DI_TYPE_OBJECT}, (void **)&cl);
 	di_unref_object((void *)c);
 	free(buf);
 

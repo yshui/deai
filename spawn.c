@@ -242,5 +242,5 @@ void di_init_spawn(struct deai *di) {
 	//                         DI_TYPE_OBJECT, 1, DI_TYPE_ARRAY);
 	di_method(m, "run", di_spawn_run, struct di_array, bool);
 
-	di_register_module(di, "spawn", (void *)m);
+	di_register_module(di, "spawn", &m);
 }

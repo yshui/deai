@@ -205,10 +205,8 @@ static struct di_lua_ref *lua_type_to_di_object(lua_State *L, int i, void *call)
 
 	auto getter = di_new_object_with_type(struct lua_table_getter);
 	getter->call = di_lua_table_get;
-	// not incrementing getter->t->ref_count to prevent cycle
 	getter->t = o;
-	di_add_value_member((void *)o, "__get", false, DI_TYPE_OBJECT, getter);
-	di_unref_object((void *)getter);
+	di_add_member_move((void *)o, "__get", false, (di_type_t[]){DI_TYPE_OBJECT}, (void **)&getter);
 	o->dtor = (void *)lua_ref_dtor;
 	o->call = call;
 	o->d = di_listen_to_destroyed((void *)s->L, trivial_destroyed_handler,
@@ -821,6 +819,6 @@ PUBLIC int di_plugin_init(struct deai *di) {
 	m->di = di;
 	di_method(m, "load_script", di_lua_load_script, char *);
 
-	di_register_module(di, "lua", (void *)m);
+	di_register_module(di, "lua", &m);
 	return 0;
 }

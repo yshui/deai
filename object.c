@@ -173,7 +173,7 @@ PUBLIC gen_tfunc(di_getxt, di_getx);
 PUBLIC gen_tfunc(di_rawgetxt, di_rawgetx);
 
 PUBLIC int di_set_type(struct di_object *o, const char *tyname) {
-	return di_add_value_member(o, "__type", false, DI_TYPE_STRING_LITERAL, tyname);
+	return di_add_member_clone(o, "__type", false, DI_TYPE_STRING_LITERAL, tyname);
 }
 
 PUBLIC const char *di_get_type(struct di_object *o) {
@@ -364,8 +364,8 @@ static int di_insert_member(struct di_object *r, struct di_member_internal *m) {
 	return 0;
 }
 
-PUBLIC int di_add_member(struct di_object *o, const char *name, bool writable,
-                          bool own, di_type_t t, void *v) {
+static int di_add_member(struct di_object *o, const char *name, bool writable,
+                         bool own, di_type_t t, void *v) {
 	if (!name)
 		return -EINVAL;
 
@@ -379,7 +379,7 @@ PUBLIC int di_add_member(struct di_object *o, const char *name, bool writable,
 	return di_insert_member(o, m);
 }
 
-PUBLIC int di_add_value_member(struct di_object *o, const char *name, bool writable,
+PUBLIC int di_add_member_clone(struct di_object *o, const char *name, bool writable,
                                di_type_t t, ...) {
 	if (di_sizeof_type(t) == 0)
 		return -EINVAL;
@@ -398,7 +398,23 @@ PUBLIC int di_add_value_member(struct di_object *o, const char *name, bool writa
 	return di_add_member(o, name, writable, true, t, v);
 }
 
-PUBLIC int di_add_ref_member(struct di_object *o, const char *name, bool writable,
+PUBLIC int di_add_member_move(struct di_object *o, const char *name, bool writable,
+		di_type_t *t, void *addr) {
+	auto sz = di_sizeof_type(*t);
+	if (sz == 0)
+		return -EINVAL;
+
+	di_type_t tt = *t;
+	void *taddr = malloc(sz);
+	memcpy(taddr, addr, sz);
+
+	*t = DI_TYPE_NIL;
+	memset(addr, 0, sz);
+
+	return di_add_member(o, name, writable, true, tt, taddr);
+}
+
+PUBLIC int di_add_member_ref(struct di_object *o, const char *name, bool writable,
                              di_type_t t, void *addr) {
 	return di_add_member(o, name, writable, false, t, addr);
 }

@@ -263,7 +263,7 @@ int di_proxy_signal(struct di_object *nonnull src, const char *nonnull srcsig,
 	di_emitn((struct di_object *)o, name, di_tuple(__VA_ARGS__))
 
 #define di_field(o, name)                                                           \
-	di_add_ref_member((struct di_object *)(o), #name, false,                    \
+	di_add_member_ref((struct di_object *)(o), #name, false,                    \
 	                  di_typeof((o)->name), &((o)->name))
 
 #define di_getter(o, name, g) di_method(o, STRINGIFY(__get_##name), g)
@@ -344,7 +344,7 @@ static inline int nonnull_all
     di_set_detach(struct di_listener *nonnull l, di_detach_fn_t fn,
                   struct di_object *nonnull o) {
 	struct di_closure *cl = di_closure(fn, true, (o));
-	int ret = di_add_value_member((struct di_object *)l, "__detach", false,
+	int ret = di_add_member_clone((struct di_object *)l, "__detach", false,
 	                              DI_TYPE_OBJECT, cl);
 	di_unref_object((void *)cl);
 	return ret;

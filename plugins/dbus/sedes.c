@@ -146,8 +146,8 @@ static void _dbus_deserialize_dict(DBusMessageIter *i, void *retp, int length) {
 		_dbus_deserialize_tuple(&i2, &t);
 		assert(t.length == 2);
 		assert(t.elem_type[0] == DI_TYPE_STRING);
-		di_add_ref_member(o, *(const char **)t.tuple[0], false,
-		                  t.elem_type[1], t.tuple[1]);
+		di_add_member_move(o, *(const char **)t.tuple[0], false,
+		                   &t.elem_type[1], &t.tuple[1]);
 		di_free_tuple(t);
 	}
 	*(struct di_object **)retp = o;

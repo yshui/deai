@@ -102,12 +102,14 @@ const char *nonnull di_get_type(struct di_object *nonnull o);
 bool di_check_type(struct di_object *nonnull o, const char *nonnull type);
 
 int nonnull_all
-di_add_member(struct di_object *nonnull o, const char *nonnull name,
-              bool writable, bool own, di_type_t, void *nonnull address);
-int di_add_ref_member(struct di_object *nonnull o, const char *nonnull name,
-                      bool writable, di_type_t t, void *nonnull address);
-int di_add_value_member(struct di_object *nonnull o, const char *nonnull name,
-                        bool writable, di_type_t t, ...);
+di_add_member_move(struct di_object *nonnull o, const char *nonnull name,
+                   bool writable, di_type_t *, void *nonnull address);
+int nonnull_all
+di_add_member_ref(struct di_object *nonnull o, const char *nonnull name,
+                  bool writable, di_type_t, void *nonnull address);
+int nonnull_all
+di_add_member_clone(struct di_object *nonnull o, const char *nonnull name,
+                    bool writable, di_type_t, ...);
 int di_remove_member(struct di_object *nonnull o, const char *nonnull name);
 struct di_member *nullable di_lookup(struct di_object *nonnull o,
                                       const char *nonnull name);

@@ -153,15 +153,17 @@ PUBLIC int di_set_log_level(struct di_object *o, int log_level) {
 }
 
 void di_init_log(struct deai *di) {
-	auto l = di_new_module_with_type(struct di_log);
-	if (!l)
+	auto lm = di_new_module_with_type(struct di_log);
+	if (!lm)
 		return;
+
+	struct di_log *l = (void *)lm;
 	l->log_level = DI_LOG_ERROR;
 
-	di_add_ref_member((void *)l, "log_target", true, DI_TYPE_OBJECT,
+	di_add_member_ref((void *)l, "log_target", true, DI_TYPE_OBJECT,
 	                  &l->log_target);
 	l->call = di_log;
 	di_method(l, "file_target", file_target, char *, bool);
 	di_getter_setter(l, log_level, get_log_level, set_log_level);
-	di_register_module(di, "log", (void *)l);
+	di_register_module(di, "log", &lm);
 }
