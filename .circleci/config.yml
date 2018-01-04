@@ -7,7 +7,7 @@ jobs:
       - checkout
       - run:
           name: install dependencies
-          command: yum install -y libev-devel libffi-devel meson lua-devel ninja-build libxcb-devel libxkbcommon-devel pkg-config gcc xcb-util-keysyms-devel dbus-devel findutils dbus xorg-x11-server-utils xdotool xorg-x11-server-Xvfb
+          command: yum install -y libev-devel libffi-devel meson lua-devel ninja-build libxcb-devel libxkbcommon-devel pkg-config gcc xcb-util-keysyms-devel dbus-devel findutils dbus xorg-x11-server-utils xdotool xorg-x11-server-Xvfb valgrind
       - run:
           name: Build
           command: meson -Db_coverage=true builddir && ninja -C builddir
@@ -17,3 +17,6 @@ jobs:
       - run:
           name: codecov
           command: cd builddir && curl -o codecov https://codecov.io/bash && chmod +x codecov && ./codecov -R .. -y .codecov.yml
+      - run:
+          name: Valgrind
+          command: cd builddir && meson test --wrap='valgrind --leak-check=full' && cat meson-logs/testlog-valgrind.txt
