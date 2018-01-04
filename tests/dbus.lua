@@ -49,6 +49,7 @@ dbusl.on("exit", function()
 
     -- Use non-existent method to test message serialization
     call_with_error(o, "org.dummy.Dummy", {1,2,3})
+    call_with_error(o, "org.dummy.Dummy", {"asdf","qwer"})
     call_with_error(o, "org.dummy.Dummy", 1)
     call_with_error(o, "org.dummy.Dummy", "asdf")
 end)
