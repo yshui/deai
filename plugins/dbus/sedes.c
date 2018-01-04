@@ -383,15 +383,17 @@ static int _dbus_serialize_with_signature(DBusMessageIter *i, di_type_t type,
 		int step = di_sizeof_type(arr->elem_type);
 		bool ret =
 		    dbus_message_iter_open_container(i, dtype, si2.current, &i2);
+		si2.current[si2.length] = tmp;
 		if (!ret)
 			return -ENOMEM;
-		si2.current[si2.length] = tmp;
 		for (int i = 0; i < arr->length; i++) {
 			int ret = _dbus_serialize_with_signature(
 			    &i2, arr->elem_type, arr->arr + step * i, si2);
 			if (ret < 0)
 				return ret;
 		}
+		dbus_message_iter_close_container(i, &i2);
+		return 0;
 	}
 	if (type == DI_TYPE_TUPLE) {
 		assert(dtype == DBUS_TYPE_STRUCT);
