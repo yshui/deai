@@ -22,7 +22,7 @@
 #include <config.h>
 
 #include "di_internal.h"
-#include "env.h"
+#include "os.h"
 #include "event.h"
 #include "log.h"
 #include "spawn.h"
@@ -107,6 +107,7 @@ int di_chdir(struct di_object *p, const char *dir) {
 	return ret;
 }
 
+// Consider PRDEATHSIG
 static void kill_all_descendants(pid_t pid) {
 	// Best effort attempt to kill all descendants of pid
 	struct _childp {
@@ -343,7 +344,7 @@ int main(int argc, char *argv[]) {
 	// (1) Initialize builtin modules first
 	di_init_event(p);
 	di_init_log(p);
-	di_init_env(p);
+	di_init_os(p);
 	di_init_spawn(p);
 
 	if (argc < 2) {

@@ -28,3 +28,5 @@
 # define nullable _Nullable
 # define null_unspecified _Null_unspecified
 #endif
+
+#define PUBLIC __attribute__((visibility("default")))

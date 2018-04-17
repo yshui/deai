@@ -373,10 +373,13 @@ static int di_insert_member(struct di_object *r, struct di_member_internal *m) {
 }
 
 // `own` actually have 2 meanings: 1) do we own the value `*v` points to (e.g. do
-// we hold a ref to a di_object) 2) do we own the memory location of `v`
+// we hold a ref to a di_object) 2) do we own the memory location `v` points to
 //
 // right now, own = true means we own both of those, and own = false means we own
 // neither
+//
+// Which means, if own = true, after di_add_member returns, the ref to the value
+// `*v` points to is consumed, and the memory location `v` points to is freed
 static int di_add_member(struct di_object *o, const char *name, bool writable,
                          bool own, di_type_t t, void *v) {
 	if (!name)

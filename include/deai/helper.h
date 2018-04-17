@@ -14,7 +14,9 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#include "common.h"
+#define CONCAT2(a, b) a##b
+#define CONCAT1(a, b) CONCAT2(a, b)
+#define CONCAT(a, b) CONCAT1(a, b)
 
 struct di_object *ret_nonnull di_new_error(const char *nonnull fmt, ...);
 
@@ -66,10 +68,6 @@ int di_proxy_signal(struct di_object *nonnull src, const char *nonnull srcsig,
 		return;
 
 // Pardon this mess, this is what you get for doing meta programming using C macros.
-#define CONCAT2(a, b) a##b
-#define CONCAT1(a, b) CONCAT2(a, b)
-#define CONCAT(a, b) CONCAT1(a, b)
-
 #define _ARG13(_0, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, N, ...) N
 #define VA_ARGS_LENGTH(...)                                                         \
 	_ARG13(0, ##__VA_ARGS__, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0)
@@ -265,6 +263,10 @@ int di_proxy_signal(struct di_object *nonnull src, const char *nonnull srcsig,
 #define di_field(o, name)                                                           \
 	di_add_member_ref((struct di_object *)(o), #name, false,                    \
 	                  di_typeof((o)->name), &((o)->name))
+
+#define di_member(o, name, v) \
+	di_add_member_move((struct di_object *)(o), name, false, \
+	                   (di_type_t[]){di_typeof(v)}, &v)
 
 #define di_getter(o, name, g) di_method(o, STRINGIFY(__get_##name), g)
 

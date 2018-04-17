@@ -49,7 +49,7 @@ deai_exe = executable('deai', [
   'event.c',
   'log.c',
   'helper.c',
-  'env.c',
+  'os.c',
   'spawn.c',
   'string_buf.c'
 ], c_args: base_c_args

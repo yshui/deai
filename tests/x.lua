@@ -1,7 +1,7 @@
 di.load_plugin("./plugins/xorg/di_xorg.so")
 di.spawn.run({"Xvfb", ":1", "-screen", "0", "1600x1200x24+32"}, true)
 di.spawn.run({"Xvfb", ":2", "-screen", "0", "1600x1200x24+32"}, true)
-di.env.DISPLAY=":1"
+di.os.env.DISPLAY=":1"
 
 di.event.timer(0.2).on("elapsed", true, function()
     -- wait a awhile for Xvfb to start

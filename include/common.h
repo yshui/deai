@@ -34,6 +34,32 @@
 #define with_cleanup_t(type) __attribute__((cleanup(free_##type##p))) type *
 #define with_cleanup(func) __attribute__((cleanup(func)))
 
-#define PUBLIC __attribute__((visibility("default")))
-
 #define IS_BIG_ENDIAN (!*(unsigned char *)&(uint16_t){1})
+
+#define CONCAT2(a, b) a##b
+#define CONCAT1(a, b) CONCAT2(a, b)
+#define CONCAT(a, b) CONCAT1(a, b)
+
+#ifdef __clang__
+#if __has_extension(blocks)
+__attribute__((weak)) long _NSConcreteGlobalBlock;
+static void unused __clang_cleanup_func(void (^*dfunc)(void)) {
+    (*dfunc)();
+}
+
+#define defer                                        \
+    void (^CONCAT(__defer_f_, __COUNTER__))(void) \
+        __attribute__((cleanup(__clang_cleanup_func))) unused = ^
+
+#else
+#define defer _Static_assert(false, "no blocks support in clang");
+#endif
+#else
+
+#define _DEFER(a, count)                                                                      \
+    void CONCAT(__defer_f_, count)(void* _defer_arg unused);         \
+    int CONCAT(__defer_var_, count) __attribute__((cleanup(CONCAT(__defer_f_, count)))) \
+        unused;                                                              \
+    void CONCAT(__defer_f_, count)(void* _defer_arg unused)
+#define defer _DEFER(a, __COUNTER__)
+#endif

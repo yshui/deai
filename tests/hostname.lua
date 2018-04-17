@@ -1,0 +1,1 @@
+print(di.os.hostname)
