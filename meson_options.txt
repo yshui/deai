@@ -1,0 +1,1 @@
+option('sanitize', type: 'boolean', value: false, description: 'Enable sanitizers')
