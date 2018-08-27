@@ -72,8 +72,8 @@ static void binding_dtor(struct keybinding *kb) {
 static int refresh_binding(struct keybinding *kb) {
 	if (kb->keycodes) {
 		ungrab(kb);
-		kb->keycodes = NULL;
 		free(kb->keycodes);
+		kb->keycodes = NULL;
 	}
 
 	auto kc = xcb_key_symbols_get_keycode(kb->k->keysyms, kb->keysym);
