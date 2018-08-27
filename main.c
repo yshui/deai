@@ -208,6 +208,12 @@ static void kill_all_descendants(pid_t pid) {
 void di_dtor(struct deai *di) {
 	*di->quit = true;
 
+#ifdef HAVE_SETPROCTITLE
+	for (int i = 0; environ[i]; i++)
+		free(environ[i]);
+	free(environ);
+#endif
+
 	// fprintf(stderr, "%d\n", p->ref_count);
 	kill_all_descendants(getpid());
 	ev_break(di->loop, EVBREAK_ALL);
@@ -250,8 +256,8 @@ static void setproctitle_init(int argc, char **argv, struct deai *p) {
 	p->proctitle = argv[0];
 
 	size_t envsz = 0;
-	for (; environ[envsz]; envsz++)
-		;
+	for (; environ[envsz]; envsz++);
+
 	char **old_env = environ;
 	environ = calloc(envsz + 1, sizeof(char *));
 	for (int i = 0; i < envsz; i++) {
