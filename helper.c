@@ -17,6 +17,11 @@ struct di_error {
 	char *msg;
 };
 
+PUBLIC void di_free_error(struct di_object *o) {
+	auto err = (struct di_error *)o;
+	free(err->msg);
+}
+
 PUBLIC struct di_object *di_new_error(const char *fmt, ...) {
 	va_list ap;
 	va_start(ap, fmt);
@@ -30,6 +35,7 @@ PUBLIC struct di_object *di_new_error(const char *fmt, ...) {
 	err->msg = errmsg;
 
 	di_add_member_ref((void *)err, "errmsg", false, DI_TYPE_STRING, &err->msg);
+	err->dtor = di_free_error;
 	return (void *)err;
 }
 
