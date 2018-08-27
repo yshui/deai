@@ -157,7 +157,7 @@ int di_proxy_signal(struct di_object *nonnull src, const char *nonnull srcsig,
 		int rc = di_get(di, #modn, __o);                                    \
 		if (rc != 0)                                                        \
 			on_err;                                                     \
-		if (!di_check_type(__o, "module")) {                                \
+		if (!di_check_type(__o, "deai:module")) {                           \
 			rc = -EINVAL;                                               \
 			on_err;                                                     \
 		}                                                                   \

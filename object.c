@@ -184,7 +184,7 @@ PUBLIC const char *di_get_type(struct di_object *o) {
 	int rc = di_getxt(o, "__type", DI_TYPE_STRING_LITERAL, &ret);
 	if (rc != 0) {
 		if (rc == -ENOENT)
-			return "object";
+			return "deai:object";
 		return ERR_PTR(rc);
 	}
 
@@ -222,7 +222,7 @@ PUBLIC struct di_module *di_new_module(size_t size) {
 
 	struct di_module_internal *pm = (void *)di_new_object(size);
 
-	di_set_type((void *)pm, "module");
+	di_set_type((void *)pm, "deai:module");
 
 	return (void *)pm;
 }
@@ -559,7 +559,7 @@ static struct di_listener *di_new_listener(void) {
 	di_method(l, "stop", di_stop_listener);
 	di_getter(l, owner, di_get_owner_of_listener);
 
-	ABRT_IF_ERR(di_set_type((void *)l, "listener"));
+	ABRT_IF_ERR(di_set_type((void *)l, "deai:listener"));
 	return l;
 }
 

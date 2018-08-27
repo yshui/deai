@@ -108,7 +108,7 @@ out:
 
 static int method_trampoline(struct di_object *o, di_type_t *rtype, void **ret,
                              struct di_tuple t) {
-	if (!di_check_type(o, "method"))
+	if (!di_check_type(o, "deai:method"))
 		return -EINVAL;
 
 	struct di_typed_method *tm = (void *)o;
@@ -130,7 +130,7 @@ static int method_trampoline(struct di_object *o, di_type_t *rtype, void **ret,
 
 static int closure_trampoline(struct di_object *o, di_type_t *rtype, void **ret,
                               struct di_tuple t) {
-	if (!di_check_type(o, "closure"))
+	if (!di_check_type(o, "deai:closure"))
 		return -EINVAL;
 
 	struct di_closure *cl = (void *)o;
@@ -150,7 +150,7 @@ static int closure_trampoline(struct di_object *o, di_type_t *rtype, void **ret,
 }
 
 static void free_closure(struct di_object *o) {
-	assert(di_check_type(o, "closure"));
+	assert(di_check_type(o, "deai:closure"));
 
 	struct di_closure *cl = (void *)o;
 	for (int i = 0; i < cl->nargs0; i++) {
@@ -212,7 +212,7 @@ di_create_closure(void (*fn)(void), di_type_t rtype, int nargs0,
 		cl->cargs[i] = dst;
 	}
 
-	di_set_type((void *)cl, "closure");
+	di_set_type((void *)cl, "deai:closure");
 
 	return cl;
 }
@@ -256,7 +256,7 @@ PUBLIC int di_add_method(struct di_object *o, const char *name, void (*fn)(void)
 		return -EINVAL;
 	}
 
-	di_set_type((void *)f, "method");
+	di_set_type((void *)f, "deai:method");
 
 	f->this = o;
 	return di_add_member_move(o, name, false, (di_type_t[]){DI_TYPE_OBJECT}, (void **)&f);
