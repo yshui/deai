@@ -212,6 +212,9 @@ void di_dtor(struct deai *di) {
 	for (int i = 0; environ[i]; i++)
 		free(environ[i]);
 	free(environ);
+	for (int i = 0; i < di->argc; i++)
+		free(di->argv[i]);
+	free(di->argv);
 #endif
 
 	// fprintf(stderr, "%d\n", p->ref_count);
@@ -287,9 +290,9 @@ static void di_set_pr_name(struct deai *p, const char *name) {
 }
 #else
 // no-op
-static void setproctitle_init(int argc, struct deai *p) {
-}
-static void di_set_pr_name(struct deai *p, const char *name) {
+static void setproctitle_init(int argc, char **argv, struct deai *p) {
+	p->argc = argc;
+	p->argv = argv;
 }
 #endif
 
@@ -373,7 +376,9 @@ int main(int argc, char *argv[]) {
 	di_method(p, "quit", di_prepare_quit);
 	di_method(p, "exit", di_prepare_exit, int);
 	di_method(p, "terminate", di_terminate);
+#ifdef HAVE_SETPROCTITLE
 	di_method(p, "__set_proctitle", di_set_pr_name, char *);
+#endif
 	di_method(p, "__get_argv", di_get_argv);
 
 	di_add_member_ref((void *)p, "proctitle", false, DI_TYPE_STRING_LITERAL,

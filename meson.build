@@ -47,6 +47,8 @@ base_c_args = base_c_args + [ '-fvisibility=hidden', '-fms-extensions', '-D_GNU_
 plugin_install_dir = get_option('libdir')+'/deai'
 if host_machine.system() == 'linux'
   have_setproctitle = true
+else
+  have_setproctitle = false
 endif
 libev = cc.find_library('ev', required: true)
 libffi = dependency('libffi', version: '>=3.0', required: true)
