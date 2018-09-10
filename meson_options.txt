@@ -1,1 +1,2 @@
 option('sanitize', type: 'boolean', value: false, description: 'Enable sanitizers')
+option('build_doc', type: 'boolean', value: false, description: 'Build documents')

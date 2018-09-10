@@ -330,10 +330,10 @@ int di_exec(struct deai *p, struct di_array argv) {
 	return -1;
 }
 
-// Terminate self and all children.
-//
-// This is a best effort attempt, some of the children might have moved to different
-// process group.
+/// Terminate self and all children.
+///
+/// This is a best effort attempt, some of the children might have moved to different
+/// process group.
 void di_terminate(struct deai *p) {
 	kill(0, SIGTERM);
 }

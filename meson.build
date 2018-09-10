@@ -1,4 +1,7 @@
 project('deai', 'c', default_options: ['b_lundef=false'])
+if get_option('build_doc')
+  subdir('docs')
+endif
 cc = meson.get_compiler('c')
 if not cc.has_argument('-fvisibility=hidden') or not cc.has_argument('-fms-extensions')
   error('Unsupported compiler')
