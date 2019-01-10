@@ -51,6 +51,7 @@ _dbus_deserialize_basic(DBusMessageIter *i, void *retp, di_type_t *otype, int ty
 		_DESERIAL(DBUS_TYPE_UINT64, dbus_uint64_t, u64, duint);
 		_DESERIAL(DBUS_TYPE_DOUBLE, double, d, dfloat);
 		_DESERIAL(DBUS_TYPE_STRING, const char *, str, dstr);
+		default: assert(false);
 	}
 dbool:
 	*(bool *)retp = b;
