@@ -35,6 +35,15 @@ struct di_xorg_output {
 	xcb_randr_output_t oid;
 };
 
+struct di_xorg_output_info {
+	struct di_object;
+	unsigned int mm_width;
+	unsigned int mm_height;
+	int connection;
+	int subpixel_order;
+	char *name;
+};
+
 // What xorg calls a crtc, we call a view.
 //
 // Who still has a CRT this day and age?
@@ -73,7 +82,12 @@ define_trivial_cleanup_t(xcb_randr_set_crtc_config_reply_t);
 static struct di_object *
 make_object_for_view(struct di_xorg_randr *rr, xcb_randr_crtc_t cid);
 
-static char *get_output_name(struct di_xorg_output *o) {
+static void free_output_info(struct di_object *o) {
+	auto i = (struct di_xorg_output_info *)o;
+	free(i->name);
+}
+
+static struct di_object *get_output_info(struct di_xorg_output *o) {
 	if (!o->rr->dc)
 		return NULL;
 
@@ -82,9 +96,25 @@ static char *get_output_name(struct di_xorg_output *o) {
 	        o->rr->dc->c,
 	        xcb_randr_get_output_info(o->rr->dc->c, o->oid, o->rr->cts), NULL);
 
-	char *ret = strndup((char *)xcb_randr_get_output_info_name(r),
+	if (!r || r->status != 0)
+		return NULL;
+
+	auto ret = di_new_object_with_type(struct di_xorg_output_info);
+	ret->name = strndup((char *)xcb_randr_get_output_info_name(r),
 	                    xcb_randr_get_output_info_name_length(r));
-	return ret;
+	ret->connection = r->connection;
+	ret->mm_width = r->mm_width;
+	ret->mm_height = r->mm_height;
+	ret->subpixel_order = r->subpixel_order;
+
+	di_field(ret, connection);
+	di_field(ret, mm_width);
+	di_field(ret, mm_height);
+	di_field(ret, name);
+	di_field(ret, subpixel_order);
+	ret->dtor = free_output_info;
+
+	return (struct di_object *)ret;
 }
 
 static struct di_object *get_output_view(struct di_xorg_output *o) {
@@ -281,7 +311,7 @@ make_object_for_output(struct di_xorg_randr *rr, xcb_randr_output_t oid) {
 	obj->rr = rr;
 	obj->oid = oid;
 	di_getter(obj, view, get_output_view);
-	di_getter(obj, name, get_output_name);
+	di_getter(obj, info, get_output_info);
 	di_getter_setter(obj, backlight, get_output_backlight, set_output_backlight);
 	di_getter(obj, max_backlight, get_output_max_backlight);
 
@@ -503,10 +533,9 @@ struct di_xorg_ext *new_randr(struct di_xorg_connection *dc) {
 	di_getter(rr, outputs, rr_outputs);
 	di_getter(rr, modes, rr_modes);
 
-	rr_select_input(rr,
-	                XCB_RANDR_NOTIFY_MASK_OUTPUT_CHANGE |
-	                    XCB_RANDR_NOTIFY_MASK_CRTC_CHANGE |
-	                    XCB_RANDR_NOTIFY_MASK_SCREEN_CHANGE);
+	rr_select_input(rr, XCB_RANDR_NOTIFY_MASK_OUTPUT_CHANGE |
+	                        XCB_RANDR_NOTIFY_MASK_CRTC_CHANGE |
+	                        XCB_RANDR_NOTIFY_MASK_SCREEN_CHANGE);
 
 	free(r);
 	return (void *)rr;
