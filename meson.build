@@ -9,6 +9,7 @@ endif
 test_c_args = [
     '-fno-strict-aliasing',
     '-fplan9-extensions',
+    '-fms-extensions',
     '-Wno-microsoft-anon-tag',
     '-Wnullability-completeness',
     '-Werror=incompatible-pointer-types',

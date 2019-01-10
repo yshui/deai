@@ -454,7 +454,7 @@ int main(int argc, char *argv[]) {
 			exit(EXIT_FAILURE);
 		}
 	} else
-		mod = di_ref_object(p);
+		mod = di_ref_object((struct di_object *)p);
 
 	di_type_t rt;
 	void *retd = NULL;

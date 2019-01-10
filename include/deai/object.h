@@ -83,8 +83,7 @@ int di_callx(struct di_object *nonnull o, const char *nonnull name,
 int di_rawcallx(struct di_object *nonnull o, const char *nonnull name,
                 di_type_t *nonnull rt, void *nullable *nonnull ret, ...);
 int di_rawcallxn(struct di_object *nonnull o, const char *nonnull name,
-                 di_type_t *nonnull rt, void *nullable *nonnull ret,
-                 struct di_tuple);
+                 di_type_t *nonnull rt, void *nullable *nonnull ret, struct di_tuple);
 
 int di_setx(struct di_object *nonnull o, const char *nonnull prop, di_type_t type,
             void *nullable val);
@@ -101,27 +100,27 @@ int di_set_type(struct di_object *nonnull o, const char *nonnull type);
 const char *nonnull di_get_type(struct di_object *nonnull o);
 bool di_check_type(struct di_object *nonnull o, const char *nonnull type);
 
-int nonnull_all
-di_add_member_move(struct di_object *nonnull o, const char *nonnull name,
-                   bool writable, di_type_t *, void *nonnull address);
-int nonnull_all
-di_add_member_ref(struct di_object *nonnull o, const char *nonnull name,
-                  bool writable, di_type_t, void *nonnull address);
-int nonnull_all
-di_add_member_clone(struct di_object *nonnull o, const char *nonnull name,
-                    bool writable, di_type_t, ...);
+int nonnull_all di_add_member_move(struct di_object *nonnull o,
+                                   const char *nonnull name, bool writable,
+                                   di_type_t *nonnull, void *nonnull address);
+int nonnull_all di_add_member_ref(struct di_object *nonnull o,
+                                  const char *nonnull name, bool writable, di_type_t,
+                                  void *nonnull address);
+int nonnull_all di_add_member_clone(struct di_object *nonnull o,
+                                    const char *nonnull name, bool writable,
+                                    di_type_t, ...);
 int di_remove_member(struct di_object *nonnull o, const char *nonnull name);
 struct di_member *nullable di_lookup(struct di_object *nonnull o,
-                                      const char *nonnull name);
+                                     const char *nonnull name);
 struct di_object *nullable di_new_object(size_t sz);
 
 struct di_listener *nullable di_listen_to(struct di_object *nonnull o,
-                                           const char *nonnull name,
-                                           struct di_object *nullable h);
+                                          const char *nonnull name,
+                                          struct di_object *nullable h);
 struct di_listener *nullable di_listen_to_once(struct di_object *nonnull o,
-                                                const char *nonnull name,
-                                                struct di_object *nullable h,
-                                                bool once);
+                                               const char *nonnull name,
+                                               struct di_object *nullable h,
+                                               bool once);
 
 // Unscribe from a signal from the listener side. __detach is not called in this case
 // It's guaranteed after calling this, the handler and __detach method will never be
@@ -200,7 +199,7 @@ static inline size_t di_sizeof_type(di_type_t t) {
 #define DI_TUPLE_NIL ((struct di_tuple){0, NULL, NULL})
 
 #define define_object_cleanup(t)                                                    \
-	static inline void free_##t(struct t **ptr) {                               \
+	static inline void free_##t(struct t *nullable *nonnull ptr) {              \
 		if (*ptr)                                                           \
 			di_unref_object((struct di_object *)*ptr);                  \
 		*ptr = NULL;                                                        \
