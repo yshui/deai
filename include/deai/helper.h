@@ -260,12 +260,18 @@ int di_proxy_signal(struct di_object *nonnull src, const char *nonnull srcsig,
 #define di_emit(o, name, ...)                                                       \
 	di_emitn((struct di_object *)o, name, di_tuple(__VA_ARGS__))
 
-#define di_field(o, name)                                                           \
-	di_add_member_ref((struct di_object *)(o), #name, false,                    \
-	                  di_typeof((o)->name), &((o)->name))
+#define _di_field(o, name, w)                                                       \
+	di_add_member_ref((struct di_object *)(o), #name, w, di_typeof((o)->name),  \
+	                  &((o)->name))
 
-#define di_member(o, name, v) \
-	di_add_member_move((struct di_object *)(o), name, false, \
+/// Register a field of struct `o` as a read only member of the di_object
+#define di_field(o, name) _di_field(o, name, false)
+
+/// Register a field of struct `o` as a writable member of the di_object
+#define di_fieldw(o, name) _di_field(o, name, true)
+
+#define di_member(o, name, v)                                                       \
+	di_add_member_move((struct di_object *)(o), name, false,                    \
 	                   (di_type_t[]){di_typeof(v)}, &v)
 
 #define di_getter(o, name, g) di_method(o, STRINGIFY(__get_##name), g)
@@ -330,21 +336,19 @@ static inline void nonnull_args(1) __free_objp(struct di_object *nullable *nonnu
 	*p = NULL;
 }
 
-static void unused nonnull_all
-    trivial_destroyed_handler(struct di_object *nonnull o) {
+static void unused nonnull_all trivial_destroyed_handler(struct di_object *nonnull o) {
 	di_destroy_object(o);
 }
 
-static void unused nonnull_all
-    trivial_detach(struct di_object *nonnull o) {
+static void unused nonnull_all trivial_detach(struct di_object *nonnull o) {
 	di_destroy_object(o);
 }
 
 typedef void (*nonnull di_detach_fn_t)(struct di_object *nonnull);
 
-static inline int nonnull_all
-    di_set_detach(struct di_listener *nonnull l, di_detach_fn_t fn,
-                  struct di_object *nonnull o) {
+static inline int nonnull_all di_set_detach(struct di_listener *nonnull l,
+                                            di_detach_fn_t fn,
+                                            struct di_object *nonnull o) {
 	struct di_closure *cl = di_closure(fn, true, (o));
 	int ret = di_add_member_clone((struct di_object *)l, "__detach", false,
 	                              DI_TYPE_OBJECT, cl);
@@ -352,9 +356,8 @@ static inline int nonnull_all
 	return ret;
 }
 
-static inline struct di_listener *ret_nonnull nonnull_all
-    di_listen_to_destroyed(struct di_object *nonnull o, di_detach_fn_t fn,
-                           struct di_object *nonnull o2) {
+static inline struct di_listener *ret_nonnull nonnull_all di_listen_to_destroyed(
+    struct di_object *nonnull o, di_detach_fn_t fn, struct di_object *nonnull o2) {
 	struct di_listener *ret = di_listen_to(o, "__destroyed", NULL);
 	di_set_detach(ret, fn, o2);
 	return ret;

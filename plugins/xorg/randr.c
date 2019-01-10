@@ -166,12 +166,12 @@ static struct di_object *get_view_config(struct di_xorg_view *v) {
 	else
 		ret->reflection = 0;
 
-	di_field(ret, x);
-	di_field(ret, y);
-	di_field(ret, width);
-	di_field(ret, height);
-	di_field(ret, rotation);
-	di_field(ret, reflection);
+	di_fieldw(ret, x);
+	di_fieldw(ret, y);
+	di_fieldw(ret, width);
+	di_fieldw(ret, height);
+	di_fieldw(ret, rotation);
+	di_fieldw(ret, reflection);
 	return (void *)ret;
 }
 
