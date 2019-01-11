@@ -1,3 +1,18 @@
+<!-- markdown-toc start - Don't edit this section. Run M-x markdown-toc-refresh-toc -->
+**Table of Contents**
+
+- [deai](#deai)
+    - [Background](#background)
+    - [Documentation](#documentation)
+    - [Design](#design)
+    - [Current features](#current-features)
+    - [Planned features](#planned-features)
+    - [Build and Run](#build-and-run)
+        - [Build Dependencies](#build-dependencies)
+        - [Usage](#usage)
+    - [Contact](#contact)
+
+<!-- markdown-toc end -->
 # deai
 
 [![Codecov](https://img.shields.io/codecov/c/github/yshui/deai.svg)](https://codecov.io/gh/yshui/deai) [![CircleCI](https://circleci.com/gh/yshui/deai.svg?style=shield&circle-token=75b416f5709a1179e1a817e7fb5568c5814d51ee)](https://circleci.com/gh/yshui/deai) [![Gitter](https://img.shields.io/gitter/room/nwjs/nw.js.svg)](https://gitter.im/deai/Lobby?utm_source=share-link&utm_medium=link&utm_campaign=share-link)
@@ -164,28 +179,29 @@ I use the issue tracker to track the progress of these feature, so if you are in
 
 ## Build and Run
 
-To build **deai**, you need following dependencies:
+### Build Dependencies
 
 * libev
+* dbus-libs
 * xorg
     * xcb
+    * xcb-randr
+    * xcb-xinput
+    * xcb-xkb
     * libxkbcommon
     * xcb-util-keysyms
 * lua
 
 In the future, you will be able to build only the plugins you want.
 
-To run **deai**, you invoke it like this:
+### Usage
 
 ```sh
-/path/to/deai [module].[method] [argument]...
+/path/to/deai module.method arguments...
 ```
 
-OK, this might be hard to understand. Most likely, you just need to use this command:
-
-```sh
-/path/to/deai lua.load_script s:/path/to/your/script
-```
+A more detailed explanation of how the command line arguments works can be found
+[in the wiki](https://github.com/yshui/deai/wiki/Command-line)
 
 ## Contact
 
