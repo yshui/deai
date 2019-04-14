@@ -7,7 +7,13 @@
 #include <ev.h>
 #include <fcntl.h>
 #include <unistd.h>
+#include <sys/wait.h>
+
+#ifdef __FreeBSD__
+#include <sys/procctl.h>
+#else
 #include <sys/prctl.h>
+#endif
 
 #include <deai/builtin/spawn.h>
 #include <deai/helper.h>
@@ -231,7 +237,11 @@ di_spawn_run(struct di_spawn *p, struct di_array argv, bool ignore_output) {
 
 void di_init_spawn(struct deai *di) {
 	// Become subreaper
+#ifdef __FreeBSD__
+	int ret = procctl(P_PID, getpid(), PROC_REAP_ACQUIRE, NULL);
+#else
 	int ret = prctl(PR_SET_CHILD_SUBREAPER, 1);
+#endif
 	if (ret != 0)
 		return;
 

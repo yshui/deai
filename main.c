@@ -14,6 +14,9 @@
 #include <stdio.h>
 #include <sys/stat.h>
 #include <sys/types.h>
+#ifdef __FreeBSD__
+#include <sys/procctl.h>
+#endif
 #include <unistd.h>
 
 #include <deai/deai.h>
@@ -107,9 +110,33 @@ int di_chdir(struct di_object *p, const char *dir) {
 	return ret;
 }
 
+#ifdef __FreeBSD__
+static void kill_all_descendants(void) {
+	struct procctl_reaper_status status;
+	int ret = procctl(P_PID, getpid(), PROC_REAP_STATUS, &status);
+	if (ret != 0) {
+		fprintf(stderr, "Failed to get reap status (%s), giving up\n", strerror(errno));
+		return;
+	}
+	if (status.rs_descendants == 0) {
+		// Nothing needs to be killed
+		return;
+	}
+	struct procctl_reaper_kill k = {
+		.rk_sig = SIGKILL,
+		.rk_flags = 0,
+		.rk_subtree = 0,
+	};
+	ret = procctl(P_PID, getpid(), PROC_REAP_KILL, &k);
+	if (ret != 0) {
+		fprintf(stderr, "Failed to reap children %s\n", strerror(errno));
+	}
+	return;
+}
+#else
 // Consider PRDEATHSIG
-static void kill_all_descendants(pid_t pid) {
-	// Best effort attempt to kill all descendants of pid
+static void kill_all_descendants(void) {
+	// Best effort attempt to kill all descendants of ourself
 	struct _childp {
 		pid_t pid, ppid;
 		bool visited;
@@ -117,6 +144,7 @@ static void kill_all_descendants(pid_t pid) {
 		struct list_head ll;
 		UT_hash_handle hh;
 	};
+	pid_t pid = getpid();
 
 	struct _childp *ps = NULL;
 	struct _childp *self = NULL;
@@ -204,6 +232,7 @@ static void kill_all_descendants(pid_t pid) {
 		free(i);
 	}
 }
+#endif
 
 void di_dtor(struct deai *di) {
 	*di->quit = true;
@@ -218,7 +247,7 @@ void di_dtor(struct deai *di) {
 #endif
 
 	// fprintf(stderr, "%d\n", p->ref_count);
-	kill_all_descendants(getpid());
+	kill_all_descendants();
 	ev_break(di->loop, EVBREAK_ALL);
 }
 
