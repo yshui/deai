@@ -1,7 +1,10 @@
 src = 'lua.c'
 lua = dependency('lua', version: '>=5.3', required: false)
 if not lua.found()
-  lua = dependency('lua5.3', required: true)
+  lua = dependency('lua5.3', required: false)
+endif
+if not lua.found()
+  lua = dependency('lua-5.3', required: true)
 endif
 di_lua_lib = shared_library('di_lua', src,
   dependencies: lua, include_directories: incs,
