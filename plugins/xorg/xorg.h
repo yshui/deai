@@ -9,6 +9,7 @@
 #include <deai/deai.h>
 
 #include <xcb/xcb.h>
+#include <xkbcommon/xkbcommon.h>
 
 #include "utils.h"
 #include "uthash.h"
@@ -28,6 +29,8 @@ struct di_xorg_connection {
 	struct di_object *xcb_fd;
 	struct di_listener *xcb_fdlistener;
 	struct di_xorg_ext *xext;
+
+	struct xkb_context *xkb_ctx;
 
 	struct di_atom_entry *a_byatom, *a_byname;
 };

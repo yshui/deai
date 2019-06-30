@@ -12,6 +12,7 @@
 #include <assert.h>
 #include <stdio.h>
 #include <xcb/xcb.h>
+#include <xkbcommon/xkbcommon.h>
 
 #include "uthash.h"
 #include "utils.h"
@@ -44,6 +45,10 @@ static void xorg_disconnect(struct di_xorg_connection *xc) {
 	di_stop_listener(xc->xcb_fdlistener);
 	di_unref_object((void *)xc->xcb_fd);
 	xc->xcb_fd = NULL;
+
+	if (xc->xkb_ctx) {
+		xkb_context_unref(xc->xkb_ctx);
+	}
 
 	// free_sub might need the connection, don't disconnect now
 	struct di_xorg_ext *ext, *text;
@@ -139,8 +144,9 @@ xcb_atom_t di_xorg_intern_atom(struct di_xorg_connection *xc, const char *name,
 static char *di_xorg_get_resource(struct di_xorg_connection *xc) {
 	auto scrn = screen_of_display(xc->c, xc->dflt_scrn);
 	auto r = xcb_get_property_reply(
-	    xc->c, xcb_get_property(xc->c, 0, scrn->root, XCB_ATOM_RESOURCE_MANAGER,
-	                            XCB_ATOM_ANY, 0, 0),
+	    xc->c,
+	    xcb_get_property(xc->c, 0, scrn->root, XCB_ATOM_RESOURCE_MANAGER,
+	                     XCB_ATOM_ANY, 0, 0),
 	    NULL);
 	if (!r)
 		return strdup("");
@@ -149,8 +155,9 @@ static char *di_xorg_get_resource(struct di_xorg_connection *xc) {
 	free(r);
 
 	r = xcb_get_property_reply(
-	    xc->c, xcb_get_property(xc->c, 0, scrn->root, XCB_ATOM_RESOURCE_MANAGER,
-	                            XCB_ATOM_ANY, 0, real_size),
+	    xc->c,
+	    xcb_get_property(xc->c, 0, scrn->root, XCB_ATOM_RESOURCE_MANAGER,
+	                     XCB_ATOM_ANY, 0, real_size),
 	    NULL);
 	if (!r)
 		return strdup("");
@@ -174,7 +181,10 @@ struct _xext {
 	const char *name;
 	struct di_xorg_ext *(*new)(struct di_xorg_connection *xc);
 } xext_reg[] = {
-    {"xinput", new_xinput}, {"randr", new_randr}, {"key", new_key}, {NULL, NULL},
+    {"xinput", new_xinput},
+    {"randr", new_randr},
+    {"key", new_key},
+    {NULL, NULL},
 };
 
 static struct di_object *
@@ -215,6 +225,96 @@ static struct di_object *get_screen(struct di_xorg_connection *dc) {
 	return (void *)ret;
 }
 
+static void set_keymap(struct di_xorg_connection *xc,
+                                            struct di_object *o) {
+	struct xkb_rule_names names = {0};
+
+	di_getmi(xc->x->di, log);
+	if (di_get(o, "layout", names.layout)) {
+		di_log_va(logm, DI_LOG_ERROR,
+		          "Invalid keymap object, key \"layout\" is not set");
+		return;
+	}
+	di_get(o, "model", names.model);
+	di_get(o, "variant", names.variant);
+	di_get(o, "options", names.options);
+
+	auto xsetup = xcb_get_setup(xc->c);
+
+	auto map = xkb_keymap_new_from_names(xc->xkb_ctx, &names,
+	                                     XKB_KEYMAP_COMPILE_NO_FLAGS);
+	xcb_keysym_t *keysyms = NULL;
+
+	if (xkb_keymap_num_layouts(map) != 1) {
+		di_log_va(logm, DI_LOG_ERROR,
+		          "Using multiple layout at the same time is not currently "
+		          "supported.");
+		goto out;
+	}
+
+	int keysym_per_keycode = 0;
+	int max_keycode = xkb_keymap_max_keycode(map),
+	    min_keycode = xkb_keymap_min_keycode(map);
+	if (max_keycode > xsetup->max_keycode) {
+		// Xorg doesn't accept keycode > 255
+		max_keycode = xsetup->max_keycode;
+	}
+	if (min_keycode < xsetup->min_keycode) {
+		min_keycode = xsetup->min_keycode;
+	}
+	for (int i = min_keycode; i <= max_keycode; i++) {
+		int nlevels = xkb_keymap_num_levels_for_key(map, i, 0);
+		if (nlevels > keysym_per_keycode) {
+			keysym_per_keycode = nlevels;
+		}
+	}
+
+	// Xorg uses 2 groups of keymapping, while xkbcommon uses 1 group
+	keysym_per_keycode += 2;
+	keysyms = tmalloc(xcb_keysym_t,
+	                  keysym_per_keycode * (max_keycode - min_keycode + 1));
+
+	for (int i = min_keycode; i <= max_keycode; i++) {
+		int nlevels = xkb_keymap_num_levels_for_key(map, i, 0);
+		for (int j = 0; j < nlevels; j++) {
+			const xkb_keysym_t *sym;
+			int nsyms =
+			    xkb_keymap_key_get_syms_by_level(map, i, 0, j, &sym);
+			if (nsyms > 1) {
+				di_log_va(logm, DI_LOG_WARN,
+				          "Multiple keysyms per level is not "
+				          "supported");
+				continue;
+			}
+			if (!nsyms || sym == NULL) {
+				continue;
+			}
+			if (j < 2) {
+				keysyms[(i - min_keycode) * keysym_per_keycode + j] =
+				    *sym;
+			}
+			keysyms[(i - min_keycode) * keysym_per_keycode + j + 2] =
+			    *sym;
+		}
+	}
+
+	auto r = xcb_request_check(xc->c,
+	                           xcb_change_keyboard_mapping_checked(
+	                               xc->c, (max_keycode - min_keycode + 1),
+	                               min_keycode, keysym_per_keycode, keysyms));
+	if (r) {
+		di_log_va(logm, DI_LOG_ERROR, "Failed to set keymap.");
+		free(r);
+	}
+out:
+	free((char *)names.layout);
+	free((char *)names.model);
+	free((char *)names.variant);
+	free((char *)names.options);
+	free(keysyms);
+	xkb_keymap_unref(map);
+}
+
 static struct di_object *
 di_xorg_connect_to(struct di_xorg *x, const char *displayname) {
 	int scrn;
@@ -248,9 +348,12 @@ di_xorg_connect_to(struct di_xorg *x, const char *displayname) {
 	di_method(dc, "__get_xrdb", di_xorg_get_resource);
 	di_method(dc, "__set_xrdb", di_xorg_set_resource, char *);
 	di_method(dc, "__get_screen", get_screen);
+	di_method(dc, "__set_keymap", set_keymap, struct di_object *);
 	di_method(dc, "disconnect", di_destroy_object);
 
 	dc->x = x;
+	dc->xkb_ctx = xkb_context_new(XKB_CONTEXT_NO_FLAGS);
+
 	return (void *)dc;
 }
 
