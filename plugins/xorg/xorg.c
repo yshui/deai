@@ -225,8 +225,101 @@ static struct di_object *get_screen(struct di_xorg_connection *dc) {
 	return (void *)ret;
 }
 
-static void set_keymap(struct di_xorg_connection *xc,
-                                            struct di_object *o) {
+// A really hacky way of finding all modifiers in a keymap. Because xkbcommon doesn't
+// expose an API for that.
+static struct {
+	int keycode_per_modifiers;
+	xcb_keycode_t *keycodes;
+} find_modifiers(struct xkb_keymap *map, int min, int max) {
+	static const char *modifier_names[8] = {
+	    XKB_MOD_NAME_SHIFT, XKB_MOD_NAME_CAPS,
+	    XKB_MOD_NAME_CTRL,  XKB_MOD_NAME_ALT,
+	    XKB_MOD_NAME_NUM,   "Mod3",
+	    XKB_MOD_NAME_LOGO,  "Mod5"};
+
+	// keycodes, next_keycode_indices, and modifier_keycode_head effectively
+	// forms 8 linked lists. next_keycode_indices are the "next pointers".
+	// modifier_keycode_head are the heads of the lists. keycodes are the data
+	// stored in the list nodes.
+	int modifier_keycode_count[8] = {0};
+	int next_keycode_indices[256];
+	int keycodes[256];
+	int total_keycodes = 0;
+	int modifier_keycode_head[8] = {-1, -1, -1, -1, -1, -1, -1, -1};
+	int total_modifier_keys = 0;
+	memset(next_keycode_indices, -1, sizeof next_keycode_indices);
+
+	// Sanity check
+	for (int i = 0; i < 8; i++) {
+		assert(xkb_map_mod_get_index(map, modifier_names[i]) !=
+		       XKB_MOD_INVALID);
+	}
+
+	auto state = xkb_state_new(map);
+	// Find a non-modifier key
+	for (int i = min; i <= max; i++) {
+		// Basically we press the key and see what modifier state changes
+		auto updates = xkb_state_update_key(state, i, XKB_KEY_DOWN);
+		updates &= (XKB_STATE_MODS_DEPRESSED | XKB_STATE_MODS_LATCHED |
+		            XKB_STATE_MODS_LOCKED);
+		if (!updates) {
+			xkb_state_update_key(state, i, XKB_KEY_UP);
+			continue;
+		}
+		printf("%#x %#x\n", i, updates);
+		for (int j = 0; j < 8; j++) {
+			if (xkb_state_mod_name_is_active(state, modifier_names[j],
+			                                 updates)) {
+				//printf("%s %#x\n", modifier_names[j], i);
+				next_keycode_indices[total_keycodes] =
+				    modifier_keycode_head[j];
+				modifier_keycode_head[j] = total_keycodes;
+				keycodes[total_keycodes++] = i;
+				modifier_keycode_count[j]++;
+				total_modifier_keys++;
+			}
+		}
+		xkb_state_update_key(state, i, XKB_KEY_UP);
+		if (updates & XKB_STATE_MODS_LOCKED) {
+			xkb_state_update_key(state, i, XKB_KEY_DOWN);
+			xkb_state_update_key(state, i, XKB_KEY_UP);
+		}
+		if (updates & XKB_STATE_MODS_LATCHED) {
+			// Don't know how to reliably handle mod latches, just
+			// recreate the state
+			xkb_state_unref(state);
+			state = xkb_state_new(map);
+		}
+	}
+	xkb_state_unref(state);
+
+	int keycodes_per_modifiers = 0;
+	for (int i = 0; i < 8; i++) {
+		if (modifier_keycode_count[i] > keycodes_per_modifiers) {
+			keycodes_per_modifiers = modifier_keycode_count[i];
+		}
+	}
+
+	typeof(find_modifiers(map, min, max)) ret = {0};
+	ret.keycode_per_modifiers = keycodes_per_modifiers;
+	ret.keycodes = tmalloc(xcb_keycode_t, 8 * keycodes_per_modifiers);
+
+	for (int i = 0; i < 8; i++) {
+		int cnt = 0;
+		int curr = modifier_keycode_head[i];
+		while (curr != -1) {
+			assert(cnt < keycodes_per_modifiers);
+			ret.keycodes[i * keycodes_per_modifiers + cnt] =
+			    keycodes[curr];
+			curr = next_keycode_indices[curr];
+			cnt++;
+		}
+	}
+
+	return ret;
+}
+
+static void set_keymap(struct di_xorg_connection *xc, struct di_object *o) {
 	struct xkb_rule_names names = {0};
 
 	di_getmi(xc->x->di, log);
@@ -298,14 +391,36 @@ static void set_keymap(struct di_xorg_connection *xc,
 		}
 	}
 
-	auto r = xcb_request_check(xc->c,
-	                           xcb_change_keyboard_mapping_checked(
-	                               xc->c, (max_keycode - min_keycode + 1),
-	                               min_keycode, keysym_per_keycode, keysyms));
+	auto r =
+	    xcb_request_check(xc->c, xcb_change_keyboard_mapping_checked(
+	                                 xc->c, (max_keycode - min_keycode + 1),
+	                                 min_keycode, keysym_per_keycode, keysyms));
 	if (r) {
 		di_log_va(logm, DI_LOG_ERROR, "Failed to set keymap.");
 		free(r);
 	}
+
+	auto modifiers = find_modifiers(map, min_keycode, max_keycode);
+
+	while (true) {
+		auto r2 = xcb_set_modifier_mapping_reply(
+		    xc->c,
+		    xcb_set_modifier_mapping(xc->c, modifiers.keycode_per_modifiers,
+					     modifiers.keycodes),
+		    NULL);
+		if (!r2 || r2->status == XCB_MAPPING_STATUS_FAILURE) {
+			di_log_va(logm, DI_LOG_ERROR,
+				  "Failed to set modifiers, your keymap will be broken.");
+			free(r2);
+			break;
+		}
+		if (r2->status == XCB_MAPPING_STATUS_SUCCESS) {
+			free(r2);
+			break;
+		}
+	}
+	free(modifiers.keycodes);
+
 out:
 	free((char *)names.layout);
 	free((char *)names.model);
