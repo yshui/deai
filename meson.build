@@ -27,23 +27,6 @@ foreach arg: test_c_args
   endif
 endforeach
 
-if get_option('sanitize')
-  sanitizers = [
-    'address',
-    'undefined'
-  ]
-  supported_sanitizers = []
-  foreach s: sanitizers
-    if cc.has_argument('-fsanitize='+s)
-      supported_sanitizers = supported_sanitizers + [ s ]
-      base_c_args = base_c_args + [ '-fsanitize='+s ]
-      base_ld_args = base_ld_args + [ '-fsanitize='+s ]
-    endif
-  endforeach
-  if supported_sanitizers.length() == 0
-    error('sanitize enabled, but no sanitizers supported by the compiler')
-  endif
-endif
 base_c_args = base_c_args + [ '-fvisibility=hidden', '-fms-extensions', '-D_GNU_SOURCE' ]
 plugin_install_dir = get_option('libdir')+'/deai'
 if host_machine.system() == 'linux'
