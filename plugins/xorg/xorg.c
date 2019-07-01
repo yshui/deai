@@ -245,7 +245,7 @@ static struct {
 	int next_keycode_indices[256];
 	int keycodes[256];
 	int total_keycodes = 0;
-	int modifier_keycode_head[8] = {-1, -1, -1, -1, -1, -1, -1, -1};
+	int modifier_keycode_head[8] = { [0 ... 7] = -1, };
 	int total_modifier_keys = 0;
 	memset(next_keycode_indices, -1, sizeof next_keycode_indices);
 
