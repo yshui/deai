@@ -266,7 +266,7 @@ static struct {
 			xkb_state_update_key(state, i, XKB_KEY_UP);
 			continue;
 		}
-		printf("%#x %#x\n", i, updates);
+		//printf("%#x %#x\n", i, updates);
 		for (int j = 0; j < 8; j++) {
 			if (xkb_state_mod_name_is_active(state, modifier_names[j],
 			                                 updates)) {
