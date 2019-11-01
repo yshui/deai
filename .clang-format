@@ -5,7 +5,7 @@ BreakBeforeBraces: Attach
 #BreakStringLiterals: true
 IndentWidth: 8
 AlignAfterOpenBracket: Align
-ColumnLimit: 85
+ColumnLimit: 90
 #ExperimentalAutoDetectBinPacking: true
 BinPackArguments: true
 BinPackParameters: true
@@ -20,7 +20,7 @@ AllowShortFunctionsOnASingleLine: false
 IndentCaseLabels: false
 PenaltyReturnTypeOnItsOwnLine: 0
 PenaltyBreakString: 5
-PenaltyExcessCharacter: 15
+PenaltyExcessCharacter: 2
 BreakBeforeBinaryOperators: None
 PenaltyBreakBeforeFirstCallParameter: 3
 IncludeCategories:
