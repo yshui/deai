@@ -15,6 +15,7 @@
 #include <deai/deai.h>
 #include <deai/helper.h>
 
+#include "compat.h"
 #include "list.h"
 #include "utils.h"
 
