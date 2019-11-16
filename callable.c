@@ -107,8 +107,8 @@ out:
 	return rc;
 }
 
-static int method_trampoline(struct di_object *o, di_type_t *rtype, void **ret,
-                             struct di_tuple t) {
+static int
+method_trampoline(struct di_object *o, di_type_t *rtype, void **ret, struct di_tuple t) {
 	if (!di_check_type(o, "deai:method"))
 		return -EINVAL;
 
@@ -125,12 +125,11 @@ static int method_trampoline(struct di_object *o, di_type_t *rtype, void **ret,
 
 	void *this = tm->this;
 	return _di_typed_trampoline(&tm->cif, tm->fn, *ret, tm->atypes + 1, 1,
-	                            (const void *[]){&this}, tm->nargs, t.elem_type,
-	                            t.tuple);
+	                            (const void *[]){&this}, tm->nargs, t.elem_type, t.tuple);
 }
 
-static int closure_trampoline(struct di_object *o, di_type_t *rtype, void **ret,
-                              struct di_tuple t) {
+static int
+closure_trampoline(struct di_object *o, di_type_t *rtype, void **ret, struct di_tuple t) {
 	if (!di_check_type(o, "deai:closure"))
 		return -EINVAL;
 
@@ -146,8 +145,7 @@ static int closure_trampoline(struct di_object *o, di_type_t *rtype, void **ret,
 		*ret = NULL;
 
 	return _di_typed_trampoline(&cl->cif, cl->fn, *ret, cl->atypes + cl->nargs0,
-	                            cl->nargs0, cl->cargs, t.length, t.elem_type,
-	                            t.tuple);
+	                            cl->nargs0, cl->cargs, t.length, t.elem_type, t.tuple);
 }
 
 static void free_closure(struct di_object *o) {
@@ -164,9 +162,8 @@ static void free_closure(struct di_object *o) {
 }
 
 PUBLIC struct di_closure *
-di_create_closure(void (*fn)(void), di_type_t rtype, int nargs0,
-                  const di_type_t *cats, const void *const *cargs, int nargs,
-                  const di_type_t *ats, bool weak_capture) {
+di_create_closure(void (*fn)(void), di_type_t rtype, int nargs0, const di_type_t *cats,
+                  const void *const *cargs, int nargs, const di_type_t *ats, bool weak_capture) {
 	if (nargs0 < 0 || nargs < 0 || nargs0 + nargs > MAX_NARGS)
 		return ERR_PTR(-E2BIG);
 
@@ -178,8 +175,8 @@ di_create_closure(void (*fn)(void), di_type_t rtype, int nargs0,
 		if (di_sizeof_type(ats[i]) == 0)
 			return ERR_PTR(-EINVAL);
 
-	struct di_closure *cl = (void *)di_new_object(
-	    sizeof(struct di_closure) + sizeof(di_type_t) * (nargs0 + nargs));
+	struct di_closure *cl = (void *)di_new_object(sizeof(struct di_closure) +
+	                                              sizeof(di_type_t) * (nargs0 + nargs));
 
 	cl->rtype = rtype;
 	cl->call = closure_trampoline;
@@ -194,8 +191,7 @@ di_create_closure(void (*fn)(void), di_type_t rtype, int nargs0,
 	if (nargs)
 		memcpy(cl->atypes + nargs0, ats, sizeof(di_type_t) * nargs);
 
-	auto ffiret =
-	    di_ffi_prep_cif(&cl->cif, nargs0 + nargs, cl->rtype, cl->atypes);
+	auto ffiret = di_ffi_prep_cif(&cl->cif, nargs0 + nargs, cl->rtype, cl->atypes);
 	if (ffiret != FFI_OK) {
 		free(cl);
 		return ERR_PTR(-EINVAL);
@@ -228,8 +224,8 @@ PUBLIC int di_add_method(struct di_object *o, const char *name, void (*fn)(void)
 	if (nargs < 0 || nargs + 1 > MAX_NARGS)
 		return -EINVAL;
 
-	struct di_typed_method *f = (void *)di_new_object(
-	    sizeof(struct di_typed_method) + sizeof(di_type_t) * (1 + nargs));
+	struct di_typed_method *f = (void *)di_new_object(sizeof(struct di_typed_method) +
+	                                                  sizeof(di_type_t) * (1 + nargs));
 
 	f->rtype = rtype;
 	f->call = method_trampoline;
@@ -264,8 +260,7 @@ PUBLIC int di_add_method(struct di_object *o, const char *name, void (*fn)(void)
 }
 
 // va_args version of di_call_callable
-PUBLIC int
-di_call_objectv(struct di_object *o, di_type_t *rtype, void **ret, va_list ap) {
+PUBLIC int di_call_objectv(struct di_object *o, di_type_t *rtype, void **ret, va_list ap) {
 	if (!o->call)
 		return -EINVAL;
 
