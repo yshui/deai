@@ -7,6 +7,7 @@
 #include <fcntl.h>
 #include <stdarg.h>
 #include <stdio.h>
+#include <unistd.h>
 
 #include <deai/builtin/log.h>
 #include <deai/deai.h>
@@ -123,6 +124,15 @@ file_target(struct di_log *l, const char *filename, bool overwrite) {
 	return (void *)lf;
 }
 
+static struct di_object *
+stderr_target(struct di_log *l) {
+	auto ls = di_new_object_with_type(struct log_file);
+	ls->f = stderr;
+	ls->dtor = NULL;
+	di_method(ls, "write", file_target_write, char *);
+	return (void *)ls;
+}
+
 // Public API to be used by C plugins
 __attribute__((format(printf, 3, 4))) PUBLIC int
 di_log_va(struct di_object *o, int log_level, const char *fmt, ...) {
@@ -172,6 +182,7 @@ void di_init_log(struct deai *di) {
 	di_add_member_move((struct di_object *)l, "log_target", true, (di_type_t[]){DI_TYPE_OBJECT}, &dtgt);
 	l->call = di_log;
 	di_method(l, "file_target", file_target, char *, bool);
+	di_method(l, "stderr_target", stderr_target);
 	di_getter_setter(l, log_level, get_log_level, set_log_level);
 	di_register_module(di, "log", &lm);
 }
