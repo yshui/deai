@@ -15,12 +15,13 @@ Must have:
 * backlight [done]
 * battery
 * hotkeys [done]
-* dbus
+* dbus [mostly done]
 * inotify [done]
+* mpd control
 
 Probably:
 
-* audio
+* audio (alsa? pulseaudio?)
 * xorg.window
 * menu, tray icons
 * wifi
