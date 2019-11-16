@@ -46,10 +46,9 @@ static inline void *allocate_for_return(di_type_t rtype) {
 	return malloc(sz);
 }
 
-static int
-_di_typed_trampoline(ffi_cif *cif, void (*fn)(void), void *ret,
-                     const di_type_t *fnats, int nargs0, const void *const *args0,
-                     int nargs, const di_type_t *ats, void *const *args) {
+static int _di_typed_trampoline(ffi_cif *cif, void (*fn)(void), void *ret,
+                                const di_type_t *fnats, int nargs0, const void *const *args0,
+                                int nargs, const di_type_t *ats, void *const *args) {
 	assert(nargs == 0 || args != NULL);
 	assert(nargs0 == 0 || args0 != NULL);
 	assert(nargs >= 0 && nargs0 >= 0);
@@ -58,6 +57,7 @@ _di_typed_trampoline(ffi_cif *cif, void (*fn)(void), void *ret,
 	void *null_ptr = NULL;
 	void **xargs = alloca((nargs0 + nargs) * sizeof(void *));
 	memcpy(xargs, args0, sizeof(void *) * nargs0);
+	memset(xargs + nargs0, 0, sizeof(void *) * nargs);
 
 	int rc = 0;
 	for (int i = nargs0; i < nargs0 + nargs; i++) {
@@ -89,6 +89,7 @@ _di_typed_trampoline(ffi_cif *cif, void (*fn)(void), void *ret,
 				default: xargs[i] = NULL; goto out;
 				}
 			} else {
+				// Conversion failed
 				xargs[i] = NULL;
 				goto out;
 			}
