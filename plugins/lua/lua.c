@@ -194,25 +194,32 @@ static struct di_lua_ref *lua_type_to_di_object(lua_State *L, int i, void *call)
 	// TODO need to make sure that same lua object get same di object
 	struct di_lua_script *s;
 
+	// retrive the script object from lua registry
 	lua_pushliteral(L, DI_LUA_REGISTRY_SCRIPT_OBJECT_KEY);
 	lua_rawget(L, LUA_REGISTRYINDEX);
 	s = lua_touserdata(L, -1);
-	lua_pop(L, 1);
+	lua_pop(L, 1);        // pop the script object
 
 	auto o = di_new_object_with_type(struct di_lua_ref);
-	o->tref = luaL_ref(L, LUA_REGISTRYINDEX);
+	o->tref = luaL_ref(L, LUA_REGISTRYINDEX);        // this pops the table from stack,
+	                                                 // we need to put it back
 	o->s = s;
 	di_ref_object((void *)s);
+
+	// Restore the value onto the stack
+	lua_pushinteger(L, o->tref);
+	lua_rawget(L, LUA_REGISTRYINDEX);
 
 	auto getter = di_new_object_with_type(struct lua_table_getter);
 	getter->call = di_lua_table_get;
 	getter->t = o;
-	di_add_member_move((void *)o, "__get", false, (di_type_t[]){DI_TYPE_OBJECT}, (void **)&getter);
+	di_add_member_move((void *)o, "__get", false, (di_type_t[]){DI_TYPE_OBJECT},
+	                   (void **)&getter);
 	o->dtor = (void *)lua_ref_dtor;
 	o->call = call;
-	o->d = di_listen_to_destroyed((void *)s->L, trivial_destroyed_handler,
-	                              (void *)o);
+	o->d = di_listen_to_destroyed((void *)s->L, trivial_destroyed_handler, (void *)o);
 
+	// Need to return
 	return o;
 }
 
