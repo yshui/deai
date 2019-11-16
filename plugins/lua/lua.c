@@ -559,11 +559,20 @@ static void *di_lua_type_to_di(lua_State *L, int i, di_type_t *t) {
 			goto type_error;
 		ret_arg(i, DI_TYPE_OBJECT, void *, toobjref);
 	case LUA_TTABLE:
-		// Empty table should be pushed as object
+		// Empty table should be pushed as nil, because di_typed_trampoline knows
+		// how to convert nil to anything, unless the table has a metatable, in
+		// which case it should become a object.
 		if ((nelem = di_lua_checkarray(L, i, &elemt)) <= 0) {
-			*t = DI_TYPE_OBJECT;
-			ret = malloc(sizeof(struct di_object *));
-			*(void **)ret = lua_type_to_di_object(L, i, NULL);
+			if (lua_getmetatable(L, i)) {
+				lua_pop(L, 1); // pop the metatable
+				*t = DI_TYPE_OBJECT;
+				ret = malloc(sizeof(struct di_object *));
+				*(void **)ret = lua_type_to_di_object(L, i, NULL);
+			} else {
+				// nothing is pushed to stack
+				*t = DI_TYPE_NIL;
+				ret = NULL;
+			}
 			return ret;
 		}
 		*t = DI_TYPE_ARRAY;
