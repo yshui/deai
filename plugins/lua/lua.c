@@ -197,8 +197,8 @@ static struct di_lua_ref *lua_type_to_di_object(lua_State *L, int i, void *call)
 	lua_pop(L, 1);        // pop the script object
 
 	auto o = di_new_object_with_type(struct di_lua_ref);
-	o->tref = luaL_ref(L, LUA_REGISTRYINDEX);        // this pops the table from stack,
-	                                                 // we need to put it back
+	o->tref = luaL_ref(L, LUA_REGISTRYINDEX);        // this pops the table from
+	                                                 // stack, we need to put it back
 	o->s = s;
 	di_ref_object((void *)s);
 
@@ -444,12 +444,22 @@ static int di_lua_table_to_array(lua_State *L, int index, int nelem, di_type_t e
 	return 0;
 }
 
-static int di_lua_checkarray(lua_State *L, int index, di_type_t *elemt) {
+/* Check if a lua table is an array by lua's convention
+ * i.e. Whether the only keys of the table are 1, 2, 3, ..., n; and all of the values are
+ * of the same type. Exception: for empty table, this function returns true, in order to
+ * distinguish it from other kind of non-array tables.
+ *
+ * @param[out] elemt  if the table is an array, return the element type
+ * @param[out] nelemt if the table is an array, return the number of elements
+ * @return Whether the table is an array
+ */
+static bool di_lua_checkarray(lua_State *L, int index, int *nelem, di_type_t *elemt) {
 	lua_pushnil(L);
 	if (lua_next(L, index) == 0) {
 		// Empty array
 		*elemt = DI_TYPE_VOID;
-		return 0;
+		*nelem = 0;
+		return true;
 	}
 
 	int i = 1;
@@ -464,8 +474,9 @@ static int di_lua_checkarray(lua_State *L, int index, di_type_t *elemt) {
 	lua_pop(L, 2);
 
 	if (*elemt == DI_TYPE_VOID || *elemt >= DI_LAST_TYPE || *elemt == DI_TYPE_NIL) {
+		// Unsupported element types
 		lua_pop(L, 1);
-		return -1;
+		return false;
 	}
 
 	while (lua_next(L, index) != 0) {
@@ -475,25 +486,29 @@ static int di_lua_checkarray(lua_State *L, int index, di_type_t *elemt) {
 		ret = di_lua_type_to_di(L, -1, &t);
 		di_free_value(t, ret);
 		free(ret);
-		// pop 2 value
+		// pop 2 value (lua_next and lua_rawgeti)
 		lua_pop(L, 2);
+
 		if (t != *elemt) {
-			if (t == DI_TYPE_FLOAT && *elemt == DI_TYPE_INT)
+			if (t == DI_TYPE_FLOAT && *elemt == DI_TYPE_INT) {
 				*elemt = DI_TYPE_FLOAT;
-			else if (t != DI_TYPE_INT || *elemt != DI_TYPE_FLOAT) {
+			} else if (t != DI_TYPE_INT || *elemt != DI_TYPE_FLOAT) {
+				// Non-uniform element type, cannot be an array
 				// pop 1 key
 				lua_pop(L, 1);
-				return -1;
+				return false;
 			}
 		}
 
 		if (i == INT_MAX) {
 			// Array too big
 			lua_pop(L, 1);
-			return i - 1;
+			break;
 		}
 	}
-	return i - 1;
+
+	*nelem = i - 1;
+	return true;
 }
 
 static int
@@ -558,26 +573,31 @@ static void *di_lua_type_to_di(lua_State *L, int i, di_type_t *t) {
 		if (!di_lua_isobject(L, i))
 			goto type_error;
 		ret_arg(i, DI_TYPE_OBJECT, void *, toobjref);
-	case LUA_TTABLE:
-		// Empty table should be pushed as nil, because di_typed_trampoline knows
-		// how to convert nil to anything, unless the table has a metatable, in
-		// which case it should become a object.
-		if ((nelem = di_lua_checkarray(L, i, &elemt)) <= 0) {
-			if (lua_getmetatable(L, i)) {
-				lua_pop(L, 1); // pop the metatable
-				*t = DI_TYPE_OBJECT;
-				ret = malloc(sizeof(struct di_object *));
-				*(void **)ret = lua_type_to_di_object(L, i, NULL);
-			} else {
-				// nothing is pushed to stack
+	case LUA_TTABLE:;
+		// Non-array tables, and tables with metatable shoudl become an di_object
+		bool has_metatable = lua_getmetatable(L, i);
+		if (has_metatable) {
+			lua_pop(L, 1);        // pop the metatable
+		}
+		if (!di_lua_checkarray(L, i, &nelem, &elemt) || has_metatable) {
+			*t = DI_TYPE_OBJECT;
+			ret = malloc(sizeof(struct di_object *));
+			*(void **)ret = lua_type_to_di_object(L, i, NULL);
+		} else {
+			// Empty table should be pushed as nil, because empty tables can
+			// either be interpreted as an empty di_array or an empty
+			// di_object.
+			// We pass nil for it because di_typed_trampoline knows how to
+			// convert nil to the required type.
+			if (!nelem) {
 				*t = DI_TYPE_NIL;
 				ret = NULL;
+			} else {
+				*t = DI_TYPE_ARRAY;
+				ret = calloc(1, sizeof(struct di_array));
+				di_lua_table_to_array(L, i, nelem, elemt, ret);
 			}
-			return ret;
 		}
-		*t = DI_TYPE_ARRAY;
-		ret = calloc(1, sizeof(struct di_array));
-		di_lua_table_to_array(L, i, nelem, elemt, ret);
 		return ret;
 	case LUA_TFUNCTION: ret_arg(i, DI_TYPE_OBJECT, struct di_object *, todiobj);
 	case LUA_TNIL:
