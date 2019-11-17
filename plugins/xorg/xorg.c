@@ -323,7 +323,7 @@ static void set_keymap(struct di_xorg_connection *xc, struct di_object *o) {
 	struct xkb_rule_names names = {0};
 
 	di_getmi(xc->x->di, log);
-	if (di_get(o, "layout", names.layout)) {
+	if (!o || di_get(o, "layout", names.layout)) {
 		di_log_va(logm, DI_LOG_ERROR,
 		          "Invalid keymap object, key \"layout\" is not set");
 		return;
