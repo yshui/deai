@@ -536,6 +536,11 @@ _dbus_filter(DBusConnection *conn, DBusMessage *msg, void *ud) {
 	auto path = dbus_message_get_path(msg);
 	auto ifc = dbus_message_get_interface(msg);
 	auto mbr = dbus_message_get_member(msg);
+
+	if (!bus_name) {
+		return DBUS_HANDLER_RESULT_NOT_YET_HANDLED;
+	}
+
 	if (*bus_name != ':') {
 		// We got a well known name
 		asprintf(&sig, "%%%s%%%s%%%s.%s", bus_name, path, ifc, mbr);
