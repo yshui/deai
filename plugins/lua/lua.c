@@ -754,7 +754,7 @@ int di_lua_emit_signal(lua_State *L) {
 	t.elem_type = tmalloc(di_type_t, top - 1);
 
 	for (int i = 2; i <= top; i++) {
-		void *dst = di_lua_type_to_di(L, i, &t.elem_type[i - 1]);
+		void *dst = di_lua_type_to_di(L, i, &t.elem_type[i - 2]);
 		t.tuple[i - 2] = dst;
 	}
 
