@@ -25,9 +25,9 @@
 #include <config.h>
 
 #include "di_internal.h"
-#include "os.h"
 #include "event.h"
 #include "log.h"
+#include "os.h"
 #include "spawn.h"
 #include "uthash.h"
 #include "utils.h"
@@ -123,9 +123,9 @@ static void kill_all_descendants(void) {
 		return;
 	}
 	struct procctl_reaper_kill k = {
-		.rk_sig = SIGKILL,
-		.rk_flags = 0,
-		.rk_subtree = 0,
+	    .rk_sig = SIGKILL,
+	    .rk_flags = 0,
+	    .rk_subtree = 0,
 	};
 	ret = procctl(P_PID, getpid(), PROC_REAP_KILL, &k);
 	if (ret != 0) {
@@ -162,7 +162,7 @@ static void kill_all_descendants(void) {
 		if (dent->d_type != DT_DIR)
 			continue;
 		char *name = dent->d_name;
-		while(*name)
+		while (*name)
 			if (!isdigit(*name++))
 				goto next;
 		snprintf(pathbuf, PATH_MAX, "/proc/%s/stat", dent->d_name);
@@ -174,8 +174,8 @@ static void kill_all_descendants(void) {
 		size_t cap = 0;
 		char *stattext = NULL;
 		while ((ret = read(fd, textbuf, sizeof(textbuf))) > 0) {
-			stattext = realloc(stattext, cap+ret+1);
-			memcpy(stattext+cap, textbuf, ret);
+			stattext = realloc(stattext, cap + ret + 1);
+			memcpy(stattext + cap, textbuf, ret);
 			cap += ret;
 		}
 		close(fd);
@@ -186,9 +186,9 @@ static void kill_all_descendants(void) {
 		// End of comm
 		char *sep1 = strrchr(stattext, ')');
 		// Skip ') %c ', and find the end of ppid
-		char *ppid_end = strchr(sep1+4, ' ');
+		char *ppid_end = strchr(sep1 + 4, ' ');
 		*ppid_end = '\0';
-		pid_t ppid = atoi(sep1+4);
+		pid_t ppid = atoi(sep1 + 4);
 		free(stattext);
 
 		auto np = tmalloc(struct _childp, 1);
@@ -206,7 +206,7 @@ static void kill_all_descendants(void) {
 	struct _childp *i, *ni;
 	struct _childp sentinel;
 	INIT_LIST_HEAD(&sentinel.ll);
-	HASH_ITER(hh, ps, i, ni) {
+	HASH_ITER (hh, ps, i, ni) {
 		struct _childp *pp;
 		HASH_FIND_INT(ps, &i->ppid, pp);
 		if (!pp)
@@ -227,7 +227,7 @@ static void kill_all_descendants(void) {
 		kill(curr->pid, SIGTERM);
 		curr->visited = true;
 	}
-	HASH_ITER(hh, ps, i, ni) {
+	HASH_ITER (hh, ps, i, ni) {
 		HASH_DEL(ps, i);
 		free(i);
 	}
@@ -288,7 +288,8 @@ static void setproctitle_init(int argc, char **argv, struct deai *p) {
 	p->proctitle = argv[0];
 
 	size_t envsz = 0;
-	for (; environ[envsz]; envsz++);
+	for (; environ[envsz]; envsz++)
+		;
 
 	char **old_env = environ;
 	environ = calloc(envsz + 1, sizeof(char *));
@@ -339,13 +340,13 @@ static struct di_array di_get_argv(struct deai *p) {
 }
 
 PUBLIC int di_register_module(struct deai *p, const char *name, struct di_module **m) {
-	int ret = di_add_member_move((void *)p, name, (di_type_t[]){DI_TYPE_OBJECT}, (void **)m);
+	int ret =
+	    di_add_member_move((void *)p, name, (di_type_t[]){DI_TYPE_OBJECT}, (void **)m);
 	return ret;
 }
 
 // Don't consumer the ref, because it breaks the usual method call sementics
-static int
-di_register_module_method(struct deai *p, const char *name, struct di_module *m) {
+static int di_register_module_method(struct deai *p, const char *name, struct di_module *m) {
 	return di_add_member_clone((void *)p, name, DI_TYPE_OBJECT, m);
 }
 
@@ -390,27 +391,28 @@ int main(int argc, char *argv[]) {
 		exit(1);
 	}
 
-	di_method(p, "load_plugin_from_dir", load_plugin_dir, char *);
-	di_method(p, "load_plugin", load_plugin, char *);
-	di_method(p, "register_module", di_register_module_method, char *,
-	          struct di_object *);
-	di_method(p, "chdir", di_chdir, char *);
-	di_method(p, "exec", di_exec, struct di_array);
+	DI_CHECK_OK(di_method(p, "load_plugin_from_dir", load_plugin_dir, char *));
+	DI_CHECK_OK(di_method(p, "load_plugin", load_plugin, char *));
+	DI_CHECK_OK(di_method(p, "register_module", di_register_module_method, char *,
+	                      struct di_object *));
+	DI_CHECK_OK(di_method(p, "chdir", di_chdir, char *));
+	DI_CHECK_OK(di_method(p, "exec", di_exec, struct di_array));
 
 	/**
 	 * XXX: Quit method should delay the __destroyed signal until control flow
 	 * gets back to the mainloop. The destruction shouldn't happen on someone
 	 * else's stack frame
 	 */
-	di_method(p, "quit", di_prepare_quit);
-	di_method(p, "exit", di_prepare_exit, int);
-	di_method(p, "terminate", di_terminate);
+	DI_CHECK_OK(di_method(p, "quit", di_prepare_quit));
+	DI_CHECK_OK(di_method(p, "exit", di_prepare_exit, int));
+	DI_CHECK_OK(di_method(p, "terminate", di_terminate));
 #ifdef HAVE_SETPROCTITLE
-	di_method(p, "__set_proctitle", di_set_pr_name, char *);
+	DI_CHECK_OK(di_method(p, "__set_proctitle", di_set_pr_name, char *));
 #endif
-	di_method(p, "__get_argv", di_get_argv);
+	DI_CHECK_OK(di_method(p, "__get_argv", di_get_argv));
 
-	di_add_member_ref((void *)p, "proctitle", DI_TYPE_STRING_LITERAL, &p->proctitle);
+	DI_CHECK_OK(di_add_member_ref((void *)p, "proctitle", DI_TYPE_STRING_LITERAL,
+	                              &p->proctitle));
 
 	struct di_ev_signal sigintw;
 	sigintw.ud = p;
@@ -486,8 +488,7 @@ int main(int argc, char *argv[]) {
 
 	di_type_t rt;
 	void *retd = NULL;
-	ret = di_rawcallxn(mod, method, &rt, &retd,
-	                   (struct di_tuple){nargs, di_args, di_types});
+	ret = di_rawcallxn(mod, method, &rt, &retd, (struct di_tuple){nargs, di_args, di_types});
 	if (ret != 0) {
 		fprintf(stderr, "Failed to call \"%s.%s\"\n", modname ? modname : "", method);
 		exit(EXIT_FAILURE);

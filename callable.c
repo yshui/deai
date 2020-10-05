@@ -208,7 +208,7 @@ di_create_closure(void (*fn)(void), di_type_t rtype, int nargs0, const di_type_t
 		cl->cargs[i] = dst;
 	}
 
-	di_set_type((void *)cl, "deai:closure");
+	DI_OK_OR_RET_PTR(di_set_type((void *)cl, "deai:closure"));
 
 	return cl;
 }
@@ -252,7 +252,7 @@ PUBLIC int di_add_method(struct di_object *o, const char *name, void (*fn)(void)
 		return -EINVAL;
 	}
 
-	di_set_type((void *)f, "deai:method");
+	DI_OK_OR_RET(di_set_type((void *)f, "deai:method"));
 
 	f->this = o;
 	return di_add_member_move(o, name, (di_type_t[]){DI_TYPE_OBJECT}, (void **)&f);
