@@ -17,30 +17,30 @@
 
 const void *null_ptr = NULL;
 
-#define gen_callx(fnname, getter)                                                   \
-	int fnname(struct di_object *o, const char *name, di_type_t *rt,            \
-	           void **ret, ...) {                                               \
-		void *val;                                                          \
-		int rc = getter(o, name, DI_TYPE_OBJECT, &val);                     \
-		if (rc != 0)                                                        \
-			return rc;                                                  \
-                                                                                    \
-		auto m = *(struct di_object **)val;                                 \
-		free((void *)val);                                                  \
-                                                                                    \
-		va_list ap;                                                         \
-		va_start(ap, ret);                                                  \
-		rc = di_call_objectv(m, rt, ret, ap);                               \
-                                                                                    \
-		di_unref_object(m);                                                 \
-		return rc;                                                          \
+#define gen_callx(fnname, getter)                                                           \
+	int fnname(struct di_object *o, const char *name, di_type_t *rt, void **ret, ...) { \
+		void *val;                                                                  \
+		int rc = getter(o, name, DI_TYPE_OBJECT, &val);                             \
+		if (rc != 0)                                                                \
+			return rc;                                                          \
+                                                                                            \
+		DI_ASSERT(val != NULL, "Successful get returned NULL");                     \
+		auto m = *(struct di_object **)val;                                         \
+		DI_ASSERT(m != NULL, "Found NULL object reference");                        \
+		free((void *)val);                                                          \
+                                                                                            \
+		va_list ap;                                                                 \
+		va_start(ap, ret);                                                          \
+		rc = di_call_objectv(m, rt, ret, ap);                                       \
+                                                                                            \
+		di_unref_object(m);                                                         \
+		return rc;                                                                  \
 	}
 
-PUBLIC gen_callx(di_rawcallx, di_rawgetxt);
 PUBLIC gen_callx(di_callx, di_getxt);
 
-PUBLIC int di_rawcallxn(struct di_object *o, const char *name, di_type_t *rt,
-                        void **ret, struct di_tuple t) {
+PUBLIC int di_rawcallxn(struct di_object *o, const char *name, di_type_t *rt, void **ret,
+                        struct di_tuple t) {
 	void *val;
 	int rc = di_rawgetxt(o, name, DI_TYPE_OBJECT, &val);
 	if (rc != 0)
@@ -130,8 +130,7 @@ PUBLIC int di_setx(struct di_object *o, const char *name, di_type_t type, void *
 	return rc;
 }
 
-PUBLIC int
-di_rawgetx(struct di_object *o, const char *name, di_type_t *type, void **ret) {
+PUBLIC int di_rawgetx(struct di_object *o, const char *name, di_type_t *type, void **ret) {
 	auto m = di_lookup(o, name);
 
 	// nil type is treated as non-existent
@@ -147,31 +146,28 @@ di_rawgetx(struct di_object *o, const char *name, di_type_t *type, void **ret) {
 	return 0;
 }
 
-PUBLIC int
-di_getx(struct di_object *o, const char *name, di_type_t *type, void **ret) {
+PUBLIC int di_getx(struct di_object *o, const char *name, di_type_t *type, void **ret) {
 	int rc = di_rawgetx(o, name, type, ret);
 	if (rc == 0)
 		return 0;
 
-	return call_handler_with_fallback(o, "__get", name, DI_LAST_TYPE, NULL, type,
-	                                  ret);
+	return call_handler_with_fallback(o, "__get", name, DI_LAST_TYPE, NULL, type, ret);
 }
 
-#define gen_tfunc(name, getter)                                                     \
-	int name(struct di_object *o, const char *prop, di_type_t rtype,            \
-	         void **ret) {                                                      \
-		void *ret2;                                                         \
-		di_type_t rt;                                                       \
-		int rc = getter(o, prop, &rt, &ret2);                               \
-		if (rc != 0)                                                        \
-			return rc;                                                  \
-                                                                                    \
-		rc = di_type_conversion(rt, ret2, rtype, ret);                      \
-		free((void *)ret2);                                                 \
-		if (rc != 0)                                                        \
-			return rc;                                                  \
-                                                                                    \
-		return rc;                                                          \
+#define gen_tfunc(name, getter)                                                          \
+	int name(struct di_object *o, const char *prop, di_type_t rtype, void **ret) {   \
+		void *ret2;                                                              \
+		di_type_t rt;                                                            \
+		int rc = getter(o, prop, &rt, &ret2);                                    \
+		if (rc != 0)                                                             \
+			return rc;                                                       \
+                                                                                         \
+		rc = di_type_conversion(rt, ret2, rtype, ret);                           \
+		free((void *)ret2);                                                      \
+		if (rc != 0)                                                             \
+			return rc;                                                       \
+                                                                                         \
+		return rc;                                                               \
 	}
 
 PUBLIC gen_tfunc(di_getxt, di_getx);
@@ -511,7 +507,16 @@ PUBLIC void di_copy_value(di_type_t t, void *dst, const void *src) {
 	case DI_TYPE_ANY:
 	case DI_LAST_TYPE:
 		DI_PANIC("Trying to copy invalid types");
-	default: memmove(dst, src, di_sizeof_type(t)); break;
+	case DI_TYPE_BOOL:
+	case DI_TYPE_INT:
+	case DI_TYPE_UINT:
+	case DI_TYPE_NINT:
+	case DI_TYPE_NUINT:
+	case DI_TYPE_FLOAT:
+	case DI_TYPE_POINTER:
+	case DI_TYPE_STRING_LITERAL:
+		memmove(dst, src, di_sizeof_type(t));
+		break;
 	}
 }
 
@@ -557,8 +562,8 @@ static struct di_listener *di_new_listener(void) {
 
 // Returned listener has 1 ref, which is dropped when the listener stops.
 // You don't usually need to ref a listener
-PUBLIC struct di_listener *di_listen_to_once(struct di_object *o, const char *name,
-                                             struct di_object *h, bool once) {
+PUBLIC struct di_listener *
+di_listen_to_once(struct di_object *o, const char *name, struct di_object *h, bool once) {
 	assert(!o->destroyed);
 
 	struct di_signal *sig = NULL;
@@ -680,8 +685,7 @@ PUBLIC int di_emitn(struct di_object *o, const char *name, struct di_tuple t) {
 		return 0;
 
 	int cnt = 0;
-	struct di_listener *l,
-	    **all_l = tmalloc(struct di_listener *, sig->nlisteners);
+	struct di_listener *l, **all_l = tmalloc(struct di_listener *, sig->nlisteners);
 
 	// Allow listeners to be removed during emission
 	// One usecase: There're two object, A, B, where A -> B.

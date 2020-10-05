@@ -65,20 +65,20 @@ static_assert(__alignof__(bool) == __alignof__(uint8_t), "bool is not uint8_t, "
 
 static inline ffi_type *nullable di_type_to_ffi(di_type_t in) {
 	ffi_type *const type_map[] = {
-	        [DI_TYPE_UNIT] = &ffi_type_void,
-	        [DI_TYPE_BOOL] = &ffi_type_uint8,
-	        [DI_TYPE_NINT] = &ffi_type_sint,
-	        [DI_TYPE_NUINT] = &ffi_type_uint,
-	        [DI_TYPE_UINT] = &ffi_type_uint64,
-	        [DI_TYPE_INT] = &ffi_type_sint64,
-	        [DI_TYPE_FLOAT] = &ffi_type_double,
-	        [DI_TYPE_POINTER] = &ffi_type_pointer,
-	        [DI_TYPE_OBJECT] = &ffi_type_pointer,
-	        [DI_TYPE_STRING] = &ffi_type_pointer,
-	        [DI_TYPE_STRING_LITERAL] = &ffi_type_pointer,
-	        [DI_TYPE_ARRAY] = &ffi_type_di_array,
-	        [DI_TYPE_TUPLE] = &ffi_type_di_tuple,
-	        [DI_LAST_TYPE] = NULL,
+	    [DI_TYPE_UNIT] = &ffi_type_void,
+	    [DI_TYPE_BOOL] = &ffi_type_uint8,
+	    [DI_TYPE_NINT] = &ffi_type_sint,
+	    [DI_TYPE_NUINT] = &ffi_type_uint,
+	    [DI_TYPE_UINT] = &ffi_type_uint64,
+	    [DI_TYPE_INT] = &ffi_type_sint64,
+	    [DI_TYPE_FLOAT] = &ffi_type_double,
+	    [DI_TYPE_POINTER] = &ffi_type_pointer,
+	    [DI_TYPE_OBJECT] = &ffi_type_pointer,
+	    [DI_TYPE_STRING] = &ffi_type_pointer,
+	    [DI_TYPE_STRING_LITERAL] = &ffi_type_pointer,
+	    [DI_TYPE_ARRAY] = &ffi_type_di_array,
+	    [DI_TYPE_TUPLE] = &ffi_type_di_tuple,
+	    [DI_LAST_TYPE] = NULL,
 	};
 
 	assert(type_map[in]);
@@ -95,8 +95,7 @@ static inline ffi_status di_ffi_prep_cif(ffi_cif *nonnull cif, unsigned int narg
 			ffi_atypes[i] = di_type_to_ffi(atypes[i]);
 	}
 
-	ffi_status ret =
-	    ffi_prep_cif(cif, FFI_DEFAULT_ABI, nargs, ffi_rtype, ffi_atypes);
+	ffi_status ret = ffi_prep_cif(cif, FFI_DEFAULT_ABI, nargs, ffi_rtype, ffi_atypes);
 	if (ret != FFI_OK)
 		free(ffi_atypes);
 	return ret;
