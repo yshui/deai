@@ -77,6 +77,9 @@ static void unused __clang_cleanup_func(void (^*dfunc)(void)) {
 		}                                                                        \
 	} while (0)
 
+/// Check if function returns success (i.e. 0)
+#define DI_CHECK_OK(expr, ...) DI_CHECK((expr) == 0, ##__VA_ARGS__)
+
 /// Panic the program with `msg`
 #define DI_PANIC(...)                                                                    \
 	do {                                                                             \
@@ -90,3 +93,19 @@ static void unused __clang_cleanup_func(void (^*dfunc)(void)) {
 /// Like DI_CHECK, but only enabled in debug builds
 #define DI_ASSERT(expr, ...) DI_CHECK(expr, ##__VA_ARGS__)
 #endif
+
+#define DI_OK_OR_RET(expr)                                                               \
+	do {                                                                             \
+		__auto_type __di_ok_or_ret_tmp = (expr);                                 \
+		if (__di_ok_or_ret_tmp != 0) {                                           \
+			return __di_ok_or_ret_tmp;                                       \
+		}                                                                        \
+	} while (0)
+
+#define DI_OK_OR_RET_PTR(expr)                                                           \
+	do {                                                                             \
+		__auto_type __di_ok_or_ret_tmp = (expr);                                 \
+		if (__di_ok_or_ret_tmp != 0) {                                           \
+			return ERR_PTR(__di_ok_or_ret_tmp);                              \
+		}                                                                        \
+	} while (0)
