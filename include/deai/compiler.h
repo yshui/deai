@@ -14,6 +14,7 @@
 #define nonnull_all __attribute__((__nonnull__))
 #define unused __attribute__((unused))
 #define ret_nonnull nonnull __attribute__((returns_nonnull))
+#define unreachable() __builtin_unreachable()
 
 #ifndef __has_feature
 # define __has_feature(x) 0

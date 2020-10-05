@@ -411,7 +411,7 @@ di_xorg_xinput_get_prop(struct di_xorg_xinput_device *dev, const char *name) {
 			case 8: *tmp = read(8); break;
 			case 16: *tmp = read(16); break;
 			case 32: *tmp = read(32); break;
-			default: __builtin_unreachable();
+			default: unreachable();
 			}
 		} else if (ret.elem_type == DI_TYPE_STRING) {
 			const char **tmp = curr;

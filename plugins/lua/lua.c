@@ -139,7 +139,7 @@ static struct di_object *di_lua_checkobject(lua_State *L, int index) {
 	if (di_lua_isobject(L, index))
 		return *(struct di_object **)lua_touserdata(L, index);
 	luaL_argerror(L, index, "not a di_object");
-	__builtin_unreachable();
+	unreachable();
 }
 
 struct lua_table_getter {
