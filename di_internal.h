@@ -40,7 +40,6 @@ struct di_member {
 	char *nonnull name;
 	void *nonnull data;
 	di_type_t type;
-	bool writable;
 	bool own;
 	UT_hash_handle hh;
 };
@@ -49,16 +48,14 @@ static ffi_type ffi_type_di_array = {
     .size = 0,
     .alignment = 0,
     .type = FFI_TYPE_STRUCT,
-    .elements =
-        (ffi_type *[]){&ffi_type_uint64, &ffi_type_pointer, &ffi_type_uint8, NULL},
+    .elements = (ffi_type *[]){&ffi_type_uint64, &ffi_type_pointer, &ffi_type_uint8, NULL},
 };
 
 static ffi_type ffi_type_di_tuple = {
     .size = 0,
     .alignment = 0,
     .type = FFI_TYPE_STRUCT,
-    .elements =
-        (ffi_type *[]){&ffi_type_uint64, &ffi_type_pointer, &ffi_type_pointer, NULL},
+    .elements = (ffi_type *[]){&ffi_type_uint64, &ffi_type_pointer, &ffi_type_pointer, NULL},
 };
 
 static_assert(sizeof(bool) == sizeof(uint8_t), "bool is not uint8_t, unsupported "

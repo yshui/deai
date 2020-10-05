@@ -98,11 +98,11 @@ const char *nonnull di_get_type(struct di_object *nonnull o);
 bool di_check_type(struct di_object *nonnull o, const char *nonnull type);
 
 int nonnull_all di_add_member_move(struct di_object *nonnull o, const char *nonnull name,
-                                   bool writable, di_type_t *nonnull, void *nonnull address);
+                                   di_type_t *nonnull, void *nonnull address);
 int nonnull_all di_add_member_ref(struct di_object *nonnull o, const char *nonnull name,
-                                  bool writable, di_type_t, void *nonnull address);
+                                  di_type_t, void *nonnull address);
 int nonnull_all di_add_member_clone(struct di_object *nonnull o, const char *nonnull name,
-                                    bool writable, di_type_t, ...);
+                                    di_type_t, ...);
 int di_remove_member(struct di_object *nonnull o, const char *nonnull name);
 struct di_member *nullable di_lookup(struct di_object *nonnull o, const char *nonnull name);
 struct di_object *nullable di_new_object(size_t sz);

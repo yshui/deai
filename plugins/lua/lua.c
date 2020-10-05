@@ -209,8 +209,7 @@ static struct di_lua_ref *lua_type_to_di_object(lua_State *L, int i, void *call)
 	auto getter = di_new_object_with_type(struct lua_table_getter);
 	getter->call = di_lua_table_get;
 	getter->t = o;
-	di_add_member_move((void *)o, "__get", false, (di_type_t[]){DI_TYPE_OBJECT},
-	                   (void **)&getter);
+	di_add_member_move((void *)o, "__get", (di_type_t[]){DI_TYPE_OBJECT}, (void **)&getter);
 	o->dtor = (void *)lua_ref_dtor;
 	o->call = call;
 	o->d = di_listen_to_destroyed((void *)s->L, trivial_destroyed_handler, (void *)o);

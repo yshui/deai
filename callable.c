@@ -255,7 +255,7 @@ PUBLIC int di_add_method(struct di_object *o, const char *name, void (*fn)(void)
 	di_set_type((void *)f, "deai:method");
 
 	f->this = o;
-	return di_add_member_move(o, name, false, (di_type_t[]){DI_TYPE_OBJECT}, (void **)&f);
+	return di_add_member_move(o, name, (di_type_t[]){DI_TYPE_OBJECT}, (void **)&f);
 }
 
 // va_args version of di_call_callable

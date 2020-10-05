@@ -106,7 +106,7 @@ PUBLIC int di_setx(struct di_object *o, const char *name, di_type_t type, void *
 	auto mem = di_lookup(o, name);
 	int rc;
 	void *val2;
-	if (mem && mem->writable) {
+	if (mem) {
 		rc = di_type_conversion(type, val, mem->type, &val2);
 		if (rc != 0)
 			return rc;
@@ -176,7 +176,7 @@ PUBLIC gen_tfunc(di_getxt, di_getx);
 PUBLIC gen_tfunc(di_rawgetxt, di_rawgetx);
 
 PUBLIC int di_set_type(struct di_object *o, const char *tyname) {
-	return di_add_member_clone(o, "__type", false, DI_TYPE_STRING_LITERAL, tyname);
+	return di_add_member_clone(o, "__type", DI_TYPE_STRING_LITERAL, tyname);
 }
 
 PUBLIC const char *di_get_type(struct di_object *o) {
@@ -305,7 +305,8 @@ PUBLIC size_t di_min_return_size(size_t in) {
 static int check_new_member(struct di_object *r, struct di_member *m) {
 	// member name rules:
 	// "<name>" and "__get_<name>" can't exist at the same time
-	// if "<name>" member is writable, then "__set_<name>" can't exist
+	// ("<name>" and "__set_<name>" can co-exist, the setter will always be called
+	// when setting the value, making "<name>" readonly)
 	// internal names (starts with __) can't have getter/setter (might change)
 
 	struct di_member *om = NULL;
@@ -329,10 +330,6 @@ static int check_new_member(struct di_object *r, struct di_member *m) {
 		const char *fname = m->name + 6;
 		if (strncmp(fname, "__", 2) == 0)
 			return -EINVAL;
-
-		HASH_FIND_STR(r->members, m->name, om);
-		if (om && om->writable)
-			return -EEXIST;
 	} else if (strncmp(m->name, "__", 2) != 0) {
 		char *buf;
 		asprintf(&buf, "__get_%s", m->name);
@@ -342,16 +339,6 @@ static int check_new_member(struct di_object *r, struct di_member *m) {
 
 		if (om)
 			return -EEXIST;
-
-		if (m->writable) {
-			asprintf(&buf, "__set_%s", m->name);
-
-			HASH_FIND_STR(r->members, buf, om);
-			free(buf);
-
-			if (om)
-				return -EEXIST;
-		}
 	}
 	return 0;
 }
@@ -373,7 +360,7 @@ static int di_insert_member(struct di_object *r, struct di_member *m) {
 //
 // Which means, if own = true, after di_add_member returns, the ref to the value
 // `*v` points to is consumed, and the memory location `v` points to is freed
-static int di_add_member(struct di_object *o, const char *name, bool writable, bool own,
+static int di_add_member(struct di_object *o, const char *name, bool own,
                          di_type_t t, void *v) {
 	if (!name)
 		return -EINVAL;
@@ -382,7 +369,6 @@ static int di_add_member(struct di_object *o, const char *name, bool writable, b
 	m->type = t;
 	m->data = v;
 	m->name = strdup(name);
-	m->writable = writable;
 	m->own = own;
 
 	int ret = di_insert_member(o, m);
@@ -397,8 +383,8 @@ static int di_add_member(struct di_object *o, const char *name, bool writable, b
 	return ret;
 }
 
-PUBLIC int di_add_member_clone(struct di_object *o, const char *name, bool writable,
-                               di_type_t t, ...) {
+PUBLIC int
+di_add_member_clone(struct di_object *o, const char *name, di_type_t t, ...) {
 	if (di_sizeof_type(t) == 0)
 		return -EINVAL;
 
@@ -413,10 +399,10 @@ PUBLIC int di_add_member_clone(struct di_object *o, const char *name, bool writa
 	di_copy_value(t, v, nv);
 	free(nv);
 
-	return di_add_member(o, name, writable, true, t, v);
+	return di_add_member(o, name, true, t, v);
 }
 
-PUBLIC int di_add_member_move(struct di_object *o, const char *name, bool writable,
+PUBLIC int di_add_member_move(struct di_object *o, const char *name,
                               di_type_t *t, void *addr) {
 	auto sz = di_sizeof_type(*t);
 	if (sz == 0)
@@ -429,12 +415,12 @@ PUBLIC int di_add_member_move(struct di_object *o, const char *name, bool writab
 	*t = DI_TYPE_UNIT;
 	memset(addr, 0, sz);
 
-	return di_add_member(o, name, writable, true, tt, taddr);
+	return di_add_member(o, name, true, tt, taddr);
 }
 
-PUBLIC int di_add_member_ref(struct di_object *o, const char *name, bool writable,
+PUBLIC int di_add_member_ref(struct di_object *o, const char *name,
                              di_type_t t, void *addr) {
-	return di_add_member(o, name, writable, false, t, addr);
+	return di_add_member(o, name, false, t, addr);
 }
 
 PUBLIC struct di_member *di_lookup(struct di_object *o, const char *name) {
@@ -462,13 +448,20 @@ PUBLIC void di_free_array(struct di_array arr) {
 
 PUBLIC void di_free_value(di_type_t t, void *ret) {
 	switch (t) {
-	case DI_TYPE_ARRAY: di_free_array(*(struct di_array *)ret); break;
-	case DI_TYPE_TUPLE: di_free_tuple(*(struct di_tuple *)ret); break;
-	case DI_TYPE_STRING: chknull(ret) free(*(char **)ret); break;
+	case DI_TYPE_ARRAY:
+		di_free_array(*(struct di_array *)ret);
+		break;
+	case DI_TYPE_TUPLE:
+		di_free_tuple(*(struct di_tuple *)ret);
+		break;
+	case DI_TYPE_STRING:
+		chknull(ret) free(*(char **)ret);
+		break;
 	case DI_TYPE_OBJECT:
 		chknull(ret) di_unref_object(*(struct di_object **)ret);
 		break;
-	default: break;
+	default:
+		break;
 	}
 }
 
@@ -486,11 +479,9 @@ PUBLIC void di_copy_value(di_type_t t, void *dst, const void *src) {
 		assert(di_sizeof_type(arr->elem_type) != 0);
 		d = calloc(arr->length, di_sizeof_type(arr->elem_type));
 		for (int i = 0; i < arr->length; i++)
-			di_copy_value(arr->elem_type,
-			              d + di_sizeof_type(arr->elem_type) * i,
+			di_copy_value(arr->elem_type, d + di_sizeof_type(arr->elem_type) * i,
 			              arr->arr + di_sizeof_type(arr->elem_type) * i);
-		*(struct di_array *)dst =
-		    (struct di_array){arr->length, d, arr->elem_type};
+		*(struct di_array *)dst = (struct di_array){arr->length, d, arr->elem_type};
 		break;
 	case DI_TYPE_TUPLE:
 		tuple = src;
@@ -498,12 +489,10 @@ PUBLIC void di_copy_value(di_type_t t, void *dst, const void *src) {
 		ret.elem_type = tmalloc(di_type_t, tuple->length);
 		ret.length = tuple->length;
 
-		memcpy(ret.elem_type, tuple->elem_type,
-		       sizeof(di_type_t) * tuple->length);
+		memcpy(ret.elem_type, tuple->elem_type, sizeof(di_type_t) * tuple->length);
 		for (int i = 0; i < tuple->length; i++) {
 			ret.tuple[i] = calloc(1, di_sizeof_type(tuple->elem_type[i]));
-			di_copy_value(tuple->elem_type[i], ret.tuple[i],
-			              tuple->tuple[i]);
+			di_copy_value(tuple->elem_type[i], ret.tuple[i], tuple->tuple[i]);
 		}
 		*(struct di_tuple *)dst = ret;
 		break;
@@ -660,8 +649,8 @@ PUBLIC int di_stop_listener(struct di_listener *l) {
 		HASH_DEL(l->signal->owner->signals, l->signal);
 		if (!is_destroy(l->signal->name)) {
 			call_handler_with_fallback(l->signal->owner, "__del_signal",
-			                           l->signal->name, DI_LAST_TYPE,
-			                           NULL, NULL, NULL);
+			                           l->signal->name, DI_LAST_TYPE, NULL,
+			                           NULL, NULL);
 			di_unref_object((void *)l->signal->owner);
 		}
 		free(l->signal->name);

@@ -179,7 +179,8 @@ void di_init_log(struct deai *di) {
 	auto dtgt = di_new_object_with_type(struct di_object);
 	di_method(dtgt, "write", _stderr_write, char *);
 
-	di_add_member_move((struct di_object *)l, "log_target", true, (di_type_t[]){DI_TYPE_OBJECT}, &dtgt);
+	di_add_member_move((struct di_object *)l, "log_target",
+	                   (di_type_t[]){DI_TYPE_OBJECT}, &dtgt);
 	l->call = di_log;
 	di_method(l, "file_target", file_target, char *, bool);
 	di_method(l, "stderr_target", stderr_target);
