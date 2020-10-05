@@ -18,20 +18,21 @@ struct di_module_internal;
 struct di_ev_prepare;
 struct deai {
 	struct di_object;
-	struct ev_loop *loop;
+	struct ev_loop *nonnull loop;
 
 	int argc;
-	char **argv;
+	char *nullable *nonnull argv;
 
-	char *proctitle, *proctitle_end;
+	char *nonnull proctitle;
+	char *nonnull proctitle_end;
 
-	int *exit_code;
-	bool *quit;
+	int *nonnull exit_code;
+	bool *nonnull quit;
 };
 
 struct di_module_internal {
 	struct di_object;
-	struct deai *di;
+	struct deai *nonnull di;
 	UT_hash_handle hh;
 };
 
@@ -64,7 +65,7 @@ static_assert(sizeof(bool) == sizeof(uint8_t), "bool is not uint8_t, unsupported
 static_assert(__alignof__(bool) == __alignof__(uint8_t), "bool is not uint8_t, "
                                                          "unsupported platform");
 
-static inline ffi_type *di_type_to_ffi(di_type_t in) {
+static inline ffi_type *nullable di_type_to_ffi(di_type_t in) {
 	ffi_type *const type_map[] = {
 	        [DI_TYPE_UNIT] = &ffi_type_void,
 	        [DI_TYPE_BOOL] = &ffi_type_uint8,
@@ -86,8 +87,8 @@ static inline ffi_type *di_type_to_ffi(di_type_t in) {
 	return type_map[in];
 }
 
-static inline ffi_status di_ffi_prep_cif(ffi_cif *cif, unsigned int nargs,
-                                         di_type_t rtype, const di_type_t *atypes) {
+static inline ffi_status di_ffi_prep_cif(ffi_cif *nonnull cif, unsigned int nargs,
+                                         di_type_t rtype, const di_type_t *nonnull atypes) {
 	ffi_type *ffi_rtype = di_type_to_ffi(rtype);
 	ffi_type **ffi_atypes = NULL;
 	if (nargs) {
