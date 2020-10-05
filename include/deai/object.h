@@ -11,11 +11,11 @@
 #include <deai/compiler.h>
 
 #include <assert.h>
-#include <stdlib.h>
 #include <errno.h>
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
+#include <stdlib.h>
 #include <string.h>
 
 /// deai type ids. Use negative numbers for invalid types.
@@ -146,19 +146,29 @@ static inline size_t di_sizeof_type(di_type_t t) {
 	case DI_TYPE_ANY:
 	case DI_LAST_TYPE:
 		return 0;
-	case DI_TYPE_FLOAT: return sizeof(double);
-	case DI_TYPE_ARRAY: return sizeof(struct di_array);
-	case DI_TYPE_TUPLE: return sizeof(struct di_tuple);
+	case DI_TYPE_FLOAT:
+		return sizeof(double);
+	case DI_TYPE_ARRAY:
+		return sizeof(struct di_array);
+	case DI_TYPE_TUPLE:
+		return sizeof(struct di_tuple);
 	case DI_TYPE_UINT:
-	case DI_TYPE_INT: return 8;
-	case DI_TYPE_NUINT: return sizeof(unsigned int);
-	case DI_TYPE_NINT: return sizeof(int);
+	case DI_TYPE_INT:
+		return 8;
+	case DI_TYPE_NUINT:
+		return sizeof(unsigned int);
+	case DI_TYPE_NINT:
+		return sizeof(int);
 	case DI_TYPE_STRING:
 	case DI_TYPE_STRING_LITERAL:
 	case DI_TYPE_OBJECT:
-	case DI_TYPE_POINTER: return sizeof(void *);
-	case DI_TYPE_BOOL: return sizeof(bool);
-	default: assert(false); unreachable();
+	case DI_TYPE_POINTER:
+		return sizeof(void *);
+	case DI_TYPE_BOOL:
+		return sizeof(bool);
+	default:
+		assert(false);
+		unreachable();
 	}
 }
 
