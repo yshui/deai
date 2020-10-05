@@ -67,7 +67,7 @@ static int _di_typed_trampoline(ffi_cif *cif, void (*fn)(void), void *ret,
 		rc = di_type_conversion(ats[i - nargs0], args[i - nargs0],
 		                        fnats[i - nargs0], xargs + i);
 		if (rc != 0) {
-			if (ats[i - nargs0] == DI_TYPE_NIL) {
+			if (ats[i - nargs0] == DI_TYPE_UNIT) {
 				struct di_array *arr;
 				switch (fnats[i - nargs0]) {
 				case DI_TYPE_OBJECT:
@@ -81,8 +81,7 @@ static int _di_typed_trampoline(ffi_cif *cif, void (*fn)(void), void *ret,
 					break;
 				case DI_TYPE_ARRAY:
 					arr = tmalloc(struct di_array, 1);
-					arr->length = 0;
-					arr->elem_type = DI_TYPE_NIL;
+					*arr = DI_ARRAY_UNIT;
 					xargs[i] = arr;
 					rc = 0;
 					break;
@@ -236,7 +235,7 @@ PUBLIC int di_add_method(struct di_object *o, const char *name, void (*fn)(void)
 	va_start(ap, nargs);
 	for (unsigned int i = 0; i < nargs; i++) {
 		f->atypes[i + 1] = va_arg(ap, di_type_t);
-		if (f->atypes[i + 1] == DI_TYPE_NIL) {
+		if (f->atypes[i + 1] == DI_TYPE_UNIT) {
 			free(f);
 			return -EINVAL;
 		}
@@ -265,7 +264,7 @@ PUBLIC int di_call_objectv(struct di_object *o, di_type_t *rtype, void **ret, va
 		return -EINVAL;
 
 	va_list ap2;
-	struct di_tuple tu = DI_TUPLE_NIL;
+	struct di_tuple tu = DI_TUPLE_UNIT;
 
 	va_copy(ap2, ap);
 	di_type_t t = va_arg(ap, di_type_t);

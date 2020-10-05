@@ -457,7 +457,7 @@ static bool di_lua_checkarray(lua_State *L, int index, int *nelem, di_type_t *el
 	lua_pushnil(L);
 	if (lua_next(L, index) == 0) {
 		// Empty array
-		*elemt = DI_TYPE_VOID;
+		*elemt = DI_TYPE_ANY;
 		*nelem = 0;
 		return true;
 	}
@@ -473,7 +473,9 @@ static bool di_lua_checkarray(lua_State *L, int index, int *nelem, di_type_t *el
 	// Pop 2 value, top of stack is the key
 	lua_pop(L, 2);
 
-	if (*elemt == DI_TYPE_VOID || *elemt >= DI_LAST_TYPE || *elemt == DI_TYPE_NIL) {
+	// We already ruled out empty tables
+	assert(*elemt != DI_TYPE_UINT);
+	if (*elemt < 0 || *elemt == DI_TYPE_UNIT) {
 		// Unsupported element types
 		lua_pop(L, 1);
 		return false;
@@ -584,13 +586,14 @@ static void *di_lua_type_to_di(lua_State *L, int i, di_type_t *t) {
 			ret = malloc(sizeof(struct di_object *));
 			*(void **)ret = lua_type_to_di_object(L, i, NULL);
 		} else {
-			// Empty table should be pushed as nil, because empty tables can
+			// Empty table should be pushed as unit, because empty tables can
 			// either be interpreted as an empty di_array or an empty
 			// di_object.
-			// We pass nil for it because di_typed_trampoline knows how to
-			// convert nil to the required type.
+			// We pass unit for it because di_typed_trampoline knows how to
+			// convert unit to either array or object as required.
 			if (!nelem) {
-				*t = DI_TYPE_NIL;
+				assert(elemt == DI_TYPE_ANY);
+				*t = DI_TYPE_UNIT;
 				ret = NULL;
 			} else {
 				*t = DI_TYPE_ARRAY;
@@ -601,10 +604,10 @@ static void *di_lua_type_to_di(lua_State *L, int i, di_type_t *t) {
 		return ret;
 	case LUA_TFUNCTION: ret_arg(i, DI_TYPE_OBJECT, struct di_object *, todiobj);
 	case LUA_TNIL:
-		*t = DI_TYPE_NIL;
+		*t = DI_TYPE_UNIT;
 		return NULL;
 	type_error:
-	default: *t = DI_LAST_TYPE; return NULL;
+	default: *t = -1; return NULL;
 	}
 #undef ret_arg
 #undef tostringdup
@@ -677,7 +680,7 @@ static int di_lua_pushany(lua_State *L, const char *name, di_type_t t, const voi
 
 	if (t == DI_TYPE_ARRAY) {
 		const struct di_array *tmp = d;
-		if (tmp->elem_type == DI_TYPE_NIL) {
+		if (tmp->elem_type == DI_TYPE_ANY) {
 			lua_pushnil(L);
 			return 1;
 		}
@@ -728,9 +731,9 @@ static int di_lua_pushany(lua_State *L, const char *name, di_type_t t, const voi
 		b = *(bool *)d;
 		lua_pushboolean(L, b);
 		return 1;
-	// shouldn't happen
-	case DI_TYPE_VOID:
-	default: return 0;
+	case DI_TYPE_UNIT: lua_pushnil(L); return 0;
+	case DI_TYPE_ANY:
+	case DI_LAST_TYPE: DI_ASSERT(false, "Value with invalid type"); return 0;
 	}
 
 pushint:
@@ -825,7 +828,7 @@ static int di_lua_setter(lua_State *L) {
 	di_type_t vt;
 
 	void *val = di_lua_type_to_di(L, 3, &vt);
-	if (!val && vt != DI_TYPE_NIL)
+	if (!val && vt != DI_TYPE_UNIT)
 		return luaL_error(L, "unhandled lua type");
 
 	int ret = di_setx(ud, key, vt, val);

@@ -201,10 +201,6 @@ PUBLIC bool di_check_type(struct di_object *o, const char *tyname) {
 	return strcmp(ot, tyname) == 0;
 }
 
-PUBLIC struct di_array di_get_keys_of_object(struct di_object *o) {
-	return DI_ARRAY_NIL;
-}
-
 PUBLIC struct di_object *di_new_object(size_t sz) {
 	if (sz < sizeof(struct di_object))
 		return NULL;
@@ -433,7 +429,7 @@ PUBLIC int di_add_member_move(struct di_object *o, const char *name, bool writab
 	void *taddr = malloc(sz);
 	memcpy(taddr, addr, sz);
 
-	*t = DI_TYPE_NIL;
+	*t = DI_TYPE_UNIT;
 	memset(addr, 0, sz);
 
 	return di_add_member(o, name, writable, true, tt, taddr);
@@ -485,8 +481,8 @@ PUBLIC void di_copy_value(di_type_t t, void *dst, const void *src) {
 	struct di_tuple ret;
 	void *d;
 
-	// dst and src only allowed to be null when t is nil
-	assert(t == DI_TYPE_NIL || (dst && src));
+	// dst and src only allowed to be null when t is unit
+	assert(t == DI_TYPE_UNIT || (dst && src));
 	switch (t) {
 	case DI_TYPE_ARRAY:
 		arr = src;
@@ -521,9 +517,12 @@ PUBLIC void di_copy_value(di_type_t t, void *dst, const void *src) {
 		di_ref_object(*(struct di_object **)src);
 		*(struct di_object **)dst = *(struct di_object **)src;
 		break;
-	case DI_TYPE_NIL:
+	case DI_TYPE_UNIT:
 		// nothing to do
 		break;
+	case DI_TYPE_ANY:
+	case DI_LAST_TYPE:
+		DI_PANIC("Trying to copy invalid types");
 	default: memmove(dst, src, di_sizeof_type(t)); break;
 	}
 }

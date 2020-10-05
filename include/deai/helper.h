@@ -291,8 +291,8 @@ int di_proxy_signal(struct di_object *nonnull src, const char *nonnull srcsig,
 
 #define TYPE_INIT(type)                                                             \
 	_Generic((type *)0, \
-	struct di_array *: DI_ARRAY_NIL, \
-	struct di_tuple *: DI_TUPLE_NIL, \
+	struct di_array *: DI_ARRAY_UNIT, \
+	struct di_tuple *: DI_TUPLE_UNIT, \
 	int *: 0, \
 	unsigned int *: 0, \
 	int64_t *: 0, \

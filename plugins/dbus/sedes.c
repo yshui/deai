@@ -98,7 +98,7 @@ static void _dbus_deserialize_array(DBusMessageIter *i, struct di_array *retp,
 	size_t esize = di_sizeof_type(ret.elem_type);
 	ret.length = length;
 	if (ret.elem_type >= DI_LAST_TYPE) {
-		*retp = DI_ARRAY_NIL;
+		*retp = DI_ARRAY_UNIT;
 		return;
 	}
 	ret.arr = calloc(ret.length, esize);
