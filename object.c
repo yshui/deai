@@ -115,7 +115,10 @@ PUBLIC int di_setx(struct di_object *o, const char *name, di_type_t type, void *
 		if (mem->own)
 			di_free_value(mem->type, mem->data);
 		di_copy_value(mem->type, mem->data, val2);
-		free((void *)val2);
+		if (val2 != val) {
+			di_free_value(mem->type, val2);
+			free((void *)val2);
+		}
 		return 0;
 	}
 
@@ -163,7 +166,10 @@ PUBLIC int di_getx(struct di_object *o, const char *name, di_type_t *type, void 
 			return rc;                                                       \
                                                                                          \
 		rc = di_type_conversion(rt, ret2, rtype, ret);                           \
-		free((void *)ret2);                                                      \
+		if (*ret != ret2) {                                                      \
+			di_free_value(rt, ret2);                                         \
+			free((void *)ret2);                                              \
+		}                                                                        \
 		if (rc != 0)                                                             \
 			return rc;                                                       \
                                                                                          \
@@ -358,8 +364,8 @@ static int di_insert_member(struct di_object *r, struct di_member *m) {
 //
 // Which means, if own = true, after di_add_member returns, the ref to the value
 // `*v` points to is consumed, and the memory location `v` points to is freed
-static int di_add_member(struct di_object *o, const char *name, bool own,
-                         di_type_t t, void *v) {
+static int
+di_add_member(struct di_object *o, const char *name, bool own, di_type_t t, void *v) {
 	if (!name)
 		return -EINVAL;
 
@@ -381,8 +387,7 @@ static int di_add_member(struct di_object *o, const char *name, bool own,
 	return ret;
 }
 
-PUBLIC int
-di_add_member_clone(struct di_object *o, const char *name, di_type_t t, ...) {
+PUBLIC int di_add_member_clone(struct di_object *o, const char *name, di_type_t t, ...) {
 	if (di_sizeof_type(t) == 0)
 		return -EINVAL;
 
@@ -400,8 +405,7 @@ di_add_member_clone(struct di_object *o, const char *name, di_type_t t, ...) {
 	return di_add_member(o, name, true, t, v);
 }
 
-PUBLIC int di_add_member_move(struct di_object *o, const char *name,
-                              di_type_t *t, void *addr) {
+PUBLIC int di_add_member_move(struct di_object *o, const char *name, di_type_t *t, void *addr) {
 	auto sz = di_sizeof_type(*t);
 	if (sz == 0)
 		return -EINVAL;
@@ -416,8 +420,7 @@ PUBLIC int di_add_member_move(struct di_object *o, const char *name,
 	return di_add_member(o, name, true, tt, taddr);
 }
 
-PUBLIC int di_add_member_ref(struct di_object *o, const char *name,
-                             di_type_t t, void *addr) {
+PUBLIC int di_add_member_ref(struct di_object *o, const char *name, di_type_t t, void *addr) {
 	return di_add_member(o, name, false, t, addr);
 }
 
@@ -427,7 +430,9 @@ PUBLIC struct di_member *di_lookup(struct di_object *o, const char *name) {
 	return (void *)ret;
 }
 
-#define chknull(v) if ((*(void **)(v)) != NULL)
+#define chknull(v)                                                                       \
+	if ((*(void **)(v)) == NULL)                                                     \
+	break
 PUBLIC void di_free_tuple(struct di_tuple t) {
 	for (int i = 0; i < t.length; i++) {
 		di_free_value(t.elem_type[i], t.tuple[i]);
@@ -453,10 +458,12 @@ PUBLIC void di_free_value(di_type_t t, void *ret) {
 		di_free_tuple(*(struct di_tuple *)ret);
 		break;
 	case DI_TYPE_STRING:
-		chknull(ret) free(*(char **)ret);
+		chknull(ret);
+		free(*(char **)ret);
 		break;
 	case DI_TYPE_OBJECT:
-		chknull(ret) di_unref_object(*(struct di_object **)ret);
+		chknull(ret);
+		di_unref_object(*(struct di_object **)ret);
 		break;
 	default:
 		break;

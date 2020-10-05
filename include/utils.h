@@ -80,10 +80,12 @@ static inline bool is_integer(di_type_t t) {
 	return t == DI_TYPE_INT || t == DI_TYPE_NINT || t == DI_TYPE_UINT || t == DI_TYPE_NUINT;
 }
 
-static inline int
+/// Convert value `inp` to type `outty`. `*outp != inp` if and only if a conversion
+/// happened. And if a conversion did happen, it's safe to free the original value.
+static inline int unused
 di_type_conversion(di_type_t inty, const void *inp, di_type_t outty, void **outp) {
 	if (inty == outty) {
-		typed_alloc_copy(inty, inp, outp);
+		*outp = (void *)inp;
 		return 0;
 	}
 

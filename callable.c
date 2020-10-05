@@ -99,8 +99,10 @@ static int _di_typed_trampoline(ffi_cif *cif, void (*fn)(void), void *ret,
 
 out:
 	for (int i = nargs0; i < nargs0 + nargs; i++) {
-		if (xargs[i] != args[i - nargs0] && xargs[i] != &null_ptr)
+		if (xargs[i] != args[i - nargs0] && xargs[i] != &null_ptr) {
+			di_free_value(fnats[i - nargs0], xargs[i]);
 			free((void *)xargs[i]);
+		}
 	}
 
 	return rc;

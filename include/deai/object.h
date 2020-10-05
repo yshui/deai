@@ -19,6 +19,13 @@
 #include <string.h>
 
 /// deai type ids. Use negative numbers for invalid types.
+///
+/// Notes:
+///
+/// * Arrays are passed by value, which contains a pointer to the array storage. It has the
+///   same effect as C++ vectors. You can modify the elements of the array, but if you
+///   change the storage pointer, it won't be reflected in the actual array. The same
+///   applies to tuples as well.
 typedef enum di_type {
 	DI_TYPE_UNIT = 0,
 	DI_TYPE_ANY,                   // any, only used as element type for empty arrays.
