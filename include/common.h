@@ -7,6 +7,7 @@
 #pragma once
 
 #include <deai/compiler.h>
+#include <stdio.h>
 
 #define tmalloc(type, nmem) (type *)calloc(nmem, sizeof(type))
 #define auto __auto_type
@@ -62,4 +63,30 @@ static void unused __clang_cleanup_func(void (^*dfunc)(void)) {
         unused;                                                              \
     void CONCAT(__defer_f_, count)(void* _defer_arg unused)
 #define defer _DEFER(a, __COUNTER__)
+#endif
+
+/// Check if `expr` is true, panic with `msg` if not.
+#define DI_CHECK(expr, msg)                                                              \
+	do {                                                                             \
+		__auto_type __di_check_tmp = (expr);                                     \
+		if (!__di_check_tmp) {                                                   \
+			fprintf(stderr, "Check \"%s\" failed in %s at %s:%d. %s", #expr, \
+			        __func__, __FILE__, __LINE__, msg);                      \
+			abort();                                                         \
+			unreachable();                                                   \
+		}                                                                        \
+	} while (0)
+
+/// Panic the program with `msg`
+#define DI_PANIC(msg)                                                                    \
+	do {                                                                             \
+		DI_CHECK(false, msg);                                                    \
+		unreachable();                                                           \
+	} while (0)
+
+#ifdef NDEBUG
+#define DI_ASSERT(expr, msg)
+#else
+/// Like DI_CHECK, but only enabled in debug builds
+#define DI_ASSERT(expr, msg) DI_CHECK(expr, msg)
 #endif

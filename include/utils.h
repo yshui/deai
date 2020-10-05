@@ -9,8 +9,11 @@
 #include <assert.h>
 #include <limits.h>
 #include <stdbool.h>
+#include <stdlib.h>
 #include <string.h>
 
+#include <deai/compiler.h>
+#include <deai/object.h>
 #include "common.h"
 
 static inline void typed_alloc_copy(di_type_t type, const void *src, void **dest) {
@@ -26,26 +29,26 @@ integer_conversion(di_type_t inty, const void *inp, di_type_t outty, void **outp
 		return 0;
 	}
 
-#define convert_case(srct, dstt, dstmax, dstmin)                                    \
-	case di_typeof((srct)0):                                                    \
-		do {                                                                \
-			srct tmp = *(srct *)(inp);                                  \
-			if (tmp > (dstmax) || tmp < (dstmin)) {                     \
-				*outp = NULL;                                       \
-				return -ERANGE;                                     \
-			}                                                           \
-			dstt *tmp2 = malloc(sizeof(dstt));                          \
-			*tmp2 = (dstt)tmp;                                          \
-			*outp = tmp2;                                               \
-		} while (0);                                                        \
+#define convert_case(srct, dstt, dstmax, dstmin)                                         \
+	case di_typeof((srct)0):                                                         \
+		do {                                                                     \
+			srct tmp = *(srct *)(inp);                                       \
+			if (tmp > (dstmax) || tmp < (dstmin)) {                          \
+				*outp = NULL;                                            \
+				return -ERANGE;                                          \
+			}                                                                \
+			dstt *tmp2 = malloc(sizeof(dstt));                               \
+			*tmp2 = (dstt)tmp;                                               \
+			*outp = tmp2;                                                    \
+		} while (0);                                                             \
 		break
 
-#define convert_switch(s1, s2, s3, ...)                                             \
-	switch (inty) {                                                             \
-		convert_case(s1, __VA_ARGS__);                                      \
-		convert_case(s2, __VA_ARGS__);                                      \
-		convert_case(s3, __VA_ARGS__);                                      \
-	default: *outp = NULL; return -EINVAL;                                      \
+#define convert_switch(s1, s2, s3, ...)                                                  \
+	switch (inty) {                                                                  \
+		convert_case(s1, __VA_ARGS__);                                           \
+		convert_case(s2, __VA_ARGS__);                                           \
+		convert_case(s3, __VA_ARGS__);                                           \
+	default: *outp = NULL; return -EINVAL;                                           \
 	}
 
 #pragma GCC diagnostic push
@@ -53,8 +56,7 @@ integer_conversion(di_type_t inty, const void *inp, di_type_t outty, void **outp
 #pragma GCC diagnostic ignored "-Wtautological-constant-out-of-range-compare"
 	switch (outty) {
 	case DI_TYPE_INT:
-		convert_switch(unsigned int, int, uint64_t, int64_t, INT64_MAX,
-		               INT64_MIN);
+		convert_switch(unsigned int, int, uint64_t, int64_t, INT64_MAX, INT64_MIN);
 		break;
 	case DI_TYPE_NINT:
 		convert_switch(unsigned int, uint64_t, int64_t, int, INT_MAX, INT_MIN);
@@ -75,8 +77,7 @@ integer_conversion(di_type_t inty, const void *inp, di_type_t outty, void **outp
 }
 
 static inline bool is_integer(di_type_t t) {
-	return t == DI_TYPE_INT || t == DI_TYPE_NINT || t == DI_TYPE_UINT ||
-	       t == DI_TYPE_NUINT;
+	return t == DI_TYPE_INT || t == DI_TYPE_NINT || t == DI_TYPE_UINT || t == DI_TYPE_NUINT;
 }
 
 static inline int
@@ -98,7 +99,7 @@ di_type_conversion(di_type_t inty, const void *inp, di_type_t outty, void **outp
 			return integer_conversion(inty, inp, outty, outp);
 		if (outty == DI_TYPE_FLOAT) {
 			double *res = malloc(sizeof(double));
-#define convert_case(srct)                                                          \
+#define convert_case(srct)                                                               \
 	case di_typeof((srct)0): *res = (double)*(srct *)inp; break;
 			switch (inty) {
 				convert_case(unsigned int);
