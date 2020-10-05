@@ -72,7 +72,9 @@ static int _di_typed_trampoline(ffi_cif *cif, void (*fn)(void), void *ret,
 				switch (fnats[i - nargs0]) {
 				case DI_TYPE_OBJECT:
 					rc = 0;
-					xargs[i] = &null_ptr;
+					xargs[i] = tmalloc(struct di_object *, 1);
+					*(struct di_object **)xargs[i] =
+					    di_new_object(sizeof(struct di_object));
 					break;
 				case DI_TYPE_STRING:
 				case DI_TYPE_POINTER:
@@ -85,7 +87,9 @@ static int _di_typed_trampoline(ffi_cif *cif, void (*fn)(void), void *ret,
 					xargs[i] = arr;
 					rc = 0;
 					break;
-				default: xargs[i] = NULL; goto out;
+				default:
+					xargs[i] = NULL;
+					goto out;
 				}
 			} else {
 				// Conversion failed
