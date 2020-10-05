@@ -15,7 +15,7 @@ Language: Cpp
 SpacesBeforeTrailingComments: 8
 SpaceBeforeAssignmentOperators: true
 AllowShortIfStatementsOnASingleLine: false
-AllowShortCaseLabelsOnASingleLine: true
+AllowShortCaseLabelsOnASingleLine: false
 AllowShortFunctionsOnASingleLine: false
 IndentCaseLabels: false
 PenaltyReturnTypeOnItsOwnLine: 0
