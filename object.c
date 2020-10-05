@@ -223,8 +223,8 @@ PUBLIC struct di_module *di_new_module(size_t size) {
 	return (void *)pm;
 }
 
-static void _di_remove_member(struct di_object *obj, struct di_member_internal *m) {
-	HASH_DEL(*(struct di_member_internal **)&obj->members, m);
+static void _di_remove_member(struct di_object *obj, struct di_member *m) {
+	HASH_DEL(*(struct di_member **)&obj->members, m);
 
 	if (m->own) {
 		di_free_value(m->type, m->data);
@@ -260,7 +260,7 @@ PUBLIC void di_destroy_object(struct di_object *obj) {
 		tmp(obj);
 	}
 
-	struct di_member_internal *m = (void *)obj->members;
+	struct di_member *m = (void *)obj->members;
 	while (m) {
 		auto next_m = m->hh.next;
 #if 0
@@ -302,21 +302,18 @@ PUBLIC size_t di_min_return_size(size_t in) {
 	return in;
 }
 
-// cast a di_member to di_member_internal, when you need a lvalue
-#define M(x) (*(struct di_member_internal **)&(x))
-
-static int check_new_member(struct di_object *r, struct di_member_internal *m) {
+static int check_new_member(struct di_object *r, struct di_member *m) {
 	// member name rules:
 	// "<name>" and "__get_<name>" can't exist at the same time
 	// if "<name>" member is writable, then "__set_<name>" can't exist
 	// internal names (starts with __) can't have getter/setter (might change)
 
-	struct di_member_internal *om = NULL;
+	struct di_member *om = NULL;
 
 	if (!m->name)
 		return -EINVAL;
 
-	HASH_FIND_STR(M(r->members), m->name, om);
+	HASH_FIND_STR(r->members, m->name, om);
 	if (om)
 		return -EEXIST;
 
@@ -325,7 +322,7 @@ static int check_new_member(struct di_object *r, struct di_member_internal *m) {
 		if (strncmp(fname, "__", 2) == 0)
 			return -EINVAL;
 
-		HASH_FIND_STR(M(r->members), m->name, om);
+		HASH_FIND_STR(r->members, m->name, om);
 		if (om)
 			return -EEXIST;
 	} else if (strncmp(m->name, "__set_", 6) == 0) {
@@ -333,14 +330,14 @@ static int check_new_member(struct di_object *r, struct di_member_internal *m) {
 		if (strncmp(fname, "__", 2) == 0)
 			return -EINVAL;
 
-		HASH_FIND_STR(M(r->members), m->name, om);
+		HASH_FIND_STR(r->members, m->name, om);
 		if (om && om->writable)
 			return -EEXIST;
 	} else if (strncmp(m->name, "__", 2) != 0) {
 		char *buf;
 		asprintf(&buf, "__get_%s", m->name);
 
-		HASH_FIND_STR(M(r->members), buf, om);
+		HASH_FIND_STR(r->members, buf, om);
 		free(buf);
 
 		if (om)
@@ -349,7 +346,7 @@ static int check_new_member(struct di_object *r, struct di_member_internal *m) {
 		if (m->writable) {
 			asprintf(&buf, "__set_%s", m->name);
 
-			HASH_FIND_STR(M(r->members), buf, om);
+			HASH_FIND_STR(r->members, buf, om);
 			free(buf);
 
 			if (om)
@@ -359,12 +356,12 @@ static int check_new_member(struct di_object *r, struct di_member_internal *m) {
 	return 0;
 }
 
-static int di_insert_member(struct di_object *r, struct di_member_internal *m) {
+static int di_insert_member(struct di_object *r, struct di_member *m) {
 	int ret = check_new_member(r, (void *)m);
 	if (ret != 0)
 		return ret;
 
-	HASH_ADD_KEYPTR(hh, M(r->members), m->name, strlen(m->name), m);
+	HASH_ADD_KEYPTR(hh, r->members, m->name, strlen(m->name), m);
 	return 0;
 }
 
@@ -376,12 +373,12 @@ static int di_insert_member(struct di_object *r, struct di_member_internal *m) {
 //
 // Which means, if own = true, after di_add_member returns, the ref to the value
 // `*v` points to is consumed, and the memory location `v` points to is freed
-static int di_add_member(struct di_object *o, const char *name, bool writable,
-                         bool own, di_type_t t, void *v) {
+static int di_add_member(struct di_object *o, const char *name, bool writable, bool own,
+                         di_type_t t, void *v) {
 	if (!name)
 		return -EINVAL;
 
-	auto m = tmalloc(struct di_member_internal, 1);
+	auto m = tmalloc(struct di_member, 1);
 	m->type = t;
 	m->data = v;
 	m->name = strdup(name);
@@ -420,7 +417,7 @@ PUBLIC int di_add_member_clone(struct di_object *o, const char *name, bool writa
 }
 
 PUBLIC int di_add_member_move(struct di_object *o, const char *name, bool writable,
-		di_type_t *t, void *addr) {
+                              di_type_t *t, void *addr) {
 	auto sz = di_sizeof_type(*t);
 	if (sz == 0)
 		return -EINVAL;
@@ -441,8 +438,8 @@ PUBLIC int di_add_member_ref(struct di_object *o, const char *name, bool writabl
 }
 
 PUBLIC struct di_member *di_lookup(struct di_object *o, const char *name) {
-	struct di_member_internal *ret = NULL;
-	HASH_FIND_STR(M(o->members), name, ret);
+	struct di_member *ret = NULL;
+	HASH_FIND_STR(o->members, name, ret);
 	return (void *)ret;
 }
 

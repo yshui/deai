@@ -44,6 +44,7 @@ typedef int (*di_call_fn_t)(struct di_object *nonnull, di_type_t *nonnull rt,
 struct di_signal;
 struct di_listener;
 struct di_callable;
+struct di_member;
 struct di_object {
 	struct di_member *nullable members;
 	struct di_signal *nullable signals;
@@ -73,13 +74,6 @@ struct di_module {
 	char padding[56];
 };
 
-struct di_member {
-	char *nonnull name;
-	void *nonnull data;
-	di_type_t type;
-	bool writable;
-	bool own;
-};
 
 int di_callx(struct di_object *nonnull o, const char *nonnull name, di_type_t *nonnull rt,
              void *nullable *nonnull ret, ...);

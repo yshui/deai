@@ -36,13 +36,14 @@ struct di_module_internal {
 	UT_hash_handle hh;
 };
 
-struct di_member_internal {
-	struct di_member;
+struct di_member {
+	char *nonnull name;
+	void *nonnull data;
+	di_type_t type;
+	bool writable;
+	bool own;
 	UT_hash_handle hh;
 };
-
-static_assert(sizeof(struct di_module_internal) == sizeof(struct di_module),
-              "di_module size mismatch");
 
 static ffi_type ffi_type_di_array = {
     .size = 0,
