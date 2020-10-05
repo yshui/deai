@@ -27,7 +27,7 @@ foreach arg: test_c_args
   endif
 endforeach
 
-base_c_args = base_c_args + [ '-fvisibility=hidden', '-fms-extensions', '-D_GNU_SOURCE' ]
+base_c_args = base_c_args + [ '-fvisibility=hidden', '-D_GNU_SOURCE' ]
 plugin_install_dir = get_option('libdir')+'/deai'
 if host_machine.system() == 'linux'
   have_setproctitle = true
