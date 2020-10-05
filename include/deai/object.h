@@ -242,7 +242,7 @@ static inline unused size_t di_sizeof_type(di_type_t t) {
 	int64_t *: DI_TYPE_INT, \
 	uint64_t *: DI_TYPE_UINT, \
 	char **: DI_TYPE_STRING, \
-	const char **: DI_TYPE_STRING, \
+	const char **: DI_TYPE_STRING_LITERAL, \
 	struct di_object **: DI_TYPE_OBJECT, \
 	void **: DI_TYPE_POINTER, \
 	double *: DI_TYPE_FLOAT, \
