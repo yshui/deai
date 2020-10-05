@@ -107,6 +107,8 @@ PUBLIC int di_setx(struct di_object *o, const char *name, di_type_t type, void *
 	int rc;
 	void *val2;
 	if (mem) {
+		// TODO(yshui) remove the type conversion.
+		// If automatic type conversion is desired, you should use a setter
 		rc = di_type_conversion(type, val, mem->type, &val2);
 		if (rc != 0)
 			return rc;

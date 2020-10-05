@@ -74,27 +74,85 @@ struct di_module {
 	char padding[56];
 };
 
+/// Fetch member object `name` from object `o`, then call the member object with `args`.
+///
+/// # Errors
+///
+/// * EINVAL: if the member object is not callable.
+/// * ENOENT: if the member object doesn't exist.
+///
+/// @param[out] rt The return type of the function
+/// @param[out] ret The return value
+int di_rawcallxn(struct di_object *nonnull o, const char *nonnull name,
+                 di_type_t *nonnull rt, void *nullable *nonnull ret, struct di_tuple args);
 
+/// Like `di_rawcallxn`, but also calls getter functions to fetch the member object. And
+/// the arguments are pass as variadic arguments. Arguments are passed as pairs of type
+/// ids and values, end with DI_LAST_TYPE.
+///
+/// You shouldn't use this function directly, use the `di_call` macro if you are using C.
 int di_callx(struct di_object *nonnull o, const char *nonnull name, di_type_t *nonnull rt,
              void *nullable *nonnull ret, ...);
-int di_rawcallx(struct di_object *nonnull o, const char *nonnull name,
-                di_type_t *nonnull rt, void *nullable *nonnull ret, ...);
-int di_rawcallxn(struct di_object *nonnull o, const char *nonnull name,
-                 di_type_t *nonnull rt, void *nullable *nonnull ret, struct di_tuple);
 
+/// Change the value of member `prop` of object `o`. It will call the setter if one exists.
+///
+/// NOTE: currently di_setx cannot change the type of `prop`, it will convert `val` to the
+/// type of `prop`. This WILL change!
+///
+/// @param[in] type The type of the value
+/// @param[in] val The value
 int di_setx(struct di_object *nonnull o, const char *nonnull prop, di_type_t type,
             void *nullable val);
+
+/// Fetch a member with name `prop` from an object `o`, without calling the getter
+/// functions. The value is cloned, then returned.
+///
+/// # Errors
+///
+/// * ENOENT: member `prop` not found.
+///
+/// @param[out] type Type of the value
+/// @param[out] ret The value
+/// @return 0 for success, or an error code.
 int di_rawgetx(struct di_object *nonnull o, const char *nonnull prop,
                di_type_t *nonnull type, void *nullable *nonnull ret);
+
+/// Like `di_rawgetx`, but tries to do automatic type conversion to the desired type `type`.
+///
+/// # Errors
+///
+/// Same as `di_rawgetx`, plus:
+///
+/// * EINVAL: if type conversion failes.
+///
+/// @param[out] ret The value
+/// @return 0 for success, or an error code.
 int di_rawgetxt(struct di_object *nonnull o, const char *nonnull prop, di_type_t type,
                 void *nullable *nonnull ret);
+
+/// Like `di_rawgetx`, but also calls getter functions if `prop` is not found.
+/// The getter functions are the generic getter "__get", or the specialized getter
+/// "__get_<prop>"
 int di_getx(struct di_object *nonnull no, const char *nonnull prop,
             di_type_t *nonnull type, void *nullable *nonnull ret);
+
+/// Like `di_rawgetxt`, but also calls getter functions if `prop` is not found.
 int di_getxt(struct di_object *nonnull o, const char *nonnull prop, di_type_t type,
              void *nullable *nonnull ret);
 
+/// Set the "__type" member of the object `o`. By convention, "__type" names the type of
+/// the object. Type names should be formated as "<namespace>:<type>". The "deai"
+/// namespace is used by deai.
+///
+/// @param[in] type The type name, must be a string literal
 int di_set_type(struct di_object *nonnull o, const char *nonnull type);
+
+/// Get the type name of the object
+///
+/// @return A const string, the type name. It shouldn't be freed.
 const char *nonnull di_get_type(struct di_object *nonnull o);
+
+/// Check if the type of the object is `type`
 bool di_check_type(struct di_object *nonnull o, const char *nonnull type);
 
 int nonnull_all di_add_member_move(struct di_object *nonnull o, const char *nonnull name,
@@ -134,7 +192,7 @@ void di_free_array(struct di_array);
 void di_free_value(di_type_t, void *nonnull);
 void di_copy_value(di_type_t t, void *nullable dest, const void *nullable src);
 
-static inline size_t di_sizeof_type(di_type_t t) {
+static inline unused size_t di_sizeof_type(di_type_t t) {
 	switch (t) {
 	case DI_TYPE_UNIT:
 	case DI_TYPE_ANY:
@@ -210,4 +268,4 @@ static const struct di_tuple unused DI_TUPLE_UNIT = {0, NULL, NULL};
 	}
 #define with_object_cleanup(t) with_cleanup(free_##t) struct t *
 
-define_object_cleanup(di_object);
+unused define_object_cleanup(di_object);
