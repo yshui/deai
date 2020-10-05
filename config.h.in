@@ -2,4 +2,4 @@
 #define DI_PLUGIN_INSTALL_DIR "@plugin_install_dir@"
 
 #mesondefine HAVE_SETPROCTITLE
-//#cmakedefine DI_REFCOUNT_DEBUG
+#mesondefine DI_REFCOUNT_DEBUG
