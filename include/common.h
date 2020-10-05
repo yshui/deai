@@ -19,16 +19,16 @@
  * @member:	the name of the member within the struct.
  *
  */
-#define container_of(ptr, type, member)                                             \
-	__extension__({                                                             \
-		const typeof(((type *)0)->member) *__mptr = (ptr);                  \
-		(type *)((char *)__mptr - offsetof(type, member));                  \
+#define container_of(ptr, type, member)                                                  \
+	__extension__({                                                                  \
+		const typeof(((type *)0)->member) *__mptr = (ptr);                       \
+		(type *)((char *)__mptr - offsetof(type, member));                       \
 	})
 
-#define define_trivial_cleanup(type, name)                                          \
-	static inline unused void name(type **ptr) {                                \
-		free(*ptr);                                                         \
-		*ptr = NULL;                                                        \
+#define define_trivial_cleanup(type, name)                                               \
+	static inline unused void name(type **ptr) {                                     \
+		free(*ptr);                                                              \
+		*ptr = NULL;                                                             \
 	}
 #define define_trivial_cleanup_t(type) define_trivial_cleanup(type, free_##type##p)
 
@@ -45,42 +45,42 @@
 #if __has_extension(blocks)
 __attribute__((weak)) long _NSConcreteGlobalBlock;
 static void unused __clang_cleanup_func(void (^*dfunc)(void)) {
-    (*dfunc)();
+	(*dfunc)();
 }
 
-#define defer                                        \
-    void (^CONCAT(__defer_f_, __COUNTER__))(void) \
-        __attribute__((cleanup(__clang_cleanup_func))) unused = ^
+#define defer                                                                            \
+	void (^CONCAT(__defer_f_, __COUNTER__))(void)                                    \
+	    __attribute__((cleanup(__clang_cleanup_func))) unused = ^
 
 #else
 #define defer _Static_assert(false, "no blocks support in clang");
 #endif
 #else
 
-#define _DEFER(a, count)                                                                      \
-    void CONCAT(__defer_f_, count)(void* _defer_arg unused);         \
-    int CONCAT(__defer_var_, count) __attribute__((cleanup(CONCAT(__defer_f_, count)))) \
-        unused;                                                              \
-    void CONCAT(__defer_f_, count)(void* _defer_arg unused)
+#define _DEFER(a, count)                                                                 \
+	void CONCAT(__defer_f_, count)(void *_defer_arg unused);                         \
+	int CONCAT(__defer_var_, count)                                                  \
+	    __attribute__((cleanup(CONCAT(__defer_f_, count)))) unused;                  \
+	void CONCAT(__defer_f_, count)(void *_defer_arg unused)
 #define defer _DEFER(a, __COUNTER__)
 #endif
 
 /// Check if `expr` is true, panic with `msg` if not.
-#define DI_CHECK(expr, msg)                                                              \
+#define DI_CHECK(expr, ...)                                                              \
 	do {                                                                             \
 		__auto_type __di_check_tmp = (expr);                                     \
 		if (!__di_check_tmp) {                                                   \
-			fprintf(stderr, "Check \"%s\" failed in %s at %s:%d. %s", #expr, \
-			        __func__, __FILE__, __LINE__, msg);                      \
+			fprintf(stderr, "Check \"" #expr "\" failed in %s at " __FILE__  \
+			        ":%d. %s\n", __func__, __LINE__, #__VA_ARGS__);          \
 			abort();                                                         \
 			unreachable();                                                   \
 		}                                                                        \
 	} while (0)
 
 /// Panic the program with `msg`
-#define DI_PANIC(msg)                                                                    \
+#define DI_PANIC(...)                                                                    \
 	do {                                                                             \
-		DI_CHECK(false, msg);                                                    \
+		DI_CHECK(false, ##__VA_ARGS__);                                           \
 		unreachable();                                                           \
 	} while (0)
 
@@ -88,5 +88,5 @@ static void unused __clang_cleanup_func(void (^*dfunc)(void)) {
 #define DI_ASSERT(expr, msg)
 #else
 /// Like DI_CHECK, but only enabled in debug builds
-#define DI_ASSERT(expr, msg) DI_CHECK(expr, msg)
+#define DI_ASSERT(expr, ...) DI_CHECK(expr, ##__VA_ARGS__)
 #endif
