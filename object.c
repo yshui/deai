@@ -86,7 +86,7 @@ call_handler_with_fallback(struct di_object *o, const char *prefix, const char *
 	tmp.tuple[1] = tmp.tuple[0];
 	tmp.tuple[0] = &name;
 	tmp.elem_type[1] = tmp.elem_type[0];
-	tmp.elem_type[0] = DI_TYPE_STRING;
+	tmp.elem_type[0] = DI_TYPE_STRING_LITERAL;
 
 	rc2 = di_rawcallxn(o, prefix, &rtype2, &ret2, tmp);
 ret:
