@@ -8,6 +8,7 @@
 #include <deai/helper.h>
 #include <deai/object.h>
 #include <assert.h>
+#include <stdalign.h>
 #include <stdarg.h>
 #include <stdio.h>
 #include <sys/mman.h>
@@ -16,6 +17,12 @@
 #include "utils.h"
 
 const void *null_ptr = NULL;
+// clang-format off
+static_assert(sizeof(struct di_object) == sizeof(struct di_object_internal),
+              "di_object size mismatch");
+static_assert(alignof(struct di_object) == alignof(struct di_object_internal),
+              "di_object alignment mismatch");
+// clang-format on
 
 #define gen_callx(fnname, getter)                                                           \
 	int fnname(struct di_object *o, const char *name, di_type_t *rt, void **ret, ...) { \
@@ -46,15 +53,15 @@ PUBLIC int di_rawcallxn(struct di_object *o, const char *name, di_type_t *rt, vo
 	if (rc != 0)
 		return rc;
 
-	auto m = *(struct di_object * nonnull *)val;
+	auto m = *(struct di_object_internal * nonnull *)val;
 	free((void *)val);
 
 	if (!m->call)
 		return -EINVAL;
 
-	rc = m->call(m, rt, ret, t);
+	rc = m->call((struct di_object *)m, rt, ret, t);
 
-	di_unref_object(m);
+	di_unref_object((struct di_object *)m);
 	return rc;
 }
 
@@ -209,11 +216,11 @@ PUBLIC struct di_object *di_new_object(size_t sz) {
 	if (sz < sizeof(struct di_object))
 		return NULL;
 
-	struct di_object *obj = calloc(1, sz);
+	struct di_object_internal *obj = calloc(1, sz);
 	obj->ref_count = 1;
 	obj->destroyed = 0;
 
-	return obj;
+	return (struct di_object *)obj;
 }
 
 struct di_module *di_new_module_with_size(struct deai *di, size_t size) {
@@ -232,7 +239,7 @@ PUBLIC struct di_module *di_new_module(struct deai *di) {
 	return di_new_module_with_size(di, sizeof(struct di_module));
 }
 
-static void _di_remove_member(struct di_object *obj, struct di_member *m) {
+static void _di_remove_member(struct di_object_internal *obj, struct di_member *m) {
 	HASH_DEL(*(struct di_member **)&obj->members, m);
 
 	if (m->own) {
@@ -248,25 +255,27 @@ PUBLIC int di_remove_member(struct di_object *obj, const char *name) {
 	if (!m)
 		return -ENOENT;
 
-	_di_remove_member(obj, (void *)m);
+	_di_remove_member((struct di_object_internal *)obj, (void *)m);
 	return 0;
 }
 
 // Try to never call destroy twice on something. Although it's fine to do so
-PUBLIC void di_destroy_object(struct di_object *obj) {
+PUBLIC void di_destroy_object(struct di_object *_obj) {
+	auto obj = (struct di_object_internal *)_obj;
+
 	// Prevent destroy from being called while we are destroying
-	di_ref_object(obj);
+	di_ref_object(_obj);
 	if (obj->destroyed)
 		fprintf(stderr, "warning: destroy object multiple times\n");
 	obj->destroyed = 1;
-	di_clear_listeners(obj);
+	di_clear_listeners(_obj);
 
 	// Call dtor before removing members to allow the dtor to check __type
 	// Never call dtor more than once
 	if (obj->dtor) {
 		auto tmp = obj->dtor;
 		obj->dtor = NULL;
-		tmp(obj);
+		tmp(_obj);
 	}
 
 	struct di_member *m = (void *)obj->members;
@@ -285,15 +294,17 @@ PUBLIC void di_destroy_object(struct di_object *obj) {
 		m = next_m;
 	}
 
-	di_unref_object(obj);
+	di_unref_object(_obj);
 }
 
-PUBLIC struct di_object *di_ref_object(struct di_object *obj) {
+PUBLIC struct di_object *di_ref_object(struct di_object *_obj) {
+	auto obj = (struct di_object_internal *)_obj;
 	obj->ref_count++;
-	return obj;
+	return _obj;
 }
 
-PUBLIC void di_unref_object(struct di_object *obj) {
+PUBLIC void di_unref_object(struct di_object *_obj) {
+	auto obj = (struct di_object_internal *)_obj;
 	assert(obj->ref_count > 0);
 	obj->ref_count--;
 	if (obj->ref_count == 0) {
@@ -301,7 +312,7 @@ PUBLIC void di_unref_object(struct di_object *obj) {
 			// If we reach here, destroy must have completed
 			free(obj);
 		else
-			di_destroy_object(obj);
+			di_destroy_object(_obj);
 	}
 }
 
@@ -311,7 +322,7 @@ PUBLIC size_t di_min_return_size(size_t in) {
 	return in;
 }
 
-static int check_new_member(struct di_object *r, struct di_member *m) {
+static int check_new_member(struct di_object_internal *obj, struct di_member *m) {
 	// member name rules:
 	// "<name>" and "__get_<name>" can't exist at the same time
 	// ("<name>" and "__set_<name>" can co-exist, the setter will always be called
@@ -323,7 +334,7 @@ static int check_new_member(struct di_object *r, struct di_member *m) {
 	if (!m->name)
 		return -EINVAL;
 
-	HASH_FIND_STR(r->members, m->name, om);
+	HASH_FIND_STR(obj->members, m->name, om);
 	if (om)
 		return -EEXIST;
 
@@ -332,7 +343,7 @@ static int check_new_member(struct di_object *r, struct di_member *m) {
 		if (strncmp(fname, "__", 2) == 0)
 			return -EINVAL;
 
-		HASH_FIND_STR(r->members, m->name, om);
+		HASH_FIND_STR(obj->members, m->name, om);
 		if (om)
 			return -EEXIST;
 	} else if (strncmp(m->name, "__set_", 6) == 0) {
@@ -343,7 +354,7 @@ static int check_new_member(struct di_object *r, struct di_member *m) {
 		char *buf;
 		asprintf(&buf, "__get_%s", m->name);
 
-		HASH_FIND_STR(r->members, buf, om);
+		HASH_FIND_STR(obj->members, buf, om);
 		free(buf);
 
 		if (om)
@@ -352,12 +363,12 @@ static int check_new_member(struct di_object *r, struct di_member *m) {
 	return 0;
 }
 
-static int di_insert_member(struct di_object *r, struct di_member *m) {
-	int ret = check_new_member(r, (void *)m);
+static int di_insert_member(struct di_object_internal *obj, struct di_member *m) {
+	int ret = check_new_member(obj, (void *)m);
 	if (ret != 0)
 		return ret;
 
-	HASH_ADD_KEYPTR(hh, r->members, m->name, strlen(m->name), m);
+	HASH_ADD_KEYPTR(hh, obj->members, m->name, strlen(m->name), m);
 	return 0;
 }
 
@@ -370,7 +381,7 @@ static int di_insert_member(struct di_object *r, struct di_member *m) {
 // Which means, if own = true, after di_add_member returns, the ref to the value
 // `*v` points to is consumed, and the memory location `v` points to is freed
 static int
-di_add_member(struct di_object *o, const char *name, bool own, di_type_t t, void *v) {
+di_add_member(struct di_object_internal *o, const char *name, bool own, di_type_t t, void *v) {
 	if (!name)
 		return -EINVAL;
 
@@ -407,7 +418,7 @@ PUBLIC int di_add_member_clone(struct di_object *o, const char *name, di_type_t 
 	di_copy_value(t, v, nv);
 	free(nv);
 
-	return di_add_member(o, name, true, t, v);
+	return di_add_member((struct di_object_internal *)o, name, true, t, v);
 }
 
 PUBLIC int di_add_member_move(struct di_object *o, const char *name, di_type_t *t, void *addr) {
@@ -422,17 +433,33 @@ PUBLIC int di_add_member_move(struct di_object *o, const char *name, di_type_t *
 	*t = DI_TYPE_UNIT;
 	memset(addr, 0, sz);
 
-	return di_add_member(o, name, true, tt, taddr);
+	return di_add_member((struct di_object_internal *)o, name, true, tt, taddr);
 }
 
 PUBLIC int di_add_member_ref(struct di_object *o, const char *name, di_type_t t, void *addr) {
-	return di_add_member(o, name, false, t, addr);
+	return di_add_member((struct di_object_internal *)o, name, false, t, addr);
 }
 
-PUBLIC struct di_member *di_lookup(struct di_object *o, const char *name) {
+PUBLIC struct di_member *di_lookup(struct di_object *_obj, const char *name) {
+	auto obj = (struct di_object_internal *)_obj;
 	struct di_member *ret = NULL;
-	HASH_FIND_STR(o->members, name, ret);
+	HASH_FIND_STR(obj->members, name, ret);
 	return (void *)ret;
+}
+
+PUBLIC void di_set_object_dtor(struct di_object *nonnull obj, di_dtor_fn_t nullable dtor) {
+	auto internal = (struct di_object_internal *)obj;
+	internal->dtor = dtor;
+}
+
+PUBLIC void di_set_object_call(struct di_object *nonnull obj, di_call_fn_t nullable call) {
+	auto internal = (struct di_object_internal *)obj;
+	internal->call = call;
+}
+
+PUBLIC bool di_is_object_callable(struct di_object *nonnull obj) {
+	auto internal = (struct di_object_internal *)obj;
+	return internal->call != NULL;
 }
 
 #define chknull(v)                                                                       \
@@ -575,22 +602,23 @@ static struct di_listener *di_new_listener(void) {
 // Returned listener has 1 ref, which is dropped when the listener stops.
 // You don't usually need to ref a listener
 PUBLIC struct di_listener *
-di_listen_to_once(struct di_object *o, const char *name, struct di_object *h, bool once) {
-	assert(!o->destroyed);
+di_listen_to_once(struct di_object *_obj, const char *name, struct di_object *h, bool once) {
+	auto obj = (struct di_object_internal *)_obj;
+	assert(!obj->destroyed);
 
 	struct di_signal *sig = NULL;
-	HASH_FIND_STR(o->signals, name, sig);
+	HASH_FIND_STR(obj->signals, name, sig);
 	if (!sig) {
 		sig = tmalloc(struct di_signal, 1);
 		sig->name = strdup(name);
-		sig->owner = o;
+		sig->owner = _obj;
 
 		INIT_LIST_HEAD(&sig->listeners);
-		HASH_ADD_KEYPTR(hh, o->signals, sig->name, strlen(sig->name), sig);
+		HASH_ADD_KEYPTR(hh, obj->signals, sig->name, strlen(sig->name), sig);
 		if (!is_destroy(name)) {
-			call_handler_with_fallback(o, "__new_signal", sig->name,
+			call_handler_with_fallback(_obj, "__new_signal", sig->name,
 			                           DI_LAST_TYPE, NULL, NULL, NULL);
-			di_ref_object((void *)o);
+			di_ref_object((void *)obj);
 		}
 	}
 
@@ -617,11 +645,12 @@ di_listen_to(struct di_object *o, const char *name, struct di_object *h) {
  * Remove all listeners from an object.
  * @param o the object.
  */
-PUBLIC void di_clear_listeners(struct di_object *o) {
+PUBLIC void di_clear_listeners(struct di_object *_obj) {
+	auto obj = (struct di_object_internal *)_obj;
 	struct di_signal *sig, *tsig;
-	HASH_ITER (hh, o->signals, sig, tsig) {
+	HASH_ITER (hh, obj->signals, sig, tsig) {
 		if (!is_destroy(sig->name))
-			call_handler_with_fallback(o, "__del_signal", sig->name,
+			call_handler_with_fallback(_obj, "__del_signal", sig->name,
 			                           DI_LAST_TYPE, NULL, NULL, NULL);
 
 		// unrefing object, calling detach might cause some other listeners
@@ -643,9 +672,9 @@ PUBLIC void di_clear_listeners(struct di_object *o) {
 			di_unref_object((void *)l);
 		}
 
-		HASH_DEL(o->signals, sig);
+		HASH_DEL(obj->signals, sig);
 		if (!is_destroy(sig->name))
-			di_unref_object(o);
+			di_unref_object(_obj);
 		free(sig->name);
 		free(sig);
 	}
@@ -665,7 +694,7 @@ PUBLIC int di_stop_listener(struct di_listener *l) {
 	list_del(&l->siblings);
 	l->signal->nlisteners--;
 	if (list_empty(&l->signal->listeners)) {
-		HASH_DEL(l->signal->owner->signals, l->signal);
+		HASH_DEL(((struct di_object_internal *)l->signal->owner)->signals, l->signal);
 		if (!is_destroy(l->signal->name)) {
 			call_handler_with_fallback(l->signal->owner, "__del_signal",
 			                           l->signal->name, DI_LAST_TYPE, NULL,
@@ -692,7 +721,7 @@ PUBLIC int di_emitn(struct di_object *o, const char *name, struct di_tuple t) {
 	assert(t.length == 0 || (t.elem_type != NULL && t.tuple != NULL));
 
 	struct di_signal *sig;
-	HASH_FIND_STR(o->signals, name, sig);
+	HASH_FIND_STR(((struct di_object_internal *)o)->signals, name, sig);
 	if (!sig)
 		return 0;
 
@@ -722,7 +751,8 @@ PUBLIC int di_emitn(struct di_object *o, const char *name, struct di_tuple t) {
 			goto next;
 		di_type_t rtype;
 		void *ret = NULL;
-		int rc = l->handler->call(l->handler, &rtype, &ret, t);
+		int rc =
+		    ((struct di_object_internal *)l->handler)->call(l->handler, &rtype, &ret, t);
 
 		if (rc == 0) {
 			di_free_value(rtype, ret);

@@ -11,9 +11,10 @@
 #include <stdio.h>
 
 #include "utils.h"
+#include "di_internal.h"
 
 struct di_error {
-	struct di_object;
+	struct di_object_internal;
 	char *msg;
 };
 
@@ -41,7 +42,7 @@ PUBLIC struct di_object *di_new_error(const char *fmt, ...) {
 
 PUBLIC int di_gmethod(struct di_object *o, const char *name, void (*fn)(void)) {
 	with_object_cleanup(di_object) m = di_new_object_with_type(struct di_object);
-	m->call = (void *)fn;
+	((struct di_object_internal *)m)->call = (void *)fn;
 
 	return di_add_member_clone(o, name, DI_TYPE_OBJECT, m);
 }
@@ -83,7 +84,7 @@ PUBLIC int di_proxy_signal(struct di_object *src, const char *srcsig,
 	auto c = di_new_object_with_type(_di_proxied_signal);
 	c->signal = strdup(proxysig);
 	c->proxy = proxy;        // proxied signal should die when proxy die
-	c->call = _emit_proxied_signal;
+	((struct di_object_internal *)c)->call = _emit_proxied_signal;
 
 	char *buf;
 	asprintf(&buf, "__del_signal_%s", proxysig);

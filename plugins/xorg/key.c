@@ -124,7 +124,7 @@ new_binding(struct xorg_key *k, struct di_array modifiers, char *key, bool repla
 	auto kb = di_new_object_with_type(struct keybinding);
 	kb->modifiers = mod;
 	kb->keysym = ks;
-	kb->dtor = (void *)binding_dtor;
+	di_set_object_dtor((void *)kb, (void *)binding_dtor);
 	kb->k = k;
 	kb->replay = replay;
 	di_ref_object((void *)k);

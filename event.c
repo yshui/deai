@@ -15,7 +15,7 @@
 #include "utils.h"
 
 struct di_ioev {
-	struct di_object;
+	struct di_object_internal;
 	ev_io evh;
 	struct deai *di;
 	struct di_listener *d;
@@ -23,14 +23,14 @@ struct di_ioev {
 };
 
 struct di_timer {
-	struct di_object;
+	struct di_object_internal;
 	ev_timer evt;
 	struct deai *di;
 	struct di_listener *d;
 };
 
 struct di_periodic {
-	struct di_object;
+	struct di_object_internal;
 	ev_periodic pt;
 	struct deai *di;
 	struct di_listener *d;

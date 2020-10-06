@@ -14,7 +14,7 @@
 #include "utils.h"
 
 struct di_typed_method {
-	struct di_object;
+	struct di_object_internal;
 
 	struct di_object *this;
 	void (*nonnull fn)(void);
@@ -26,7 +26,7 @@ struct di_typed_method {
 };
 
 struct di_closure {
-	struct di_object;
+	struct di_object_internal;
 
 	const void **cargs;
 	void (*nonnull fn)(void);
@@ -265,8 +265,9 @@ PUBLIC int di_add_method(struct di_object *o, const char *name, void (*fn)(void)
 }
 
 // va_args version of di_call_callable
-PUBLIC int di_call_objectv(struct di_object *o, di_type_t *rtype, void **ret, va_list ap) {
-	if (!o->call)
+PUBLIC int di_call_objectv(struct di_object *_obj, di_type_t *rtype, void **ret, va_list ap) {
+	auto obj = (struct di_object_internal *)_obj;
+	if (!obj->call)
 		return -EINVAL;
 
 	va_list ap2;
@@ -296,7 +297,7 @@ PUBLIC int di_call_objectv(struct di_object *o, di_type_t *rtype, void **ret, va
 		va_end(ap2);
 	}
 
-	return o->call(o, rtype, ret, tu);
+	return obj->call(_obj, rtype, ret, tu);
 }
 
 PUBLIC int di_call_object(struct di_object *o, di_type_t *rtype, void **ret, ...) {
@@ -304,4 +305,10 @@ PUBLIC int di_call_object(struct di_object *o, di_type_t *rtype, void **ret, ...
 
 	va_start(ap, ret);
 	return di_call_objectv(o, rtype, ret, ap);
+}
+
+PUBLIC int di_call_objectt(struct di_object *nonnull obj, di_type_t *nonnull rt,
+                    void *nullable *nonnull ret, struct di_tuple args) {
+	auto internal = (struct di_object_internal *)obj;
+	return internal->call(obj, rt, ret, args);
 }

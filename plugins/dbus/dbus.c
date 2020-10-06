@@ -63,7 +63,7 @@ static struct di_object *di_dbus_send(_di_dbus_connection *c, DBusMessage *msg) 
 		di_unref_object((void *)ret);
 		return NULL;
 	}
-	ret->dtor = (void *)di_free_pending_reply;
+	di_set_object_dtor((void *)ret, (void *)di_free_pending_reply);
 	ret->c = c;
 	di_ref_object((void *)c);
 	di_ref_object((void *)ret);
@@ -346,8 +346,8 @@ di_dbus_object_getter(_di_dbus_object *dobj, const char *method) {
 	ret->dobj = dobj;
 	di_ref_object((void *)dobj);
 
-	ret->dtor = (void *)di_dbus_free_method;
-	ret->call = (void *)call_dbus_method;
+	di_set_object_dtor((void *)ret, (void *)di_dbus_free_method);
+	di_set_object_call((void *)ret, (void *)call_dbus_method);
 	return (void *)ret;
 }
 
@@ -371,7 +371,7 @@ di_dbus_get_object(struct di_object *o, const char *bus, const char *obj) {
 	di_method(ret, "__get", di_dbus_object_getter, const char *);
 	di_method(ret, "__new_signal", di_dbus_object_new_signal, const char *);
 
-	ret->dtor = di_free_dbus_object;
+	di_set_object_dtor((void *)ret, di_free_dbus_object);
 	return (void *)ret;
 }
 
@@ -598,7 +598,7 @@ static struct di_object *di_dbus_get_session_bus(struct di_object *o) {
 
 	dbus_connection_add_filter(conn, _dbus_filter, ret, NULL);
 
-	ret->dtor = (void *)di_dbus_shutdown;
+	di_set_object_dtor((void *)ret, (void *)di_dbus_shutdown);
 
 	return (void *)ret;
 }

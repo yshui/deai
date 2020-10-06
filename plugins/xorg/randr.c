@@ -112,7 +112,7 @@ static struct di_object *get_output_info(struct di_xorg_output *o) {
 	di_field(ret, mm_height);
 	di_field(ret, name);
 	di_field(ret, subpixel_order);
-	ret->dtor = free_output_info;
+	di_set_object_dtor((void *)ret, free_output_info);
 
 	return (struct di_object *)ret;
 }
@@ -315,7 +315,7 @@ make_object_for_output(struct di_xorg_randr *rr, xcb_randr_output_t oid) {
 	di_getter_setter(obj, backlight, get_output_backlight, set_output_backlight);
 	di_getter(obj, max_backlight, get_output_max_backlight);
 
-	obj->dtor = (void *)output_dtor;
+	di_set_object_dtor((void *)obj, (void *)output_dtor);
 
 	di_ref_object((void *)rr);
 	return (void *)obj;
@@ -354,7 +354,7 @@ make_object_for_view(struct di_xorg_randr *rr, xcb_randr_crtc_t cid) {
 
 	di_getter(obj, outputs, get_view_outputs);
 	di_getter_setter(obj, config, get_view_config, set_view_config);
-	obj->dtor = (void *)view_dtor;
+	di_set_object_dtor((void *)obj, (void *)view_dtor);
 
 	di_ref_object((void *)rr);
 

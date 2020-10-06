@@ -198,7 +198,7 @@ di_xorg_get_ext(struct di_xorg_connection *xc, const char *name) {
 	for (int i = 0; xext_reg[i].name; i++)
 		if (strcmp(xext_reg[i].name, name) == 0) {
 			auto ext = xext_reg[i].new(xc);
-			ext->dtor = (void *)di_xorg_free_sub;
+			di_set_object_dtor((void *)ext, (void *)di_xorg_free_sub);
 
 			HASH_ADD_KEYPTR(hh, xc->xext, ext->extname,
 			                strlen(ext->extname), ext);
@@ -454,7 +454,7 @@ di_xorg_connect_to(struct di_xorg *x, const char *displayname) {
 	dc->xcb_fdlistener = di_listen_to(dc->xcb_fd, "read", (void *)cl);
 	di_unref_object((void *)cl);
 
-	dc->dtor = (void *)xorg_disconnect;
+	di_set_object_dtor((void *)dc, (void *)xorg_disconnect);
 
 	ABRT_IF_ERR(di_set_detach(dc->xcb_fdlistener,
 	                          (di_detach_fn_t)xorg_disconnect, (void *)dc));

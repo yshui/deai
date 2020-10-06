@@ -144,7 +144,7 @@ static struct di_object *di_file_new_watch(struct di_module *f, struct di_array 
 
 	auto fw = di_new_object_with_type(struct di_file_watch);
 	fw->fd = ifd;
-	fw->dtor = (void *)stop_file_watcher;
+	di_set_object_dtor((void *)fw, (void *)stop_file_watcher);
 
 	di_method(fw, "add", di_file_add_many_watch, struct di_array);
 	di_method(fw, "add_one", di_file_add_watch, char *);

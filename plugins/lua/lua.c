@@ -198,11 +198,11 @@ static struct di_lua_ref *lua_type_to_di_object(lua_State *L, int i, void *call)
 	lua_rawget(L, LUA_REGISTRYINDEX);
 
 	auto getter = di_new_object_with_type(struct lua_table_getter);
-	getter->call = di_lua_table_get;
+	di_set_object_call((void *)getter, di_lua_table_get);
 	getter->t = o;
 	di_add_member_move((void *)o, "__get", (di_type_t[]){DI_TYPE_OBJECT}, (void **)&getter);
-	o->dtor = (void *)lua_ref_dtor;
-	o->call = call;
+	di_set_object_dtor((void *)o, (void *)lua_ref_dtor);
+	di_set_object_call((void *)o, call);
 	o->d = di_listen_to_destroyed((void *)s->L, trivial_destroyed_handler, (void *)o);
 
 	// Need to return
@@ -210,7 +210,7 @@ static struct di_lua_ref *lua_type_to_di_object(lua_State *L, int i, void *call)
 }
 
 static int _di_lua_method_handler(lua_State *L, const char *name, struct di_object *m) {
-	if (!m->call)
+	if (!di_is_object_callable(m))
 		return luaL_error(L, "Object %s is not callable\n", name);
 
 	int nargs = lua_gettop(L);
@@ -231,7 +231,7 @@ static int _di_lua_method_handler(lua_State *L, const char *name, struct di_obje
 
 	void *ret;
 	di_type_t rtype;
-	int nret = m->call((void *)m, &rtype, &ret, t);
+	int nret = di_call_objectt(m, &rtype, &ret, t);
 
 	if (nret == 0) {
 		nret = di_lua_pushany(L, NULL, rtype, ret);
@@ -322,7 +322,7 @@ static void lua_new_state(struct di_module *m) {
 	auto L = di_new_object_with_type(struct di_lua_state);
 	L->m = m;
 	L->L = luaL_newstate();
-	L->dtor = (void *)lua_state_dtor;
+	di_set_object_dtor((void *)L, (void *)lua_state_dtor);
 	luaL_openlibs(L->L);
 
 	struct di_object *di = (void *)di_module_get_deai(m);
@@ -370,7 +370,7 @@ static struct di_object *di_lua_load_script(struct di_object *obj, const char *p
 		return di_new_error("Path is null");
 
 	auto s = di_new_object_with_type(struct di_lua_script);
-	s->dtor = (void *)di_lua_free_script;
+	di_set_object_dtor((void *)s, (void *)di_lua_free_script);
 
 	struct di_module *m = (void *)obj;
 	{

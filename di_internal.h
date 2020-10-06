@@ -7,6 +7,7 @@
 #pragma once
 #include <assert.h>
 #include <ffi.h>
+#include <stdalign.h>
 
 #include <deai/deai.h>
 
@@ -14,8 +15,31 @@
 #include "uthash.h"
 
 struct di_ev_prepare;
+
+struct di_member {
+	char *nonnull name;
+	void *nonnull data;
+	di_type_t type;
+	bool own;
+	UT_hash_handle hh;
+};
+
+struct di_object_internal {
+	struct di_member *nullable members;
+	struct di_signal *nullable signals;
+
+	di_dtor_fn_t nullable dtor;
+	di_call_fn_t nullable call;
+
+	uint64_t ref_count;
+	uint8_t destroyed;
+
+	// Reserved for future use
+	char padding[23];
+};
+
 struct deai {
-	struct di_object;
+	struct di_object_internal;
 	struct ev_loop *nonnull loop;
 
 	int argc;
@@ -31,14 +55,6 @@ struct deai {
 struct di_module {
 	struct di_object;
 	struct deai *nonnull di;
-	UT_hash_handle hh;
-};
-
-struct di_member {
-	char *nonnull name;
-	void *nonnull data;
-	di_type_t type;
-	bool own;
 	UT_hash_handle hh;
 };
 

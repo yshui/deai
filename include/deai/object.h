@@ -12,6 +12,7 @@
 
 #include <assert.h>
 #include <errno.h>
+#include <stdalign.h>
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
@@ -48,20 +49,15 @@ struct di_tuple;
 struct di_object;
 typedef int (*di_call_fn_t)(struct di_object *nonnull, di_type_t *nonnull rt,
                             void *nullable *nonnull ret, struct di_tuple);
+typedef void (*di_dtor_fn_t)(struct di_object *);
 struct di_signal;
 struct di_listener;
 struct di_callable;
 struct di_member;
 struct di_module;
+
 struct di_object {
-	struct di_member *nullable members;
-	struct di_signal *nullable signals;
-
-	void (*nullable dtor)(struct di_object *nonnull);
-	di_call_fn_t nullable call;
-
-	uint64_t ref_count;
-	uint8_t destroyed;
+	alignas(8) char padding[64];
 };
 
 struct di_array {
@@ -209,6 +205,10 @@ void di_clear_listeners(struct di_object *nonnull);
 
 struct di_object *nonnull di_ref_object(struct di_object *nonnull);
 void di_unref_object(struct di_object *nonnull);
+
+void di_set_object_dtor(struct di_object *nonnull, di_dtor_fn_t nullable);
+void di_set_object_call(struct di_object *nonnull, di_call_fn_t nullable);
+bool di_is_object_callable(struct di_object *nonnull);
 
 void di_free_tuple(struct di_tuple);
 void di_free_array(struct di_array);

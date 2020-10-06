@@ -80,7 +80,7 @@ static int di_log(struct di_object *o, di_type_t *rt, void **ret, struct di_tupl
 }
 
 struct log_file {
-	struct di_object;
+	struct di_object_internal;
 	FILE *f;
 };
 
@@ -181,7 +181,7 @@ void di_init_log(struct deai *di) {
 
 	di_add_member_move((struct di_object *)l, "log_target",
 	                   (di_type_t[]){DI_TYPE_OBJECT}, &dtgt);
-	l->call = di_log;
+	((struct di_object_internal *)l)->call = di_log;
 	di_method(l, "file_target", file_target, char *, bool);
 	di_method(l, "stderr_target", stderr_target);
 	di_getter_setter(l, log_level, get_log_level, set_log_level);

@@ -451,7 +451,7 @@ di_xorg_make_object_for_devid(struct di_xorg_xinput *xi, int deviceid) {
 
 	di_ref_object((void *)xi);
 
-	obj->dtor = (void *)free_xi_device_object;
+	di_set_object_dtor((void *)obj, (void *)free_xi_device_object);
 
 	di_method(obj, "__get_name", di_xorg_xinput_get_device_name);
 	di_method(obj, "__get_use", di_xorg_xinput_get_device_use);
