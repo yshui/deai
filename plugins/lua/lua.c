@@ -158,7 +158,7 @@ static int di_lua_table_get(struct di_object *m, di_type_t *rt, void **ret, stru
 	if (tu.length != 1)
 		return -EINVAL;
 
-	if (tu.elem_type[0] != DI_TYPE_STRING)
+	if (tu.elem_type[0] != DI_TYPE_STRING && tu.elem_type[0] != DI_TYPE_STRING_LITERAL)
 		return -EINVAL;
 
 	const char *key = *(const char **)tu.tuple[0];

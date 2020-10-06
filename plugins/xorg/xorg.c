@@ -102,8 +102,7 @@ const char *di_xorg_get_atom_name(struct di_xorg_connection *xc, xcb_atom_t atom
 		return NULL;
 
 	ae = tmalloc(struct di_atom_entry, 1);
-	ae->name =
-	    strndup(xcb_get_atom_name_name(r), xcb_get_atom_name_name_length(r));
+	ae->name = strndup(xcb_get_atom_name_name(r), xcb_get_atom_name_name_length(r));
 	ae->atom = atom;
 	free(r);
 
@@ -123,8 +122,7 @@ xcb_atom_t di_xorg_intern_atom(struct di_xorg_connection *xc, const char *name,
 	if (ae)
 		return ae->atom;
 
-	auto r = xcb_intern_atom_reply(
-	    xc->c, xcb_intern_atom(xc->c, 0, strlen(name), name), e);
+	auto r = xcb_intern_atom_reply(xc->c, xcb_intern_atom(xc->c, 0, strlen(name), name), e);
 	if (!r) {
 		di_log_va(logm, DI_LOG_ERROR, "Cannot intern atom");
 		return 0;
@@ -145,8 +143,7 @@ static char *di_xorg_get_resource(struct di_xorg_connection *xc) {
 	auto scrn = screen_of_display(xc->c, xc->dflt_scrn);
 	auto r = xcb_get_property_reply(
 	    xc->c,
-	    xcb_get_property(xc->c, 0, scrn->root, XCB_ATOM_RESOURCE_MANAGER,
-	                     XCB_ATOM_ANY, 0, 0),
+	    xcb_get_property(xc->c, 0, scrn->root, XCB_ATOM_RESOURCE_MANAGER, XCB_ATOM_ANY, 0, 0),
 	    NULL);
 	if (!r)
 		return strdup("");
@@ -154,16 +151,14 @@ static char *di_xorg_get_resource(struct di_xorg_connection *xc) {
 	auto real_size = r->bytes_after;
 	free(r);
 
-	r = xcb_get_property_reply(
-	    xc->c,
-	    xcb_get_property(xc->c, 0, scrn->root, XCB_ATOM_RESOURCE_MANAGER,
-	                     XCB_ATOM_ANY, 0, real_size),
-	    NULL);
+	r = xcb_get_property_reply(xc->c,
+	                           xcb_get_property(xc->c, 0, scrn->root, XCB_ATOM_RESOURCE_MANAGER,
+	                                            XCB_ATOM_ANY, 0, real_size),
+	                           NULL);
 	if (!r)
 		return strdup("");
 
-	char *ret =
-	    strndup(xcb_get_property_value(r), xcb_get_property_value_length(r));
+	char *ret = strndup(xcb_get_property_value(r), xcb_get_property_value_length(r));
 	free(r);
 	return ret;
 }
@@ -187,8 +182,7 @@ struct _xext {
     {NULL, NULL},
 };
 
-static struct di_object *
-di_xorg_get_ext(struct di_xorg_connection *xc, const char *name) {
+static struct di_object *di_xorg_get_ext(struct di_xorg_connection *xc, const char *name) {
 	struct di_xorg_ext *ret;
 	HASH_FIND_STR(xc->xext, name, ret);
 	if (ret) {
@@ -200,8 +194,7 @@ di_xorg_get_ext(struct di_xorg_connection *xc, const char *name) {
 			auto ext = xext_reg[i].new(xc);
 			di_set_object_dtor((void *)ext, (void *)di_xorg_free_sub);
 
-			HASH_ADD_KEYPTR(hh, xc->xext, ext->extname,
-			                strlen(ext->extname), ext);
+			HASH_ADD_KEYPTR(hh, xc->xext, ext->extname, strlen(ext->extname), ext);
 			di_ref_object((void *)xc);
 			return (void *)ext;
 		}
@@ -235,7 +228,8 @@ static struct {
 	    XKB_MOD_NAME_SHIFT, XKB_MOD_NAME_CAPS,
 	    XKB_MOD_NAME_CTRL,  XKB_MOD_NAME_ALT,
 	    XKB_MOD_NAME_NUM,   "Mod3",
-	    XKB_MOD_NAME_LOGO,  "Mod5"};
+	    XKB_MOD_NAME_LOGO,  "Mod5",
+	};
 
 	// keycodes, next_keycode_indices, and modifier_keycode_head effectively
 	// forms 8 linked lists. next_keycode_indices are the "next pointers".
@@ -245,14 +239,15 @@ static struct {
 	int next_keycode_indices[256];
 	int keycodes[256];
 	int total_keycodes = 0;
-	int modifier_keycode_head[8] = { [0 ... 7] = -1, };
+	int modifier_keycode_head[8] = {
+	    [0 ... 7] = -1,
+	};
 	int total_modifier_keys = 0;
 	memset(next_keycode_indices, -1, sizeof next_keycode_indices);
 
 	// Sanity check
 	for (int i = 0; i < 8; i++) {
-		assert(xkb_map_mod_get_index(map, modifier_names[i]) !=
-		       XKB_MOD_INVALID);
+		assert(xkb_map_mod_get_index(map, modifier_names[i]) != XKB_MOD_INVALID);
 	}
 
 	auto state = xkb_state_new(map);
@@ -266,11 +261,10 @@ static struct {
 			xkb_state_update_key(state, i, XKB_KEY_UP);
 			continue;
 		}
-		//printf("%#x %#x\n", i, updates);
+		// printf("%#x %#x\n", i, updates);
 		for (int j = 0; j < 8; j++) {
-			if (xkb_state_mod_name_is_active(state, modifier_names[j],
-			                                 updates)) {
-				//printf("%s %#x\n", modifier_names[j], i);
+			if (xkb_state_mod_name_is_active(state, modifier_names[j], updates)) {
+				// printf("%s %#x\n", modifier_names[j], i);
 				next_keycode_indices[total_keycodes] =
 				    modifier_keycode_head[j];
 				modifier_keycode_head[j] = total_keycodes;
@@ -309,8 +303,7 @@ static struct {
 		int curr = modifier_keycode_head[i];
 		while (curr != -1) {
 			assert(cnt < keycodes_per_modifiers);
-			ret.keycodes[i * keycodes_per_modifiers + cnt] =
-			    keycodes[curr];
+			ret.keycodes[i * keycodes_per_modifiers + cnt] = keycodes[curr];
 			curr = next_keycode_indices[curr];
 			cnt++;
 		}
@@ -320,22 +313,27 @@ static struct {
 }
 
 static void set_keymap(struct di_xorg_connection *xc, struct di_object *o) {
-	struct xkb_rule_names names = {0};
+	char *layout = NULL, *model = NULL, *variant = NULL, *options = NULL;
 
 	di_mgetmi(xc->x, log);
-	if (!o || di_get(o, "layout", names.layout)) {
-		di_log_va(logm, DI_LOG_ERROR,
-		          "Invalid keymap object, key \"layout\" is not set");
+	if (!o || di_get(o, "layout", layout)) {
+		di_log_va(logm, DI_LOG_ERROR, "Invalid keymap object, key \"layout\" is not set");
 		return;
 	}
-	di_get(o, "model", names.model);
-	di_get(o, "variant", names.variant);
-	di_get(o, "options", names.options);
+	di_get(o, "model", model);
+	di_get(o, "variant", variant);
+	di_get(o, "options", options);
+
+	struct xkb_rule_names names = {
+	    .layout = layout,
+	    .model = model,
+	    .variant = variant,
+	    .options = options,
+	};
 
 	auto xsetup = xcb_get_setup(xc->c);
 
-	auto map = xkb_keymap_new_from_names(xc->xkb_ctx, &names,
-	                                     XKB_KEYMAP_COMPILE_NO_FLAGS);
+	auto map = xkb_keymap_new_from_names(xc->xkb_ctx, &names, XKB_KEYMAP_COMPILE_NO_FLAGS);
 	xcb_keysym_t *keysyms = NULL;
 
 	if (xkb_keymap_num_layouts(map) != 1) {
@@ -364,15 +362,13 @@ static void set_keymap(struct di_xorg_connection *xc, struct di_object *o) {
 
 	// Xorg uses 2 groups of keymapping, while xkbcommon uses 1 group
 	keysym_per_keycode += 2;
-	keysyms = tmalloc(xcb_keysym_t,
-	                  keysym_per_keycode * (max_keycode - min_keycode + 1));
+	keysyms = tmalloc(xcb_keysym_t, keysym_per_keycode * (max_keycode - min_keycode + 1));
 
 	for (int i = min_keycode; i <= max_keycode; i++) {
 		int nlevels = xkb_keymap_num_levels_for_key(map, i, 0);
 		for (int j = 0; j < nlevels; j++) {
 			const xkb_keysym_t *sym;
-			int nsyms =
-			    xkb_keymap_key_get_syms_by_level(map, i, 0, j, &sym);
+			int nsyms = xkb_keymap_key_get_syms_by_level(map, i, 0, j, &sym);
 			if (nsyms > 1) {
 				di_log_va(logm, DI_LOG_WARN,
 				          "Multiple keysyms per level is not "
@@ -383,18 +379,15 @@ static void set_keymap(struct di_xorg_connection *xc, struct di_object *o) {
 				continue;
 			}
 			if (j < 2) {
-				keysyms[(i - min_keycode) * keysym_per_keycode + j] =
-				    *sym;
+				keysyms[(i - min_keycode) * keysym_per_keycode + j] = *sym;
 			}
-			keysyms[(i - min_keycode) * keysym_per_keycode + j + 2] =
-			    *sym;
+			keysyms[(i - min_keycode) * keysym_per_keycode + j + 2] = *sym;
 		}
 	}
 
-	auto r =
-	    xcb_request_check(xc->c, xcb_change_keyboard_mapping_checked(
-	                                 xc->c, (max_keycode - min_keycode + 1),
-	                                 min_keycode, keysym_per_keycode, keysyms));
+	auto r = xcb_request_check(xc->c, xcb_change_keyboard_mapping_checked(
+	                                      xc->c, (max_keycode - min_keycode + 1),
+	                                      min_keycode, keysym_per_keycode, keysyms));
 	if (r) {
 		di_log_va(logm, DI_LOG_ERROR, "Failed to set keymap.");
 		free(r);
@@ -406,11 +399,11 @@ static void set_keymap(struct di_xorg_connection *xc, struct di_object *o) {
 		auto r2 = xcb_set_modifier_mapping_reply(
 		    xc->c,
 		    xcb_set_modifier_mapping(xc->c, modifiers.keycode_per_modifiers,
-					     modifiers.keycodes),
+		                             modifiers.keycodes),
 		    NULL);
 		if (!r2 || r2->status == XCB_MAPPING_STATUS_FAILURE) {
 			di_log_va(logm, DI_LOG_ERROR,
-				  "Failed to set modifiers, your keymap will be broken.");
+			          "Failed to set modifiers, your keymap will be broken.");
 			free(r2);
 			break;
 		}
@@ -422,16 +415,15 @@ static void set_keymap(struct di_xorg_connection *xc, struct di_object *o) {
 	free(modifiers.keycodes);
 
 out:
-	free((char *)names.layout);
-	free((char *)names.model);
-	free((char *)names.variant);
-	free((char *)names.options);
+	free(layout);
+	free(model);
+	free(variant);
+	free(options);
 	free(keysyms);
 	xkb_keymap_unref(map);
 }
 
-static struct di_object *
-di_xorg_connect_to(struct di_xorg *x, const char *displayname) {
+static struct di_object *di_xorg_connect_to(struct di_xorg *x, const char *displayname) {
 	int scrn;
 	auto c = xcb_connect(displayname, &scrn);
 	if (xcb_connection_has_error(c)) {
@@ -441,13 +433,11 @@ di_xorg_connect_to(struct di_xorg *x, const char *displayname) {
 
 	di_mgetm(x, event, di_new_error("Can't get event module"));
 
-	struct di_xorg_connection *dc =
-	    di_new_object_with_type(struct di_xorg_connection);
+	struct di_xorg_connection *dc = di_new_object_with_type(struct di_xorg_connection);
 	dc->c = c;
 	dc->dflt_scrn = scrn;
 
-	di_callr(eventm, "fdevent", dc->xcb_fd, xcb_get_file_descriptor(dc->c),
-	         IOEV_READ);
+	di_callr(eventm, "fdevent", dc->xcb_fd, xcb_get_file_descriptor(dc->c), IOEV_READ);
 
 	struct di_object *odc = (void *)dc;
 	auto cl = di_closure(di_xorg_ioev, true, (odc));
@@ -456,8 +446,8 @@ di_xorg_connect_to(struct di_xorg *x, const char *displayname) {
 
 	di_set_object_dtor((void *)dc, (void *)xorg_disconnect);
 
-	ABRT_IF_ERR(di_set_detach(dc->xcb_fdlistener,
-	                          (di_detach_fn_t)xorg_disconnect, (void *)dc));
+	ABRT_IF_ERR(di_set_detach(dc->xcb_fdlistener, (di_detach_fn_t)xorg_disconnect,
+	                          (void *)dc));
 
 	di_method(dc, "__get", di_xorg_get_ext, char *);
 	di_method(dc, "__get_xrdb", di_xorg_get_resource);
