@@ -74,7 +74,7 @@ static int _di_typed_trampoline(ffi_cif *cif, void (*fn)(void), void *ret,
 					rc = 0;
 					xargs[i] = tmalloc(struct di_object *, 1);
 					*(struct di_object **)xargs[i] =
-					    di_new_object(sizeof(struct di_object));
+					    di_new_object_with_type(struct di_object);
 					break;
 				case DI_TYPE_STRING:
 				case DI_TYPE_POINTER:
@@ -180,8 +180,9 @@ di_create_closure(void (*fn)(void), di_type_t rtype, int nargs0, const di_type_t
 		if (di_sizeof_type(ats[i]) == 0)
 			return ERR_PTR(-EINVAL);
 
-	struct di_closure *cl = (void *)di_new_object(sizeof(struct di_closure) +
-	                                              sizeof(di_type_t) * (nargs0 + nargs));
+	struct di_closure *cl = (void *)di_new_object(
+	    sizeof(struct di_closure) + sizeof(di_type_t) * (nargs0 + nargs),
+	    alignof(struct di_closure));
 
 	cl->rtype = rtype;
 	cl->call = closure_trampoline;
@@ -229,8 +230,9 @@ PUBLIC int di_add_method(struct di_object *o, const char *name, void (*fn)(void)
 	if (nargs < 0 || nargs + 1 > MAX_NARGS)
 		return -EINVAL;
 
-	struct di_typed_method *f = (void *)di_new_object(sizeof(struct di_typed_method) +
-	                                                  sizeof(di_type_t) * (1 + nargs));
+	struct di_typed_method *f = (void *)di_new_object(
+	    sizeof(struct di_typed_method) + sizeof(di_type_t) * (1 + nargs),
+	    alignof(struct di_typed_method));
 
 	f->rtype = rtype;
 	f->call = method_trampoline;
@@ -308,7 +310,7 @@ PUBLIC int di_call_object(struct di_object *o, di_type_t *rtype, void **ret, ...
 }
 
 PUBLIC int di_call_objectt(struct di_object *nonnull obj, di_type_t *nonnull rt,
-                    void *nullable *nonnull ret, struct di_tuple args) {
+                           void *nullable *nonnull ret, struct di_tuple args) {
 	auto internal = (struct di_object_internal *)obj;
 	return internal->call(obj, rt, ret, args);
 }

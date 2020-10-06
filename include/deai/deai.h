@@ -42,4 +42,4 @@ typedef void (*init_fn_t)(struct deai *);
 struct di_module *di_new_module(struct deai *);
 int di_register_module(struct deai *, const char *, struct di_module **);
 
-#define di_new_object_with_type(type) (type *)di_new_object(sizeof(type))
+#define di_new_object_with_type(type) (type *)di_new_object(sizeof(type), alignof(type))

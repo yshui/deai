@@ -212,11 +212,17 @@ PUBLIC bool di_check_type(struct di_object *o, const char *tyname) {
 	return strcmp(ot, tyname) == 0;
 }
 
-PUBLIC struct di_object *di_new_object(size_t sz) {
-	if (sz < sizeof(struct di_object))
+PUBLIC struct di_object *di_new_object(size_t sz, size_t alignment) {
+	if (sz < sizeof(struct di_object)) {
 		return NULL;
+	}
+	if (alignment < alignof(struct di_object)) {
+		return NULL;
+	}
 
-	struct di_object_internal *obj = calloc(1, sz);
+	struct di_object_internal *obj;
+	posix_memalign((void **)&obj, alignment, sz);
+	memset(obj, 0, sz);
 	obj->ref_count = 1;
 	obj->destroyed = 0;
 
@@ -227,7 +233,7 @@ struct di_module *di_new_module_with_size(struct deai *di, size_t size) {
 	if (size < sizeof(struct di_module))
 		return NULL;
 
-	struct di_module *pm = (void *)di_new_object(size);
+	struct di_module *pm = (void *)di_new_object(size, alignof(max_align_t));
 
 	di_set_type((void *)pm, "deai:module");
 	pm->di = di;

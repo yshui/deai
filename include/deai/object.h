@@ -180,7 +180,7 @@ int nonnull_all di_add_member_clone(struct di_object *nonnull o, const char *non
                                     di_type_t, ...);
 int di_remove_member(struct di_object *nonnull o, const char *nonnull name);
 struct di_member *nullable di_lookup(struct di_object *nonnull o, const char *nonnull name);
-struct di_object *nullable di_new_object(size_t sz);
+struct di_object *nullable di_new_object(size_t sz, size_t alignment);
 
 struct di_listener *nullable di_listen_to(struct di_object *nonnull o, const char *nonnull name,
                                           struct di_object *nullable h);
