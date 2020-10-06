@@ -81,6 +81,25 @@ struct di_module {
 	char padding[56];
 };
 
+/// All builtin deai types
+union di_value {
+	// void unit;
+	// ? any;
+	bool bool_;
+	int nint;
+	unsigned int nuint;
+	int64_t int_;
+	uint64_t uint;
+	double float_;
+	void *pointer;
+	struct di_object *object;
+	char *string;
+	const char *string_literal;
+	struct di_array array;
+	struct di_tuple tuple;
+	// ! last_type
+};
+
 /// Fetch member object `name` from object `o`, then call the member object with `args`.
 ///
 /// # Errors
@@ -182,7 +201,9 @@ struct di_listener *nullable di_listen_to_once(struct di_object *nonnull o,
 // It's guaranteed after calling this, the handler and __detach method will never be
 // called
 int di_stop_listener(struct di_listener *nullable);
-int di_emitn(struct di_object *nonnull, const char *nonnull name, struct di_tuple);
+/// Emit a signal with `name`, and `args`. The emitter of the signal is responsible of
+/// freeing `args`.
+int di_emitn(struct di_object *nonnull, const char *nonnull name, struct di_tuple args);
 // Call object dtor, remove all listeners and members from the object. And free the
 // memory
 // if the ref count drop to 0 after this process
