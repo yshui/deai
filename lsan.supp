@@ -1,0 +1,2 @@
+leak:libxcb.*
+leak:setproctitle_init
