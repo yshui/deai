@@ -8,6 +8,7 @@
 #include <deai/deai.h>
 #include <deai/helper.h>
 #include <deai/compiler.h>
+#include <deai/module.h>
 
 #include <assert.h>
 #include <ctype.h>
@@ -39,7 +40,7 @@ struct di_xorg_xinput_device {
 #define get_mask(a, m) (a)[(m) >> 3] & (1 << ((m)&7))
 
 static void di_xorg_xi_start_listen_for_event(struct di_xorg_xinput *xi, int ev) {
-	di_getmi(xi->dc->x->di, log);
+	di_mgetmi(xi->dc->x, log);
 	if (ev > 26) {
 		if (logm)
 			di_log_va(logm, DI_LOG_ERROR, "invalid xi event number %d",
@@ -61,7 +62,7 @@ static void di_xorg_xi_start_listen_for_event(struct di_xorg_xinput *xi, int ev)
 }
 
 static void di_xorg_xi_stop_listen_for_event(struct di_xorg_xinput *xi, int ev) {
-	di_getmi(xi->dc->x->di, log);
+	di_mgetmi(xi->dc->x, log);
 	if (ev > 26) {
 		if (logm)
 			di_log_va(logm, DI_LOG_ERROR, "invalid xi event number %d",
@@ -104,7 +105,7 @@ static void di_xorg_free_xinput(struct di_xorg_ext *x) {
 	auto cookie =
 	    xcb_input_xi_select_events_checked(xi->dc->c, scrn->root, 1, &xi->ec);
 
-	di_getmi(x->dc->x->di, log);
+	di_mgetmi(xi->dc->x, log);
 	auto e = xcb_request_check(xi->dc->c, cookie);
 	if (e && logm)
 		di_log_va(logm, DI_LOG_ERROR, "select events failed\n");
@@ -220,7 +221,7 @@ static void di_xorg_xinput_set_prop(struct di_xorg_xinput_device *dev,
 
 	struct di_xorg_connection *dc = dev->xi->dc;
 
-	di_getmi(dc->x->di, log);
+	di_mgetmi(dev->xi->dc->x, log);
 	xcb_generic_error_t *e;
 	auto prop_atom = di_xorg_intern_atom(dc, key, &e);
 	if (e)
@@ -342,7 +343,7 @@ di_xorg_xinput_get_prop(struct di_xorg_xinput_device *dev, const char *name) {
 
 	struct di_xorg_connection *dc = dev->xi->dc;
 
-	di_getmi(dc->x->di, log);
+	di_mgetmi(dc->x, log);
 	xcb_generic_error_t *e;
 	struct di_array ret = DI_ARRAY_UNIT;
 	auto prop_atom = di_xorg_intern_atom(dc, name, &e);

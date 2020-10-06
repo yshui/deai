@@ -31,8 +31,8 @@ static char *di_get_hostname(struct deai *p) {
 	return strdup(buf.nodename);
 }
 
-void di_init_os(struct deai *p) {
-	struct di_module *m = di_new_module_with_type(struct di_module);
+void di_init_os(struct deai *di) {
+	struct di_module *m = di_new_module(di);
 
 	struct di_object *o = di_new_object_with_type(struct di_object);
 
@@ -42,5 +42,5 @@ void di_init_os(struct deai *p) {
 	di_member(m, "env", o);
 
 	di_getter(m, hostname, di_get_hostname);
-	di_register_module(p, "os", &m);
+	di_register_module(di, "os", &m);
 }

@@ -245,7 +245,7 @@ void di_init_spawn(struct deai *di) {
 	if (ret != 0)
 		return;
 
-	auto m = di_new_module_with_type(struct di_spawn);
+	auto m = di_new_module_with_size(di, sizeof(struct di_spawn));
 	m->di = di;
 
 	// di_register_typed_method((void *)m, (di_fn_t)di_spawn_run, "run",

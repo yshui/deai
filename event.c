@@ -36,10 +36,6 @@ struct di_periodic {
 	struct di_listener *d;
 };
 
-struct di_evmodule {
-	struct di_module;
-};
-
 static void di_ioev_callback(EV_P_ ev_io *w, int revents) {
 	auto ev = container_of(w, struct di_ioev, evh);
 	int dt = 0;
@@ -107,7 +103,7 @@ static void di_ioev_dtor(struct di_object *obj) {
 }
 
 static struct di_object *di_create_ioev(struct di_object *obj, int fd, int t) {
-	struct di_evmodule *em = (void *)obj;
+	struct di_module *em = (void *)obj;
 	auto ret = di_new_object_with_type(struct di_ioev);
 
 	unsigned int flags = 0;
@@ -158,7 +154,7 @@ static void di_timer_set(struct di_timer *obj, double t) {
 }
 
 static struct di_object *di_create_timer(struct di_object *obj, double timeout) {
-	struct di_evmodule *em = (void *)obj;
+	struct di_module *em = (void *)obj;
 	auto ret = di_new_object_with_type(struct di_timer);
 	ret->di = em->di;
 	di_ref_object((void *)ret->di);
@@ -193,7 +189,7 @@ static void periodic_set(struct di_periodic *p, double interval, double offset) 
 }
 
 static struct di_object *
-di_create_periodic(struct di_evmodule *evm, double interval, double offset) {
+di_create_periodic(struct di_module *evm, double interval, double offset) {
 	auto ret = di_new_object_with_type(struct di_periodic);
 	ret->di = evm->di;
 	di_ref_object((void *)ret->di);
@@ -220,8 +216,7 @@ static void di_prepare(EV_P_ ev_prepare *w, int revents) {
 }
 
 void di_init_event(struct deai *di) {
-	auto em = di_new_module_with_type(struct di_evmodule);
-	em->di = di;
+	auto em = di_new_module(di);
 
 	di_method(em, "fdevent", di_create_ioev, int, int);
 	di_method(em, "timer", di_create_timer, double);

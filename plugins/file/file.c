@@ -15,10 +15,6 @@
 #include "uthash.h"
 #include "utils.h"
 
-struct di_file {
-	struct di_module;
-};
-
 struct di_file_watch_entry {
 	char *fname;
 	int wd;
@@ -138,7 +134,7 @@ static void stop_file_watcher(struct di_file_watch *fw) {
 	di_stop_listener(fw->fdev_listener);
 }
 
-static struct di_object *di_file_new_watch(struct di_file *f, struct di_array paths) {
+static struct di_object *di_file_new_watch(struct di_module *f, struct di_array paths) {
 	if (paths.length > 0 && paths.elem_type != DI_TYPE_STRING)
 		return di_new_error("Argument needs to be an array of strings");
 
@@ -154,7 +150,7 @@ static struct di_object *di_file_new_watch(struct di_file *f, struct di_array pa
 	di_method(fw, "add_one", di_file_add_watch, char *);
 	di_method(fw, "remove", di_file_rm_watch, char *);
 	di_method(fw, "stop", di_destroy_object);
-	di_getm(f->di, event, di_new_error("Can't find event module"));
+	di_mgetm(f, event, di_new_error("Can't find event module"));
 	di_callr(eventm, "fdevent", fw->fdev, fw->fd, IOEV_READ);
 
 	struct di_object *tmpo = (void *)fw;
@@ -170,8 +166,7 @@ static struct di_object *di_file_new_watch(struct di_file *f, struct di_array pa
 	return (void *)fw;
 }
 PUBLIC int di_plugin_init(struct deai *di) {
-	auto fm = di_new_module_with_type(struct di_file);
-	fm->di = di;
+	auto fm = di_new_module(di);
 	di_method(fm, "watch", di_file_new_watch, struct di_array);
 	di_register_module(di, "file", &fm);
 	return 0;

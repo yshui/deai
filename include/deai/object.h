@@ -52,6 +52,7 @@ struct di_signal;
 struct di_listener;
 struct di_callable;
 struct di_member;
+struct di_module;
 struct di_object {
 	struct di_member *nullable members;
 	struct di_signal *nullable signals;
@@ -73,12 +74,6 @@ struct di_tuple {
 	uint64_t length;
 	void *nonnull *nullable tuple;
 	di_type_t *nullable elem_type;
-};
-
-struct di_module {
-	struct di_object;
-	struct deai *nonnull di;
-	char padding[56];
 };
 
 /// All builtin deai types

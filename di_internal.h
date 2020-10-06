@@ -13,8 +13,6 @@
 #include "list.h"
 #include "uthash.h"
 
-struct di_module_internal;
-
 struct di_ev_prepare;
 struct deai {
 	struct di_object;
@@ -30,7 +28,7 @@ struct deai {
 	bool *nonnull quit;
 };
 
-struct di_module_internal {
+struct di_module {
 	struct di_object;
 	struct deai *nonnull di;
 	UT_hash_handle hh;
@@ -100,3 +98,5 @@ static inline ffi_status di_ffi_prep_cif(ffi_cif *nonnull cif, unsigned int narg
 		free(ffi_atypes);
 	return ret;
 }
+
+struct di_module *di_new_module_with_size(struct deai *di, size_t size);

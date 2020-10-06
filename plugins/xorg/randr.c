@@ -269,7 +269,7 @@ static void set_output_backlight(struct di_xorg_output *o, int bkl) {
 	                          o->rr->dc->c, o->oid, bklatom, XCB_ATOM_INTEGER,
 	                          32, XCB_PROP_MODE_REPLACE, 1, (void *)&v));
 	if (e) {
-		di_getm(o->rr->dc->x->di, log, (void)0);
+		di_mgetm(o->rr->dc->x, log, (void)0);
 		di_log_va(logm, DI_LOG_ERROR, "Failed to set backlight");
 	}
 }
@@ -388,7 +388,7 @@ static inline void rr_select_input(struct di_xorg_randr *rr, uint16_t mask) {
 	auto e = xcb_request_check(
 	    rr->dc->c, xcb_randr_select_input(rr->dc->c, scrn->root, mask));
 
-	di_getm(rr->dc->x->di, log, (void)0);
+	di_mgetm(rr->dc->x, log, (void)0);
 	if (e)
 		di_log_va(logm, DI_LOG_ERROR, "randr select input failed\n");
 }

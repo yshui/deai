@@ -90,7 +90,7 @@ static int refresh_binding(struct keybinding *kb) {
 		                                kb->keycodes[i], XCB_GRAB_MODE_ASYNC,
 		                                XCB_GRAB_MODE_SYNC));
 		if (err) {
-			di_getmi(dc->x->di, log);
+			di_mgetmi(dc->x, log);
 			if (logm)
 				di_log_va(logm, DI_LOG_ERROR, "Cannot grab %c",
 				          kb->keycodes[i]);

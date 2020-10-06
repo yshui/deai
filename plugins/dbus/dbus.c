@@ -4,6 +4,7 @@
 #include <deai/builtin/event.h>
 #include <deai/deai.h>
 #include <deai/helper.h>
+#include <deai/module.h>
 #include <dbus/dbus.h>
 
 #include "common.h"
@@ -585,9 +586,9 @@ static struct di_object *di_dbus_get_session_bus(struct di_object *o) {
 	dbus_connection_set_exit_on_disconnect(conn, 0);
 	auto ret = di_new_object_with_type(_di_dbus_connection);
 	ret->conn = conn;
-	ret->di = m->di;
+	ret->di = di_module_get_deai(m);
 	INIT_LIST_HEAD(&ret->known_names);
-	di_ref_object((void *)m->di);
+	di_ref_object((void *)ret->di);
 	di_method(ret, "get", di_dbus_get_object, const char *, const char *);
 	di_method(ret, "__new_signal", di_dbus_new_signal, const char *);
 	di_method(ret, "__del_signal", di_dbus_del_signal, const char *);
@@ -603,8 +604,7 @@ static struct di_object *di_dbus_get_session_bus(struct di_object *o) {
 }
 
 PUBLIC int di_plugin_init(struct deai *di) {
-	auto m = di_new_module_with_type(struct di_module);
-	m->di = di;
+	auto m = di_new_module(di);
 
 	di_getter(m, session_bus, di_dbus_get_session_bus);
 

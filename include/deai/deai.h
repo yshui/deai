@@ -39,8 +39,7 @@ static inline bool IS_ERR_OR_NULL(const void *ptr) {
 
 typedef void (*init_fn_t)(struct deai *);
 
-struct di_module *di_new_module(size_t);
+struct di_module *di_new_module(struct deai *);
 int di_register_module(struct deai *, const char *, struct di_module **);
 
-#define di_new_module_with_type(type) (struct di_module *)di_new_module(sizeof(type))
 #define di_new_object_with_type(type) (type *)di_new_object(sizeof(type))

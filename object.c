@@ -216,15 +216,20 @@ PUBLIC struct di_object *di_new_object(size_t sz) {
 	return obj;
 }
 
-PUBLIC struct di_module *di_new_module(size_t size) {
+struct di_module *di_new_module_with_size(struct deai *di, size_t size) {
 	if (size < sizeof(struct di_module))
 		return NULL;
 
-	struct di_module_internal *pm = (void *)di_new_object(size);
+	struct di_module *pm = (void *)di_new_object(size);
 
 	di_set_type((void *)pm, "deai:module");
+	pm->di = di;
 
 	return (void *)pm;
+}
+
+PUBLIC struct di_module *di_new_module(struct deai *di) {
+	return di_new_module_with_size(di, sizeof(struct di_module));
 }
 
 static void _di_remove_member(struct di_object *obj, struct di_member *m) {

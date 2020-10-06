@@ -169,7 +169,7 @@ PUBLIC int di_set_log_level(struct di_object *o, int log_level) {
 }
 
 void di_init_log(struct deai *di) {
-	auto lm = di_new_module_with_type(struct di_log);
+	auto lm = di_new_module_with_size(di, sizeof(struct di_log));
 	if (!lm)
 		return;
 

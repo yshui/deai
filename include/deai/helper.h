@@ -7,6 +7,7 @@
 #pragma once
 
 #include <deai/deai.h>
+#include <deai/module.h>
 #include <string.h>
 
 #include <limits.h>
@@ -29,48 +30,47 @@ int di_proxy_signal(struct di_object *nonnull src, const char *nonnull srcsig,
 
 #define DTOR(o) ((struct di_object *)o)->dtor
 
-#define RET_IF_ERR(expr)                                                            \
-	do {                                                                        \
-		int ret = (expr);                                                   \
-		if (ret != 0)                                                       \
-			return ret;                                                 \
+#define RET_IF_ERR(expr)                                                                 \
+	do {                                                                             \
+		int ret = (expr);                                                        \
+		if (ret != 0)                                                            \
+			return ret;                                                      \
 	} while (0)
 
-#define ABRT_IF_ERR(expr)                                                           \
-	do {                                                                        \
-		int ret = (expr);                                                   \
-		if (ret != 0)                                                       \
-			abort();                                                    \
+#define ABRT_IF_ERR(expr)                                                                \
+	do {                                                                             \
+		int ret = (expr);                                                        \
+		if (ret != 0)                                                            \
+			abort();                                                         \
 	} while (0)
 
-#define di_set(o, prop, v)                                                          \
-	({                                                                          \
-		__auto_type __tmp = (v);                                            \
-		di_setx(o, prop, di_typeof(__tmp), &__tmp);                         \
+#define di_set(o, prop, v)                                                               \
+	({                                                                               \
+		__auto_type __tmp = (v);                                                 \
+		di_setx(o, prop, di_typeof(__tmp), &__tmp);                              \
 	})
 
-#define di_get(o, prop, r)                                                          \
-	({                                                                          \
-		int rc;                                                             \
-		void *ret;                                                          \
-		do {                                                                \
-			rc = di_getxt((void *)o, prop, di_typeof(r), &ret);         \
-			if (rc != 0)                                                \
-				break;                                              \
-			(r) = *(typeof(r) *)ret;                                    \
-			free((void *)ret);                                          \
-		} while (0);                                                        \
-		rc;                                                                 \
+#define di_get(o, prop, r)                                                               \
+	({                                                                               \
+		int rc;                                                                  \
+		void *ret;                                                               \
+		do {                                                                     \
+			rc = di_getxt((void *)o, prop, di_typeof(r), &ret);              \
+			if (rc != 0)                                                     \
+				break;                                                   \
+			(r) = *(typeof(r) *)ret;                                         \
+			free((void *)ret);                                               \
+		} while (0);                                                             \
+		rc;                                                                      \
 	})
 
-#define di_gets(o, prop, r)                                                         \
-	if (di_get(o, prop, r))                                                     \
+#define di_gets(o, prop, r)                                                              \
+	if (di_get(o, prop, r))                                                          \
 		return;
 
 // Pardon this mess, this is what you get for doing meta programming using C macros.
 #define _ARG13(_0, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, N, ...) N
-#define VA_ARGS_LENGTH(...)                                                         \
-	_ARG13(0, ##__VA_ARGS__, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0)
+#define VA_ARGS_LENGTH(...) _ARG13(0, ##__VA_ARGS__, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0)
 #define HAS_COMMA(...) _ARG13(0, ##__VA_ARGS__, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0)
 
 #define LIST_SHIFT_0(...) __VA_ARGS__
@@ -89,37 +89,26 @@ int di_proxy_signal(struct di_object *nonnull src, const char *nonnull srcsig,
 #define LIST_APPLY_8(fn, sep, x, ...) fn(x) sep() LIST_APPLY_7(fn, sep, __VA_ARGS__)
 #define LIST_APPLY_9(fn, sep, x, ...) fn(x) sep() LIST_APPLY_8(fn, sep, __VA_ARGS__)
 #define LIST_APPLY_10(fn, sep, x, ...) fn(x) sep() LIST_APPLY_9(fn, sep, __VA_ARGS__)
-#define LIST_APPLY_11(fn, sep, x, ...)                                              \
-	fn(x) sep() LIST_APPLY_10(fn, sep, __VA_ARGS__)
+#define LIST_APPLY_11(fn, sep, x, ...) fn(x) sep() LIST_APPLY_10(fn, sep, __VA_ARGS__)
 #define LIST_APPLY_(N, fn, sep, ...) CONCAT(LIST_APPLY_, N)(fn, sep, __VA_ARGS__)
-#define LIST_APPLY(fn, sep, ...)                                                    \
+#define LIST_APPLY(fn, sep, ...)                                                         \
 	LIST_APPLY_(VA_ARGS_LENGTH(__VA_ARGS__), fn, sep, __VA_ARGS__)
 
 #define LIST_APPLY_pre0(fn, sep, ...)
 #define LIST_APPLY_pre1(fn, sep, x, ...) sep() fn(x)
-#define LIST_APPLY_pre2(fn, sep, x, ...)                                            \
-	sep() fn(x) LIST_APPLY_pre1(fn, sep, __VA_ARGS__)
-#define LIST_APPLY_pre3(fn, sep, x, ...)                                            \
-	sep() fn(x) LIST_APPLY_pre2(fn, sep, __VA_ARGS__)
-#define LIST_APPLY_pre4(fn, sep, x, ...)                                            \
-	sep() fn(x) LIST_APPLY_pre3(fn, sep, __VA_ARGS__)
-#define LIST_APPLY_pre5(fn, sep, x, ...)                                            \
-	sep() fn(x) LIST_APPLY_pre4(fn, sep, __VA_ARGS__)
-#define LIST_APPLY_pre6(fn, sep, x, ...)                                            \
-	sep() fn(x) LIST_APPLY_pre5(fn, sep, __VA_ARGS__)
-#define LIST_APPLY_pre7(fn, sep, x, ...)                                            \
-	sep() fn(x) LIST_APPLY_pre6(fn, sep, __VA_ARGS__)
-#define LIST_APPLY_pre8(fn, sep, x, ...)                                            \
-	sep() fn(x) LIST_APPLY_pre7(fn, sep, __VA_ARGS__)
-#define LIST_APPLY_pre9(fn, sep, x, ...)                                            \
-	sep() fn(x) LIST_APPLY_pre8(fn, sep, __VA_ARGS__)
-#define LIST_APPLY_pre10(fn, sep, x, ...)                                           \
+#define LIST_APPLY_pre2(fn, sep, x, ...) sep() fn(x) LIST_APPLY_pre1(fn, sep, __VA_ARGS__)
+#define LIST_APPLY_pre3(fn, sep, x, ...) sep() fn(x) LIST_APPLY_pre2(fn, sep, __VA_ARGS__)
+#define LIST_APPLY_pre4(fn, sep, x, ...) sep() fn(x) LIST_APPLY_pre3(fn, sep, __VA_ARGS__)
+#define LIST_APPLY_pre5(fn, sep, x, ...) sep() fn(x) LIST_APPLY_pre4(fn, sep, __VA_ARGS__)
+#define LIST_APPLY_pre6(fn, sep, x, ...) sep() fn(x) LIST_APPLY_pre5(fn, sep, __VA_ARGS__)
+#define LIST_APPLY_pre7(fn, sep, x, ...) sep() fn(x) LIST_APPLY_pre6(fn, sep, __VA_ARGS__)
+#define LIST_APPLY_pre8(fn, sep, x, ...) sep() fn(x) LIST_APPLY_pre7(fn, sep, __VA_ARGS__)
+#define LIST_APPLY_pre9(fn, sep, x, ...) sep() fn(x) LIST_APPLY_pre8(fn, sep, __VA_ARGS__)
+#define LIST_APPLY_pre10(fn, sep, x, ...)                                                \
 	sep() fn(x) LIST_APPLY_pre9(fn, sep, __VA_ARGS__)
-#define LIST_APPLY_pre11(fn, sep, x, ...)                                           \
-	sep() fn(x) LIST_APPLY_10(fn, sep, __VA_ARGS__)
-#define LIST_APPLY_pre_(N, fn, sep, ...)                                            \
-	CONCAT(LIST_APPLY_pre, N)(fn, sep, __VA_ARGS__)
-#define LIST_APPLY_pre(fn, sep, ...)                                                \
+#define LIST_APPLY_pre11(fn, sep, x, ...) sep() fn(x) LIST_APPLY_10(fn, sep, __VA_ARGS__)
+#define LIST_APPLY_pre_(N, fn, sep, ...) CONCAT(LIST_APPLY_pre, N)(fn, sep, __VA_ARGS__)
+#define LIST_APPLY_pre(fn, sep, ...)                                                     \
 	LIST_APPLY_pre_(VA_ARGS_LENGTH(__VA_ARGS__), fn, sep, __VA_ARGS__)
 
 #define SEP_COMMA() ,
@@ -135,130 +124,130 @@ int di_proxy_signal(struct di_object *nonnull src, const char *nonnull srcsig,
 
 #define object_cleanup __attribute__((cleanup(__free_objp)))
 
-#define capture(...)                                                                \
-	VA_ARGS_LENGTH(__VA_ARGS__)                                                 \
-	, (di_type_t[]){LIST_APPLY(di_typeof, SEP_COMMA, __VA_ARGS__)},             \
-	    (const void *[]) {                                                      \
-		LIST_APPLY(addressof, SEP_COMMA, __VA_ARGS__)                       \
+#define capture(...)                                                                       \
+	VA_ARGS_LENGTH(__VA_ARGS__)                                                        \
+	, (di_type_t[]){LIST_APPLY(di_typeof, SEP_COMMA, __VA_ARGS__)}, (const void *[]) { \
+		LIST_APPLY(addressof, SEP_COMMA, __VA_ARGS__)                              \
 	}
 
 #define capture_types(...) LIST_APPLY_pre(typeof, SEP_COMMA, __VA_ARGS__)
 
-#define di_closure(fn, weak, caps, ...)                                             \
-	di_create_closure(                                                          \
-	    (void *)fn, di_return_typeid(fn capture_types caps, ##__VA_ARGS__),     \
-	    capture caps, VA_ARGS_LENGTH(__VA_ARGS__),                              \
-	    (di_type_t[]){LIST_APPLY(di_typeid, SEP_COMMA, __VA_ARGS__)}, weak)
+#define di_closure(fn, weak, caps, ...)                                                       \
+	di_create_closure((void *)fn, di_return_typeid(fn capture_types caps, ##__VA_ARGS__), \
+	                  capture caps, VA_ARGS_LENGTH(__VA_ARGS__),                          \
+	                  (di_type_t[]){LIST_APPLY(di_typeid, SEP_COMMA, __VA_ARGS__)}, weak)
 
-#define _di_getm(di, modn, on_err)                                                  \
-	object_cleanup struct di_object *modn##m = NULL;                            \
-	do {                                                                        \
-		struct di_object *__o;                                              \
-		int rc = di_get(di, #modn, __o);                                    \
-		if (rc != 0)                                                        \
-			on_err;                                                     \
-		if (!di_check_type(__o, "deai:module")) {                           \
-			rc = -EINVAL;                                               \
-			on_err;                                                     \
-		}                                                                   \
-		modn##m = __o;                                                      \
+#define _di_getm(di, modn, on_err)                                                       \
+	object_cleanup struct di_object *modn##m = NULL;                                 \
+	do {                                                                             \
+		struct di_object *__o;                                                   \
+		int rc = di_get(di, #modn, __o);                                         \
+		if (rc != 0)                                                             \
+			on_err;                                                          \
+		if (!di_check_type(__o, "deai:module")) {                                \
+			rc = -EINVAL;                                                    \
+			on_err;                                                          \
+		}                                                                        \
+		modn##m = __o;                                                           \
 	} while (0)
 
 #define di_getm(di, modn, on_err) _di_getm(di, modn, return (on_err))
 #define di_getmi(di, modn) _di_getm(di, modn, break)
+#define di_mgetm(mod, modn, on_err)                                                      \
+	_di_getm(di_module_get_deai((struct di_module *)(mod)), modn, return (on_err))
+#define di_mgetmi(mod, modn)                                                             \
+	_di_getm(di_module_get_deai((struct di_module *)(mod)), modn, break)
 
-#define di_schedule_call(di, fn, cap)                                               \
-	do {                                                                        \
-		di_getmi(di, event);                                                \
-		assert(eventm);                                                     \
-		auto cl = di_closure(fn, false, cap);                               \
-		di_listen_to_once(eventm, "prepare", (void *)cl, true);             \
-		di_unref_object((void *)cl);                                        \
+#define di_schedule_call(di, fn, cap)                                                    \
+	do {                                                                             \
+		di_getmi(di, event);                                                     \
+		assert(eventm);                                                          \
+		auto cl = di_closure(fn, false, cap);                                    \
+		di_listen_to_once(eventm, "prepare", (void *)cl, true);                  \
+		di_unref_object((void *)cl);                                             \
 	} while (0)
 
 // call but ignore return
-#define di_call(o, name, ...)                                                       \
-	({                                                                          \
-		int rc = 0;                                                         \
-		do {                                                                \
-			di_type_t rtype;                                            \
-			void *ret;                                                  \
-			rc = di_callx((struct di_object *)(o), (name), &rtype,      \
-			              &ret, di_arg_list(__VA_ARGS__));              \
-			if (rc != 0)                                                \
-				break;                                              \
-			di_free_value(rtype, (void *)ret);                          \
-			free((void *)ret);                                          \
-		} while (0);                                                        \
-		rc;                                                                 \
+#define di_call(o, name, ...)                                                            \
+	({                                                                               \
+		int rc = 0;                                                              \
+		do {                                                                     \
+			di_type_t rtype;                                                 \
+			void *ret;                                                       \
+			rc = di_callx((struct di_object *)(o), (name), &rtype, &ret,     \
+			              di_arg_list(__VA_ARGS__));                         \
+			if (rc != 0)                                                     \
+				break;                                                   \
+			di_free_value(rtype, (void *)ret);                               \
+			free((void *)ret);                                               \
+		} while (0);                                                             \
+		rc;                                                                      \
 	})
 
-#define di_callr(o, name, r, ...)                                                   \
-	({                                                                          \
-		int rc = 0;                                                         \
-		do {                                                                \
-			di_type_t rtype;                                            \
-			void *ret;                                                  \
-			rc = di_callx((struct di_object *)(o), (name), &rtype,      \
-			              &ret, di_arg_list(__VA_ARGS__));              \
-			if (rc != 0)                                                \
-				break;                                              \
-			if (di_typeof(r) != rtype) {                                \
-				di_free_value(rtype, ret);                          \
-				free(ret);                                          \
-				rc = -EINVAL;                                       \
-				break;                                              \
-			}                                                           \
-			(r) = *(typeof(r) *)ret;                                    \
-			free(ret);                                                  \
-		} while (0);                                                        \
-		rc;                                                                 \
+#define di_callr(o, name, r, ...)                                                        \
+	({                                                                               \
+		int rc = 0;                                                              \
+		do {                                                                     \
+			di_type_t rtype;                                                 \
+			void *ret;                                                       \
+			rc = di_callx((struct di_object *)(o), (name), &rtype, &ret,     \
+			              di_arg_list(__VA_ARGS__));                         \
+			if (rc != 0)                                                     \
+				break;                                                   \
+			if (di_typeof(r) != rtype) {                                     \
+				di_free_value(rtype, ret);                               \
+				free(ret);                                               \
+				rc = -EINVAL;                                            \
+				break;                                                   \
+			}                                                                \
+			(r) = *(typeof(r) *)ret;                                         \
+			free(ret);                                                       \
+		} while (0);                                                             \
+		rc;                                                                      \
 	})
 
-#define di_tuple(...)                                                               \
-	((struct di_tuple){                                                         \
-	    VA_ARGS_LENGTH(__VA_ARGS__),                                            \
-	    (void *[]){LIST_APPLY(addressof, SEP_COMMA, __VA_ARGS__)},              \
-	    (di_type_t[]){LIST_APPLY(di_typeof, SEP_COMMA, __VA_ARGS__)}})
+#define di_tuple(...)                                                                    \
+	((struct di_tuple){VA_ARGS_LENGTH(__VA_ARGS__),                                  \
+	                   (void *[]){LIST_APPLY(addressof, SEP_COMMA, __VA_ARGS__)},    \
+	                   (di_type_t[]){LIST_APPLY(di_typeof, SEP_COMMA, __VA_ARGS__)}})
 
-#define di_call_callable(c, ...)                                                    \
-	({                                                                          \
-		int rc = 0;                                                         \
-		do {                                                                \
-			di_type_t rt;                                               \
-			void *ret;                                                  \
-			rc = c->call(c, &rt, &ret, di_tuple(__VA_ARGS__));          \
-			if (rc != 0)                                                \
-				break;                                              \
-			di_free_value(rt, ret);                                     \
-			free(ret);                                                  \
-		} while (0);                                                        \
-		rc;                                                                 \
+#define di_call_callable(c, ...)                                                         \
+	({                                                                               \
+		int rc = 0;                                                              \
+		do {                                                                     \
+			di_type_t rt;                                                    \
+			void *ret;                                                       \
+			rc = c->call(c, &rt, &ret, di_tuple(__VA_ARGS__));               \
+			if (rc != 0)                                                     \
+				break;                                                   \
+			di_free_value(rt, ret);                                          \
+			free(ret);                                                       \
+		} while (0);                                                             \
+		rc;                                                                      \
 	})
 
-#define di_callr_callable(c, r, ...)                                                \
-	({                                                                          \
-		int rc = 0;                                                         \
-		do {                                                                \
-			di_type_t rt;                                               \
-			void *ret;                                                  \
-			rc = c->call(c, &rt, &ret, di_tuple(__VA_ARGS__));          \
-			if (rc != 0)                                                \
-				break;                                              \
-			if (di_typeof(r) != rt) {                                   \
-				di_free_value(rt, ret);                             \
-				free(ret);                                          \
-				rc = -EINVAL;                                       \
-				break;                                              \
-			}                                                           \
-			(r) = *(typeof(r) *)ret;                                    \
-			free(ret);                                                  \
-		} while (0);                                                        \
-		rc;                                                                 \
+#define di_callr_callable(c, r, ...)                                                     \
+	({                                                                               \
+		int rc = 0;                                                              \
+		do {                                                                     \
+			di_type_t rt;                                                    \
+			void *ret;                                                       \
+			rc = c->call(c, &rt, &ret, di_tuple(__VA_ARGS__));               \
+			if (rc != 0)                                                     \
+				break;                                                   \
+			if (di_typeof(r) != rt) {                                        \
+				di_free_value(rt, ret);                                  \
+				free(ret);                                               \
+				rc = -EINVAL;                                            \
+				break;                                                   \
+			}                                                                \
+			(r) = *(typeof(r) *)ret;                                         \
+			free(ret);                                                       \
+		} while (0);                                                             \
+		rc;                                                                      \
 	})
 
-#define di_emit(o, name, ...)                                                       \
-	di_emitn((struct di_object *)o, name, di_tuple(__VA_ARGS__))
+#define di_emit(o, name, ...) di_emitn((struct di_object *)o, name, di_tuple(__VA_ARGS__))
 
 #define _di_field(o, name)                                                               \
 	di_add_member_ref((struct di_object *)(o), #name, di_typeof((o)->name), &((o)->name))
@@ -271,20 +260,20 @@ int di_proxy_signal(struct di_object *nonnull src, const char *nonnull srcsig,
 
 #define di_getter(o, name, g) di_method(o, STRINGIFY(__get_##name), g)
 
-#define di_getter_setter(o, name, g, s)                                             \
-	({                                                                          \
-		int rc = 0;                                                         \
-		do {                                                                \
-			rc = di_getter(o, name, g);                                 \
-			if (rc != 0)                                                \
-				break;                                              \
-			rc = di_method(o, STRINGIFY(__set_##name), s,               \
-			               di_return_typeof(g, struct di_object *));    \
-		} while (0);                                                        \
-		rc;                                                                 \
+#define di_getter_setter(o, name, g, s)                                                  \
+	({                                                                               \
+		int rc = 0;                                                              \
+		do {                                                                     \
+			rc = di_getter(o, name, g);                                      \
+			if (rc != 0)                                                     \
+				break;                                                   \
+			rc = di_method(o, STRINGIFY(__set_##name), s,                    \
+			               di_return_typeof(g, struct di_object *));         \
+		} while (0);                                                             \
+		rc;                                                                      \
 	})
 
-#define TYPE_INIT(type)                                                             \
+#define TYPE_INIT(type)                                                                  \
 	_Generic((type *)0, \
 	struct di_array *: DI_ARRAY_UNIT, \
 	struct di_tuple *: DI_TUPLE_UNIT, \
@@ -304,25 +293,25 @@ int di_proxy_signal(struct di_object *nonnull src, const char *nonnull srcsig,
 #define di_return_typeof(fn, ...) typeof(fn(gen_args(__VA_ARGS__)))
 #define di_return_typeid(fn, ...) di_typeid(di_return_typeof(fn, ##__VA_ARGS__))
 
-#define di_register_typed_method(o, name, fn, rtype, ...)                           \
-	di_add_method((struct di_object *)(o), (name), (void *)(fn), (rtype),       \
+#define di_register_typed_method(o, name, fn, rtype, ...)                                \
+	di_add_method((struct di_object *)(o), (name), (void *)(fn), (rtype),            \
 	              VA_ARGS_LENGTH(__VA_ARGS__), ##__VA_ARGS__)
 
 #define INDIRECT(fn, ...) fn(__VA_ARGS__)
 
 // Need to use INDIRECT because macro(A B) is consider to have only one argument,
 // even if B expands to something starts with a comma
-#define di_method(obj, name, fn, ...)                                               \
-	INDIRECT(di_register_typed_method, obj, name, fn,                           \
-	         di_return_typeid(fn, struct di_object *, ##__VA_ARGS__)            \
+#define di_method(obj, name, fn, ...)                                                    \
+	INDIRECT(di_register_typed_method, obj, name, fn,                                \
+	         di_return_typeid(fn, struct di_object *, ##__VA_ARGS__)                 \
 	             LIST_APPLY_pre(di_typeid, SEP_COMMA, ##__VA_ARGS__))
 
 #define MAKE_VARIANT(x) di_make_variant(di_typeid(x), x)
 
 #define MAKE_VARIANT_LIST(...) LIST_APPLY(MAKE_VARIANT, SEP_COMMA, ##__VA_ARGS__)
 
-#define di_make_tuple(...)                                                          \
-	((struct di_tuple){VA_ARGS_LENGTH(__VA_ARGS__),                             \
+#define di_make_tuple(...)                                                               \
+	((struct di_tuple){VA_ARGS_LENGTH(__VA_ARGS__),                                  \
 	                   (struct di_variant[]){MAKE_VARIANT_LIST(__VA_ARGS__)}})
 
 static inline void nonnull_args(1) __free_objp(struct di_object *nullable *nonnull p) {
@@ -342,8 +331,7 @@ static void unused nonnull_all trivial_detach(struct di_object *nonnull o) {
 typedef void (*nonnull di_detach_fn_t)(struct di_object *nonnull);
 
 static inline int nonnull_all di_set_detach(struct di_listener *nonnull l,
-                                            di_detach_fn_t fn,
-                                            struct di_object *nonnull o) {
+                                            di_detach_fn_t fn, struct di_object *nonnull o) {
 	struct di_closure *cl = di_closure(fn, true, (o));
 	int ret = di_add_member_clone((struct di_object *)l, "__detach", DI_TYPE_OBJECT, cl);
 	di_unref_object((void *)cl);

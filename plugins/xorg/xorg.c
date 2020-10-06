@@ -115,7 +115,7 @@ const char *di_xorg_get_atom_name(struct di_xorg_connection *xc, xcb_atom_t atom
 
 xcb_atom_t di_xorg_intern_atom(struct di_xorg_connection *xc, const char *name,
                                xcb_generic_error_t **e) {
-	di_getm(xc->x->di, log, 0);
+	di_mgetm(xc->x, log, 0);
 	struct di_atom_entry *ae = NULL;
 	*e = NULL;
 
@@ -322,7 +322,7 @@ static struct {
 static void set_keymap(struct di_xorg_connection *xc, struct di_object *o) {
 	struct xkb_rule_names names = {0};
 
-	di_getmi(xc->x->di, log);
+	di_mgetmi(xc->x, log);
 	if (!o || di_get(o, "layout", names.layout)) {
 		di_log_va(logm, DI_LOG_ERROR,
 		          "Invalid keymap object, key \"layout\" is not set");
@@ -439,7 +439,7 @@ di_xorg_connect_to(struct di_xorg *x, const char *displayname) {
 		return di_new_error("Cannot connect to the display");
 	}
 
-	di_getm(x->di, event, di_new_error("Can't get event module"));
+	di_mgetm(x, event, di_new_error("Can't get event module"));
 
 	struct di_xorg_connection *dc =
 	    di_new_object_with_type(struct di_xorg_connection);
@@ -476,8 +476,7 @@ static struct di_object *di_xorg_connect(struct di_xorg *x) {
 	return di_xorg_connect_to(x, NULL);
 }
 PUBLIC int di_plugin_init(struct deai *di) {
-	auto x = di_new_module_with_type(struct di_xorg);
-	x->di = di;
+	auto x = di_new_module(di);
 
 	di_method(x, "connect", di_xorg_connect);
 	di_method(x, "connect_to", di_xorg_connect_to, char *);

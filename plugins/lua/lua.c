@@ -14,6 +14,7 @@
 #include <deai/builtin/log.h>
 #include <deai/deai.h>
 #include <deai/helper.h>
+#include <deai/module.h>
 
 #include "compat.h"
 #include "list.h"
@@ -42,16 +43,6 @@
 		s = tmp;                                                                 \
 	} while (0)
 
-struct di_lua_module {
-	struct di_module;
-
-	// Allow lua state to be freed when no lua object is ref'd by other part of
-	// the system. So lua state can in turn free all di_object it holds
-	struct di_lua_state *L;
-
-	// struct list_head scripts;
-};
-
 struct di_lua_state {
 	// Beware of cycles, could happen if one lua object is registered as module
 	// and access in lua again as module.
@@ -59,7 +50,7 @@ struct di_lua_state {
 	// lua_state -> di_module/di_lua_ref -> lua_script -> lua_state
 	struct di_object;
 	lua_State *L;
-	struct di_lua_module *m;
+	struct di_module *m;
 	struct di_listener *d;
 };
 
@@ -94,7 +85,7 @@ static int di_lua_errfunc(lua_State *L) {
 	lua_pushliteral(L, DI_LUA_REGISTRY_SCRIPT_OBJECT_KEY);
 	lua_rawget(L, LUA_REGISTRYINDEX);
 	struct di_lua_script *o = lua_touserdata(L, -1);
-	di_getm(o->L->m->di, log, rc);
+	di_mgetm(o->L->m, log, rc);
 
 	if (!luaL_dostring(L, "return debug.traceback(\"error while running "
 	                      "function!\", 3)")) {
@@ -323,20 +314,22 @@ const luaL_Reg di_lua_di_methods[] = {
 
 static void lua_state_dtor(struct di_lua_state *obj) {
 	di_stop_listener(obj->d);
-	obj->m->L = NULL;
 	lua_close(obj->L);
+	di_remove_member((void *)obj->m, "__lua_state");
 }
 
-static void lua_new_state(struct di_lua_module *m) {
+static void lua_new_state(struct di_module *m) {
 	auto L = di_new_object_with_type(struct di_lua_state);
 	L->m = m;
 	L->L = luaL_newstate();
 	L->dtor = (void *)lua_state_dtor;
 	luaL_openlibs(L->L);
 
-	di_lua_pushobject(L->L, "di", (void *)m->di, di_lua_di_methods);
+	struct di_object *di = (void *)di_module_get_deai(m);
+	di_lua_pushobject(L->L, "di", di, di_lua_di_methods);
 	// Make it a weak ref
-	di_unref_object((void *)m->di);
+	// TODO(yshui) add proper weak ref
+	di_unref_object(di);
 	lua_setglobal(L->L, "di");
 
 	// We have to unref di here, otherwise there will be a ref cycle:
@@ -354,8 +347,11 @@ static void lua_new_state(struct di_lua_module *m) {
 	}
 	lua_setglobal(L->L, "os");
 	lua_pop(L->L, 1);
-	m->L = L;
-	L->d = di_listen_to_destroyed((void *)m->di, trivial_destroyed_handler, (void *)L);
+	L->d = di_listen_to_destroyed((void *)di_module_get_deai(m),
+	                              trivial_destroyed_handler, (void *)L);
+
+	auto Lo = (struct di_object *)L;
+	di_member(m, "__lua_state", Lo);
 }
 
 static struct di_object *di_lua_load_script(struct di_object *obj, const char *path) {
@@ -376,22 +372,27 @@ static struct di_object *di_lua_load_script(struct di_object *obj, const char *p
 	auto s = di_new_object_with_type(struct di_lua_script);
 	s->dtor = (void *)di_lua_free_script;
 
-	struct di_lua_module *m = (void *)obj;
+	struct di_module *m = (void *)obj;
+	struct di_lua_state **L = NULL;
+	di_type_t vtype;
+	int rc = di_rawgetx(obj, "__lua_state", &vtype, (void **)&L);
+
 	// Don't hold ref. If lua module goes away first, script will become
 	// defunct so that's fine.
-	if (!m->L)
+	if (rc != 0) {
 		lua_new_state(m);
-	else
-		di_ref_object((void *)m->L);
-	s->L = m->L;
+		rc = di_rawgetx(obj, "__lua_state", &vtype, (void **)&L);
+	}
+	assert(vtype == DI_TYPE_OBJECT);
+	s->L = *L;
 
-	di_getm(m->di, log, di_new_error("Can't find log module"));
-	lua_pushcfunction(m->L->L, di_lua_errfunc);
+	di_mgetm(m, log, di_new_error("Can't find log module"));
+	lua_pushcfunction(s->L->L, di_lua_errfunc);
 
-	if (luaL_loadfile(m->L->L, path)) {
-		const char *err = lua_tostring(m->L->L, -1);
+	if (luaL_loadfile(s->L->L, path)) {
+		const char *err = lua_tostring(s->L->L, -1);
 		di_log_va(logm, DI_LOG_ERROR, "Failed to load lua script %s: %s\n", path, err);
-		lua_pop(m->L->L, 2);
+		lua_pop(s->L->L, 2);
 		di_unref_object((void *)s);
 		return di_new_error("Failed to load lua script %s: %s\n", path, err);
 	}
@@ -401,9 +402,9 @@ static struct di_object *di_lua_load_script(struct di_object *obj, const char *p
 	int ret;
 	// load_script might be called by lua script,
 	// so preserve the current set script object.
-	di_lua_xchg_env(m->L->L, s);
-	ret = lua_pcall(m->L->L, 0, 0, -2);
-	di_lua_xchg_env(m->L->L, s);
+	di_lua_xchg_env((*L)->L, s);
+	ret = lua_pcall((*L)->L, 0, 0, -2);
+	di_lua_xchg_env((*L)->L, s);
 
 	if (ret != 0) {
 		// Right now there's no way to revert what this script
@@ -411,7 +412,7 @@ static struct di_object *di_lua_load_script(struct di_object *obj, const char *p
 		// we can do here except unref and return an error object
 
 		// Pop error handling function
-		lua_pop(m->L->L, 1);
+		lua_pop(s->L->L, 1);
 		di_unref_object((void *)s);
 		return di_new_error("Failed to run the lua script");
 	}
@@ -563,13 +564,15 @@ static void *di_lua_type_to_di(lua_State *L, int i, di_type_t *t) {
 	void *ret;
 	di_type_t elemt;
 	switch (lua_type(L, i)) {
-	case LUA_TBOOLEAN: ret_arg(i, DI_TYPE_BOOL, bool, lua_toboolean);
+	case LUA_TBOOLEAN:
+		ret_arg(i, DI_TYPE_BOOL, bool, lua_toboolean);
 	case LUA_TNUMBER:
 		if (lua_isinteger(L, i))
 			ret_arg(i, DI_TYPE_INT, int64_t, lua_tointeger);
 		else
 			ret_arg(i, DI_TYPE_FLOAT, double, lua_tonumber);
-	case LUA_TSTRING: ret_arg(i, DI_TYPE_STRING, const char *, tostringdup);
+	case LUA_TSTRING:
+		ret_arg(i, DI_TYPE_STRING, const char *, tostringdup);
 	case LUA_TUSERDATA:
 		if (!di_lua_isobject(L, i))
 			goto type_error;
@@ -601,12 +604,15 @@ static void *di_lua_type_to_di(lua_State *L, int i, di_type_t *t) {
 			}
 		}
 		return ret;
-	case LUA_TFUNCTION: ret_arg(i, DI_TYPE_OBJECT, struct di_object *, todiobj);
+	case LUA_TFUNCTION:
+		ret_arg(i, DI_TYPE_OBJECT, struct di_object *, todiobj);
 	case LUA_TNIL:
 		*t = DI_TYPE_UNIT;
 		return NULL;
 	type_error:
-	default: *t = -1; return NULL;
+	default:
+		*t = -1;
+		return NULL;
 	}
 #undef ret_arg
 #undef tostringdup
@@ -692,11 +698,21 @@ static int di_lua_pushany(lua_State *L, const char *name, di_type_t t, const voi
 	struct di_tuple *tuple;
 	int step;
 	switch (t) {
-	case DI_TYPE_NUINT: i = *(unsigned int *)d; goto pushint;
-	case DI_TYPE_UINT: i = *(uint64_t *)d; goto pushint;
-	case DI_TYPE_NINT: i = *(int *)d; goto pushint;
-	case DI_TYPE_INT: i = *(int64_t *)d; goto pushint;
-	case DI_TYPE_FLOAT: n = *(double *)d; goto pushnumber;
+	case DI_TYPE_NUINT:
+		i = *(unsigned int *)d;
+		goto pushint;
+	case DI_TYPE_UINT:
+		i = *(uint64_t *)d;
+		goto pushint;
+	case DI_TYPE_NINT:
+		i = *(int *)d;
+		goto pushint;
+	case DI_TYPE_INT:
+		i = *(int64_t *)d;
+		goto pushint;
+	case DI_TYPE_FLOAT:
+		n = *(double *)d;
+		goto pushnumber;
 	case DI_TYPE_POINTER:
 		// bad idea
 		lua_pushlightuserdata(L, *(void **)d);
@@ -708,7 +724,9 @@ static int di_lua_pushany(lua_State *L, const char *name, di_type_t t, const voi
 		di_lua_pushobject(L, name, *(void **)d, di_lua_methods);
 		return 1;
 	case DI_TYPE_STRING:
-	case DI_TYPE_STRING_LITERAL: lua_pushstring(L, *(const char **)d); return 1;
+	case DI_TYPE_STRING_LITERAL:
+		lua_pushstring(L, *(const char **)d);
+		return 1;
 	case DI_TYPE_ARRAY:
 		arr = (struct di_array *)d;
 		step = di_sizeof_type(arr->elem_type);
@@ -730,9 +748,13 @@ static int di_lua_pushany(lua_State *L, const char *name, di_type_t t, const voi
 		b = *(bool *)d;
 		lua_pushboolean(L, b);
 		return 1;
-	case DI_TYPE_UNIT: lua_pushnil(L); return 0;
+	case DI_TYPE_UNIT:
+		lua_pushnil(L);
+		return 0;
 	case DI_TYPE_ANY:
-	case DI_LAST_TYPE: DI_ASSERT(false, "Value with invalid type"); return 0;
+	case DI_LAST_TYPE:
+		DI_ASSERT(false, "Value with invalid type");
+		return 0;
 	}
 
 pushint:
@@ -844,9 +866,8 @@ static int di_lua_setter(lua_State *L) {
 }
 
 PUBLIC int di_plugin_init(struct deai *di) {
-	auto m = di_new_module_with_type(struct di_lua_module);
+	auto m = di_new_module(di);
 
-	m->di = di;
 	di_method(m, "load_script", di_lua_load_script, char *);
 
 	di_register_module(di, "lua", &m);
