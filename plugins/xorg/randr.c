@@ -373,9 +373,11 @@ static int handle_randr_event(struct di_xorg_ext *ext, xcb_generic_event_t *ev) 
 			o = make_object_for_output(rr, rev->u.oc.output);
 			di_emit(ext, "output-change", o);
 			rr->cts = rev->u.oc.config_timestamp;
+			di_unref_object(o);
 		} else if (rev->subCode == XCB_RANDR_NOTIFY_CRTC_CHANGE) {
 			o = make_object_for_view(rr, rev->u.cc.crtc);
 			di_emit(ext, "view-change", o);
+			di_unref_object(o);
 		}
 	} else
 		return 1;
