@@ -238,9 +238,6 @@ void di_dtor(struct deai *di) {
 	*di->quit = true;
 
 #ifdef HAVE_SETPROCTITLE
-	for (int i = 0; environ[i]; i++)
-		free(environ[i]);
-	free(environ);
 	for (int i = 0; i < di->argc; i++)
 		free(di->argv[i]);
 	free(di->argv);
