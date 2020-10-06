@@ -49,7 +49,7 @@ struct di_tuple;
 struct di_object;
 typedef int (*di_call_fn_t)(struct di_object *nonnull, di_type_t *nonnull rt,
                             void *nullable *nonnull ret, struct di_tuple);
-typedef void (*di_dtor_fn_t)(struct di_object *);
+typedef void (*di_dtor_fn_t)(struct di_object *nonnull);
 struct di_signal;
 struct di_listener;
 struct di_callable;
@@ -82,10 +82,10 @@ union di_value {
 	int64_t int_;
 	uint64_t uint;
 	double float_;
-	void *pointer;
-	struct di_object *object;
-	char *string;
-	const char *string_literal;
+	void *nullable pointer;
+	struct di_object *nonnull object;
+	char *nonnull string;
+	const char *nonnull string_literal;
 	struct di_array array;
 	struct di_tuple tuple;
 	// ! last_type
@@ -213,6 +213,9 @@ bool di_is_object_callable(struct di_object *nonnull);
 void di_free_tuple(struct di_tuple);
 void di_free_array(struct di_array);
 void di_free_value(di_type_t, void *nonnull);
+
+/// Copy value of type `t` from `src` to `dst`. It's assumed that `dst` has enough memory
+/// space to hold a value of type `t`
 void di_copy_value(di_type_t t, void *nullable dest, const void *nullable src);
 
 static inline unused size_t di_sizeof_type(di_type_t t) {

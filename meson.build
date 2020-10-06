@@ -19,6 +19,18 @@ test_c_args = [
     '-Werror=implicit-fallthrough',
     '-Wall'
 ]
+
+if get_option('b_sanitize').contains('undefined')
+  ubsan_args = [
+    '-fsanitize=null',
+    '-fsanitize=nonnull-attribute',
+    '-fsanitize=nullability-arg',
+    '-fsanitize=nullability-assign',
+    '-fsanitize=nullability-return',
+  ]
+  test_c_args += ubsan_args
+endif
+
 base_c_args = []
 base_ld_args = [ '-rdynamic' ]
 foreach arg: test_c_args

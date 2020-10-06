@@ -14,7 +14,8 @@ enum { MAX_NARGS = 128,
 
 struct di_closure;
 
-int di_call_object(struct di_object *o, di_type_t *rtype, void **ret, ...);
+int di_call_object(struct di_object *nonnull o, di_type_t *nonnull rtype,
+                   void *nullable *nonnull ret, ...);
 int di_call_objectv(struct di_object *nonnull obj, di_type_t *nonnull rtype,
                     void *nullable *nonnull ret, va_list);
 int di_call_objectt(struct di_object *nonnull, di_type_t *nonnull,

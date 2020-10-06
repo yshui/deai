@@ -125,7 +125,7 @@ static inline ffi_status di_ffi_prep_cif(ffi_cif *nonnull cif, unsigned int narg
 	return ret;
 }
 
-struct di_module *di_new_module_with_size(struct deai *di, size_t size);
+struct di_module *nullable di_new_module_with_size(struct deai *nonnull di, size_t size);
 
 #ifdef TRACK_OBJECTS
 void di_dump_objects(void);

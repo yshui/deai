@@ -345,7 +345,7 @@ static inline struct di_listener *ret_nonnull nonnull_all di_listen_to_destroyed
 	return ret;
 }
 
-static inline unused const char *di_type_to_string(di_type_t type) {
+static inline unused const char *nonnull di_type_to_string(di_type_t type) {
 #define TYPE_CASE(name)                                                                  \
 	case DI_TYPE_##name:                                                             \
 		return #name
