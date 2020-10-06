@@ -344,3 +344,16 @@ static inline struct di_listener *ret_nonnull nonnull_all di_listen_to_destroyed
 	di_set_detach(ret, fn, o2);
 	return ret;
 }
+
+static inline unused const char *di_type_to_string(di_type_t type) {
+#define TYPE_CASE(name)                                                                  \
+	case DI_TYPE_##name:                                                             \
+		return #name
+	switch (type) {
+		LIST_APPLY(TYPE_CASE, SEP_COLON, UNIT, ANY, BOOL, INT, UINT, NINT, NUINT,
+		           FLOAT, STRING, STRING_LITERAL);
+		LIST_APPLY(TYPE_CASE, SEP_COLON, TUPLE, ARRAY, OBJECT, POINTER);
+		case DI_LAST_TYPE: return "LAST_TYPE";
+	}
+	unreachable();
+}

@@ -8,6 +8,7 @@
 #include <assert.h>
 #include <ffi.h>
 #include <stdalign.h>
+#include <threads.h>
 
 #include <deai/deai.h>
 
@@ -34,9 +35,18 @@ struct di_object_internal {
 	uint64_t ref_count;
 	uint8_t destroyed;
 
+#ifdef TRACK_OBJECTS
+	char padding[7];
+	struct list_head siblings;
+#else
 	// Reserved for future use
 	char padding[23];
+#endif
 };
+
+#ifdef TRACK_OBJECTS
+extern thread_local struct list_head all_objects;
+#endif
 
 struct deai {
 	struct di_object_internal;
@@ -116,3 +126,7 @@ static inline ffi_status di_ffi_prep_cif(ffi_cif *nonnull cif, unsigned int narg
 }
 
 struct di_module *di_new_module_with_size(struct deai *di, size_t size);
+
+#ifdef TRACK_OBJECTS
+void di_dump_objects(void);
+#endif

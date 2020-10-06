@@ -434,6 +434,7 @@ static struct di_object *di_xorg_connect_to(struct di_xorg *x, const char *displ
 	di_mgetm(x, event, di_new_error("Can't get event module"));
 
 	struct di_xorg_connection *dc = di_new_object_with_type(struct di_xorg_connection);
+	di_set_type((void *)dc, "deai.plugin.xorg:connection");
 	dc->c = c;
 	dc->dflt_scrn = scrn;
 

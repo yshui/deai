@@ -308,6 +308,7 @@ make_object_for_output(struct di_xorg_randr *rr, xcb_randr_output_t oid) {
 	assert(rr->dc);
 
 	auto obj = di_new_object_with_type(struct di_xorg_output);
+	di_set_type((void *)obj, "deai.plugin.xorg:randr_output");
 	obj->rr = rr;
 	obj->oid = oid;
 	di_getter(obj, view, get_output_view);
@@ -349,6 +350,7 @@ make_object_for_view(struct di_xorg_randr *rr, xcb_randr_crtc_t cid) {
 	assert(rr->dc);
 
 	auto obj = di_new_object_with_type(struct di_xorg_view);
+	di_set_type((void *)obj, "deai.plugin.xorg:randr_view");
 	obj->rr = rr;
 	obj->cid = cid;
 

@@ -366,6 +366,9 @@ void di_terminate(struct deai *p) {
 }
 
 int main(int argc, char *argv[]) {
+#ifdef TRACK_OBJECTS
+	INIT_LIST_HEAD(&all_objects);
+#endif
 	struct deai *p = di_new_object_with_type(struct deai);
 	int exit_code = 0;
 	bool quit = false;
@@ -505,6 +508,10 @@ int main(int argc, char *argv[]) {
 
 	// (4) Start mainloop
 	di_unref_object((void *)p);
+
+#ifdef TRACK_OBJECTS
+	di_dump_objects();
+#endif
 	if (!quit)
 		ev_run(p->loop, 0);
 

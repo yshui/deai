@@ -212,6 +212,7 @@ PUBLIC bool di_check_type(struct di_object *o, const char *tyname) {
 	return strcmp(ot, tyname) == 0;
 }
 
+thread_local struct list_head all_objects;
 PUBLIC struct di_object *di_new_object(size_t sz, size_t alignment) {
 	if (sz < sizeof(struct di_object)) {
 		return NULL;
@@ -225,6 +226,10 @@ PUBLIC struct di_object *di_new_object(size_t sz, size_t alignment) {
 	memset(obj, 0, sz);
 	obj->ref_count = 1;
 	obj->destroyed = 0;
+
+#ifdef TRACK_OBJECTS
+	list_add(&obj->siblings, &all_objects);
+#endif
 
 	return (struct di_object *)obj;
 }
@@ -314,10 +319,13 @@ PUBLIC void di_unref_object(struct di_object *_obj) {
 	assert(obj->ref_count > 0);
 	obj->ref_count--;
 	if (obj->ref_count == 0) {
-		if (obj->destroyed)
+		if (obj->destroyed) {
 			// If we reach here, destroy must have completed
+#ifdef TRACK_OBJECTS
+			list_del(&obj->siblings);
+#endif
 			free(obj);
-		else
+		} else
 			di_destroy_object(_obj);
 	}
 }
@@ -386,8 +394,8 @@ static int di_insert_member(struct di_object_internal *obj, struct di_member *m)
 //
 // Which means, if own = true, after di_add_member returns, the ref to the value
 // `*v` points to is consumed, and the memory location `v` points to is freed
-static int
-di_add_member(struct di_object_internal *o, const char *name, bool own, di_type_t t, void *v) {
+static int di_add_member(struct di_object_internal *o, const char *name, bool own,
+                         di_type_t t, void *v) {
 	if (!name)
 		return -EINVAL;
 
@@ -777,3 +785,20 @@ PUBLIC int di_emitn(struct di_object *o, const char *name, struct di_tuple t) {
 }
 
 #undef is_destroy
+
+#ifdef TRACK_OBJECTS
+void di_dump_objects(void) {
+	struct di_object_internal *i;
+	list_for_each_entry (i, &all_objects, siblings) {
+		fprintf(stderr, "%p, ref count: %lu, type: %s\n", i, i->ref_count,
+		        di_get_type((void *)i));
+		for (struct di_member *m = i->members; m != NULL; m = m->hh.next) {
+			fprintf(stderr, "\tmember: %s, type: %s\n", m->name,
+			        di_type_to_string(m->type));
+		}
+		for (struct di_signal *s = i->signals; s != NULL; s = s->hh.next) {
+			fprintf(stderr, "\tsignal: %s, nlisteners: %d\n", s->name, s->nlisteners);
+		}
+	}
+}
+#endif

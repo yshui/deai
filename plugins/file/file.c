@@ -143,6 +143,7 @@ static struct di_object *di_file_new_watch(struct di_module *f, struct di_array 
 		return di_new_error("Failed to create new inotify file descriptor");
 
 	auto fw = di_new_object_with_type(struct di_file_watch);
+	di_set_type((void *)fw, "deai.plugin.file:watch");
 	fw->fd = ifd;
 	di_set_object_dtor((void *)fw, (void *)stop_file_watcher);
 

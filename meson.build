@@ -41,6 +41,7 @@ subdir('include')
 incs = [deai_inc, include_directories('.')]
 conf = configuration_data()
 conf.set('HAVE_SETPROCTITLE', have_setproctitle)
+conf.set('TRACK_OBJECTS', get_option('track_objects'))
 conf.set('plugin_install_dir', get_option('prefix')+'/'+plugin_install_dir)
 configure_file(input: 'config.h.in', output: 'config.h', configuration: conf)
 subdir('scripts')
