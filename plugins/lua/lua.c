@@ -373,19 +373,24 @@ static struct di_object *di_lua_load_script(struct di_object *obj, const char *p
 	s->dtor = (void *)di_lua_free_script;
 
 	struct di_module *m = (void *)obj;
-	struct di_lua_state **L = NULL;
-	di_type_t vtype;
-	int rc = di_rawgetx(obj, "__lua_state", &vtype, (void **)&L);
+	{
+		struct di_lua_state **L = NULL;
+		di_type_t vtype;
+		int rc = di_rawgetx(obj, "__lua_state", &vtype, (void **)&L);
 
-	// Don't hold ref. If lua module goes away first, script will become
-	// defunct so that's fine.
-	if (rc != 0) {
-		lua_new_state(m);
-		rc = di_rawgetx(obj, "__lua_state", &vtype, (void **)&L);
+		// Don't hold ref. If lua module goes away first, script will become
+		// defunct so that's fine.
+		if (rc != 0) {
+			lua_new_state(m);
+			rc = di_rawgetx(obj, "__lua_state", &vtype, (void **)&L);
+		}
+		assert(vtype == DI_TYPE_OBJECT);
+
+		s->L = *L;
+		free(L);
 	}
-	assert(vtype == DI_TYPE_OBJECT);
-	s->L = *L;
 
+	struct di_lua_state *L = s->L;
 	di_mgetm(m, log, di_new_error("Can't find log module"));
 	lua_pushcfunction(s->L->L, di_lua_errfunc);
 
@@ -402,9 +407,9 @@ static struct di_object *di_lua_load_script(struct di_object *obj, const char *p
 	int ret;
 	// load_script might be called by lua script,
 	// so preserve the current set script object.
-	di_lua_xchg_env((*L)->L, s);
-	ret = lua_pcall((*L)->L, 0, 0, -2);
-	di_lua_xchg_env((*L)->L, s);
+	di_lua_xchg_env(L->L, s);
+	ret = lua_pcall(L->L, 0, 0, -2);
+	di_lua_xchg_env(L->L, s);
 
 	if (ret != 0) {
 		// Right now there's no way to revert what this script
