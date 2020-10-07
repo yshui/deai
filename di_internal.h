@@ -82,6 +82,13 @@ static ffi_type ffi_type_di_tuple = {
     .elements = (ffi_type *[]){&ffi_type_uint64, &ffi_type_pointer, &ffi_type_pointer, NULL},
 };
 
+static ffi_type ffi_type_di_variant = {
+    .size = 0,
+    .alignment = 0,
+    .type = FFI_TYPE_STRUCT,
+    .elements = (ffi_type *[]){&ffi_type_pointer, &ffi_type_uint8, NULL},
+};
+
 static_assert(sizeof(bool) == sizeof(uint8_t), "bool is not uint8_t, unsupported "
                                                "platform");
 static_assert(__alignof__(bool) == __alignof__(uint8_t), "bool is not uint8_t, "
@@ -102,6 +109,7 @@ static inline ffi_type *nullable di_type_to_ffi(di_type_t in) {
 	    [DI_TYPE_STRING_LITERAL] = &ffi_type_pointer,
 	    [DI_TYPE_ARRAY] = &ffi_type_di_array,
 	    [DI_TYPE_TUPLE] = &ffi_type_di_tuple,
+	    [DI_TYPE_VARIANT] = &ffi_type_di_variant,
 	    [DI_LAST_TYPE] = NULL,
 	};
 

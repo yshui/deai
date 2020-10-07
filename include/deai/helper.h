@@ -277,6 +277,7 @@ int di_proxy_signal(struct di_object *nonnull src, const char *nonnull srcsig,
 	_Generic((type *)0, \
 	struct di_array *: DI_ARRAY_INIT, \
 	struct di_tuple *: DI_TUPLE_INIT, \
+	struct di_variant *: DI_VARIANT_INIT, \
 	int *: 0, \
 	unsigned int *: 0, \
 	int64_t *: 0, \
@@ -352,7 +353,7 @@ static inline unused const char *nonnull di_type_to_string(di_type_t type) {
 	switch (type) {
 		LIST_APPLY(TYPE_CASE, SEP_COLON, NIL, ANY, BOOL, INT, UINT, NINT, NUINT,
 		           FLOAT, STRING, STRING_LITERAL);
-		LIST_APPLY(TYPE_CASE, SEP_COLON, TUPLE, ARRAY, OBJECT, POINTER);
+		LIST_APPLY(TYPE_CASE, SEP_COLON, TUPLE, ARRAY, VARIANT, OBJECT, POINTER);
 		case DI_LAST_TYPE: return "LAST_TYPE";
 	}
 	unreachable();

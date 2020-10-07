@@ -525,34 +525,49 @@ PUBLIC void di_free_array(struct di_array arr) {
 	free(arr.arr);
 }
 
-PUBLIC void di_free_value(di_type_t t, void *ptr_) {
+PUBLIC void di_free_value(di_type_t t, void *ptr) {
 	if (t == DI_TYPE_NIL) {
 		return;
 	}
 
 	// If t != DI_TYPE_UINT, then `ptr_` cannot be NULL
-	void *nonnull ptr = ptr_;
+	union di_value *nonnull val = ptr;
 	switch (t) {
 	case DI_TYPE_ARRAY:
-		di_free_array(*(struct di_array *)ptr);
+		di_free_array(val->array);
 		break;
 	case DI_TYPE_TUPLE:
-		di_free_tuple(*(struct di_tuple *)ptr);
+		di_free_tuple(val->tuple);
 		break;
 	case DI_TYPE_STRING:
-		chknull(ptr);
-		free(*(char **)ptr);
+		chknull(val);
+		free(val->string);
 		break;
 	case DI_TYPE_OBJECT:
-		chknull(ptr);
-		di_unref_object(*(struct di_object **)ptr);
+		chknull(val);
+		di_unref_object(val->object);
+		break;
+	case DI_TYPE_VARIANT:
+		di_free_value(val->variant.type, val->variant.value);
+		free(val->variant.value);
 		break;
 	case DI_LAST_TYPE:
 	case DI_TYPE_ANY:
 		DI_ASSERT(false, "Trying to free value of invalid types");
 		fallthrough();
-	default:
+	case DI_TYPE_BOOL:
+	case DI_TYPE_INT:
+	case DI_TYPE_UINT:
+	case DI_TYPE_NINT:
+	case DI_TYPE_NUINT:
+	case DI_TYPE_FLOAT:
+	case DI_TYPE_POINTER:
+	case DI_TYPE_STRING_LITERAL:
+		// Nothing to do
 		break;
+	case DI_TYPE_NIL:
+		// Already checked
+		unreachable();
 	}
 }
 
@@ -589,6 +604,13 @@ PUBLIC void di_copy_value(di_type_t t, void *dst, const void *src) {
 			di_copy_value(tuple->elem_type[i], ret.tuple[i], tuple->tuple[i]);
 		}
 		*(struct di_tuple *)dst = ret;
+		break;
+	case DI_TYPE_VARIANT:
+		dstval->variant = (struct di_variant){
+		    .type = srcval->variant.type,
+		    .value = malloc(di_sizeof_type(srcval->variant.type)),
+		};
+		di_copy_value(srcval->variant.type, dstval->variant.value, srcval->variant.value);
 		break;
 	case DI_TYPE_STRING:
 		dstval->string = strdup(srcval->string);
@@ -684,8 +706,9 @@ di_listen_to_once(struct di_object *_obj, const char *name, struct di_object *h,
 	l->signal = sig;
 	l->once = once;
 
-	if (h)
+	if (h) {
 		di_ref_object(h);
+	}
 	list_add(&l->siblings, &sig->listeners);
 
 	sig->nlisteners++;

@@ -29,19 +29,20 @@
 ///   applies to tuples as well.
 typedef enum di_type {
 	DI_TYPE_NIL = 0,
-	DI_TYPE_ANY,                   // any, only used as element type for empty arrays.
-	DI_TYPE_BOOL,                  // boolean, no implicit conversion to number types
-	DI_TYPE_NINT,                  // native int
-	DI_TYPE_NUINT,                 // native unsigned int
-	DI_TYPE_UINT,                  // uint64_t
-	DI_TYPE_INT,                   // int64_t
-	DI_TYPE_FLOAT,                 // platform dependent, double
-	DI_TYPE_POINTER,               // Generic pointer, void *
-	DI_TYPE_OBJECT,                // pointer to di_object
-	DI_TYPE_STRING,                // utf-8 string, char *
+	DI_TYPE_ANY,            // unresolved, only used for element type of empty arrays.
+	DI_TYPE_BOOL,           // boolean, no implicit conversion to number types
+	DI_TYPE_NINT,           // native int
+	DI_TYPE_NUINT,          // native unsigned int
+	DI_TYPE_UINT,           // uint64_t
+	DI_TYPE_INT,            // int64_t
+	DI_TYPE_FLOAT,          // platform dependent, double
+	DI_TYPE_POINTER,        // Generic pointer, void *
+	DI_TYPE_OBJECT,         // pointer to di_object
+	DI_TYPE_STRING,         // utf-8 string, char *
 	DI_TYPE_STRING_LITERAL,        // utf-8 string literal, const char *
 	DI_TYPE_ARRAY,                 // struct di_array
 	DI_TYPE_TUPLE,                 // array with variable element type
+	DI_TYPE_VARIANT,               // sum type of all di types
 	DI_LAST_TYPE,                  // bottom, the empty type
 } di_type_t;
 
@@ -72,6 +73,11 @@ struct di_tuple {
 	di_type_t *nullable elem_type;
 };
 
+struct di_variant {
+	di_type_t type;
+	union di_value *value;
+};
+
 /// All builtin deai types
 union di_value {
 	// void unit;
@@ -88,6 +94,7 @@ union di_value {
 	const char *nonnull string_literal;
 	struct di_array array;
 	struct di_tuple tuple;
+	struct di_variant variant;
 	// ! last_type
 };
 
@@ -235,6 +242,8 @@ static inline unused size_t di_sizeof_type(di_type_t t) {
 		return sizeof(struct di_array);
 	case DI_TYPE_TUPLE:
 		return sizeof(struct di_tuple);
+	case DI_TYPE_VARIANT:
+		return sizeof(struct di_variant);
 	case DI_TYPE_UINT:
 	case DI_TYPE_INT:
 		return sizeof(int64_t);
@@ -259,6 +268,7 @@ static inline unused size_t di_sizeof_type(di_type_t t) {
 	_Generic((x*)0, \
 	struct di_array *: DI_TYPE_ARRAY, \
 	struct di_tuple *: DI_TYPE_TUPLE, \
+	struct di_variant *: DI_TYPE_VARIANT, \
 	int *: DI_TYPE_NINT, \
 	unsigned int *: DI_TYPE_NUINT, \
 	int64_t *: DI_TYPE_INT, \
@@ -288,6 +298,8 @@ static inline unused size_t di_sizeof_type(di_type_t t) {
 static const struct di_array unused DI_ARRAY_INIT = {0, NULL, DI_TYPE_ANY};
 /// A constant to create an empty tuple
 static const struct di_tuple unused DI_TUPLE_INIT = {0, NULL, NULL};
+/// A constant to create an nil variant
+static const struct di_variant unused DI_VARIANT_INIT = {DI_TYPE_NIL, NULL};
 
 #define define_object_cleanup(t)                                                         \
 	static inline void free_##t(struct t *nullable *nonnull ptr) {                   \
