@@ -28,7 +28,7 @@
 ///   change the storage pointer, it won't be reflected in the actual array. The same
 ///   applies to tuples as well.
 typedef enum di_type {
-	DI_TYPE_UNIT = 0,
+	DI_TYPE_NIL = 0,
 	DI_TYPE_ANY,                   // any, only used as element type for empty arrays.
 	DI_TYPE_BOOL,                  // boolean, no implicit conversion to number types
 	DI_TYPE_NINT,                  // native int
@@ -223,7 +223,7 @@ void di_copy_value(di_type_t t, void *nullable dest, const void *nullable src);
 
 static inline unused size_t di_sizeof_type(di_type_t t) {
 	switch (t) {
-	case DI_TYPE_UNIT:
+	case DI_TYPE_NIL:
 	case DI_TYPE_ANY:
 	case DI_LAST_TYPE:
 		return 0;
@@ -268,7 +268,7 @@ static inline unused size_t di_sizeof_type(di_type_t t) {
 	struct di_object **: DI_TYPE_OBJECT, \
 	void **: DI_TYPE_POINTER, \
 	double *: DI_TYPE_FLOAT, \
-	void *: DI_TYPE_UNIT, \
+	void *: DI_TYPE_NIL, \
 	bool *: DI_TYPE_BOOL \
 )
 

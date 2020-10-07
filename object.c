@@ -446,7 +446,7 @@ PUBLIC int di_add_member_move(struct di_object *o, const char *name, di_type_t *
 	void *taddr = malloc(sz);
 	memcpy(taddr, addr, sz);
 
-	*t = DI_TYPE_UNIT;
+	*t = DI_TYPE_NIL;
 	memset(addr, 0, sz);
 
 	return di_add_member((struct di_object_internal *)o, name, true, tt, taddr);
@@ -498,7 +498,7 @@ PUBLIC void di_free_array(struct di_array arr) {
 }
 
 PUBLIC void di_free_value(di_type_t t, void *ptr_) {
-	if (t == DI_TYPE_UNIT) {
+	if (t == DI_TYPE_NIL) {
 		return;
 	}
 
@@ -535,7 +535,7 @@ PUBLIC void di_copy_value(di_type_t t, void *dst, const void *src) {
 	void *d;
 
 	// dst and src only allowed to be null when t is unit
-	assert(t == DI_TYPE_UNIT || (dst && src));
+	assert(t == DI_TYPE_NIL || (dst && src));
 	switch (t) {
 	case DI_TYPE_ARRAY:
 		arr = src;
@@ -566,7 +566,7 @@ PUBLIC void di_copy_value(di_type_t t, void *dst, const void *src) {
 		di_ref_object(*(struct di_object **)src);
 		*(struct di_object **)dst = *(struct di_object **)src;
 		break;
-	case DI_TYPE_UNIT:
+	case DI_TYPE_NIL:
 		// nothing to do
 		break;
 	case DI_TYPE_ANY:

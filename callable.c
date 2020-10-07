@@ -67,7 +67,7 @@ static int _di_typed_trampoline(ffi_cif *cif, void (*fn)(void), void *ret,
 		rc = di_type_conversion(ats[i - nargs0], args[i - nargs0],
 		                        fnats[i - nargs0], xargs + i);
 		if (rc != 0) {
-			if (ats[i - nargs0] == DI_TYPE_UNIT) {
+			if (ats[i - nargs0] == DI_TYPE_NIL) {
 				struct di_array *arr;
 				switch (fnats[i - nargs0]) {
 				case DI_TYPE_OBJECT:
@@ -243,7 +243,7 @@ PUBLIC int di_add_method(struct di_object *o, const char *name, void (*fn)(void)
 	va_start(ap, nargs);
 	for (unsigned int i = 0; i < nargs; i++) {
 		f->atypes[i + 1] = va_arg(ap, di_type_t);
-		if (f->atypes[i + 1] == DI_TYPE_UNIT) {
+		if (f->atypes[i + 1] == DI_TYPE_NIL) {
 			free(f);
 			return -EINVAL;
 		}

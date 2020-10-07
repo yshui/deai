@@ -350,7 +350,7 @@ static inline unused const char *nonnull di_type_to_string(di_type_t type) {
 	case DI_TYPE_##name:                                                             \
 		return #name
 	switch (type) {
-		LIST_APPLY(TYPE_CASE, SEP_COLON, UNIT, ANY, BOOL, INT, UINT, NINT, NUINT,
+		LIST_APPLY(TYPE_CASE, SEP_COLON, NIL, ANY, BOOL, INT, UINT, NINT, NUINT,
 		           FLOAT, STRING, STRING_LITERAL);
 		LIST_APPLY(TYPE_CASE, SEP_COLON, TUPLE, ARRAY, OBJECT, POINTER);
 		case DI_LAST_TYPE: return "LAST_TYPE";

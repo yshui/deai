@@ -89,7 +89,7 @@ static_assert(__alignof__(bool) == __alignof__(uint8_t), "bool is not uint8_t, "
 
 static inline ffi_type *nullable di_type_to_ffi(di_type_t in) {
 	ffi_type *const type_map[] = {
-	    [DI_TYPE_UNIT] = &ffi_type_void,
+	    [DI_TYPE_NIL] = &ffi_type_void,
 	    [DI_TYPE_BOOL] = &ffi_type_uint8,
 	    [DI_TYPE_NINT] = &ffi_type_sint,
 	    [DI_TYPE_NUINT] = &ffi_type_uint,
