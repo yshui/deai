@@ -560,23 +560,25 @@ PUBLIC void di_copy_value(di_type_t t, void *dst, const void *src) {
 	const struct di_array *arr;
 	const struct di_tuple *tuple;
 	struct di_tuple ret;
+	union di_value *dstval = dst;
+	const union di_value *srcval = src;
 	void *d;
 
 	// dst and src only allowed to be null when t is unit
 	assert(t == DI_TYPE_NIL || (dst && src));
 	switch (t) {
 	case DI_TYPE_ARRAY:
-		arr = src;
+		arr = &srcval->array;
 		assert(di_sizeof_type(arr->elem_type) != 0);
 		d = calloc(arr->length, di_sizeof_type(arr->elem_type));
 		for (int i = 0; i < arr->length; i++) {
 			di_copy_value(arr->elem_type, d + di_sizeof_type(arr->elem_type) * i,
 			              arr->arr + di_sizeof_type(arr->elem_type) * i);
 		}
-		*(struct di_array *)dst = (struct di_array){arr->length, d, arr->elem_type};
+		dstval->array = (struct di_array){arr->length, d, arr->elem_type};
 		break;
 	case DI_TYPE_TUPLE:
-		tuple = src;
+		tuple = &srcval->tuple;
 		ret.tuple = tmalloc(void *, tuple->length);
 		ret.elem_type = tmalloc(di_type_t, tuple->length);
 		ret.length = tuple->length;
@@ -589,11 +591,11 @@ PUBLIC void di_copy_value(di_type_t t, void *dst, const void *src) {
 		*(struct di_tuple *)dst = ret;
 		break;
 	case DI_TYPE_STRING:
-		*(const char **)dst = strdup(*(const char **)src);
+		dstval->string = strdup(srcval->string);
 		break;
 	case DI_TYPE_OBJECT:
-		di_ref_object(*(struct di_object **)src);
-		*(struct di_object **)dst = *(struct di_object **)src;
+		di_ref_object(srcval->object);
+		dstval->object = srcval->object;
 		break;
 	case DI_TYPE_NIL:
 		// nothing to do
