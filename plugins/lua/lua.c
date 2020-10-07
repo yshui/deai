@@ -222,11 +222,12 @@ static int _di_lua_method_handler(lua_State *L, const char *name, struct di_obje
 	int argi = 0;
 	// Translate lua arguments
 	for (int i = 2; i <= nargs; i++) {
-		t.tuple[i - 2] = di_lua_type_to_di(L, i, t.elem_type + i - 2);
+		void *tmp = di_lua_type_to_di(L, i, t.elem_type + i - 2);
 		if (t.elem_type[i - 2] >= DI_LAST_TYPE) {
 			argi = i;
 			goto err;
 		}
+		t.tuple[i - 2] = tmp;
 	}
 
 	void *ret;

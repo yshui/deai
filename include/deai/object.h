@@ -68,7 +68,7 @@ struct di_array {
 
 struct di_tuple {
 	uint64_t length;
-	void *nonnull *nullable tuple;
+	void *nullable *nullable tuple;
 	di_type_t *nullable elem_type;
 };
 
@@ -212,7 +212,10 @@ bool di_is_object_callable(struct di_object *nonnull);
 
 void di_free_tuple(struct di_tuple);
 void di_free_array(struct di_array);
-void di_free_value(di_type_t, void *nonnull);
+
+/// Free a `value` of type `t`. This function does not free the storage space used by
+/// `value`. This is to make this function usable for values stored on the stack.
+void di_free_value(di_type_t t, void *nullable value);
 
 /// Copy value of type `t` from `src` to `dst`. It's assumed that `dst` has enough memory
 /// space to hold a value of type `t`

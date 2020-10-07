@@ -90,9 +90,11 @@ call_handler_with_fallback(struct di_object *o, const char *prefix, const char *
 		goto ret;
 
 	tmp.length++;
-	tmp.tuple[1] = tmp.tuple[0];
+	if (tmp.length > 1) {
+		tmp.tuple[1] = tmp.tuple[0];
+		tmp.elem_type[1] = tmp.elem_type[0];
+	}
 	tmp.tuple[0] = &name;
-	tmp.elem_type[1] = tmp.elem_type[0];
 	tmp.elem_type[0] = DI_TYPE_STRING_LITERAL;
 
 	rc2 = di_rawcallxn(o, prefix, &rtype2, &ret2, tmp);
@@ -495,22 +497,32 @@ PUBLIC void di_free_array(struct di_array arr) {
 	free(arr.arr);
 }
 
-PUBLIC void di_free_value(di_type_t t, void *ret) {
+PUBLIC void di_free_value(di_type_t t, void *ptr_) {
+	if (t == DI_TYPE_UNIT) {
+		return;
+	}
+
+	// If t != DI_TYPE_UINT, then `ptr_` cannot be NULL
+	void *nonnull ptr = ptr_;
 	switch (t) {
 	case DI_TYPE_ARRAY:
-		di_free_array(*(struct di_array *)ret);
+		di_free_array(*(struct di_array *)ptr);
 		break;
 	case DI_TYPE_TUPLE:
-		di_free_tuple(*(struct di_tuple *)ret);
+		di_free_tuple(*(struct di_tuple *)ptr);
 		break;
 	case DI_TYPE_STRING:
-		chknull(ret);
-		free(*(char **)ret);
+		chknull(ptr);
+		free(*(char **)ptr);
 		break;
 	case DI_TYPE_OBJECT:
-		chknull(ret);
-		di_unref_object(*(struct di_object **)ret);
+		chknull(ptr);
+		di_unref_object(*(struct di_object **)ptr);
 		break;
+	case DI_LAST_TYPE:
+	case DI_TYPE_ANY:
+		DI_ASSERT(false, "Trying to free value of invalid types");
+		fallthrough();
 	default:
 		break;
 	}
