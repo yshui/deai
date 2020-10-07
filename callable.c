@@ -83,7 +83,7 @@ static int _di_typed_trampoline(ffi_cif *cif, void (*fn)(void), void *ret,
 					break;
 				case DI_TYPE_ARRAY:
 					arr = tmalloc(struct di_array, 1);
-					*arr = DI_ARRAY_UNIT;
+					*arr = DI_ARRAY_INIT;
 					xargs[i] = arr;
 					rc = 0;
 					break;
@@ -273,7 +273,7 @@ PUBLIC int di_call_objectv(struct di_object *_obj, di_type_t *rtype, void **ret,
 		return -EINVAL;
 
 	va_list ap2;
-	struct di_tuple tu = DI_TUPLE_UNIT;
+	struct di_tuple tu = DI_TUPLE_INIT;
 
 	va_copy(ap2, ap);
 	di_type_t t = va_arg(ap, di_type_t);

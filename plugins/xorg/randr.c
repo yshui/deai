@@ -323,7 +323,7 @@ make_object_for_output(struct di_xorg_randr *rr, xcb_randr_output_t oid) {
 }
 
 static struct di_array get_view_outputs(struct di_xorg_view *v) {
-	struct di_array ret = DI_ARRAY_UNIT;
+	struct di_array ret = DI_ARRAY_INIT;
 	if (!v->rr->dc)
 		return ret;
 
@@ -440,7 +440,7 @@ static void disable_randr_event(struct di_xorg_randr *rr, uint16_t mask) {
 // event_funcs(OUTPUT_CHANGE, output_change);
 
 static struct di_array rr_outputs(struct di_xorg_randr *rr) {
-	struct di_array ret = DI_ARRAY_UNIT;
+	struct di_array ret = DI_ARRAY_INIT;
 	if (!rr->dc)
 		return ret;
 
@@ -479,7 +479,7 @@ make_object_for_modes(struct di_xorg_randr *rr, xcb_randr_mode_info_t *m) {
 }
 
 static struct di_array rr_modes(struct di_xorg_randr *rr) {
-	struct di_array ret = DI_ARRAY_UNIT;
+	struct di_array ret = DI_ARRAY_INIT;
 	if (!rr->dc)
 		return ret;
 

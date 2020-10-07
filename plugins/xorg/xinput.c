@@ -339,13 +339,13 @@ err:
 static struct di_array
 di_xorg_xinput_get_prop(struct di_xorg_xinput_device *dev, const char *name) {
 	if (!dev->xi->dc)
-		return DI_ARRAY_UNIT;
+		return DI_ARRAY_INIT;
 
 	struct di_xorg_connection *dc = dev->xi->dc;
 
 	di_mgetmi(dc->x, log);
 	xcb_generic_error_t *e;
-	struct di_array ret = DI_ARRAY_UNIT;
+	struct di_array ret = DI_ARRAY_INIT;
 	auto prop_atom = di_xorg_intern_atom(dc, name, &e);
 
 	if (e)
@@ -467,7 +467,7 @@ di_xorg_make_object_for_devid(struct di_xorg_xinput *xi, int deviceid) {
 
 static struct di_array di_xorg_get_all_devices(struct di_xorg_xinput *xi) {
 	if (!xi->dc)
-		return DI_ARRAY_UNIT;
+		return DI_ARRAY_INIT;
 
 	with_cleanup_t(xcb_input_xi_query_device_reply_t) r =
 	    xcb_input_xi_query_device_reply(

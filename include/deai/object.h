@@ -218,15 +218,17 @@ void di_free_array(struct di_array);
 void di_free_value(di_type_t t, void *nullable value);
 
 /// Copy value of type `t` from `src` to `dst`. It's assumed that `dst` has enough memory
-/// space to hold a value of type `t`
+/// space to hold a value of type `t`, and that `dst` doesn't contain a valid value
+/// beforehand
 void di_copy_value(di_type_t t, void *nullable dest, const void *nullable src);
 
 static inline unused size_t di_sizeof_type(di_type_t t) {
 	switch (t) {
 	case DI_TYPE_NIL:
+		return 0;
 	case DI_TYPE_ANY:
 	case DI_LAST_TYPE:
-		return 0;
+		abort();
 	case DI_TYPE_FLOAT:
 		return sizeof(double);
 	case DI_TYPE_ARRAY:
@@ -235,7 +237,7 @@ static inline unused size_t di_sizeof_type(di_type_t t) {
 		return sizeof(struct di_tuple);
 	case DI_TYPE_UINT:
 	case DI_TYPE_INT:
-		return 8;
+		return sizeof(int64_t);
 	case DI_TYPE_NUINT:
 		return sizeof(unsigned int);
 	case DI_TYPE_NINT:
@@ -247,10 +249,8 @@ static inline unused size_t di_sizeof_type(di_type_t t) {
 		return sizeof(void *);
 	case DI_TYPE_BOOL:
 		return sizeof(bool);
-	default:
-		assert(false);
-		unreachable();
 	}
+	abort();
 }
 
 // Workaround for _Generic limitations, see:
@@ -284,10 +284,10 @@ static inline unused size_t di_sizeof_type(di_type_t t) {
 		*retv = v;                                                               \
 	} while (0);
 
-/// The unit value in array form, []
-static const struct di_array unused DI_ARRAY_UNIT = {0, NULL, DI_TYPE_ANY};
-/// The unit value in tuple form, ()
-static const struct di_tuple unused DI_TUPLE_UNIT = {0, NULL, NULL};
+/// A constant to create an empty array
+static const struct di_array unused DI_ARRAY_INIT = {0, NULL, DI_TYPE_ANY};
+/// A constant to create an empty tuple
+static const struct di_tuple unused DI_TUPLE_INIT = {0, NULL, NULL};
 
 #define define_object_cleanup(t)                                                         \
 	static inline void free_##t(struct t *nullable *nonnull ptr) {                   \
