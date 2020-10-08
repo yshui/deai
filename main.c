@@ -432,15 +432,17 @@ int main(int argc, char *argv[]) {
 	if (method) {
 		modname = strndup(argv[1], method - argv[1]);
 		method = strdup(method + 1);
-	} else
+	} else {
 		method = strdup(argv[1]);
+	}
 
 	void **di_args = calloc(argc - 2, sizeof(void *));
 	di_type_t *di_types = calloc(argc - 2, sizeof(di_type_t));
 	int nargs = 0;
 	for (int i = 2; i < argc; i++) {
-		if (strcmp(argv[i], "--") == 0)
+		if (strcmp(argv[i], "--") == 0) {
 			break;
+		}
 		if (argv[i][1] != ':') {
 			fprintf(stderr, "Invalid argument: %s\n", argv[i]);
 			exit(EXIT_FAILURE);
@@ -473,8 +475,9 @@ int main(int argc, char *argv[]) {
 
 	// (3) Load default plugins
 	int ret = load_plugin_dir(p, DI_PLUGIN_INSTALL_DIR);
-	if (ret != 0)
+	if (ret != 0) {
 		fprintf(stderr, "Failed to load plugins\n");
+	}
 
 	struct di_object *mod = NULL;
 	if (modname) {
@@ -483,8 +486,9 @@ int main(int argc, char *argv[]) {
 			fprintf(stderr, "Module \"%s\" not found\n", modname);
 			exit(EXIT_FAILURE);
 		}
-	} else
+	} else {
 		mod = di_ref_object((struct di_object *)p);
+	}
 
 	di_type_t rt;
 	void *retd = NULL;
@@ -512,8 +516,9 @@ int main(int argc, char *argv[]) {
 #ifdef TRACK_OBJECTS
 	di_dump_objects();
 #endif
-	if (!quit)
+	if (!quit) {
 		ev_run(p->loop, 0);
+	}
 
 	return exit_code;
 }

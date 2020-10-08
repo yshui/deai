@@ -28,7 +28,7 @@ int di_proxy_signal(struct di_object *nonnull src, const char *nonnull srcsig,
                     struct di_object *nonnull proxy, const char *nonnull proxysig)
     nonnull_args(1, 2, 3, 4);
 
-#define DTOR(o) ((struct di_object *)o)->dtor
+#define DTOR(o) ((struct di_object *)(o))->dtor
 
 #define RET_IF_ERR(expr)                                                                 \
 	do {                                                                             \
@@ -55,7 +55,7 @@ int di_proxy_signal(struct di_object *nonnull src, const char *nonnull srcsig,
 		int rc;                                                                  \
 		void *ret;                                                               \
 		do {                                                                     \
-			rc = di_getxt((void *)o, prop, di_typeof(r), &ret);              \
+			rc = di_getxt((void *)(o), prop, di_typeof(r), &ret);            \
 			if (rc != 0)                                                     \
 				break;                                                   \
 			(r) = *(typeof(r) *)ret;                                         \
@@ -117,7 +117,7 @@ int di_proxy_signal(struct di_object *nonnull src, const char *nonnull srcsig,
 
 #define STRINGIFY(x) #x
 
-#define addressof(x) (&((typeof(x)[]){x}))
+#define addressof(x) (&((typeof(x)[]){x})[0])
 
 #define di_type_pair(v) di_typeof(v), v,
 #define di_arg_list(...) LIST_APPLY(di_type_pair, SEP_NONE, __VA_ARGS__) DI_LAST_TYPE
@@ -206,6 +206,7 @@ int di_proxy_signal(struct di_object *nonnull src, const char *nonnull srcsig,
 		rc;                                                                      \
 	})
 
+#define di_variant(x) ((struct di_variant){(union di_value *)addressof(x), di_typeof(x),})
 #define di_tuple(...)                                                                    \
 	((struct di_tuple){VA_ARGS_LENGTH(__VA_ARGS__),                                  \
 	                   (void *[]){LIST_APPLY(addressof, SEP_COMMA, __VA_ARGS__)},    \
@@ -256,7 +257,7 @@ int di_proxy_signal(struct di_object *nonnull src, const char *nonnull srcsig,
 #define di_field(o, name) _di_field(o, name)
 
 #define di_member(o, name, v)                                                            \
-	di_add_member_move((struct di_object *)(o), name, (di_type_t[]){di_typeof(v)}, &v)
+	di_add_member_move((struct di_object *)(o), name, (di_type_t[]){di_typeof(v)}, &(v))
 
 #define di_getter(o, name, g) di_method(o, STRINGIFY(__get_##name), g)
 
@@ -307,17 +308,10 @@ int di_proxy_signal(struct di_object *nonnull src, const char *nonnull srcsig,
 	         di_return_typeid(fn, struct di_object *, ##__VA_ARGS__)                 \
 	             LIST_APPLY_pre(di_typeid, SEP_COMMA, ##__VA_ARGS__))
 
-#define MAKE_VARIANT(x) di_make_variant(di_typeid(x), x)
-
-#define MAKE_VARIANT_LIST(...) LIST_APPLY(MAKE_VARIANT, SEP_COMMA, ##__VA_ARGS__)
-
-#define di_make_tuple(...)                                                               \
-	((struct di_tuple){VA_ARGS_LENGTH(__VA_ARGS__),                                  \
-	                   (struct di_variant[]){MAKE_VARIANT_LIST(__VA_ARGS__)}})
-
 static inline void nonnull_args(1) __free_objp(struct di_object *nullable *nonnull p) {
-	if (*p)
+	if (*p) {
 		di_unref_object(*p);
+	}
 	*p = NULL;
 }
 

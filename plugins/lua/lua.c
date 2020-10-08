@@ -243,7 +243,7 @@ static int _di_lua_method_handler(lua_State *L, const char *name, struct di_obje
 	int nret;
 
 	if (rc == 0) {
-		nret = di_lua_pushvariant(L, NULL, (struct di_variant){rtype, ret});
+		nret = di_lua_pushvariant(L, NULL, (struct di_variant){ret, rtype});
 		di_free_value(rtype, ret);
 		free(ret);
 	}
@@ -548,7 +548,7 @@ call_lua_function(struct di_lua_ref *ref, di_type_t *rt, void **ret, struct di_t
 	lua_rawgeti(L, LUA_REGISTRYINDEX, ref->tref);
 	// Push arguments
 	for (unsigned int i = 0; i < t.length; i++) {
-		di_lua_pushvariant(L, NULL, (struct di_variant){t.elem_type[i], t.tuple[i]});
+		di_lua_pushvariant(L, NULL, (struct di_variant){t.tuple[i], t.elem_type[i]});
 	}
 
 	lua_pcall(L, t.length, 1, -(int)t.length - 2);
@@ -763,7 +763,7 @@ static int di_lua_pushvariant(lua_State *L, const char *name, struct di_variant 
 		lua_createtable(L, arr->length, 0);
 		for (int i = 0; i < arr->length; i++) {
 			di_lua_pushvariant(
-			    L, NULL, (struct di_variant){arr->elem_type, arr->arr + step * i});
+			    L, NULL, (struct di_variant){arr->arr + step * i, arr->elem_type});
 			lua_rawseti(L, -2, i + 1);
 		}
 		return 1;
@@ -772,7 +772,7 @@ static int di_lua_pushvariant(lua_State *L, const char *name, struct di_variant 
 		lua_createtable(L, tuple->length, 0);
 		for (int i = 0; i < tuple->length; i++) {
 			di_lua_pushvariant(
-			    L, NULL, (struct di_variant){tuple->elem_type[i], tuple->tuple[i]});
+			    L, NULL, (struct di_variant){tuple->tuple[i], tuple->elem_type[i]});
 			lua_rawseti(L, -2, i + 1);
 		}
 		return 1;
@@ -866,7 +866,7 @@ static int di_lua_getter(lua_State *L) {
 		lua_pushnil(L);
 		return 1;
 	}
-	rc = di_lua_pushvariant(L, key, (struct di_variant){rt, ret});
+	rc = di_lua_pushvariant(L, key, (struct di_variant){ret, rt});
 	di_free_value(rt, (void *)ret);
 	free((void *)ret);
 	return rc;

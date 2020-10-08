@@ -72,8 +72,8 @@ static struct di_object *di_dbus_send(_di_dbus_connection *c, DBusMessage *msg) 
 	return (void *)ret;
 }
 
-static void di_dbus_update_name(_di_dbus_connection *c, const char *wk,
-                                const char *old, const char *unique) {
+static void di_dbus_update_name(_di_dbus_connection *c, const char *wk, const char *old,
+                                const char *unique) {
 	_bus_name *i, *ni;
 	if (*wk == ':')
 		return;
@@ -85,16 +85,15 @@ static void di_dbus_update_name(_di_dbus_connection *c, const char *wk,
 			if (strcmp(wk, i->well_known))
 				continue;
 
-			//fprintf(stderr, "remove old %s -> %s\n", wk, i->unique);
+			// fprintf(stderr, "remove old %s -> %s\n", wk, i->unique);
 			list_del(&i->sibling);
 			free(i);
 		}
 	}
 	if (*unique != '\0') {
-		//fprintf(stderr, "%s -> %s\n", wk, unique);
+		// fprintf(stderr, "%s -> %s\n", wk, unique);
 		auto wklen = strlen(wk);
-		_bus_name *newi =
-		    malloc(sizeof(_bus_name) + wklen + strlen(unique) + 2);
+		_bus_name *newi = malloc(sizeof(_bus_name) + wklen + strlen(unique) + 2);
 		newi->well_known = newi->buf;
 		newi->unique = newi->buf + wklen + 1;
 		strcpy(newi->well_known, wk);
@@ -103,16 +102,14 @@ static void di_dbus_update_name(_di_dbus_connection *c, const char *wk,
 	}
 }
 
-static void
-di_dbus_update_name_from_msg(_di_dbus_connection *c, char *wk, DBusMessage *msg) {
+static void di_dbus_update_name_from_msg(_di_dbus_connection *c, char *wk, DBusMessage *msg) {
 	if (dbus_message_get_type(msg) != DBUS_MESSAGE_TYPE_METHOD_RETURN)
 		return;
 
 	DBusError e;
 	dbus_error_init(&e);
 	const char *unique;
-	bool ret = dbus_message_get_args(msg, &e, DBUS_TYPE_STRING, &unique,
-	                                 DBUS_TYPE_INVALID);
+	bool ret = dbus_message_get_args(msg, &e, DBUS_TYPE_STRING, &unique, DBUS_TYPE_INVALID);
 	if (!ret)
 		return;
 	di_dbus_update_name(c, wk, NULL, unique);
@@ -127,8 +124,8 @@ static void di_dbus_watch_name(_di_dbus_connection *c, const char *busname) {
 	char *match;
 	asprintf(&match,
 	         "type='signal',sender='" DBUS_SERVICE_DBUS "',path='" DBUS_PATH_DBUS
-	         "',interface='" DBUS_INTERFACE_DBUS
-	         "',member='NameOwnerChanged',arg0='%s'",
+	         "',interface='" DBUS_INTERFACE_DBUS "',member='NameOwnerChanged',arg0='%"
+	                                             "s'",
 	         busname);
 
 	dbus_bus_add_match(c->conn, match, NULL);
@@ -140,8 +137,7 @@ static void di_dbus_watch_name(_di_dbus_connection *c, const char *busname) {
 	auto ret = di_dbus_send(c, msg);
 	dbus_message_unref(msg);
 
-	auto cl = di_closure(di_dbus_update_name_from_msg, false,
-	                     ((void *)c, busname), void *);
+	auto cl = di_closure(di_dbus_update_name_from_msg, false, ((void *)c, busname), void *);
 	di_listen_to_once(ret, "reply", (struct di_object *)cl, true);
 	di_unref_object((void *)cl);
 	di_unref_object((void *)ret);
@@ -155,8 +151,8 @@ static void di_dbus_unwatch_name(_di_dbus_connection *c, const char *busname) {
 	char *match;
 	asprintf(&match,
 	         "type='signal',sender='" DBUS_SERVICE_DBUS "',path='" DBUS_PATH_DBUS
-	         "',interface='" DBUS_INTERFACE_DBUS
-	         "',member='NameOwnerChanged',arg0='%s'",
+	         "',interface='" DBUS_INTERFACE_DBUS "',member='NameOwnerChanged',arg0='%"
+	                                             "s'",
 	         busname);
 
 	dbus_bus_remove_match(c->conn, match, NULL);
@@ -256,10 +252,11 @@ static void _dbus_call_method_reply_cb(struct di_object *sig, void *msg) {
 	dbus_message_iter_init(msg, &i);
 	_dbus_deserialize_tuple(&i, &t);
 
-	if (dbus_message_get_type(msg) == DBUS_MESSAGE_TYPE_METHOD_RETURN)
+	if (dbus_message_get_type(msg) == DBUS_MESSAGE_TYPE_METHOD_RETURN) {
 		di_emitn(sig, "reply", t);
-	else if (dbus_message_get_type(msg) == DBUS_MESSAGE_TYPE_ERROR)
+	} else if (dbus_message_get_type(msg) == DBUS_MESSAGE_TYPE_ERROR) {
 		di_emitn(sig, "error", t);
+	}
 
 	di_free_tuple(t);
 	dbus_message_unref(msg);
@@ -267,16 +264,14 @@ static void _dbus_call_method_reply_cb(struct di_object *sig, void *msg) {
 	di_destroy_object(sig);
 }
 
-static struct di_object *
-_dbus_call_method(_di_dbus_object *dobj, const char *iface, const char *method,
-                  struct di_tuple t) {
+static struct di_object *_dbus_call_method(_di_dbus_object *dobj, const char *iface,
+                                           const char *method, struct di_tuple t) {
 
 	// XXX: probably better to destroy all objects when disconnect from bus
 	if (!dobj->c->conn)
 		return NULL;
 
-	DBusMessage *msg =
-	    dbus_message_new_method_call(dobj->bus, dobj->obj, iface, method);
+	DBusMessage *msg = dbus_message_new_method_call(dobj->bus, dobj->obj, iface, method);
 	DBusMessageIter i;
 	dbus_message_iter_init_append(msg, &i);
 
@@ -314,8 +309,7 @@ static void di_dbus_free_method(_di_dbus_method *o) {
 	di_unref_object((void *)o->dobj);
 }
 
-static int
-call_dbus_method(_di_dbus_method *m, di_type_t *rt, void **ret, struct di_tuple t) {
+static int call_dbus_method(_di_dbus_method *m, di_type_t *rt, void **ret, struct di_tuple t) {
 	*rt = DI_TYPE_OBJECT;
 	auto retd = tmalloc(struct di_object *, 1);
 	*retd = _dbus_call_method(m->dobj, m->interface, m->method, t);
@@ -323,18 +317,17 @@ call_dbus_method(_di_dbus_method *m, di_type_t *rt, void **ret, struct di_tuple 
 	return 0;
 }
 
-static struct di_object *
-di_dbus_object_getter(_di_dbus_object *dobj, const char *method) {
+static struct di_object *di_dbus_object_getter(_di_dbus_object *dobj, const char *method) {
 	const char *dot = strrchr(method, '.');
 	char *ifc, *m;
 	if (dot) {
 		const char *dot2 = strchr(method, '.');
-		if (dot == method || !*(dot+1))
+		if (dot == method || !*(dot + 1))
 			return di_new_error("Method name or interface name is empty");
 		if (dot2 == dot)
 			return di_new_error("Invalid interface name");
-		ifc = strndup(method, dot-method);
-		m = strdup(dot+1);
+		ifc = strndup(method, dot - method);
+		m = strdup(dot + 1);
 	} else {
 		ifc = NULL;
 		m = strdup(method);
@@ -467,12 +460,13 @@ static char *_to_dbus_match_rule(const char *name) {
 
 	char *match;
 	if (interface)
-		asprintf(&match, "type='signal',sender='%s',path='%s',interface='%s'"
-		                 ",member='%s'",
+		asprintf(&match,
+		         "type='signal',sender='%s',path='%s',interface='%s'"
+		         ",member='%s'",
 		         bus, path, interface, signal);
 	else
-		asprintf(&match, "type='signal',sender='%s',path='%s',member='%s'",
-		         bus, path, signal);
+		asprintf(&match, "type='signal',sender='%s',path='%s',member='%s'", bus,
+		         path, signal);
 
 	free(bus);
 	free(path);
@@ -506,8 +500,7 @@ static void di_dbus_del_signal(_di_dbus_connection *c, const char *name) {
 	}
 }
 
-static DBusHandlerResult
-_dbus_filter(DBusConnection *conn, DBusMessage *msg, void *ud) {
+static DBusHandlerResult _dbus_filter(DBusConnection *conn, DBusMessage *msg, void *ud) {
 	if (dbus_message_get_type(msg) != DBUS_MESSAGE_TYPE_SIGNAL)
 		return DBUS_HANDLER_RESULT_NOT_YET_HANDLED;
 
@@ -556,8 +549,7 @@ _dbus_filter(DBusConnection *conn, DBusMessage *msg, void *ud) {
 		list_for_each_entry (ni, &c->known_names, sibling) {
 			if (strcmp(ni->unique, bus_name))
 				continue;
-			asprintf(&sig, "%%%s%%%s%%%s.%s", ni->well_known, path, ifc,
-			         mbr);
+			asprintf(&sig, "%%%s%%%s%%%s.%s", ni->well_known, path, ifc, mbr);
 			di_emitn(ud, sig, t);
 			free(sig);
 			// Emit the interface-less version of the signal

@@ -16,33 +16,46 @@
 struct di_typed_method {
 	struct di_object_internal;
 
+	/// The `this` pointer, which is passed as the first argument to the function.
 	struct di_object *this;
 	void (*nonnull fn)(void);
 
+	/// Number of arguments
 	int nargs;
+	/// Return type
 	di_type_t rtype;
 	ffi_cif cif;
+	/// Expected types of the arguments
 	di_type_t atypes[];
 };
 
 struct di_closure {
 	struct di_object_internal;
 
+	/// Captured values, we don't explicitly save their types.
+	/// `cif` contains the information of how to pass them to the function
 	const void **cargs;
 	void (*nonnull fn)(void);
 
+	/// Number of actual arguments
 	int nargs;
+	/// Number of captured values
 	int nargs0;
+	/// Return type
 	di_type_t rtype;
+	// TODO(yshui) add a weak_ref type.
+	/// Whether the captured values are weakly referenced
 	bool weak_capture;
 	ffi_cif cif;
+	/// Expected types of the arguments
 	di_type_t atypes[];
 };
 
 static inline void *allocate_for_return(di_type_t rtype) {
 	auto sz = di_sizeof_type(rtype);
-	if (sz < sizeof(ffi_arg))
+	if (sz < sizeof(ffi_arg)) {
 		sz = sizeof(ffi_arg);
+	}
 	return malloc(sz);
 }
 
@@ -114,19 +127,22 @@ out:
 
 static int
 method_trampoline(struct di_object *o, di_type_t *rtype, void **ret, struct di_tuple t) {
-	if (!di_check_type(o, "deai:method"))
+	if (!di_check_type(o, "deai:method")) {
 		return -EINVAL;
+	}
 
 	struct di_typed_method *tm = (void *)o;
-	if (t.length != tm->nargs)
+	if (t.length != tm->nargs) {
 		return -EINVAL;
+	}
 
 	*rtype = tm->rtype;
 
-	if (di_sizeof_type(tm->rtype) != 0)
+	if (di_sizeof_type(tm->rtype) != 0) {
 		*ret = allocate_for_return(tm->rtype);
-	else
+	} else {
 		*ret = NULL;
+	}
 
 	void *this = tm->this;
 	return _di_typed_trampoline(&tm->cif, tm->fn, *ret, tm->atypes + 1, 1,
@@ -135,19 +151,22 @@ method_trampoline(struct di_object *o, di_type_t *rtype, void **ret, struct di_t
 
 static int
 closure_trampoline(struct di_object *o, di_type_t *rtype, void **ret, struct di_tuple t) {
-	if (!di_check_type(o, "deai:closure"))
+	if (!di_check_type(o, "deai:closure")) {
 		return -EINVAL;
+	}
 
 	struct di_closure *cl = (void *)o;
-	if (t.length != cl->nargs)
+	if (t.length != cl->nargs) {
 		return -EINVAL;
+	}
 
 	*rtype = cl->rtype;
 
-	if (di_sizeof_type(cl->rtype) != 0)
+	if (di_sizeof_type(cl->rtype) != 0) {
 		*ret = allocate_for_return(cl->rtype);
-	else
+	} else {
 		*ret = NULL;
+	}
 
 	return _di_typed_trampoline(&cl->cif, cl->fn, *ret, cl->atypes + cl->nargs0,
 	                            cl->nargs0, cl->cargs, t.length, t.elem_type, t.tuple);
@@ -158,8 +177,9 @@ static void free_closure(struct di_object *o) {
 
 	struct di_closure *cl = (void *)o;
 	for (int i = 0; i < cl->nargs0; i++) {
-		if (!cl->weak_capture)
+		if (!cl->weak_capture) {
 			di_free_value(cl->atypes[i], (void *)cl->cargs[i]);
+		}
 		free((void *)cl->cargs[i]);
 	}
 	free(cl->cargs);
@@ -169,16 +189,21 @@ static void free_closure(struct di_object *o) {
 PUBLIC struct di_closure *
 di_create_closure(void (*fn)(void), di_type_t rtype, int nargs0, const di_type_t *cats,
                   const void *const *cargs, int nargs, const di_type_t *ats, bool weak_capture) {
-	if (nargs0 < 0 || nargs < 0 || nargs0 + nargs > MAX_NARGS)
+	if (nargs0 < 0 || nargs < 0 || nargs0 + nargs > MAX_NARGS) {
 		return ERR_PTR(-E2BIG);
+	}
 
-	for (int i = 0; i < nargs0; i++)
-		if (di_sizeof_type(cats[i]) == 0)
+	for (int i = 0; i < nargs0; i++) {
+		if (di_sizeof_type(cats[i]) == 0) {
 			return ERR_PTR(-EINVAL);
+		}
+	}
 
-	for (int i = 0; i < nargs; i++)
-		if (di_sizeof_type(ats[i]) == 0)
+	for (int i = 0; i < nargs; i++) {
+		if (di_sizeof_type(ats[i]) == 0) {
 			return ERR_PTR(-EINVAL);
+		}
+	}
 
 	struct di_closure *cl = (void *)di_new_object(
 	    sizeof(struct di_closure) + sizeof(di_type_t) * (nargs0 + nargs),
@@ -192,10 +217,12 @@ di_create_closure(void (*fn)(void), di_type_t rtype, int nargs0, const di_type_t
 	cl->nargs0 = nargs0;
 	cl->weak_capture = weak_capture;
 
-	if (nargs0)
+	if (nargs0) {
 		memcpy(cl->atypes, cats, sizeof(di_type_t) * nargs0);
-	if (nargs)
+	}
+	if (nargs) {
 		memcpy(cl->atypes + nargs0, ats, sizeof(di_type_t) * nargs);
+	}
 
 	auto ffiret = di_ffi_prep_cif(&cl->cif, nargs0 + nargs, cl->rtype, cl->atypes);
 	if (ffiret != FFI_OK) {
@@ -203,15 +230,17 @@ di_create_closure(void (*fn)(void), di_type_t rtype, int nargs0, const di_type_t
 		return ERR_PTR(-EINVAL);
 	}
 
-	if (nargs0)
+	if (nargs0) {
 		cl->cargs = malloc(sizeof(void *) * nargs0);
+	}
 
 	for (int i = 0; i < nargs0; i++) {
 		void *dst = malloc(di_sizeof_type(cats[i]));
-		if (!weak_capture)
+		if (!weak_capture) {
 			di_copy_value(cats[i], dst, cargs[i]);
-		else
+		} else {
 			memcpy(dst, cargs[i], di_sizeof_type(cats[i]));
+		}
 		cl->cargs[i] = dst;
 	}
 
@@ -226,9 +255,10 @@ static void free_method(struct di_typed_method *tm) {
 
 PUBLIC int di_add_method(struct di_object *o, const char *name, void (*fn)(void),
                          di_type_t rtype, int nargs, ...) {
-	// TODO: convert to use closure
-	if (nargs < 0 || nargs + 1 > MAX_NARGS)
+	// TODO(yshui): convert to use closure
+	if (nargs < 0 || nargs + 1 > MAX_NARGS) {
 		return -EINVAL;
+	}
 
 	struct di_typed_method *f = (void *)di_new_object(
 	    sizeof(struct di_typed_method) + sizeof(di_type_t) * (1 + nargs),
@@ -269,8 +299,9 @@ PUBLIC int di_add_method(struct di_object *o, const char *name, void (*fn)(void)
 // va_args version of di_call_callable
 PUBLIC int di_call_objectv(struct di_object *_obj, di_type_t *rtype, void **ret, va_list ap) {
 	auto obj = (struct di_object_internal *)_obj;
-	if (!obj->call)
+	if (!obj->call) {
 		return -EINVAL;
+	}
 
 	va_list ap2;
 	struct di_tuple tu = DI_TUPLE_INIT;

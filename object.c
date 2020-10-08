@@ -729,10 +729,11 @@ PUBLIC void di_clear_listeners(struct di_object *_obj) {
 	auto obj = (struct di_object_internal *)_obj;
 	struct di_signal *sig, *tsig;
 	HASH_ITER (hh, obj->signals, sig, tsig) {
-		if (!is_destroy(sig->name))
+		if (!is_destroy(sig->name)) {
 			call_handler_with_fallback(_obj, "__del_signal", sig->name,
 			                           DI_LAST_TYPE, NULL, NULL, NULL);
 
+		}
 		// unrefing object, calling detach might cause some other listeners
 		// in the linked list to be stopped, which is not accounted for by
 		// list_for_each_entry_safe. So we need to clear listeners in 2
@@ -746,15 +747,17 @@ PUBLIC void di_clear_listeners(struct di_object *_obj) {
 		// Then, actually do the cleaning work
 		list_for_each_entry_safe (l, nl, &sig->listeners, siblings) {
 			list_del(&l->siblings);
-			if (l->handler)
+			if (l->handler) {
 				di_unref_object(l->handler);
+			}
 			di_call(l, "__detach");
 			di_unref_object((void *)l);
 		}
 
 		HASH_DEL(obj->signals, sig);
-		if (!is_destroy(sig->name))
+		if (!is_destroy(sig->name)) {
 			di_unref_object(_obj);
+		}
 		free(sig->name);
 		free(sig);
 	}
@@ -768,8 +771,9 @@ PUBLIC int di_stop_listener(struct di_listener *l) {
 	// might be in progress (indicated by ->signal == NULL)
 	di_remove_member((struct di_object *)l, "__detach");
 
-	if (!l->signal)
+	if (!l->signal) {
 		return -ENOENT;
+	}
 
 	list_del(&l->siblings);
 	l->signal->nlisteners--;
@@ -786,8 +790,9 @@ PUBLIC int di_stop_listener(struct di_listener *l) {
 	}
 
 	l->signal = NULL;
-	if (l->handler)
+	if (l->handler) {
 		di_unref_object(l->handler);
+	}
 	l->handler = NULL;
 	di_unref_object((void *)l);
 	return 0;
@@ -795,15 +800,17 @@ PUBLIC int di_stop_listener(struct di_listener *l) {
 
 PUBLIC int di_emitn(struct di_object *o, const char *name, struct di_tuple t) {
 	assert(!is_destroy(name));
-	if (t.length > MAX_NARGS)
+	if (t.length > MAX_NARGS) {
 		return -E2BIG;
+	}
 
 	assert(t.length == 0 || (t.elem_type != NULL && t.tuple != NULL));
 
 	struct di_signal *sig;
 	HASH_FIND_STR(((struct di_object_internal *)o)->signals, name, sig);
-	if (!sig)
+	if (!sig) {
 		return 0;
+	}
 
 	int cnt = 0;
 	struct di_listener *l, **all_l = tmalloc(struct di_listener *, sig->nlisteners);
@@ -826,9 +833,10 @@ PUBLIC int di_emitn(struct di_object *o, const char *name, struct di_tuple t) {
 	for (int i = 0; i < cnt; i++) {
 		__label__ next;
 		l = all_l[i];
-		if (!l->handler)
+		if (!l->handler) {
 			// Listener stopped/null listener
 			goto next;
+		}
 		di_type_t rtype;
 		void *ret = NULL;
 		int rc =
@@ -837,11 +845,13 @@ PUBLIC int di_emitn(struct di_object *o, const char *name, struct di_tuple t) {
 		if (rc == 0) {
 			di_free_value(rtype, ret);
 			free(ret);
-		} else
+		} else {
 			fprintf(stderr, "Failed to call a listener callback: %s\n",
 			        strerror(-rc));
-		if (l->once)
+		}
+		if (l->once) {
 			di_stop_listener(l);
+		}
 	next:
 		di_unref_object((void *)l);
 	}

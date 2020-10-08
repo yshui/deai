@@ -117,19 +117,22 @@ static inline ffi_type *nullable di_type_to_ffi(di_type_t in) {
 	return type_map[in];
 }
 
-static inline ffi_status di_ffi_prep_cif(ffi_cif *nonnull cif, unsigned int nargs,
-                                         di_type_t rtype, const di_type_t *nonnull atypes) {
+static inline ffi_status unused di_ffi_prep_cif(ffi_cif *nonnull cif, unsigned int nargs,
+                                                di_type_t rtype,
+                                                const di_type_t *nonnull atypes) {
 	ffi_type *ffi_rtype = di_type_to_ffi(rtype);
 	ffi_type **ffi_atypes = NULL;
 	if (nargs) {
 		ffi_atypes = calloc(nargs, sizeof(ffi_type *));
-		for (int i = 0; i < nargs; i++)
+		for (int i = 0; i < nargs; i++) {
 			ffi_atypes[i] = di_type_to_ffi(atypes[i]);
+		}
 	}
 
 	ffi_status ret = ffi_prep_cif(cif, FFI_DEFAULT_ABI, nargs, ffi_rtype, ffi_atypes);
-	if (ret != FFI_OK)
+	if (ret != FFI_OK) {
 		free(ffi_atypes);
+	}
 	return ret;
 }
 

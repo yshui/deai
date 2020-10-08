@@ -74,8 +74,8 @@ struct di_tuple {
 };
 
 struct di_variant {
-	di_type_t type;
 	union di_value *value;
+	di_type_t type;
 };
 
 /// All builtin deai types
@@ -299,7 +299,7 @@ static const struct di_array unused DI_ARRAY_INIT = {0, NULL, DI_TYPE_ANY};
 /// A constant to create an empty tuple
 static const struct di_tuple unused DI_TUPLE_INIT = {0, NULL, NULL};
 /// A constant to create an nil variant
-static const struct di_variant unused DI_VARIANT_INIT = {DI_TYPE_NIL, NULL};
+static const struct di_variant unused DI_VARIANT_INIT = {NULL, DI_TYPE_NIL};
 
 #define define_object_cleanup(t)                                                         \
 	static inline void free_##t(struct t *nullable *nonnull ptr) {                   \
