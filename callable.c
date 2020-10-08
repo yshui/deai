@@ -70,6 +70,7 @@ _di_typed_trampoline(ffi_cif *cif, void (*fn)(void), void *ret, const di_type_t 
 	struct di_variant *vars = args.elements;
 	void *null_ptr = NULL;
 	void **xargs = alloca((nargs0 + args.length) * sizeof(void *));
+	bool *args_cloned = alloca(args.length * sizeof(bool));
 	memcpy(xargs, args0, sizeof(void *) * nargs0);
 	memset(xargs + nargs0, 0, sizeof(void *) * args.length);
 
@@ -79,16 +80,16 @@ _di_typed_trampoline(ffi_cif *cif, void (*fn)(void), void *ret, const di_type_t 
 		// conversion between all types of integers are allowed
 		// as long as there's no overflow
 		rc = di_type_conversion(vars[i - nargs0].type, vars[i - nargs0].value,
-		                        fnats[i - nargs0], xargs + i);
+		                        fnats[i - nargs0], xargs + i, &args_cloned[i - nargs0]);
 		if (rc != 0) {
 			if (vars[i - nargs0].type == DI_TYPE_NIL) {
-				struct di_array *arr;
 				switch (fnats[i - nargs0]) {
 				case DI_TYPE_OBJECT:
 					rc = 0;
 					xargs[i] = tmalloc(struct di_object *, 1);
 					*(struct di_object **)xargs[i] =
 					    di_new_object_with_type(struct di_object);
+					args_cloned[i - nargs0] = true;
 					break;
 				case DI_TYPE_STRING:
 				case DI_TYPE_POINTER:
@@ -96,9 +97,7 @@ _di_typed_trampoline(ffi_cif *cif, void (*fn)(void), void *ret, const di_type_t 
 					xargs[i] = &null_ptr;
 					break;
 				case DI_TYPE_ARRAY:
-					arr = tmalloc(struct di_array, 1);
-					*arr = DI_ARRAY_INIT;
-					xargs[i] = arr;
+					xargs[i] = &(struct di_array){0, NULL, DI_TYPE_ANY};
 					rc = 0;
 					break;
 				default:
@@ -117,7 +116,7 @@ _di_typed_trampoline(ffi_cif *cif, void (*fn)(void), void *ret, const di_type_t 
 
 out:
 	for (int i = nargs0; i < nargs0 + args.length; i++) {
-		if (xargs[i] != vars[i - nargs0].value && xargs[i] != &null_ptr) {
+		if (args_cloned[i - nargs0]) {
 			di_free_value(fnats[i - nargs0], xargs[i]);
 			free((void *)xargs[i]);
 		}

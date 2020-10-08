@@ -124,10 +124,11 @@ PUBLIC int di_setx(struct di_object *o, const char *name, di_type_t type, void *
 	auto mem = di_lookup(o, name);
 	int rc;
 	void *val2;
+	bool cloned = false;
 	if (mem) {
 		// TODO(yshui) remove the type conversion.
 		// If automatic type conversion is desired, you should use a setter
-		rc = di_type_conversion(type, val, mem->type, &val2);
+		rc = di_type_conversion(type, val, mem->type, &val2, &cloned);
 		if (rc != 0) {
 			return rc;
 		}
@@ -135,7 +136,7 @@ PUBLIC int di_setx(struct di_object *o, const char *name, di_type_t type, void *
 			di_free_value(mem->type, mem->data);
 		}
 		di_copy_value(mem->type, mem->data, val2);
-		if (val2 != val) {
+		if (cloned) {
 			di_free_value(mem->type, val2);
 			free((void *)val2);
 		}
@@ -191,8 +192,10 @@ PUBLIC int di_getx(struct di_object *o, const char *name, di_type_t *type, void 
 		if (rc != 0)                                                             \
 			return rc;                                                       \
                                                                                          \
-		rc = di_type_conversion(rt, ret2, rtype, ret);                           \
-		if (*ret != ret2) {                                                      \
+		bool cloned = false;                                                     \
+		rc = di_type_conversion(rt, ret2, rtype, ret, &cloned);                  \
+		if (cloned) {                                                            \
+			assert(ret2 != *ret);                                            \
 			di_free_value(rt, ret2);                                         \
 			free((void *)ret2);                                              \
 		}                                                                        \

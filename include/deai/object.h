@@ -124,17 +124,19 @@ struct di_object {
 
 struct di_array {
 	uint64_t length;
-	void *nullable arr;
+	// `arr` is an array of `type`. e.g. if `elem_type` is DI_TYPE_INT, then
+	// `arr` points to a `uint64_t[]`.
+	void *nullable arr;        // null if length == 0
 	di_type_t elem_type;
 };
 
 struct di_tuple {
 	uint64_t length;
-	struct di_variant *elements;
+	struct di_variant *nullable elements;        // null if length == 0
 };
 
 struct di_variant {
-	union di_value *value;
+	union di_value *nullable value;        // null in case of nil
 	di_type_t type;
 };
 

@@ -23,9 +23,10 @@ static inline void typed_alloc_copy(di_type_t type, const void *src, void **dest
 }
 
 static inline int
-integer_conversion(di_type_t inty, const void *inp, di_type_t outty, void **outp) {
+integer_conversion(di_type_t inty, const void *inp, di_type_t outty, void **outp, bool *cloned) {
+	*cloned = false;
 	if (inty == outty) {
-		typed_alloc_copy(inty, inp, outp);
+		*outp = (void *)inp;
 		return 0;
 	}
 
@@ -48,7 +49,9 @@ integer_conversion(di_type_t inty, const void *inp, di_type_t outty, void **outp
 		convert_case(s1, __VA_ARGS__);                                           \
 		convert_case(s2, __VA_ARGS__);                                           \
 		convert_case(s3, __VA_ARGS__);                                           \
-	default: *outp = NULL; return -EINVAL;                                           \
+	default:                                                                         \
+		*outp = NULL;                                                            \
+		return -EINVAL;                                                          \
 	}
 
 #pragma GCC diagnostic push
@@ -67,12 +70,15 @@ integer_conversion(di_type_t inty, const void *inp, di_type_t outty, void **outp
 	case DI_TYPE_NUINT:
 		convert_switch(int, int64_t, uint64_t, unsigned int, UINT_MAX, 0);
 		break;
-	default: *outp = NULL; return -EINVAL;
+	default:
+		*outp = NULL;
+		return -EINVAL;
 	}
 #pragma GCC diagnostic pop
 
 #undef convert_case
 #undef convert_switch
+	*cloned = true;
 	return 0;
 }
 
@@ -82,27 +88,45 @@ static inline bool is_integer(di_type_t t) {
 
 /// Convert value `inp` to type `outty`. `*outp != inp` if and only if a conversion
 /// happened. And if a conversion did happen, it's safe to free the original value.
-static inline int unused
-di_type_conversion(di_type_t inty, const void *inp, di_type_t outty, void **outp) {
+///
+/// @param[out] cloned if false, value in `outp` is borrowed from `inp`. otherwise the
+///                    value is cloned. always false in case of an error
+static inline int unused di_type_conversion(di_type_t inty, const void *inp,
+                                            di_type_t outty, void **outp, bool *cloned) {
+	*cloned = false;
 	if (inty == outty) {
 		*outp = (void *)inp;
 		return 0;
+	}
+
+	if (outty == DI_TYPE_NIL) {
+		*outp = NULL;
+		return 0;
+	}
+
+	if (inty == DI_TYPE_VARIANT) {
+		const struct di_variant *var = inp;
+		return di_type_conversion(var->type, var->value, outty, outp, cloned);
 	}
 
 	if (inty == DI_TYPE_STRING_LITERAL && outty == DI_TYPE_STRING) {
 		const char **res = malloc(sizeof(const char *));
 		*res = strdup(*(const char **)inp);
 		*outp = res;
+		*cloned = true;
 		return 0;
 	}
 
 	if (is_integer(inty)) {
-		if (is_integer(outty))
-			return integer_conversion(inty, inp, outty, outp);
+		if (is_integer(outty)) {
+			return integer_conversion(inty, inp, outty, outp, cloned);
+		}
 		if (outty == DI_TYPE_FLOAT) {
 			double *res = malloc(sizeof(double));
 #define convert_case(srct)                                                               \
-	case di_typeof((srct)0): *res = (double)*(srct *)inp; break;
+	case di_typeof((srct)0):                                                         \
+		*res = (double)*(srct *)inp;                                             \
+		break;
 			switch (inty) {
 				convert_case(unsigned int);
 				convert_case(int);
@@ -115,6 +139,7 @@ di_type_conversion(di_type_t inty, const void *inp, di_type_t outty, void **outp
 			}
 #undef convert_case
 			*outp = res;
+			*cloned = true;
 			return 0;
 		}
 	}
@@ -160,7 +185,8 @@ static inline void va_arg_with_di_type(va_list ap, di_type_t t, void *buf) {
 		d = va_arg(ap, double);
 		src = &d;
 		break;
-	default: assert(0);
+	default:
+		assert(0);
 	}
 
 	// if buf == NULL, the caller just want to pop the value
