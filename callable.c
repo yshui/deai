@@ -59,28 +59,29 @@ static inline void *allocate_for_return(di_type_t rtype) {
 	return malloc(sz);
 }
 
-static int _di_typed_trampoline(ffi_cif *cif, void (*fn)(void), void *ret,
-                                const di_type_t *fnats, int nargs0, const void *const *args0,
-                                int nargs, const di_type_t *ats, void *const *args) {
-	assert(nargs == 0 || args != NULL);
+static int
+_di_typed_trampoline(ffi_cif *cif, void (*fn)(void), void *ret, const di_type_t *fnats,
+                     int nargs0, const void *const *args0, struct di_tuple args) {
+	assert(args.length == 0 || args.elements != NULL);
 	assert(nargs0 == 0 || args0 != NULL);
-	assert(nargs >= 0 && nargs0 >= 0);
-	assert(nargs + nargs0 <= MAX_NARGS);
+	assert(args.length >= 0 && nargs0 >= 0);
+	assert(args.length + nargs0 <= MAX_NARGS);
 
+	struct di_variant *vars = args.elements;
 	void *null_ptr = NULL;
-	void **xargs = alloca((nargs0 + nargs) * sizeof(void *));
+	void **xargs = alloca((nargs0 + args.length) * sizeof(void *));
 	memcpy(xargs, args0, sizeof(void *) * nargs0);
-	memset(xargs + nargs0, 0, sizeof(void *) * nargs);
+	memset(xargs + nargs0, 0, sizeof(void *) * args.length);
 
 	int rc = 0;
-	for (int i = nargs0; i < nargs0 + nargs; i++) {
+	for (int i = nargs0; i < nargs0 + args.length; i++) {
 		// Type check and implicit conversion
 		// conversion between all types of integers are allowed
 		// as long as there's no overflow
-		rc = di_type_conversion(ats[i - nargs0], args[i - nargs0],
+		rc = di_type_conversion(vars[i - nargs0].type, vars[i - nargs0].value,
 		                        fnats[i - nargs0], xargs + i);
 		if (rc != 0) {
-			if (ats[i - nargs0] == DI_TYPE_NIL) {
+			if (vars[i - nargs0].type == DI_TYPE_NIL) {
 				struct di_array *arr;
 				switch (fnats[i - nargs0]) {
 				case DI_TYPE_OBJECT:
@@ -115,8 +116,8 @@ static int _di_typed_trampoline(ffi_cif *cif, void (*fn)(void), void *ret,
 	ffi_call(cif, fn, ret, (void *)xargs);
 
 out:
-	for (int i = nargs0; i < nargs0 + nargs; i++) {
-		if (xargs[i] != args[i - nargs0] && xargs[i] != &null_ptr) {
+	for (int i = nargs0; i < nargs0 + args.length; i++) {
+		if (xargs[i] != vars[i - nargs0].value && xargs[i] != &null_ptr) {
 			di_free_value(fnats[i - nargs0], xargs[i]);
 			free((void *)xargs[i]);
 		}
@@ -146,7 +147,7 @@ method_trampoline(struct di_object *o, di_type_t *rtype, void **ret, struct di_t
 
 	void *this = tm->this;
 	return _di_typed_trampoline(&tm->cif, tm->fn, *ret, tm->atypes + 1, 1,
-	                            (const void *[]){&this}, tm->nargs, t.elem_type, t.tuple);
+	                            (const void *[]){&this}, t);
 }
 
 static int
@@ -169,7 +170,7 @@ closure_trampoline(struct di_object *o, di_type_t *rtype, void **ret, struct di_
 	}
 
 	return _di_typed_trampoline(&cl->cif, cl->fn, *ret, cl->atypes + cl->nargs0,
-	                            cl->nargs0, cl->cargs, t.length, t.elem_type, t.tuple);
+	                            cl->nargs0, cl->cargs, t);
 }
 
 static void free_closure(struct di_object *o) {
@@ -319,13 +320,12 @@ PUBLIC int di_call_objectv(struct di_object *_obj, di_type_t *rtype, void **ret,
 	}
 
 	if (tu.length > 0) {
-		tu.tuple = alloca(sizeof(void *) * tu.length);
-		tu.elem_type = alloca(sizeof(di_type_t) * tu.length);
+		tu.elements = alloca(sizeof(struct di_variant) * tu.length);
 		for (unsigned int i = 0; i < tu.length; i++) {
-			tu.elem_type[i] = va_arg(ap2, di_type_t);
-			assert(di_sizeof_type(tu.elem_type[i]) != 0);
-			tu.tuple[i] = alloca(di_sizeof_type(tu.elem_type[i]));
-			va_arg_with_di_type(ap2, tu.elem_type[i], tu.tuple[i]);
+			tu.elements[i].type = va_arg(ap2, di_type_t);
+			assert(di_sizeof_type(tu.elements[i].type) != 0);
+			tu.elements[i].value = alloca(di_sizeof_type(tu.elements[i].type));
+			va_arg_with_di_type(ap2, tu.elements[i].type, tu.elements[i].value);
 		}
 		va_end(ap2);
 	}

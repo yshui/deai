@@ -163,11 +163,12 @@ static int di_lua_table_get(struct di_object *m, di_type_t *rt, void **ret, stru
 		return -EINVAL;
 	}
 
-	if (tu.elem_type[0] != DI_TYPE_STRING && tu.elem_type[0] != DI_TYPE_STRING_LITERAL) {
+	struct di_variant *vars = tu.elements;
+	if (vars[0].type != DI_TYPE_STRING && vars[0].type != DI_TYPE_STRING_LITERAL) {
 		return -EINVAL;
 	}
 
-	const char *key = *(const char **)tu.tuple[0];
+	const char *key = vars[0].value->string_literal;
 
 	struct di_lua_script *s = t->s;
 	lua_State *L = t->s->L->L;
@@ -223,18 +224,17 @@ static int _di_lua_method_handler(lua_State *L, const char *name, struct di_obje
 	int nargs = lua_gettop(L);
 
 	struct di_tuple t;
-	t.tuple = calloc(nargs - 1, sizeof(void *));
-	t.elem_type = calloc(nargs - 1, sizeof(di_type_t));
+	t.elements = tmalloc(struct di_variant, nargs - 1);
 	t.length = nargs - 1;
 	int error_argi = 0;
 	// Translate lua arguments
 	for (int i = 2; i <= nargs; i++) {
-		void *tmp = di_lua_type_to_di(L, i, t.elem_type + i - 2);
-		if (t.elem_type[i - 2] >= DI_LAST_TYPE) {
+		void *tmp = di_lua_type_to_di(L, i, &t.elements[i - 2].type);
+		if (t.elements[i - 2].type >= DI_LAST_TYPE) {
 			error_argi = i;
 			goto err;
 		}
-		t.tuple[i - 2] = tmp;
+		t.elements[i - 2].value = tmp;
 	}
 
 	void *ret;
@@ -535,6 +535,8 @@ call_lua_function(struct di_lua_ref *ref, di_type_t *rt, void **ret, struct di_t
 		return -EBADF;
 	}
 
+	struct di_variant *vars = t.elements;
+
 	lua_State *L = ref->s->L->L;
 	struct di_lua_script *s = ref->s;
 	// Prevent script object from being freed during pcall
@@ -548,7 +550,7 @@ call_lua_function(struct di_lua_ref *ref, di_type_t *rt, void **ret, struct di_t
 	lua_rawgeti(L, LUA_REGISTRYINDEX, ref->tref);
 	// Push arguments
 	for (unsigned int i = 0; i < t.length; i++) {
-		di_lua_pushvariant(L, NULL, (struct di_variant){t.tuple[i], t.elem_type[i]});
+		di_lua_pushvariant(L, NULL, vars[i]);
 	}
 
 	lua_pcall(L, t.length, 1, -(int)t.length - 2);
@@ -771,8 +773,7 @@ static int di_lua_pushvariant(lua_State *L, const char *name, struct di_variant 
 		tuple = &var.value->tuple;
 		lua_createtable(L, tuple->length, 0);
 		for (int i = 0; i < tuple->length; i++) {
-			di_lua_pushvariant(
-			    L, NULL, (struct di_variant){tuple->tuple[i], tuple->elem_type[i]});
+			di_lua_pushvariant(L, NULL, tuple->elements[i]);
 			lua_rawseti(L, -2, i + 1);
 		}
 		return 1;
@@ -805,13 +806,11 @@ int di_lua_emit_signal(lua_State *L) {
 	int top = lua_gettop(L);
 
 	struct di_tuple t;
+	t.elements = tmalloc(struct di_variant, top - 1);
 	t.length = top - 1;
-	t.tuple = tmalloc(void *, top - 1);
-	t.elem_type = tmalloc(di_type_t, top - 1);
 
 	for (int i = 2; i <= top; i++) {
-		void *dst = di_lua_type_to_di(L, i, &t.elem_type[i - 2]);
-		t.tuple[i - 2] = dst;
+		t.elements[i - 2].value = di_lua_type_to_di(L, i, &t.elements[i - 2].type);
 	}
 
 	di_ref_object(o);

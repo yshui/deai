@@ -33,8 +33,9 @@
 #include "utils.h"
 
 static void load_plugin(struct deai *p, const char *sopath) {
-	if (!sopath)
+	if (!sopath) {
 		return;
+	}
 
 	void *handle = dlopen(sopath, RTLD_NOW);
 
@@ -53,15 +54,17 @@ static void load_plugin(struct deai *p, const char *sopath) {
 }
 
 static int load_plugin_dir(struct deai *di, const char *path) {
-	if (!path)
+	if (!path) {
 		return -1;
+	}
 
 	char rpath[PATH_MAX];
 	realpath(path, rpath);
 
 	int dirfd = open(path, O_DIRECTORY | O_RDONLY);
-	if (dirfd < 0)
+	if (dirfd < 0) {
 		return -1;
+	}
 
 	DIR *dir = fdopendir(dirfd);
 	if (!dir) {
@@ -83,10 +86,11 @@ static int load_plugin_dir(struct deai *di, const char *path) {
 			is_reg = S_ISREG(buf.st_mode);
 		}
 
-		if (!is_reg)
+		if (!is_reg) {
 			continue;
+		}
 
-		int nlen = strlen(dent->d_name);
+		size_t nlen = strlen(dent->d_name);
 		if (nlen >= 3 && strcmp(dent->d_name + nlen - 3, ".so") == 0) {
 			char *sopath;
 			asprintf(&sopath, "%s/%s", rpath, dent->d_name);
@@ -99,12 +103,14 @@ static int load_plugin_dir(struct deai *di, const char *path) {
 }
 
 int di_chdir(struct di_object *p, const char *dir) {
-	if (!dir)
+	if (!dir) {
 		return -EINVAL;
+	}
 
 	int ret = chdir(dir);
-	if (ret != 0)
+	if (ret != 0) {
 		ret = -errno;
+	}
 
 	errno = 0;
 	return ret;
@@ -152,24 +158,29 @@ static void kill_all_descendants(void) {
 	// New child can appear while we are reading /proc
 	// they won't be killed
 	auto dir = opendir("/proc");
-	if (!dir)
+	if (!dir) {
 		return;
+	}
 	struct dirent *dent;
 	char pathbuf[PATH_MAX];
 	char textbuf[4096];
 	while ((dent = readdir(dir))) {
 		__label__ next;
-		if (dent->d_type != DT_DIR)
+		if (dent->d_type != DT_DIR) {
 			continue;
+		}
 		char *name = dent->d_name;
-		while (*name)
-			if (!isdigit(*name++))
+		while (*name) {
+			if (!isdigit(*name++)) {
 				goto next;
+			}
+		}
 		snprintf(pathbuf, PATH_MAX, "/proc/%s/stat", dent->d_name);
 		pid_t cpid = atoi(dent->d_name);
 		int fd = open(pathbuf, O_RDONLY);
-		if (fd < 0)
+		if (fd < 0) {
 			continue;
+		}
 		ssize_t ret;
 		size_t cap = 0;
 		char *stattext = NULL;
@@ -179,8 +190,9 @@ static void kill_all_descendants(void) {
 			cap += ret;
 		}
 		close(fd);
-		if (!stattext)
+		if (!stattext) {
 			continue;
+		}
 		stattext[cap] = '\0';
 
 		// End of comm
@@ -196,8 +208,9 @@ static void kill_all_descendants(void) {
 		np->ppid = ppid;
 		INIT_LIST_HEAD(&np->ll);
 		HASH_ADD_INT(ps, pid, np);
-		if (cpid == pid)
+		if (cpid == pid) {
 			self = np;
+		}
 	next:;
 	}
 	closedir(dir);
@@ -209,8 +222,9 @@ static void kill_all_descendants(void) {
 	HASH_ITER (hh, ps, i, ni) {
 		struct _childp *pp;
 		HASH_FIND_INT(ps, &i->ppid, pp);
-		if (!pp)
+		if (!pp) {
 			pp = &sentinel;
+		}
 		i->pp = pp;
 		__list_splice(&i->ll, &pp->ll, pp->ll.next);
 	}
@@ -222,8 +236,9 @@ static void kill_all_descendants(void) {
 	while (1) {
 		curr = container_of(curr->ll.next, struct _childp, ll);
 		// We got out of our subtree
-		if (!curr->pp->visited)
+		if (!curr->pp->visited) {
 			break;
+		}
 		kill(curr->pid, SIGTERM);
 		curr->visited = true;
 	}
@@ -238,8 +253,9 @@ void di_dtor(struct deai *di) {
 	*di->quit = true;
 
 #ifdef HAVE_SETPROCTITLE
-	for (int i = 0; i < di->argc; i++)
+	for (int i = 0; i < di->argc; i++) {
 		free(di->argv[i]);
+	}
 	free(di->argv);
 #endif
 
@@ -285,8 +301,8 @@ static void setproctitle_init(int argc, char **argv, struct deai *p) {
 	p->proctitle = argv[0];
 
 	size_t envsz = 0;
-	for (; environ[envsz]; envsz++)
-		;
+	for (; environ[envsz]; envsz++) {
+	}
 
 	char **old_env = environ;
 	environ = calloc(envsz + 1, sizeof(char *));
@@ -310,8 +326,9 @@ static void di_set_pr_name(struct deai *p, const char *name) {
 		memset(p->proctitle, 0, p->proctitle_end - p->proctitle);
 		auto nlen = strlen(name);
 
-		if (p->proctitle + nlen + 1 >= p->proctitle_end)
+		if (p->proctitle + nlen + 1 >= p->proctitle_end) {
 			nlen = p->proctitle_end - p->proctitle - 1;
+		}
 		strncpy(p->proctitle, name, nlen);
 	}
 }
@@ -330,8 +347,9 @@ static struct di_array di_get_argv(struct deai *p) {
 	ret.arr = calloc(p->argc, sizeof(void *));
 
 	const char **arr = ret.arr;
-	for (int i = 0; i < p->argc; i++)
+	for (int i = 0; i < p->argc; i++) {
 		arr[i] = strdup(p->argv[i]);
+	}
 
 	return ret;
 }
@@ -436,8 +454,7 @@ int main(int argc, char *argv[]) {
 		method = strdup(argv[1]);
 	}
 
-	void **di_args = calloc(argc - 2, sizeof(void *));
-	di_type_t *di_types = calloc(argc - 2, sizeof(di_type_t));
+	auto di_args = tmalloc(struct di_variant, argc - 2);
 	int nargs = 0;
 	for (int i = 2; i < argc; i++) {
 		if (strcmp(argv[i], "--") == 0) {
@@ -450,19 +467,19 @@ int main(int argc, char *argv[]) {
 		}
 		switch (argv[i][0]) {
 		case 'i':        // Integer
-			di_args[nargs] = malloc(sizeof(int64_t));
-			di_types[nargs] = DI_TYPE_INT;
-			*(int64_t *)di_args[nargs] = atoll(argv[i] + 2);
+			di_args[nargs].value = malloc(sizeof(int64_t));
+			di_args[nargs].type = DI_TYPE_INT;
+			di_args[nargs].value->int_ = atoll(argv[i] + 2);
 			break;
 		case 's':        // String
-			di_args[nargs] = malloc(sizeof(const char *));
-			di_types[nargs] = DI_TYPE_STRING;
-			*(const char **)di_args[nargs] = argv[i] + 2;
+			di_args[nargs].value = malloc(sizeof(const char *));
+			di_args[nargs].type = DI_TYPE_STRING_LITERAL;
+			di_args[nargs].value->string_literal = argv[i] + 2;
 			break;
 		case 'f':        // Float
-			di_types[nargs] = DI_TYPE_FLOAT;
-			di_args[nargs] = malloc(sizeof(double));
-			*(double *)di_args[nargs] = atof(argv[i] + 2);
+			di_args[nargs].value = malloc(sizeof(double));
+			di_args[nargs].type = DI_TYPE_FLOAT;
+			di_args[nargs].value->float_ = atof(argv[i] + 2);
 			break;
 		default:
 			fprintf(stderr, "Invalid argument type: %s\n", argv[i]);
@@ -492,7 +509,7 @@ int main(int argc, char *argv[]) {
 
 	di_type_t rt;
 	void *retd = NULL;
-	ret = di_rawcallxn(mod, method, &rt, &retd, (struct di_tuple){nargs, di_args, di_types});
+	ret = di_rawcallxn(mod, method, &rt, &retd, (struct di_tuple){nargs, di_args});
 	if (ret != 0) {
 		fprintf(stderr, "Failed to call \"%s.%s\"\n", modname ? modname : "", method);
 		exit(EXIT_FAILURE);
@@ -503,10 +520,10 @@ int main(int argc, char *argv[]) {
 	free(method);
 	free(modname);
 
-	for (int i = 0; i < nargs; i++)
-		free((void *)di_args[i]);
+	for (int i = 0; i < nargs; i++) {
+		di_free_value(DI_TYPE_VARIANT, &di_args[i]);
+	}
 	free(di_args);
-	free(di_types);
 
 	di_unref_object(mod);
 

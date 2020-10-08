@@ -46,8 +46,8 @@ typedef enum di_type {
 	DI_LAST_TYPE,                  // bottom, the empty type
 } di_type_t;
 
-struct di_tuple;
 struct di_object;
+struct di_tuple;
 typedef int (*di_call_fn_t)(struct di_object *nonnull, di_type_t *nonnull rt,
                             void *nullable *nonnull ret, struct di_tuple);
 typedef void (*di_dtor_fn_t)(struct di_object *nonnull);
@@ -69,8 +69,7 @@ struct di_array {
 
 struct di_tuple {
 	uint64_t length;
-	void *nullable *nullable tuple;
-	di_type_t *nullable elem_type;
+	struct di_variant *elements;
 };
 
 struct di_variant {
@@ -297,7 +296,7 @@ static inline unused size_t di_sizeof_type(di_type_t t) {
 /// A constant to create an empty array
 static const struct di_array unused DI_ARRAY_INIT = {0, NULL, DI_TYPE_ANY};
 /// A constant to create an empty tuple
-static const struct di_tuple unused DI_TUPLE_INIT = {0, NULL, NULL};
+static const struct di_tuple unused DI_TUPLE_INIT = {0, NULL};
 /// A constant to create an nil variant
 static const struct di_variant unused DI_VARIANT_INIT = {NULL, DI_TYPE_NIL};
 

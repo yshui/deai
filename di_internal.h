@@ -79,7 +79,7 @@ static ffi_type ffi_type_di_tuple = {
     .size = 0,
     .alignment = 0,
     .type = FFI_TYPE_STRUCT,
-    .elements = (ffi_type *[]){&ffi_type_uint64, &ffi_type_pointer, &ffi_type_pointer, NULL},
+    .elements = (ffi_type *[]){&ffi_type_uint64, &ffi_type_pointer, NULL},
 };
 
 static ffi_type ffi_type_di_variant = {

@@ -206,11 +206,15 @@ int di_proxy_signal(struct di_object *nonnull src, const char *nonnull srcsig,
 		rc;                                                                      \
 	})
 
-#define di_variant(x) ((struct di_variant){(union di_value *)addressof(x), di_typeof(x),})
+#define di_variant(x)                                                                    \
+	((struct di_variant){                                                            \
+	    (union di_value *)addressof(x),                                              \
+	    di_typeof(x),                                                                \
+	})
 #define di_tuple(...)                                                                    \
-	((struct di_tuple){VA_ARGS_LENGTH(__VA_ARGS__),                                  \
-	                   (void *[]){LIST_APPLY(addressof, SEP_COMMA, __VA_ARGS__)},    \
-	                   (di_type_t[]){LIST_APPLY(di_typeof, SEP_COMMA, __VA_ARGS__)}})
+	((struct di_tuple){                                                              \
+	    VA_ARGS_LENGTH(__VA_ARGS__),                                                 \
+	    (struct di_variant[]){LIST_APPLY(di_variant, SEP_COMMA, __VA_ARGS__)}})
 
 #define di_call_callable(c, ...)                                                         \
 	({                                                                               \
@@ -348,7 +352,8 @@ static inline unused const char *nonnull di_type_to_string(di_type_t type) {
 		LIST_APPLY(TYPE_CASE, SEP_COLON, NIL, ANY, BOOL, INT, UINT, NINT, NUINT,
 		           FLOAT, STRING, STRING_LITERAL);
 		LIST_APPLY(TYPE_CASE, SEP_COLON, TUPLE, ARRAY, VARIANT, OBJECT, POINTER);
-		case DI_LAST_TYPE: return "LAST_TYPE";
+	case DI_LAST_TYPE:
+		return "LAST_TYPE";
 	}
 	unreachable();
 }

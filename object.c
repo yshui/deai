@@ -68,9 +68,8 @@ PUBLIC int di_rawcallxn(struct di_object *o, const char *name, di_type_t *rt, vo
 }
 
 // Call "<prefix>_<name>" with "<prefix>" as fallback
-static int
-call_handler_with_fallback(struct di_object *o, const char *prefix, const char *name,
-                           di_type_t type, void *val, di_type_t *rtype, void **ret) {
+static int call_handler_with_fallback(struct di_object *o, const char *prefix, const char *name,
+                                      struct di_variant arg, di_type_t *rtype, void **ret) {
 	// Internal names doesn't go through handler
 	if (strncmp(name, "__", 2) == 0) {
 		return -ENOENT;
@@ -81,10 +80,15 @@ call_handler_with_fallback(struct di_object *o, const char *prefix, const char *
 	di_type_t rtype2;
 	void *ret2;
 
+	struct di_variant args[2] = {arg, DI_VARIANT_INIT};
 	struct di_tuple tmp = {
-	    .length = type != DI_LAST_TYPE ? 1 : 0,
-	    .tuple = (void *[]){val, NULL},
-	    .elem_type = (di_type_t[]){type, DI_LAST_TYPE},
+	    // There is a trick here.
+	    // DI_LAST_TYPE is used to signify that the argument "doesn't exist". Unlike
+	    // DI_TYPE_NIL, which would mean there is one argument, whose type is nil.
+	    // This is not a convention. Generally speaking, DI_LAST_TYPE should never
+	    // appear in argument lists.
+	    .length = arg.type != DI_LAST_TYPE ? 1 : 0,
+	    .elements = args,
 	};
 	int rc2 = di_rawcallxn(o, buf, &rtype2, &ret2, tmp);
 	free(buf);
@@ -95,11 +99,12 @@ call_handler_with_fallback(struct di_object *o, const char *prefix, const char *
 
 	tmp.length++;
 	if (tmp.length > 1) {
-		tmp.tuple[1] = tmp.tuple[0];
-		tmp.elem_type[1] = tmp.elem_type[0];
+		args[1] = args[0];
 	}
-	tmp.tuple[0] = &name;
-	tmp.elem_type[0] = DI_TYPE_STRING_LITERAL;
+	args[0] = (struct di_variant){
+	    .type = DI_TYPE_STRING_LITERAL,
+	    .value = &(union di_value){.string_literal = name},
+	};
 
 	rc2 = di_rawcallxn(o, prefix, &rtype2, &ret2, tmp);
 ret:
@@ -143,7 +148,8 @@ PUBLIC int di_setx(struct di_object *o, const char *name, di_type_t type, void *
 		rc = -EPERM;
 	}
 
-	int rc2 = call_handler_with_fallback(o, "__set", name, type, val, NULL, NULL);
+	int rc2 = call_handler_with_fallback(o, "__set", name,
+	                                     (struct di_variant){val, type}, NULL, NULL);
 	if (rc2 != -ENOENT) {
 		return rc2;
 	}
@@ -173,7 +179,8 @@ PUBLIC int di_getx(struct di_object *o, const char *name, di_type_t *type, void 
 		return 0;
 	}
 
-	return call_handler_with_fallback(o, "__get", name, DI_LAST_TYPE, NULL, type, ret);
+	return call_handler_with_fallback(
+	    o, "__get", name, (struct di_variant){NULL, DI_LAST_TYPE}, type, ret);
 }
 
 #define gen_tfunc(name, getter)                                                          \
@@ -510,11 +517,9 @@ PUBLIC bool di_is_object_callable(struct di_object *nonnull obj) {
 	break
 PUBLIC void di_free_tuple(struct di_tuple t) {
 	for (int i = 0; i < t.length; i++) {
-		di_free_value(t.elem_type[i], t.tuple[i]);
-		free(t.tuple[i]);
+		di_free_value(DI_TYPE_VARIANT, &t.elements[i]);
 	}
-	free(t.elem_type);
-	free(t.tuple);
+	free(t.elements);
 }
 
 PUBLIC void di_free_array(struct di_array arr) {
@@ -574,7 +579,6 @@ PUBLIC void di_free_value(di_type_t t, void *ptr) {
 PUBLIC void di_copy_value(di_type_t t, void *dst, const void *src) {
 	const struct di_array *arr;
 	const struct di_tuple *tuple;
-	struct di_tuple ret;
 	union di_value *dstval = dst;
 	const union di_value *srcval = src;
 	void *d;
@@ -594,16 +598,13 @@ PUBLIC void di_copy_value(di_type_t t, void *dst, const void *src) {
 		break;
 	case DI_TYPE_TUPLE:
 		tuple = &srcval->tuple;
-		ret.tuple = tmalloc(void *, tuple->length);
-		ret.elem_type = tmalloc(di_type_t, tuple->length);
-		ret.length = tuple->length;
+		dstval->tuple.elements = tmalloc(struct di_variant, tuple->length);
+		dstval->tuple.length = tuple->length;
 
-		memcpy(ret.elem_type, tuple->elem_type, sizeof(di_type_t) * tuple->length);
 		for (int i = 0; i < tuple->length; i++) {
-			ret.tuple[i] = calloc(1, di_sizeof_type(tuple->elem_type[i]));
-			di_copy_value(tuple->elem_type[i], ret.tuple[i], tuple->tuple[i]);
+			di_copy_value(DI_TYPE_VARIANT, &dstval->tuple.elements[i],
+			              &tuple->elements[i]);
 		}
-		*(struct di_tuple *)dst = ret;
 		break;
 	case DI_TYPE_VARIANT:
 		dstval->variant = (struct di_variant){
@@ -696,7 +697,8 @@ di_listen_to_once(struct di_object *_obj, const char *name, struct di_object *h,
 		HASH_ADD_KEYPTR(hh, obj->signals, sig->name, strlen(sig->name), sig);
 		if (!is_destroy(name)) {
 			call_handler_with_fallback(_obj, "__new_signal", sig->name,
-			                           DI_LAST_TYPE, NULL, NULL, NULL);
+			                           (struct di_variant){NULL, DI_LAST_TYPE},
+			                           NULL, NULL);
 			di_ref_object((void *)obj);
 		}
 	}
@@ -731,9 +733,10 @@ PUBLIC void di_clear_listeners(struct di_object *_obj) {
 	HASH_ITER (hh, obj->signals, sig, tsig) {
 		if (!is_destroy(sig->name)) {
 			call_handler_with_fallback(_obj, "__del_signal", sig->name,
-			                           DI_LAST_TYPE, NULL, NULL, NULL);
-
+			                           (struct di_variant){NULL, DI_LAST_TYPE},
+			                           NULL, NULL);
 		}
+
 		// unrefing object, calling detach might cause some other listeners
 		// in the linked list to be stopped, which is not accounted for by
 		// list_for_each_entry_safe. So we need to clear listeners in 2
@@ -780,9 +783,9 @@ PUBLIC int di_stop_listener(struct di_listener *l) {
 	if (list_empty(&l->signal->listeners)) {
 		HASH_DEL(((struct di_object_internal *)l->signal->owner)->signals, l->signal);
 		if (!is_destroy(l->signal->name)) {
-			call_handler_with_fallback(l->signal->owner, "__del_signal",
-			                           l->signal->name, DI_LAST_TYPE, NULL,
-			                           NULL, NULL);
+			call_handler_with_fallback(
+			    l->signal->owner, "__del_signal", l->signal->name,
+			    (struct di_variant){NULL, DI_LAST_TYPE}, NULL, NULL);
 			di_unref_object((void *)l->signal->owner);
 		}
 		free(l->signal->name);
@@ -804,7 +807,7 @@ PUBLIC int di_emitn(struct di_object *o, const char *name, struct di_tuple t) {
 		return -E2BIG;
 	}
 
-	assert(t.length == 0 || (t.elem_type != NULL && t.tuple != NULL));
+	assert(t.length == 0 || (t.elements != NULL));
 
 	struct di_signal *sig;
 	HASH_FIND_STR(((struct di_object_internal *)o)->signals, name, sig);
