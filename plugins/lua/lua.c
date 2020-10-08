@@ -748,9 +748,6 @@ static int di_lua_pushvariant(lua_State *L, const char *name, struct di_variant 
 		lua_pushlightuserdata(L, var.value->pointer);
 		return 1;
 	case DI_TYPE_OBJECT:
-		lua_pushliteral(L, DI_LUA_REGISTRY_SCRIPT_OBJECT_KEY);
-		lua_rawget(L, LUA_REGISTRYINDEX);
-		lua_pop(L, 1);
 		di_lua_pushobject(L, name, var.value->object, di_lua_methods);
 		return 1;
 	case DI_TYPE_STRING:
