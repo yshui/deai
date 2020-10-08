@@ -26,24 +26,85 @@
 /// * Arrays are passed by value, which contains a pointer to the array storage. It has the
 ///   same effect as C++ vectors. You can modify the elements of the array, but if you
 ///   change the storage pointer, it won't be reflected in the actual array. The same
-///   applies to tuples as well.
+///   applies to tuples as well. Also, the language plugins will always copy the array or
+///   tuple and convert it to a language native value, so modifications made by scripts to
+///   an array or tuple will never be reflected.
+/// * Although it's possible to pass a value by reference by wrapping it in a variant, it
+///   is discouraged. For convenience, the language plugins will always "unpack" the
+///   variant and make a copy of its inner value. If you want to pass something the
+///   scripts can modify, you should always use an object.
+///
+/// In summary, di_objects are only passed by references, all basic types are always
+/// passed by value. strings, arrays, tuples and variants are in the middle. If you use the
+/// deai API directly, they pass their inner values as references; if you are writing a
+/// script, they would be unpacked recursively, and their inner values will be passed by
+/// value to your script.
+///
+/// Examples:
+///
+/// ```c
+/// int fun(struct di_array arr) {
+///     ((int *)arr.arr)[0] = 1; // reflected
+///     arr.arr = realloc(arr.arr, 20); // not reflected
+///     ((int *)arr.arr)[0] = 1; // not reflected
+/// }
+/// ```
+///
+/// ```lua
+/// function(array)
+///     array[0] = 1 -- not reflected
+///     table.insert(array, 10) -- not reflected
+/// end
+/// ```
 typedef enum di_type {
 	DI_TYPE_NIL = 0,
-	DI_TYPE_ANY,            // unresolved, only used for element type of empty arrays.
-	DI_TYPE_BOOL,           // boolean, no implicit conversion to number types
-	DI_TYPE_NINT,           // native int
-	DI_TYPE_NUINT,          // native unsigned int
-	DI_TYPE_UINT,           // uint64_t
-	DI_TYPE_INT,            // int64_t
-	DI_TYPE_FLOAT,          // platform dependent, double
-	DI_TYPE_POINTER,        // Generic pointer, void *
-	DI_TYPE_OBJECT,         // pointer to di_object
-	DI_TYPE_STRING,         // utf-8 string, char *
-	DI_TYPE_STRING_LITERAL,        // utf-8 string literal, const char *
-	DI_TYPE_ARRAY,                 // struct di_array
-	DI_TYPE_TUPLE,                 // array with variable element type
-	DI_TYPE_VARIANT,               // sum type of all di types
-	DI_LAST_TYPE,                  // bottom, the empty type
+	// unresolved, only used for element type of empty arrays.
+	DI_TYPE_ANY,
+	// boolean, no implicit conversion to number types
+	// C type: _Bool
+	DI_TYPE_BOOL,
+	// native integer
+	// C type: int
+	DI_TYPE_NINT,
+	// native unsigned integer
+	// C type: unsigned int
+	DI_TYPE_NUINT,
+	// 64bit signed integer, int64_t
+	// C type: int64_t
+	DI_TYPE_INT,
+	// 64bit unsigned integer
+	// C type: uint64_t
+	DI_TYPE_UINT,
+	// implementation defined floating point number type
+	// C type: double
+	DI_TYPE_FLOAT,
+	// generic pointer, whose memory is not managed by deai
+	// C type: void *
+	DI_TYPE_POINTER,
+	// a deai object reference
+	// C type: struct di_object *
+	DI_TYPE_OBJECT,
+	// utf-8 string
+	// C type: char *
+	DI_TYPE_STRING,
+	// utf-8 string literal. can also mean a string whose memory is not managed by
+	// deai.
+	// C type: const char *
+	DI_TYPE_STRING_LITERAL,
+	// an array. all elements in the array have the same type. see `struct di_array`
+	// for more info.
+	// C type: struct di_array
+	DI_TYPE_ARRAY,
+	// a tuple. a collection of variable number of elements, each with its own type.
+	// C type: struct di_tuple
+	DI_TYPE_TUPLE,
+	// sum type of all deai types. note: variants always hold a reference to their
+	// inner values. passing a variant is equivalent to passing a reference to the
+	// value.
+	// C type: struct di_variant
+	DI_TYPE_VARIANT,
+	// the bottom type
+	DI_LAST_TYPE,
 } di_type_t;
 
 struct di_object;
