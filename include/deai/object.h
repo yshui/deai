@@ -21,7 +21,7 @@
 
 /// deai type ids. Use negative numbers for invalid types.
 ///
-/// Notes:
+/// # Passing by reference:
 ///
 /// * Arrays are passed by value, which contains a pointer to the array storage. It has the
 ///   same effect as C++ vectors. You can modify the elements of the array, but if you
@@ -40,7 +40,7 @@
 /// script, they would be unpacked recursively, and their inner values will be passed by
 /// value to your script.
 ///
-/// Examples:
+/// ## Examples:
 ///
 /// ```c
 /// int fun(struct di_array arr) {
@@ -56,6 +56,21 @@
 ///     table.insert(array, 10) -- not reflected
 /// end
 /// ```
+///
+/// # NULL object refernce
+///
+/// deai object references MUST NOT be NULL. However, it is sometimes useful to have a
+/// value that is either an object reference or nil. Use di_variant in that case.
+///
+/// If you are writing a specialized getter, you should reconsider returning nil from the
+/// getter. Because many script languages treat nil to mean the property doesn't exist.
+/// But having a specialized getter defined for a property, already indicates that the
+/// property does exist. This can confuse the user. Instead, return an empty object, or an
+/// error object in case there was an error getting the property.
+///
+/// If you want to have a property that may or may not exist, you should write a generic
+/// getter, and return a variant whose type is DI_LAST_TYPE to indicate the property
+/// doesn't exist.
 typedef enum di_type {
 	DI_TYPE_NIL = 0,
 	// unresolved, only used for element type of empty arrays.
@@ -104,6 +119,10 @@ typedef enum di_type {
 	// C type: struct di_variant
 	DI_TYPE_VARIANT,
 	// the bottom type
+	// this type has no value. it shouldn't be used as type for parameters or
+	// arguments. and shouldn't be used as return type, except for a getter.
+	// the getters are allowed to return a variant of LAST_TYPE, to indicate the
+	// property is not found.
 	DI_LAST_TYPE,
 } di_type_t;
 
@@ -219,7 +238,11 @@ int di_rawgetxt(struct di_object *nonnull o, const char *nonnull prop, di_type_t
 /// Like `di_rawgetx`, but also calls getter functions if `prop` is not found.
 /// The getter functions are the generic getter "__get", or the specialized getter
 /// "__get_<prop>"
-int di_getx(struct di_object *nonnull no, const char *nonnull prop,
+/// The getter can return a normal value, or a variant. Variants returned by the getters
+/// are automatically unpacked recursively. A variant of DI_LAST_TYPE can be used by the
+/// generic getter ("__get") to indicate that `prop` doesn't exist in `o`. Specifialized
+/// getter cannot return DI_LAST_TYPE.
+int di_getx(struct di_object *nonnull o, const char *nonnull prop,
             di_type_t *nonnull type, void *nullable *nonnull ret);
 
 /// Like `di_rawgetxt`, but also calls getter functions if `prop` is not found.

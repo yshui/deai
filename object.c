@@ -174,14 +174,40 @@ PUBLIC int di_rawgetx(struct di_object *o, const char *name, di_type_t *type, vo
 	return 0;
 }
 
+// Recusively unpack a variant until something not variant is reached.
+static void
+_extract_variant(struct di_variant *var, di_type_t *nonnull type, void **nonnull ret) {
+	if (var->type == DI_TYPE_VARIANT) {
+		return _extract_variant(&var->value->variant, type, ret);
+	}
+	*type = var->type;
+	*ret = var->value;
+	var->value = NULL;
+	var->type = DI_TYPE_NIL;
+}
+
 PUBLIC int di_getx(struct di_object *o, const char *name, di_type_t *type, void **ret) {
 	int rc = di_rawgetx(o, name, type, ret);
 	if (rc == 0) {
 		return 0;
 	}
 
-	return call_handler_with_fallback(
+	rc = call_handler_with_fallback(
 	    o, "__get", name, (struct di_variant){NULL, DI_LAST_TYPE}, type, ret);
+	if (rc != 0) {
+		return rc;
+	}
+
+	if (*type == DI_TYPE_VARIANT) {
+		struct di_variant *var = *ret;
+		_extract_variant(var, type, ret);
+		di_free_value(DI_TYPE_VARIANT, var);
+		free(var);
+		if (*type == DI_LAST_TYPE) {
+			return -ENOENT;
+		}
+	}
+	return 0;
 }
 
 #define gen_tfunc(name, getter)                                                          \
@@ -515,9 +541,6 @@ PUBLIC bool di_is_object_callable(struct di_object *nonnull obj) {
 	return internal->call != NULL;
 }
 
-#define chknull(v)                                                                       \
-	if ((*(void **)(v)) == NULL)                                                     \
-	break
 PUBLIC void di_free_tuple(struct di_tuple t) {
 	for (int i = 0; i < t.length; i++) {
 		di_free_value(DI_TYPE_VARIANT, &t.elements[i]);
@@ -540,6 +563,8 @@ PUBLIC void di_free_value(di_type_t t, void *ptr) {
 
 	// If t != DI_TYPE_UINT, then `ptr_` cannot be NULL
 	union di_value *nonnull val = ptr;
+	struct di_object *nonnull obj;
+	char *nonnull string;
 	switch (t) {
 	case DI_TYPE_ARRAY:
 		di_free_array(val->array);
@@ -548,12 +573,12 @@ PUBLIC void di_free_value(di_type_t t, void *ptr) {
 		di_free_tuple(val->tuple);
 		break;
 	case DI_TYPE_STRING:
-		chknull(val);
-		free(val->string);
+		string = val->string;
+		free(string);
 		break;
 	case DI_TYPE_OBJECT:
-		chknull(val);
-		di_unref_object(val->object);
+		obj = val->object;
+		di_unref_object(obj);
 		break;
 	case DI_TYPE_VARIANT:
 		di_free_value(val->variant.type, val->variant.value);

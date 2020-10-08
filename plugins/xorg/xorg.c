@@ -182,23 +182,33 @@ struct _xext {
     {NULL, NULL},
 };
 
-static struct di_object *di_xorg_get_ext(struct di_xorg_connection *xc, const char *name) {
-	struct di_xorg_ext *ret;
-	HASH_FIND_STR(xc->xext, name, ret);
-	if (ret) {
-		di_ref_object((void *)ret);
-		return (void *)ret;
+static struct di_variant di_xorg_get_ext(struct di_xorg_connection *xc, const char *name) {
+	struct di_xorg_ext *ext;
+	HASH_FIND_STR(xc->xext, name, ext);
+	if (ext) {
+		auto ret = tmalloc(union di_value, 1);
+		di_ref_object((void *)ext);
+		ret->object = (struct di_object *)ext;
+		return (struct di_variant){.type = DI_TYPE_OBJECT, .value = ret};
 	}
-	for (int i = 0; xext_reg[i].name; i++)
+	for (int i = 0; xext_reg[i].name; i++) {
 		if (strcmp(xext_reg[i].name, name) == 0) {
 			auto ext = xext_reg[i].new(xc);
+			if (ext == NULL) {
+				break;
+			}
+
 			di_set_object_dtor((void *)ext, (void *)di_xorg_free_sub);
 
 			HASH_ADD_KEYPTR(hh, xc->xext, ext->extname, strlen(ext->extname), ext);
 			di_ref_object((void *)xc);
-			return (void *)ext;
+
+			auto ret = tmalloc(union di_value, 1);
+			ret->object = (struct di_object *)ext;
+			return (struct di_variant){.type = DI_TYPE_OBJECT, .value = ret};
 		}
-	return NULL;
+	}
+	return (struct di_variant){ .type = DI_LAST_TYPE, .value = NULL };
 }
 
 struct xscreen {

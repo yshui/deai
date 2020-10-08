@@ -6,6 +6,7 @@ di.os.env.DISPLAY=":1"
 di.event.timer(0.2).on("elapsed", true, function()
     -- wait a awhile for Xvfb to start
     o = di.xorg.connect()
+    assert(o.asdf == nil)
     if o.errmsg then
         print(o.errmsg)
         di.exit(1)
@@ -20,7 +21,11 @@ di.event.timer(0.2).on("elapsed", true, function()
         print(string.format("new device %s %s %s %d", dev.type, dev.use, dev.name, dev.id))
         print("enabled:", dev.props["Device Enabled"][1])
         dev.props["Coordinate Transformation Matrix"] = {2, 0, 0, 0, 2, 0, 0, 0, 2}
-        print("matrix:", table.unpack(dev.props["Coordinate Transformation Matrix"]))
+        if table.unpack then
+            print("matrix:", table.unpack(dev.props["Coordinate Transformation Matrix"]))
+        else
+            print("matrix:", unpack(dev.props["Coordinate Transformation Matrix"]))
+        end
     end)
 
     o.key.new({"mod4"}, "d", false).on("pressed", function()
