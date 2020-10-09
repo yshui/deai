@@ -99,6 +99,15 @@ static inline int unused di_type_conversion(di_type_t inty, const void *inp,
 		return 0;
 	}
 
+	if (outty == DI_TYPE_VARIANT) {
+		auto var = tmalloc(struct di_variant, 1);
+		var->type = inty;
+		var->value = malloc(sizeof(di_sizeof_type(inty)));
+		di_copy_value(inty, var->value, inp);
+		*cloned = true;
+		return 0;
+	}
+
 	if (inty == DI_TYPE_STRING && outty == DI_TYPE_STRING_LITERAL) {
 		*outp = (void *)inp;
 		return 0;
