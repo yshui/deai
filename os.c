@@ -12,9 +12,18 @@
 
 #include "os.h"
 
-static char *di_env_get(struct di_module *m, const char *name) {
+static struct di_variant di_env_get(struct di_module *m, const char *name) {
 	const char *str = getenv(name);
-	return str ? strdup(str) : NULL;
+	struct di_variant ret;
+	if (str) {
+		ret.type = DI_TYPE_STRING_LITERAL;
+		ret.value = malloc(sizeof(void *));
+		ret.value->string_literal = str;
+	} else {
+		ret.type = DI_LAST_TYPE;
+		ret.value = NULL;
+	}
+	return ret;
 }
 
 static void di_env_set(struct di_module *m, const char *key, const char *val) {
