@@ -6,3 +6,6 @@ e = di.spawn.run({"ls"}, true)
 e.on("exit", function(e, ec, sig)
     print(ec, sig)
 end)
+
+di.os.env.PATH = nil
+assert(di.os.env.PATH == nil)

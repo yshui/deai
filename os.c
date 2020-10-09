@@ -12,7 +12,7 @@
 
 #include "os.h"
 
-static struct di_variant di_env_get(struct di_module *m, const char *name) {
+static struct di_variant di_env_get(struct di_module *m, const char *nonnull name) {
 	const char *str = getenv(name);
 	struct di_variant ret;
 	if (str) {
@@ -26,11 +26,12 @@ static struct di_variant di_env_get(struct di_module *m, const char *name) {
 	return ret;
 }
 
-static void di_env_set(struct di_module *m, const char *key, const char *val) {
-	if (val)
-		setenv(key, val, 1);
-	else
-		unsetenv(key);
+static void di_env_set(struct di_module *m, const char *nonnull key, const char *nonnull val) {
+	setenv(key, val, 1);
+}
+
+static void di_env_unset(struct di_module *m, const char *nonnull key) {
+	unsetenv(key);
 }
 
 static char *di_get_hostname(struct deai *p) {
@@ -46,8 +47,9 @@ void di_init_os(struct deai *di) {
 
 	struct di_object *o = di_new_object_with_type(struct di_object);
 
-	di_method(o, "__get", di_env_get, char *);
-	di_method(o, "__set", di_env_set, char *, char *);
+	di_method(o, "__get", di_env_get, const char *);
+	di_method(o, "__set", di_env_set, const char *, const char *);
+	di_method(o, "__delete", di_env_unset, const char *);
 
 	di_member(m, "env", o);
 
