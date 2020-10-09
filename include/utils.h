@@ -99,6 +99,11 @@ static inline int unused di_type_conversion(di_type_t inty, const void *inp,
 		return 0;
 	}
 
+	if (inty == DI_TYPE_STRING && outty == DI_TYPE_STRING_LITERAL) {
+		*outp = (void *)inp;
+		return 0;
+	}
+
 	if (outty == DI_TYPE_NIL) {
 		*outp = NULL;
 		return 0;
