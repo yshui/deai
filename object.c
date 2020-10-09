@@ -32,47 +32,35 @@ static_assert(alignof(struct di_object) == alignof(struct di_object_internal),
               "di_object alignment mismatch");
 // clang-format on
 
-#define gen_callx(fnname, getter)                                                        \
-	int fnname(struct di_object *o, const char *name, di_type_t *rt,                 \
-	           union di_value *ret, bool *called, ...) {                             \
-		*called = false;                                                         \
-		struct di_object *val;                                                   \
-		int rc = getter(o, name, DI_TYPE_OBJECT, (union di_value *)&val);        \
-		if (rc != 0) {                                                           \
-			return rc;                                                       \
-		}                                                                        \
-                                                                                         \
-		va_list ap;                                                              \
-		va_start(ap, called);                                                    \
-		rc = di_call_objectv(val, rt, ret, ap);                                  \
-		*called = true;                                                          \
-                                                                                         \
-		di_unref_object(val);                                                    \
-		return rc;                                                               \
-	}
-
-PUBLIC gen_callx(di_callx, di_getxt);
-
-PUBLIC int di_rawcallxn(struct di_object *o, const char *name, di_type_t *rt,
-                        union di_value *ret, struct di_tuple t, bool *called) {
-	struct di_object *val;
+static int di_call_internal(struct di_object *self, struct di_object *method_, di_type_t *rt,
+                            union di_value *ret, struct di_tuple args, bool *called) {
+	auto method = (struct di_object_internal *)method_;
 	*called = false;
-	int rc = di_rawgetxt(o, name, DI_TYPE_OBJECT, (union di_value *)&val);
-	if (rc != 0) {
-		return rc;
-	}
-
-	auto m = (struct di_object_internal * nonnull) val;
-	if (!m->call) {
+	if (!method->call) {
 		return -EINVAL;
 	}
 
-	rc = m->call((struct di_object *)m, rt, ret, t);
+	int rc = method->call(method_, rt, ret, args);
 	*called = true;
 
-	di_unref_object((struct di_object *)m);
+	di_unref_object(method_);
 	return rc;
 }
+
+#define gen_callx(fnname, getter)                                                        \
+	int fnname(struct di_object *self, const char *name, di_type_t *rt,              \
+	           union di_value *ret, struct di_tuple args, bool *called) {            \
+		struct di_object *val;                                                   \
+		*called = false;                                                         \
+		int rc = getter(self, name, DI_TYPE_OBJECT, (union di_value *)&val);        \
+		if (rc != 0) {                                                           \
+			return rc;                                                       \
+		}                                                                        \
+		return di_call_internal(self, val, rt, ret, args, called);               \
+	}
+
+PUBLIC gen_callx(di_callx, di_getxt);
+PUBLIC gen_callx(di_rawcallxn, di_rawgetxt);
 
 /// Call "<prefix>_<name>" with "<prefix>" as fallback
 ///

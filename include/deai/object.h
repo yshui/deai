@@ -203,7 +203,7 @@ int di_rawcallxn(struct di_object *nonnull o, const char *nonnull name, di_type_
 ///
 /// You shouldn't use this function directly, use the `di_call` macro if you are using C.
 int di_callx(struct di_object *nonnull o, const char *nonnull name, di_type_t *nonnull rt,
-             union di_value *nonnull ret, bool *nonnull called, ...);
+             union di_value *nonnull ret, struct di_tuple args, bool *nonnull called);
 
 /// Change the value of member `prop` of object `o`.
 ///

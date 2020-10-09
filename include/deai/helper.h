@@ -118,7 +118,6 @@ int di_proxy_signal(struct di_object *nonnull src, const char *nonnull srcsig,
 #define addressof(x) (&((typeof(x)[]){x})[0])
 
 #define di_type_pair(v) di_typeof(v), v,
-#define di_arg_list(...) LIST_APPLY(di_type_pair, SEP_NONE, __VA_ARGS__) DI_LAST_TYPE
 
 #define object_cleanup __attribute__((cleanup(__free_objp)))
 
@@ -174,7 +173,7 @@ int di_proxy_signal(struct di_object *nonnull src, const char *nonnull srcsig,
 			union di_value ret;                                              \
 			bool called;                                                     \
 			rc = di_callx((struct di_object *)(o), (name), &rtype, &ret,     \
-			              &called, di_arg_list(__VA_ARGS__));                \
+			              di_tuple(__VA_ARGS__), &called);                \
 			if (rc != 0) {                                                   \
 				break;                                                   \
 			}                                                                \
@@ -191,7 +190,7 @@ int di_proxy_signal(struct di_object *nonnull src, const char *nonnull srcsig,
 			union di_value ret;                                              \
 			bool called;                                                     \
 			rc = di_callx((struct di_object *)(o), (name), &rtype, &ret,     \
-			              &called, di_arg_list(__VA_ARGS__));                \
+			              di_tuple(__VA_ARGS__), &called);                \
 			if (rc != 0) {                                                   \
 				break;                                                   \
 			}                                                                \
