@@ -61,7 +61,9 @@ _di_typed_trampoline(ffi_cif *cif, void (*fn)(void), void *ret, const di_type_t 
 	struct di_variant *vars = args.elements;
 	union di_value **xargs = alloca((nargs0 + args.length) * sizeof(void *));
 	bool *args_cloned = alloca(args.length * sizeof(bool));
-	memcpy(xargs, args0, sizeof(void *) * nargs0);
+	if (nargs0 != 0) {
+		memcpy(xargs, args0, sizeof(void *) * nargs0);
+	}
 	memset(xargs + nargs0, 0, sizeof(void *) * args.length);
 
 	int rc = 0;
@@ -91,7 +93,8 @@ _di_typed_trampoline(ffi_cif *cif, void (*fn)(void), void *ret, const di_type_t 
 					xargs[i]->pointer = NULL;
 					break;
 				case DI_TYPE_ARRAY:
-					xargs[i]->array = (struct di_array){0, NULL, DI_TYPE_ANY};
+					xargs[i]->array =
+					    (struct di_array){0, NULL, DI_TYPE_ANY};
 					rc = 0;
 					break;
 				case DI_TYPE_TUPLE:
@@ -136,34 +139,6 @@ out:
 	}
 
 	return rc;
-}
-
-static int method_trampoline(struct di_object *o, di_type_t *rtype, union di_value *ret,
-                             struct di_tuple t) {
-	if (!di_check_type(o, "deai:method")) {
-		return -EINVAL;
-	}
-
-	struct di_typed_method *tm = (void *)o;
-	if (t.length != tm->nargs) {
-		return -EINVAL;
-	}
-
-	*rtype = tm->rtype;
-
-	struct di_weak_object *weak_this;
-	int rc = di_rawgetxt(o, "__this", DI_TYPE_WEAK_OBJECT, (union di_value *)&weak_this);
-	DI_CHECK(rc == 0, "this pointer not found in method?");
-
-	with_object_cleanup(di_object) this = di_upgrade_weak_ref(weak_this);
-	di_drop_weak_ref(&weak_this);
-
-	if (this == NULL) {
-		// this pointer is gone
-		return -EBADF;
-	}
-	return _di_typed_trampoline(&tm->cif, tm->fn, ret, tm->atypes + 1, 1,
-	                            (const void *[]){&this}, t);
 }
 
 static int closure_trampoline(struct di_object *o, di_type_t *rtype, union di_value *ret,
@@ -260,53 +235,26 @@ di_create_closure(void (*fn)(void), di_type_t rtype, int nargs0, const di_type_t
 	return cl;
 }
 
-static void free_method(struct di_typed_method *tm) {
-	free(tm->cif.arg_types);
-}
-
 PUBLIC int di_add_method(struct di_object *o, const char *name, void (*fn)(void),
                          di_type_t rtype, int nargs, ...) {
-	// TODO(yshui): convert to use closure
 	if (nargs < 0 || nargs + 1 > MAX_NARGS) {
 		return -EINVAL;
 	}
 
-	struct di_typed_method *f = (void *)di_new_object(
-	    sizeof(struct di_typed_method) + sizeof(di_type_t) * (1 + nargs),
-	    alignof(struct di_typed_method));
-
-	f->rtype = rtype;
-	f->call = method_trampoline;
-	f->fn = fn;
-	f->dtor = (void *)free_method;
-
+	// Get argument types
+	di_type_t *ats = alloca(sizeof(di_type_t) * (nargs + 1));
 	va_list ap;
 	va_start(ap, nargs);
 	for (unsigned int i = 0; i < nargs; i++) {
-		f->atypes[i + 1] = va_arg(ap, di_type_t);
-		if (f->atypes[i + 1] == DI_TYPE_NIL) {
-			free(f);
+		ats[i + 1] = va_arg(ap, di_type_t);
+		if (ats[i + 1] == DI_TYPE_NIL) {
 			return -EINVAL;
 		}
 	}
 	va_end(ap);
 
-	f->atypes[0] = DI_TYPE_OBJECT;
-	f->nargs = nargs;
-
-	ffi_status ret = di_ffi_prep_cif(&f->cif, nargs + 1, f->rtype, f->atypes);
-
-	if (ret != FFI_OK) {
-		free(f);
-		return -EINVAL;
-	}
-
-	DI_OK_OR_RET(di_set_type((void *)f, "deai:method"));
-
-	auto weak_this = di_weakly_ref_object(o);
-	di_add_member_clone((struct di_object *)f, "__this", DI_TYPE_WEAK_OBJECT, weak_this);
-	di_drop_weak_ref(&weak_this);
-
+	ats[0] = DI_TYPE_OBJECT;
+	auto f = di_create_closure(fn, rtype, 0, NULL, NULL, nargs + 1, ats, false);
 	return di_add_member_move(o, name, (di_type_t[]){DI_TYPE_OBJECT}, (void **)&f);
 }
 

@@ -40,7 +40,17 @@ static int di_call_internal(struct di_object *self, struct di_object *method_, d
 		return -EINVAL;
 	}
 
-	int rc = method->call(method_, rt, ret, args);
+	struct di_tuple real_args;
+	real_args.length = args.length + 1;
+	assert(real_args.length <= MAX_NARGS);
+
+	/* Push the object itself as the first argument */
+	real_args.elements = alloca(sizeof(struct di_variant) * real_args.length);
+	memcpy(&real_args.elements[1], args.elements, sizeof(struct di_variant) * args.length);
+	real_args.elements[0].type = DI_TYPE_OBJECT;
+	real_args.elements[0].value = (union di_value *)&self;
+
+	int rc = method->call(method_, rt, ret, real_args);
 	*called = true;
 
 	di_unref_object(method_);
