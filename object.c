@@ -34,7 +34,8 @@ static_assert(alignof(struct di_object) == alignof(struct di_object_internal),
 
 #define gen_callx(fnname, getter)                                                        \
 	int fnname(struct di_object *o, const char *name, di_type_t *rt,                 \
-	           union di_value *ret, ...) {                                           \
+	           union di_value *ret, bool *called, ...) {                             \
+		*called = false;                                                         \
 		struct di_object *val;                                                   \
 		int rc = getter(o, name, DI_TYPE_OBJECT, (union di_value *)&val);        \
 		if (rc != 0) {                                                           \
@@ -42,8 +43,9 @@ static_assert(alignof(struct di_object) == alignof(struct di_object_internal),
 		}                                                                        \
                                                                                          \
 		va_list ap;                                                              \
-		va_start(ap, ret);                                                       \
+		va_start(ap, called);                                                    \
 		rc = di_call_objectv(val, rt, ret, ap);                                  \
+		*called = true;                                                          \
                                                                                          \
 		di_unref_object(val);                                                    \
 		return rc;                                                               \
@@ -52,8 +54,9 @@ static_assert(alignof(struct di_object) == alignof(struct di_object_internal),
 PUBLIC gen_callx(di_callx, di_getxt);
 
 PUBLIC int di_rawcallxn(struct di_object *o, const char *name, di_type_t *rt,
-                        union di_value *ret, struct di_tuple t) {
+                        union di_value *ret, struct di_tuple t, bool *called) {
 	struct di_object *val;
+	*called = false;
 	int rc = di_rawgetxt(o, name, DI_TYPE_OBJECT, (union di_value *)&val);
 	if (rc != 0) {
 		return rc;
@@ -65,16 +68,20 @@ PUBLIC int di_rawcallxn(struct di_object *o, const char *name, di_type_t *rt,
 	}
 
 	rc = m->call((struct di_object *)m, rt, ret, t);
+	*called = true;
 
 	di_unref_object((struct di_object *)m);
 	return rc;
 }
 
-// Call "<prefix>_<name>" with "<prefix>" as fallback
-static int
-call_handler_with_fallback(struct di_object *nonnull o, const char *nonnull prefix,
-                           const char *nonnull name, struct di_variant arg,
-                           di_type_t *nullable rtype, union di_value *nullable ret) {
+/// Call "<prefix>_<name>" with "<prefix>" as fallback
+///
+/// @param[out] found whether a handler is found
+static int call_handler_with_fallback(struct di_object *nonnull o,
+                                      const char *nonnull prefix, const char *nonnull name,
+                                      struct di_variant arg, di_type_t *nullable rtype,
+                                      union di_value *nullable ret, bool *found) {
+	*found = false;
 	// Internal names doesn't go through handler
 	if (strncmp(name, "__", 2) == 0) {
 		return -ENOENT;
@@ -95,10 +102,10 @@ call_handler_with_fallback(struct di_object *nonnull o, const char *nonnull pref
 	    .length = arg.type != DI_LAST_TYPE ? 1 : 0,
 	    .elements = args,
 	};
-	int rc = di_rawcallxn(o, buf, &rtype2, &ret2, tmp);
+	int rc = di_rawcallxn(o, buf, &rtype2, &ret2, tmp, found);
 	free(buf);
 
-	if (rc != -ENOENT) {
+	if (*found) {
 		goto ret;
 	}
 
@@ -111,7 +118,7 @@ call_handler_with_fallback(struct di_object *nonnull o, const char *nonnull pref
 	    .value = &(union di_value){.string_literal = name},
 	};
 
-	rc = di_rawcallxn(o, prefix, &rtype2, &ret2, tmp);
+	rc = di_rawcallxn(o, prefix, &rtype2, &ret2, tmp, found);
 ret:
 	if (rc == 0) {
 		if (ret && rtype) {
@@ -125,6 +132,13 @@ ret:
 }
 
 PUBLIC int di_setx(struct di_object *o, const char *name, di_type_t type, void *val) {
+	bool handler_found;
+	int rc2 = call_handler_with_fallback(
+	    o, "__set", name, (struct di_variant){val, type}, NULL, NULL, &handler_found);
+	if (handler_found) {
+		return rc2;
+	}
+
 	auto mem = di_lookup(o, name);
 	int rc;
 	union di_value val2;
@@ -150,12 +164,6 @@ PUBLIC int di_setx(struct di_object *o, const char *name, di_type_t type, void *
 		rc = -ENOENT;
 	} else {
 		rc = -EPERM;
-	}
-
-	int rc2 = call_handler_with_fallback(o, "__set", name,
-	                                     (struct di_variant){val, type}, NULL, NULL);
-	if (rc2 != -ENOENT) {
-		return rc2;
 	}
 	return rc;
 }
@@ -196,8 +204,10 @@ PUBLIC int di_getx(struct di_object *o, const char *name, di_type_t *type, union
 		return 0;
 	}
 
-	rc = call_handler_with_fallback(
-	    o, "__get", name, (struct di_variant){NULL, DI_LAST_TYPE}, type, ret);
+	bool handler_found;
+	rc = call_handler_with_fallback(o, "__get", name,
+	                                (struct di_variant){NULL, DI_LAST_TYPE}, type,
+	                                ret, &handler_found);
 	if (rc != 0) {
 		return rc;
 	}
@@ -228,7 +238,7 @@ PUBLIC int di_getx(struct di_object *o, const char *name, di_type_t *type, union
 			return rc;                                                              \
 		}                                                                               \
 		bool cloned = false;                                                            \
-		rc = di_type_conversion(rt, &ret2, rtype, ret, &cloned);                       \
+		rc = di_type_conversion(rt, &ret2, rtype, ret, &cloned);                        \
 		if (cloned) {                                                                   \
 			di_free_value(rt, &ret2);                                               \
 		}                                                                               \
@@ -309,7 +319,7 @@ PUBLIC struct di_module *di_new_module(struct deai *di) {
 	return di_new_module_with_size(di, sizeof(struct di_module));
 }
 
-static void _di_remove_member(struct di_object_internal *obj, struct di_member *m) {
+static void _di_remove_member_raw(struct di_object_internal *obj, struct di_member *m) {
 	HASH_DEL(*(struct di_member **)&obj->members, m);
 
 	if (m->own) {
@@ -320,14 +330,26 @@ static void _di_remove_member(struct di_object_internal *obj, struct di_member *
 	free(m);
 }
 
-PUBLIC int di_remove_member(struct di_object *obj, const char *name) {
+PUBLIC int di_remove_member_raw(struct di_object *obj, const char *name) {
 	auto m = di_lookup(obj, name);
 	if (!m) {
 		return -ENOENT;
 	}
 
-	_di_remove_member((struct di_object_internal *)obj, (void *)m);
+	_di_remove_member_raw((struct di_object_internal *)obj, (void *)m);
 	return 0;
+}
+
+PUBLIC int di_remove_member(struct di_object *obj, const char *name) {
+	bool handler_found;
+	int rc2 = call_handler_with_fallback(obj, "__delete", name,
+	                                     (struct di_variant){NULL, DI_LAST_TYPE},
+	                                     NULL, NULL, &handler_found);
+	if (handler_found) {
+		return rc2;
+	}
+
+	return di_remove_member_raw(obj, name);
 }
 
 // Try to never call destroy twice on something. Although it's fine to do so
@@ -362,7 +384,7 @@ PUBLIC void di_destroy_object(struct di_object *_obj) {
 			            ? (*(struct di_object **)m->data)->ref_count
 			            : -1);
 #endif
-		_di_remove_member(obj, m);
+		_di_remove_member_raw(obj, m);
 		m = next_m;
 	}
 
@@ -430,10 +452,7 @@ PUBLIC size_t di_min_return_size(size_t in) {
 
 static int check_new_member(struct di_object_internal *obj, struct di_member *m) {
 	// member name rules:
-	// "<name>" and "__get_<name>" can't exist at the same time
-	// ("<name>" and "__set_<name>" can co-exist, the setter will always be called
-	// when setting the value, making "<name>" readonly)
-	// internal names (starts with __) can't have getter/setter (might change)
+	// internal names (starts with __) can't have getter/setter/deleter (might change)
 
 	struct di_member *om = NULL;
 
@@ -450,32 +469,20 @@ static int check_new_member(struct di_object_internal *obj, struct di_member *m)
 	const size_t getter_prefix_len = strlen(getter_prefix);
 	static const char *const setter_prefix = "__set_";
 	const size_t setter_prefix_len = strlen(setter_prefix);
+	static const char *const deleter_prefix = "__delete_";
+	const size_t deleter_prefix_len = strlen(setter_prefix);
 
+	char *real_name = NULL;
 	if (strncmp(m->name, getter_prefix, getter_prefix_len) == 0) {
-		const char *fname = m->name + getter_prefix_len;
-		if (strncmp(fname, "__", 2) == 0) {
-			return -EINVAL;
-		}
-
-		HASH_FIND_STR(obj->members, m->name, om);
-		if (om) {
-			return -EEXIST;
-		}
+		real_name = m->name + getter_prefix_len;
 	} else if (strncmp(m->name, setter_prefix, setter_prefix_len) == 0) {
-		const char *fname = m->name + setter_prefix_len;
-		if (strncmp(fname, "__", 2) == 0) {
-			return -EINVAL;
-		}
-	} else if (strncmp(m->name, "__", 2) != 0) {
-		char *buf;
-		asprintf(&buf, "__get_%s", m->name);
+		real_name = m->name + setter_prefix_len;
+	} else if (strncmp(m->name, deleter_prefix, deleter_prefix_len) == 0) {
+		real_name = m->name + deleter_prefix_len;
+	}
 
-		HASH_FIND_STR(obj->members, buf, om);
-		free(buf);
-
-		if (om) {
-			return -EEXIST;
-		}
+	if (real_name && strncmp(real_name, "__", 2) == 0) {
+		return -EINVAL;
 	}
 	return 0;
 }
@@ -772,9 +779,10 @@ di_listen_to_once(struct di_object *_obj, const char *name, struct di_object *h,
 		INIT_LIST_HEAD(&sig->listeners);
 		HASH_ADD_KEYPTR(hh, obj->signals, sig->name, strlen(sig->name), sig);
 		if (!is_destroy(name)) {
+			bool handler_found;
 			call_handler_with_fallback(_obj, "__new_signal", sig->name,
 			                           (struct di_variant){NULL, DI_LAST_TYPE},
-			                           NULL, NULL);
+			                           NULL, NULL, &handler_found);
 			di_ref_object((void *)obj);
 		}
 	}
@@ -808,9 +816,10 @@ PUBLIC void di_clear_listeners(struct di_object *_obj) {
 	struct di_signal *sig, *tsig;
 	HASH_ITER (hh, obj->signals, sig, tsig) {
 		if (!is_destroy(sig->name)) {
+			bool handler_found;
 			call_handler_with_fallback(_obj, "__del_signal", sig->name,
 			                           (struct di_variant){NULL, DI_LAST_TYPE},
-			                           NULL, NULL);
+			                           NULL, NULL, &handler_found);
 		}
 
 		// unrefing object, calling detach might cause some other listeners
@@ -848,7 +857,7 @@ PUBLIC int di_stop_listener(struct di_listener *l) {
 	//
 	// Better remove it here even though another stop operation
 	// might be in progress (indicated by ->signal == NULL)
-	di_remove_member((struct di_object *)l, "__detach");
+	di_remove_member_raw((struct di_object *)l, "__detach");
 
 	if (!l->signal) {
 		return -ENOENT;
@@ -859,9 +868,11 @@ PUBLIC int di_stop_listener(struct di_listener *l) {
 	if (list_empty(&l->signal->listeners)) {
 		HASH_DEL(((struct di_object_internal *)l->signal->owner)->signals, l->signal);
 		if (!is_destroy(l->signal->name)) {
-			call_handler_with_fallback(
-			    l->signal->owner, "__del_signal", l->signal->name,
-			    (struct di_variant){NULL, DI_LAST_TYPE}, NULL, NULL);
+			bool handler_found;
+			call_handler_with_fallback(l->signal->owner, "__del_signal",
+			                           l->signal->name,
+			                           (struct di_variant){NULL, DI_LAST_TYPE},
+			                           NULL, NULL, &handler_found);
 			di_unref_object((void *)l->signal->owner);
 		}
 		free(l->signal->name);

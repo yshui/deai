@@ -172,8 +172,9 @@ int di_proxy_signal(struct di_object *nonnull src, const char *nonnull srcsig,
 		do {                                                                     \
 			di_type_t rtype;                                                 \
 			union di_value ret;                                              \
+			bool called;                                                     \
 			rc = di_callx((struct di_object *)(o), (name), &rtype, &ret,     \
-			              di_arg_list(__VA_ARGS__));                         \
+			              &called, di_arg_list(__VA_ARGS__));                \
 			if (rc != 0) {                                                   \
 				break;                                                   \
 			}                                                                \
@@ -188,8 +189,9 @@ int di_proxy_signal(struct di_object *nonnull src, const char *nonnull srcsig,
 		do {                                                                     \
 			di_type_t rtype;                                                 \
 			union di_value ret;                                              \
+			bool called;                                                     \
 			rc = di_callx((struct di_object *)(o), (name), &rtype, &ret,     \
-			              di_arg_list(__VA_ARGS__));                         \
+			              &called, di_arg_list(__VA_ARGS__));                \
 			if (rc != 0) {                                                   \
 				break;                                                   \
 			}                                                                \

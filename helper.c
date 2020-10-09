@@ -70,7 +70,7 @@ static void _del_proxied_signal(struct di_object *_sig) {
 	// Remove the __del_signal, this should free the proxied_signal object
 	char *buf;
 	asprintf(&buf, "__del_signal_%s", sig->signal);
-	di_remove_member(sig->proxy, buf);
+	di_remove_member_raw(sig->proxy, buf);
 	free(buf);
 }
 

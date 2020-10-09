@@ -194,8 +194,8 @@ union di_value {
 ///
 /// @param[out] rt The return type of the function
 /// @param[out] ret The return value, MUST BE a pointer to a full di_value
-int di_rawcallxn(struct di_object *nonnull o, const char *nonnull name,
-                 di_type_t *nonnull rt, union di_value *nonnull ret, struct di_tuple args);
+int di_rawcallxn(struct di_object *nonnull o, const char *nonnull name, di_type_t *nonnull rt,
+                 union di_value *nonnull ret, struct di_tuple args, bool *nonnull called);
 
 /// Like `di_rawcallxn`, but also calls getter functions to fetch the member object. And
 /// the arguments are pass as variadic arguments. Arguments are passed as pairs of type
@@ -203,9 +203,13 @@ int di_rawcallxn(struct di_object *nonnull o, const char *nonnull name,
 ///
 /// You shouldn't use this function directly, use the `di_call` macro if you are using C.
 int di_callx(struct di_object *nonnull o, const char *nonnull name, di_type_t *nonnull rt,
-             union di_value *nonnull ret, ...);
+             union di_value *nonnull ret, bool *nonnull called, ...);
 
-/// Change the value of member `prop` of object `o`. It will call the setter if one exists.
+/// Change the value of member `prop` of object `o`.
+///
+/// If a specialized setter `__set_<prop>` exists, it will call the setter. If not, it
+/// will try the generic setter, `__set`. At last, it will try to change the value of
+/// `prop` if the exists.
 ///
 /// NOTE: currently di_setx cannot change the type of `prop`, it will convert `val` to the
 /// type of `prop`. This WILL change!
@@ -243,7 +247,9 @@ int di_rawgetxt(struct di_object *nonnull o, const char *nonnull prop, di_type_t
 
 /// Like `di_rawgetx`, but also calls getter functions if `prop` is not found.
 /// The getter functions are the generic getter "__get", or the specialized getter
-/// "__get_<prop>"
+/// "__get_<prop>". The specialized getter is called if it exists, if not, the generic
+/// getter is called.
+///
 /// The getter can return a normal value, or a variant. Variants returned by the getters
 /// are automatically unpacked recursively. A variant of DI_LAST_TYPE can be used by the
 /// generic getter ("__get") to indicate that `prop` doesn't exist in `o`. Specifialized
@@ -276,6 +282,15 @@ int nonnull_all di_add_member_ref(struct di_object *nonnull o, const char *nonnu
                                   di_type_t, void *nonnull address);
 int nonnull_all di_add_member_clone(struct di_object *nonnull o, const char *nonnull name,
                                     di_type_t, ...);
+
+/// Remove a member of object `o`, without calling the deleter.
+int di_remove_member_raw(struct di_object *nonnull o, const char *nonnull name);
+/// Remove a member of object `o`, or call its deleter.
+/// If the specialized deleter `__delete_<name>` exists, it will be called; if not,
+/// the generic deleter, `__delete`, will be tried. At last, this function will try to
+/// find and remove a member with name `name`.
+///
+/// `name` cannot name an internal member
 int di_remove_member(struct di_object *nonnull o, const char *nonnull name);
 struct di_member *nullable di_lookup(struct di_object *nonnull o, const char *nonnull name);
 struct di_object *nullable di_new_object(size_t sz, size_t alignment);
@@ -310,7 +325,8 @@ struct di_weak_object *nonnull di_weakly_ref_object(struct di_object *nullable);
 /// Upgrade a weak object reference to an object reference.
 ///
 /// @return An object reference, or NULL if the object has been freed.
-struct di_object *nullable allocates(malloc) di_upgrade_weak_ref(struct di_weak_object *nonnull);
+struct di_object *
+    nullable allocates(malloc) di_upgrade_weak_ref(struct di_weak_object *nonnull);
 
 /// Drop a weak object reference. After this function returns, the passed pointer will
 /// become invalid

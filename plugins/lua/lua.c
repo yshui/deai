@@ -367,7 +367,7 @@ const luaL_Reg di_lua_di_methods[] = {
 static void lua_state_dtor(struct di_lua_state *obj) {
 	di_stop_listener(obj->d);
 	lua_close(obj->L);
-	di_remove_member((void *)obj->m, "__lua_state");
+	di_remove_member_raw((void *)obj->m, "__lua_state");
 }
 
 static void lua_new_state(struct di_module *m) {

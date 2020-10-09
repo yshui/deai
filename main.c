@@ -19,9 +19,9 @@
 #endif
 #include <unistd.h>
 
+#include <deai/builtin/log.h>
 #include <deai/deai.h>
 #include <deai/helper.h>
-#include <deai/builtin/log.h>
 
 #include <config.h>
 
@@ -403,7 +403,7 @@ void di_remove_root(struct di_object *di, const char *key) {
 
 	char *buf;
 	asprintf(&buf, "__root_%s", key);
-	int rc = di_remove_member(di, buf);
+	int rc = di_remove_member_raw(di, buf);
 	if (rc != 0) {
 		di_log_va(logm, DI_LOG_ERROR, "cannot remove root\n");
 	}
@@ -415,9 +415,9 @@ void di_clear_roots(struct di_object *di_) {
 	static const char *const root_prefix = "__root_";
 	auto di = (struct di_object_internal *)di_;
 	struct di_member *i, *tmp;
-	HASH_ITER(hh, di->members, i, tmp) {
+	HASH_ITER (hh, di->members, i, tmp) {
 		if (strncmp(i->name, root_prefix, strlen(root_prefix)) == 0) {
-			di_remove_member(di_, i->name);
+			di_remove_member_raw(di_, i->name);
 		}
 	}
 }
@@ -552,7 +552,8 @@ int main(int argc, char *argv[]) {
 
 	di_type_t rt;
 	union di_value retd;
-	ret = di_rawcallxn(mod, method, &rt, &retd, (struct di_tuple){nargs, di_args});
+	bool called;
+	ret = di_rawcallxn(mod, method, &rt, &retd, (struct di_tuple){nargs, di_args}, &called);
 	if (ret != 0) {
 		fprintf(stderr, "Failed to call \"%s.%s\"\n", modname ? modname : "", method);
 		exit(EXIT_FAILURE);

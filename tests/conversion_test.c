@@ -19,7 +19,8 @@ PUBLIC int di_plugin_init(struct deai *di) {
 
 	di_type_t retty;
 	union di_value retval;
-	di_callx((struct di_object *)di, "takes_string", &retty, &retval,
+	bool called;
+	di_callx((struct di_object *)di, "takes_string", &retty, &retval, &called,
 	         DI_TYPE_STRING_LITERAL, "a string", DI_LAST_TYPE);
 
 	di_call(di, "takes_string_and_modify", (const char *)"string literal");
