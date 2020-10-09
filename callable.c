@@ -75,6 +75,7 @@ _di_typed_trampoline(ffi_cif *cif, void (*fn)(void), void *ret, const di_type_t 
 	memset(xargs + nargs0, 0, sizeof(void *) * args.length);
 
 	int rc = 0;
+	size_t last_arg_processed = 0;
 	for (int i = nargs0; i < nargs0 + args.length; i++) {
 		// Type check and implicit conversion
 		// conversion between all types of integers are allowed
@@ -101,21 +102,22 @@ _di_typed_trampoline(ffi_cif *cif, void (*fn)(void), void *ret, const di_type_t 
 					rc = 0;
 					break;
 				default:
-					xargs[i] = NULL;
+					last_arg_processed = i;
 					goto out;
 				}
 			} else {
 				// Conversion failed
-				xargs[i] = NULL;
+				last_arg_processed = i;
 				goto out;
 			}
 		}
 	}
 
+	last_arg_processed = nargs0 + args.length;
 	ffi_call(cif, fn, ret, (void *)xargs);
 
 out:
-	for (int i = nargs0; i < nargs0 + args.length; i++) {
+	for (int i = nargs0; i < last_arg_processed; i++) {
 		if (args_cloned[i - nargs0]) {
 			di_free_value(fnats[i - nargs0], xargs[i]);
 			free((void *)xargs[i]);
