@@ -415,3 +415,6 @@ static const struct di_variant unused DI_VARIANT_INIT = {NULL, DI_TYPE_NIL};
 #define with_object_cleanup(t) with_cleanup(free_##t) struct t *
 
 unused define_object_cleanup(di_object);
+
+/// A valid but non-upgradeable weak reference
+PUBLIC extern const struct di_weak_object *const nonnull dead_weak_ref;

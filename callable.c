@@ -92,7 +92,10 @@ _di_typed_trampoline(ffi_cif *cif, void (*fn)(void), void *ret, const di_type_t 
 					    di_new_object_with_type(struct di_object);
 					args_cloned[i - nargs0] = true;
 					break;
-				case DI_TYPE_STRING:
+				case DI_TYPE_WEAK_OBJECT:
+					rc = 0;
+					xargs[i] = (void *)&dead_weak_ref;
+					break;
 				case DI_TYPE_POINTER:
 					rc = 0;
 					xargs[i] = &null_ptr;
@@ -101,6 +104,24 @@ _di_typed_trampoline(ffi_cif *cif, void (*fn)(void), void *ret, const di_type_t 
 					xargs[i] = &(struct di_array){0, NULL, DI_TYPE_ANY};
 					rc = 0;
 					break;
+				case DI_TYPE_TUPLE:
+					xargs[i] = &(struct di_tuple){0, NULL};
+					rc = 0;
+					break;
+				case DI_TYPE_ANY:
+				case DI_LAST_TYPE:
+					DI_PANIC("Impossible types appeared in arguments");
+				case DI_TYPE_NIL:
+				case DI_TYPE_VARIANT:
+					unreachable();
+				case DI_TYPE_FLOAT:
+				case DI_TYPE_BOOL:
+				case DI_TYPE_INT:
+				case DI_TYPE_UINT:
+				case DI_TYPE_NINT:
+				case DI_TYPE_NUINT:
+				case DI_TYPE_STRING:
+				case DI_TYPE_STRING_LITERAL:
 				default:
 					last_arg_processed = i;
 					goto out;

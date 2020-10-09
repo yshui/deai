@@ -221,11 +221,20 @@ static int _di_type_to_dbus_basic(di_type_t type) {
 	case DI_TYPE_FLOAT:
 		return DBUS_TYPE_DOUBLE;
 	case DI_TYPE_STRING:
+	case DI_TYPE_STRING_LITERAL:
 		return DBUS_TYPE_STRING;
 	case DI_TYPE_ARRAY:
 		return DBUS_TYPE_ARRAY;
 	case DI_TYPE_TUPLE:
 		return DBUS_TYPE_STRUCT;
+	case DI_TYPE_ANY:
+	case DI_LAST_TYPE:
+		DI_PANIC("Impossible types appeared in dbus serialization");
+	case DI_TYPE_NIL:
+	case DI_TYPE_POINTER:
+	case DI_TYPE_OBJECT:
+	case DI_TYPE_WEAK_OBJECT:
+	case DI_TYPE_VARIANT:
 	default:
 		return DBUS_TYPE_INVALID;
 	}

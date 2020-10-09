@@ -14,6 +14,7 @@ test_c_args = [
     '-Wnullability-completeness',
     '-Werror=incompatible-pointer-types',
     '-Werror=int-conversion',
+    '-Werror=switch-enum',
     '-Werror=nonnull',
     '-Werror=implicit',
     '-Werror=implicit-fallthrough',

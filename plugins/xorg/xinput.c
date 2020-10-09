@@ -5,9 +5,9 @@
 /* Copyright (c) 2017, Yuxuan Shui <yshuiv7@gmail.com> */
 
 #include <deai/builtin/log.h>
+#include <deai/compiler.h>
 #include <deai/deai.h>
 #include <deai/helper.h>
-#include <deai/compiler.h>
 #include <deai/module.h>
 
 #include <assert.h>
@@ -17,6 +17,7 @@
 
 #include "xorg.h"
 
+#define XI_LASTEVENT XCB_INPUT_BARRIER_LEAVE
 struct di_xorg_xinput {
 	struct di_xorg_ext;
 
@@ -25,7 +26,7 @@ struct di_xorg_xinput {
 
 	// XI_LASTEVENT is not defined in xcb,
 	// but should be 26
-	unsigned int listener_count[27];
+	unsigned int listener_count[XI_LASTEVENT + 1];
 };
 
 struct di_xorg_xinput_device {
@@ -37,51 +38,53 @@ struct di_xorg_xinput_device {
 
 #define set_mask(a, m) (a)[(m) >> 3] |= (1 << ((m)&7))
 #define clear_mask(a, m) (a)[(m) >> 3] &= ~(1 << ((m)&7))
-#define get_mask(a, m) (a)[(m) >> 3] & (1 << ((m)&7))
+#define get_mask(a, m) ((a)[(m) >> 3] & (1 << ((m)&7)))
 
 static void di_xorg_xi_start_listen_for_event(struct di_xorg_xinput *xi, int ev) {
 	di_mgetmi(xi->dc->x, log);
-	if (ev > 26) {
-		if (logm)
-			di_log_va(logm, DI_LOG_ERROR, "invalid xi event number %d",
-			          ev);
+	if (ev > XI_LASTEVENT) {
+		if (logm) {
+			di_log_va(logm, DI_LOG_ERROR, "invalid xi event number %d", ev);
+		}
 		return;
 	}
 
 	xi->listener_count[ev]++;
-	if (xi->listener_count[ev] > 1)
+	if (xi->listener_count[ev] > 1) {
 		return;
+	}
 
 	auto scrn = screen_of_display(xi->dc->c, xi->dc->dflt_scrn);
 	set_mask(xi->mask, ev);
-	auto cookie =
-	    xcb_input_xi_select_events_checked(xi->dc->c, scrn->root, 1, &xi->ec);
+	auto cookie = xcb_input_xi_select_events_checked(xi->dc->c, scrn->root, 1, &xi->ec);
 	auto e = xcb_request_check(xi->dc->c, cookie);
-	if (e && logm)
+	if (e && logm) {
 		di_log_va(logm, DI_LOG_ERROR, "select events failed\n");
+	}
 }
 
 static void di_xorg_xi_stop_listen_for_event(struct di_xorg_xinput *xi, int ev) {
 	di_mgetmi(xi->dc->x, log);
-	if (ev > 26) {
-		if (logm)
-			di_log_va(logm, DI_LOG_ERROR, "invalid xi event number %d",
-			          ev);
+	if (ev > XI_LASTEVENT) {
+		if (logm) {
+			di_log_va(logm, DI_LOG_ERROR, "invalid xi event number %d", ev);
+		}
 		return;
 	}
 
 	assert(xi->listener_count[ev] > 0);
 	xi->listener_count[ev]--;
-	if (xi->listener_count[ev] > 0)
+	if (xi->listener_count[ev] > 0) {
 		return;
+	}
 
 	auto scrn = screen_of_display(xi->dc->c, xi->dc->dflt_scrn);
 	clear_mask(xi->mask, ev);
-	auto cookie =
-	    xcb_input_xi_select_events_checked(xi->dc->c, scrn->root, 1, &xi->ec);
+	auto cookie = xcb_input_xi_select_events_checked(xi->dc->c, scrn->root, 1, &xi->ec);
 	auto e = xcb_request_check(xi->dc->c, cookie);
-	if (e && logm)
+	if (e && logm) {
 		di_log_va(logm, DI_LOG_ERROR, "select events failed\n");
+	}
 }
 
 static void enable_hierarchy_event(struct di_xorg_xinput *xi) {
@@ -94,21 +97,22 @@ static void unused disable_hierarchy_event(struct di_xorg_xinput *xi) {
 
 static void di_xorg_free_xinput(struct di_xorg_ext *x) {
 	// clear event mask when free
-	if (!x->dc)
+	if (!x->dc) {
 		return;
+	}
 
 	struct di_xorg_xinput *xi = (void *)x;
 	memset(xi->mask, 0, xi->ec.mask_len * 4);
 	auto scrn = screen_of_display(xi->dc->c, xi->dc->dflt_scrn);
 	xcb_input_xi_select_events_checked(xi->dc->c, scrn->root, 1, &xi->ec);
 
-	auto cookie =
-	    xcb_input_xi_select_events_checked(xi->dc->c, scrn->root, 1, &xi->ec);
+	auto cookie = xcb_input_xi_select_events_checked(xi->dc->c, scrn->root, 1, &xi->ec);
 
 	di_mgetmi(xi->dc->x, log);
 	auto e = xcb_request_check(xi->dc->c, cookie);
-	if (e && logm)
+	if (e && logm) {
 		di_log_va(logm, DI_LOG_ERROR, "select events failed\n");
+	}
 }
 
 define_trivial_cleanup_t(xcb_input_xi_query_device_reply_t);
@@ -117,10 +121,10 @@ static xcb_input_xi_device_info_t *
 xcb_input_get_device_info(xcb_connection_t *c, xcb_input_device_id_t deviceid,
                           xcb_input_xi_query_device_reply_t **rr) {
 	*rr = NULL;
-	auto r = xcb_input_xi_query_device_reply(
-	    c, xcb_input_xi_query_device(c, deviceid), NULL);
-	if (!r)
+	auto r = xcb_input_xi_query_device_reply(c, xcb_input_xi_query_device(c, deviceid), NULL);
+	if (!r) {
 		return NULL;
+	}
 
 	auto ri = xcb_input_xi_query_device_infos_iterator(r);
 	xcb_input_xi_device_info_t *ret = NULL;
@@ -137,32 +141,41 @@ xcb_input_get_device_info(xcb_connection_t *c, xcb_input_device_id_t deviceid,
 }
 
 static char *di_xorg_xinput_get_device_name(struct di_xorg_xinput_device *dev) {
-	if (!dev->xi->dc)
+	if (!dev->xi->dc) {
 		return strdup("unknown");
+	}
 
 	with_cleanup_t(xcb_input_xi_query_device_reply_t) rr;
 	auto info = xcb_input_get_device_info(dev->xi->dc->c, dev->deviceid, &rr);
-	if (!info)
+	if (!info) {
 		return strdup("unknown");
+	}
 	return strndup(xcb_input_xi_device_info_name(info),
 	               xcb_input_xi_device_info_name_length(info));
 }
 
 static char *di_xorg_xinput_get_device_use(struct di_xorg_xinput_device *dev) {
-	if (!dev->xi->dc)
+	if (!dev->xi->dc) {
 		return strdup("unknown");
+	}
 
 	with_cleanup_t(xcb_input_xi_query_device_reply_t) rr;
 	auto info = xcb_input_get_device_info(dev->xi->dc->c, dev->deviceid, &rr);
-	if (!info)
+	if (!info) {
 		return strdup("unknown");
+	}
 
 	switch (info->type) {
-	case XCB_INPUT_DEVICE_TYPE_MASTER_KEYBOARD: return strdup("master keyboard");
-	case XCB_INPUT_DEVICE_TYPE_SLAVE_KEYBOARD: return strdup("keyboard");
-	case XCB_INPUT_DEVICE_TYPE_MASTER_POINTER: return strdup("master pointer");
-	case XCB_INPUT_DEVICE_TYPE_SLAVE_POINTER: return strdup("pointer");
-	default: return strdup("unknown");
+	case XCB_INPUT_DEVICE_TYPE_MASTER_KEYBOARD:
+		return strdup("master keyboard");
+	case XCB_INPUT_DEVICE_TYPE_SLAVE_KEYBOARD:
+		return strdup("keyboard");
+	case XCB_INPUT_DEVICE_TYPE_MASTER_POINTER:
+		return strdup("master pointer");
+	case XCB_INPUT_DEVICE_TYPE_SLAVE_POINTER:
+		return strdup("pointer");
+	default:
+		return strdup("unknown");
 	}
 }
 
@@ -178,19 +191,21 @@ const char *possible_types[] = {
 #endif
 
 static char *di_xorg_xinput_get_device_type(struct di_xorg_xinput_device *dev) {
-	if (!dev->xi->dc)
+	if (!dev->xi->dc) {
 		return strdup("unknown");
+	}
 
 	struct di_xorg_connection *dc = dev->xi->dc;
 
 	with_cleanup_t(xcb_input_list_input_devices_reply_t) r =
-	    xcb_input_list_input_devices_reply(
-	        dc->c, xcb_input_list_input_devices(dc->c), NULL);
+	    xcb_input_list_input_devices_reply(dc->c, xcb_input_list_input_devices(dc->c), NULL);
 
 	auto di = xcb_input_list_input_devices_devices_iterator(r);
-	for (; di.rem; xcb_input_device_info_next(&di))
-		if (di.data->device_id == dev->deviceid)
+	for (; di.rem; xcb_input_device_info_next(&di)) {
+		if (di.data->device_id == dev->deviceid) {
 			break;
+		}
+	}
 
 	const char *dname = di_xorg_get_atom_name(dc, di.data->device_type);
 	if (!dname) {
@@ -200,8 +215,9 @@ static char *di_xorg_xinput_get_device_type(struct di_xorg_xinput_device *dev) {
 
 	char *ret = strdup(dname);
 
-	for (int i = 0; ret[i]; i++)
-		ret[i] = tolower(ret[i]);
+	for (int i = 0; ret[i]; i++) {
+		ret[i] = (char)tolower(ret[i]);
+	}
 	return ret;
 }
 
@@ -214,40 +230,39 @@ define_trivial_cleanup_t(xcb_input_xi_get_property_reply_t);
 define_trivial_cleanup_t(xcb_input_xi_change_property_items_t);
 define_trivial_cleanup_t(char);
 
-static void di_xorg_xinput_set_prop(struct di_xorg_xinput_device *dev,
-                                    const char *key, struct di_array arr) {
-	if (!dev->xi->dc)
+static void di_xorg_xinput_set_prop(struct di_xorg_xinput_device *dev, const char *key,
+                                    struct di_array arr) {
+	if (!dev->xi->dc) {
 		return;
+	}
 
 	struct di_xorg_connection *dc = dev->xi->dc;
 
 	di_mgetmi(dev->xi->dc->x, log);
 	xcb_generic_error_t *e;
 	auto prop_atom = di_xorg_intern_atom(dc, key, &e);
-	if (e)
-		return;
-
-	auto float_atom = di_xorg_intern_atom(dc, "FLOAT", &e);
-
-	with_cleanup_t(xcb_input_xi_get_property_reply_t) prop =
-	    xcb_input_xi_get_property_reply(
-	        dc->c, xcb_input_xi_get_property(dc->c, dev->deviceid, 0,
-	                                              prop_atom, XCB_ATOM_ANY, 0, 0),
-	        NULL);
-
-	if (prop->type == XCB_ATOM_NONE) {
-		// non-existent property should be silently ignored
-		if (logm)
-			di_log_va(logm, DI_LOG_DEBUG,
-			          "setting non-existent property: %s\n", key);
+	if (e) {
 		return;
 	}
 
-	if ((prop->type == float_atom || prop->type == XCB_ATOM_ATOM) &&
-	    prop->format != 32) {
+	auto float_atom = di_xorg_intern_atom(dc, "FLOAT", &e);
+
+	with_cleanup_t(xcb_input_xi_get_property_reply_t) prop = xcb_input_xi_get_property_reply(
+	    dc->c,
+	    xcb_input_xi_get_property(dc->c, dev->deviceid, 0, prop_atom, XCB_ATOM_ANY, 0, 0),
+	    NULL);
+
+	if (prop->type == XCB_ATOM_NONE) {
+		// non-existent property should be silently ignored
+		if (logm) {
+			di_log_va(logm, DI_LOG_DEBUG, "setting non-existent property: %s\n", key);
+		}
+		return;
+	}
+
+	if ((prop->type == float_atom || prop->type == XCB_ATOM_ATOM) && prop->format != 32) {
 		di_log_va(logm, DI_LOG_ERROR,
-		          "Xorg return invalid format for float/atom type: %d\n",
-		          prop->format);
+		          "Xorg return invalid format for float/atom type: %d\n", prop->format);
 		return;
 	}
 
@@ -274,26 +289,41 @@ static void di_xorg_xinput_set_prop(struct di_xorg_xinput_device *dev,
 			f = i64;
 			break;
 		case DI_TYPE_FLOAT:
-			if (prop->type != float_atom)
+			if (prop->type != float_atom) {
 				goto err;
-			f = *(double *)src;
+			}
+			f = (float)*(double *)src;
 			break;
 		case DI_TYPE_STRING:
-			if (prop->type != XCB_ATOM_ATOM)
+		case DI_TYPE_STRING_LITERAL:
+			if (prop->type != XCB_ATOM_ATOM) {
 				goto err;
+			}
 			str = *(const char **)src;
 			i64 = di_xorg_intern_atom(dc, str, &e);
-			if (e)
+			if (e) {
 				return;
+			}
 			break;
-		default: goto err;
+		case DI_TYPE_ANY:
+		case DI_LAST_TYPE:
+			DI_PANIC("Impossible types appeared in property");
+		case DI_TYPE_BOOL:
+		case DI_TYPE_ARRAY:
+		case DI_TYPE_TUPLE:
+		case DI_TYPE_VARIANT:
+		case DI_TYPE_OBJECT:
+		case DI_TYPE_WEAK_OBJECT:
+		case DI_TYPE_POINTER:
+		case DI_TYPE_NIL:
+		default:
+			goto err;
 		}
 
-		if (prop->type == XCB_ATOM_INTEGER ||
-		    prop->type == XCB_ATOM_CARDINAL) {
-			if (arr.elem_type == DI_TYPE_FLOAT ||
-			    arr.elem_type == DI_TYPE_STRING)
+		if (prop->type == XCB_ATOM_INTEGER || prop->type == XCB_ATOM_CARDINAL) {
+			if (arr.elem_type == DI_TYPE_FLOAT || arr.elem_type == DI_TYPE_STRING) {
 				goto err;
+			}
 			switch (prop->format) {
 			case 8:
 				*(int8_t *)dst = i64;
@@ -309,13 +339,15 @@ static void di_xorg_xinput_set_prop(struct di_xorg_xinput_device *dev,
 				break;
 			}
 		} else if (prop->type == float_atom) {
-			if (arr.elem_type == DI_TYPE_STRING)
+			if (arr.elem_type == DI_TYPE_STRING) {
 				goto err;
+			}
 			*(float *)dst = f;
 			item[i].data32 = dst;
 		} else if (prop->type == XCB_ATOM_ATOM) {
-			if (arr.elem_type != DI_TYPE_STRING)
+			if (arr.elem_type != DI_TYPE_STRING) {
 				goto err;
+			}
 			*(int32_t *)dst = i64;
 			item[i].data32 = dst;
 		}
@@ -323,23 +355,26 @@ static void di_xorg_xinput_set_prop(struct di_xorg_xinput_device *dev,
 
 	auto err = xcb_request_check(
 	    dc->c, xcb_input_xi_change_property_aux_checked(
-	                    dc->c, dev->deviceid, XCB_PROP_MODE_REPLACE,
-	                    prop->format, prop_atom, prop->type, arr.length, item));
+	               dc->c, dev->deviceid, XCB_PROP_MODE_REPLACE, prop->format,
+	               prop_atom, prop->type, arr.length, item));
 
-	if (err)
+	if (err) {
 		di_log_va(logm, DI_LOG_ERROR, "Failed to set property '%s'\n", key);
+	}
 	(void)err;
 	return;
 err:
-	di_log_va(logm, DI_LOG_ERROR, "Try to set xinput property '%s' with wrong "
-	                              "type of data %d\n",
+	di_log_va(logm, DI_LOG_ERROR,
+	          "Try to set xinput property '%s' with wrong "
+	          "type of data %d\n",
 	          key, arr.elem_type);
 }
 
 static struct di_array
 di_xorg_xinput_get_prop(struct di_xorg_xinput_device *dev, const char *name) {
-	if (!dev->xi->dc)
+	if (!dev->xi->dc) {
 		return DI_ARRAY_INIT;
+}
 
 	struct di_xorg_connection *dc = dev->xi->dc;
 
@@ -348,55 +383,56 @@ di_xorg_xinput_get_prop(struct di_xorg_xinput_device *dev, const char *name) {
 	struct di_array ret = DI_ARRAY_INIT;
 	auto prop_atom = di_xorg_intern_atom(dc, name, &e);
 
-	if (e)
+	if (e) {
 		return ret;
+}
 
 	auto float_atom = di_xorg_intern_atom(dc, "FLOAT", &e);
 
-	with_cleanup_t(xcb_input_xi_get_property_reply_t) prop =
-	    xcb_input_xi_get_property_reply(
-	        dc->c, xcb_input_xi_get_property(dc->c, dev->deviceid, 0,
-	                                              prop_atom, XCB_ATOM_ANY, 0, 0),
-	        NULL);
+	with_cleanup_t(xcb_input_xi_get_property_reply_t) prop = xcb_input_xi_get_property_reply(
+	    dc->c,
+	    xcb_input_xi_get_property(dc->c, dev->deviceid, 0, prop_atom, XCB_ATOM_ANY, 0, 0),
+	    NULL);
 
-	if (prop->type == XCB_ATOM_NONE)
+	if (prop->type == XCB_ATOM_NONE) {
 		return ret;
+}
 
 	size_t plen = prop->bytes_after;
 	free(prop);
 
 	prop = xcb_input_xi_get_property_reply(
-	    dc->c, xcb_input_xi_get_property(dc->c, dev->deviceid, 0,
-	                                          prop_atom, XCB_ATOM_ANY, 0, plen),
+	    dc->c,
+	    xcb_input_xi_get_property(dc->c, dev->deviceid, 0, prop_atom, XCB_ATOM_ANY, 0, plen),
 	    NULL);
 
-	if (prop->type == XCB_ATOM_NONE)
+	if (prop->type == XCB_ATOM_NONE) {
 		return ret;
+}
 
-	if (prop->type == XCB_ATOM_INTEGER || prop->type == XCB_ATOM_CARDINAL)
+	if (prop->type == XCB_ATOM_INTEGER || prop->type == XCB_ATOM_CARDINAL) {
 		ret.elem_type = DI_TYPE_INT;
-	else if (prop->type == XCB_ATOM_ATOM)
+	} else if (prop->type == XCB_ATOM_ATOM) {
 		ret.elem_type = DI_TYPE_STRING;
-	else if (prop->type == float_atom)
+	} else if (prop->type == float_atom) {
 		ret.elem_type = DI_TYPE_FLOAT;
-	else {
-		if (logm)
-			di_log_va(logm, DI_LOG_WARN, "Unknown property type %d\n",
-			          prop->type);
+	} else {
+		if (logm) {
+			di_log_va(logm, DI_LOG_WARN, "Unknown property type %d\n", prop->type);
+}
 		return ret;
 	}
 
 	if (prop->format != 8 && prop->format != 16 && prop->format != 32) {
-		if (logm)
-			di_log_va(logm, DI_LOG_WARN,
-			          "Xorg returns invalid format %d\n", prop->format);
+		if (logm) {
+			di_log_va(logm, DI_LOG_WARN, "Xorg returns invalid format %d\n",
+			          prop->format);
+}
 		return ret;
 	}
-	if ((prop->type == float_atom || prop->type == XCB_ATOM_ATOM) &&
-	    prop->format != 32) {
+	if ((prop->type == float_atom || prop->type == XCB_ATOM_ATOM) && prop->format != 32) {
 		di_log_va(logm, DI_LOG_WARN,
-		          "Xorg return invalid format for float/atom %d\n",
-		          prop->format);
+		          "Xorg return invalid format for float/atom %d\n", prop->format);
 		return ret;
 	}
 
@@ -409,10 +445,17 @@ di_xorg_xinput_get_prop(struct di_xorg_xinput_device *dev, const char *name) {
 		if (ret.elem_type == DI_TYPE_INT) {
 			int64_t *tmp = curr;
 			switch (prop->format) {
-			case 8: *tmp = read(8); break;
-			case 16: *tmp = read(16); break;
-			case 32: *tmp = read(32); break;
-			default: unreachable();
+			case 8:
+				*tmp = read(8);
+				break;
+			case 16:
+				*tmp = read(16);
+				break;
+			case 32:
+				*tmp = read(32);
+				break;
+			default:
+				unreachable();
 			}
 		} else if (ret.elem_type == DI_TYPE_STRING) {
 			const char **tmp = curr;
@@ -442,8 +485,7 @@ static void free_xi_device_object(struct di_xorg_xinput_device *dev) {
 	di_unref_object((void *)dev->xi);
 }
 
-static struct di_object *
-di_xorg_make_object_for_devid(struct di_xorg_xinput *xi, int deviceid) {
+static struct di_object *di_xorg_make_object_for_devid(struct di_xorg_xinput *xi, int deviceid) {
 	auto obj = di_new_object_with_type(struct di_xorg_xinput_device);
 
 	obj->deviceid = deviceid;
@@ -466,25 +508,27 @@ di_xorg_make_object_for_devid(struct di_xorg_xinput *xi, int deviceid) {
 }
 
 static struct di_array di_xorg_get_all_devices(struct di_xorg_xinput *xi) {
-	if (!xi->dc)
+	if (!xi->dc) {
 		return DI_ARRAY_INIT;
+}
 
-	with_cleanup_t(xcb_input_xi_query_device_reply_t) r =
-	    xcb_input_xi_query_device_reply(
-	        xi->dc->c, xcb_input_xi_query_device(xi->dc->c, 0), NULL);
+	with_cleanup_t(xcb_input_xi_query_device_reply_t) r = xcb_input_xi_query_device_reply(
+	    xi->dc->c, xcb_input_xi_query_device(xi->dc->c, 0), NULL);
 	auto ri = xcb_input_xi_query_device_infos_iterator(r);
 
 	int ndev = 0;
-	for (; ri.rem; xcb_input_xi_device_info_next(&ri))
+	for (; ri.rem; xcb_input_xi_device_info_next(&ri)) {
 		ndev++;
+}
 
 	struct di_array ret;
 	ret.length = ndev;
 	ret.elem_type = DI_TYPE_OBJECT;
-	if (ndev)
+	if (ndev) {
 		ret.arr = tmalloc(void *, ndev);
-	else
+	} else {
 		ret.arr = NULL;
+}
 
 	struct di_object **arr = ret.arr;
 	ri = xcb_input_xi_query_device_infos_iterator(r);
@@ -497,12 +541,14 @@ static struct di_array di_xorg_get_all_devices(struct di_xorg_xinput *xi) {
 }
 
 static int handle_xinput_event(struct di_xorg_xinput *xi, xcb_generic_event_t *ev) {
-	if (ev->response_type != XCB_GE_GENERIC)
+	if (ev->response_type != XCB_GE_GENERIC) {
 		return 1;
+}
 
 	xcb_ge_generic_event_t *gev = (void *)ev;
-	if (gev->extension != xi->opcode)
+	if (gev->extension != xi->opcode) {
 		return 1;
+}
 
 	// di_getm(xi->dc->x->di, log);
 	if (gev->event_type == XCB_INPUT_HIERARCHY) {
@@ -510,16 +556,18 @@ static int handle_xinput_event(struct di_xorg_xinput *xi, xcb_generic_event_t *e
 		auto hevi = xcb_input_hierarchy_infos_iterator(hev);
 		for (; hevi.rem; xcb_input_hierarchy_info_next(&hevi)) {
 			auto info = hevi.data;
-			auto obj =
-			    di_xorg_make_object_for_devid(xi, info->deviceid);
+			auto obj = di_xorg_make_object_for_devid(xi, info->deviceid);
 			// di_log_va(log, DI_LOG_DEBUG, "hierarchy change %u %u\n",
 			// info->deviceid, info->flags);
-			if (info->flags & XCB_INPUT_HIERARCHY_MASK_SLAVE_ADDED)
+			if (info->flags & XCB_INPUT_HIERARCHY_MASK_SLAVE_ADDED) {
 				di_emit(xi, "new-device", obj);
-			if (info->flags & XCB_INPUT_HIERARCHY_MASK_DEVICE_ENABLED)
+}
+			if (info->flags & XCB_INPUT_HIERARCHY_MASK_DEVICE_ENABLED) {
 				di_emit(xi, "device-enabled", obj);
-			if (info->flags & XCB_INPUT_HIERARCHY_MASK_DEVICE_DISABLED)
+}
+			if (info->flags & XCB_INPUT_HIERARCHY_MASK_DEVICE_DISABLED) {
 				di_emit(xi, "device-disabled", obj);
+}
 			di_unref_object(obj);
 		}
 	}
@@ -528,13 +576,15 @@ static int handle_xinput_event(struct di_xorg_xinput *xi, xcb_generic_event_t *e
 
 struct di_xorg_ext *new_xinput(struct di_xorg_connection *dc) {
 	char *extname = "XInputExtension";
-	if (!xorg_has_extension(dc->c, extname))
+	if (!xorg_has_extension(dc->c, extname)) {
 		return NULL;
+}
 
 	auto cookie = xcb_query_extension(dc->c, strlen(extname), extname);
 	auto r = xcb_query_extension_reply(dc->c, cookie, NULL);
-	if (!r)
+	if (!r) {
 		return NULL;
+}
 
 	auto xi = di_new_object_with_type(struct di_xorg_xinput);
 	xi->ec.mask_len = 1;        // 4 bytes unit
@@ -547,7 +597,7 @@ struct di_xorg_ext *new_xinput(struct di_xorg_connection *dc) {
 
 	free(r);
 
-	// TODO: only enable if there are listeners?
+	// TODO(yshui): only enable if there are listeners?
 	enable_hierarchy_event(xi);
 
 	di_method(xi, "__get_devices", di_xorg_get_all_devices);

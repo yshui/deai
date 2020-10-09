@@ -22,8 +22,8 @@ static inline void typed_alloc_copy(di_type_t type, const void *src, void **dest
 	*dest = ret;
 }
 
-static inline int
-integer_conversion(di_type_t inty, const void *inp, di_type_t outty, void **outp, bool *cloned) {
+static inline int integer_conversion(di_type_t inty, const void *inp, di_type_t outty,
+                                     void **outp, bool *cloned) {
 	*cloned = false;
 	if (inty == outty) {
 		*outp = (void *)inp;
@@ -49,6 +49,21 @@ integer_conversion(di_type_t inty, const void *inp, di_type_t outty, void **outp
 		convert_case(s1, __VA_ARGS__);                                           \
 		convert_case(s2, __VA_ARGS__);                                           \
 		convert_case(s3, __VA_ARGS__);                                           \
+	case di_typeof((VA_ARG_HEAD(__VA_ARGS__))0):                                     \
+		unreachable();                                                           \
+	case DI_TYPE_ANY:                                                                \
+	case DI_TYPE_NIL:                                                                \
+	case DI_TYPE_FLOAT:                                                              \
+	case DI_TYPE_BOOL:                                                               \
+	case DI_TYPE_ARRAY:                                                              \
+	case DI_TYPE_TUPLE:                                                              \
+	case DI_TYPE_VARIANT:                                                            \
+	case DI_TYPE_OBJECT:                                                             \
+	case DI_TYPE_WEAK_OBJECT:                                                        \
+	case DI_TYPE_STRING:                                                             \
+	case DI_TYPE_STRING_LITERAL:                                                     \
+	case DI_TYPE_POINTER:                                                            \
+	case DI_LAST_TYPE:                                                               \
 	default:                                                                         \
 		*outp = NULL;                                                            \
 		return -EINVAL;                                                          \
@@ -70,6 +85,19 @@ integer_conversion(di_type_t inty, const void *inp, di_type_t outty, void **outp
 	case DI_TYPE_NUINT:
 		convert_switch(int, int64_t, uint64_t, unsigned int, UINT_MAX, 0);
 		break;
+	case DI_TYPE_ANY:
+	case DI_TYPE_NIL:
+	case DI_TYPE_FLOAT:
+	case DI_TYPE_BOOL:
+	case DI_TYPE_ARRAY:
+	case DI_TYPE_TUPLE:
+	case DI_TYPE_VARIANT:
+	case DI_TYPE_OBJECT:
+	case DI_TYPE_WEAK_OBJECT:
+	case DI_TYPE_STRING:
+	case DI_TYPE_STRING_LITERAL:
+	case DI_TYPE_POINTER:
+	case DI_LAST_TYPE:
 	default:
 		*outp = NULL;
 		return -EINVAL;
@@ -146,6 +174,19 @@ static inline int unused di_type_conversion(di_type_t inty, const void *inp,
 				convert_case(int);
 				convert_case(uint64_t);
 				convert_case(int64_t);
+			case DI_TYPE_ANY:
+			case DI_TYPE_NIL:
+			case DI_TYPE_FLOAT:
+			case DI_TYPE_BOOL:
+			case DI_TYPE_ARRAY:
+			case DI_TYPE_TUPLE:
+			case DI_TYPE_VARIANT:
+			case DI_TYPE_OBJECT:
+			case DI_TYPE_WEAK_OBJECT:
+			case DI_TYPE_STRING:
+			case DI_TYPE_STRING_LITERAL:
+			case DI_TYPE_POINTER:
+			case DI_LAST_TYPE:
 			default:
 				free(res);
 				*outp = NULL;
@@ -163,47 +204,56 @@ static inline int unused di_type_conversion(di_type_t inty, const void *inp,
 	return -EINVAL;
 }
 
+/// Fetch a value based on di_type from va_arg, and put it into `buf` if `buf` is not
+/// NULL. This function only borrows the value, without cloning it.
 static inline void va_arg_with_di_type(va_list ap, di_type_t t, void *buf) {
-	void *ptr, *src = NULL;
-	int64_t i64;
-	uint64_t u64;
-	int ni;
-	unsigned int nui;
-	double d;
+	union di_value v;
 
 	switch (t) {
 	case DI_TYPE_STRING:
 	case DI_TYPE_STRING_LITERAL:
 	case DI_TYPE_POINTER:
 	case DI_TYPE_OBJECT:
-		ptr = va_arg(ap, void *);
-		src = &ptr;
+	case DI_TYPE_WEAK_OBJECT:
+		v.pointer = va_arg(ap, void *);
 		break;
 	case DI_TYPE_NINT:
-		ni = va_arg(ap, int);
-		src = &ni;
+		v.nint = va_arg(ap, int);
 		break;
 	case DI_TYPE_NUINT:
-		nui = va_arg(ap, unsigned int);
-		src = &nui;
+		v.nuint = va_arg(ap, unsigned int);
 		break;
 	case DI_TYPE_INT:
-		i64 = va_arg(ap, int64_t);
-		src = &i64;
+		v.int_ = va_arg(ap, int64_t);
 		break;
 	case DI_TYPE_UINT:
-		u64 = va_arg(ap, uint64_t);
-		src = &u64;
+		v.uint = va_arg(ap, uint64_t);
 		break;
 	case DI_TYPE_FLOAT:
-		d = va_arg(ap, double);
-		src = &d;
+		v.float_ = va_arg(ap, double);
 		break;
+	case DI_TYPE_BOOL:
+		// Per C standard, bool is converted to int in va_arg
+		v.bool_ = va_arg(ap, int);
+		break;
+	case DI_TYPE_ARRAY:
+		v.array = va_arg(ap, struct di_array);
+		break;
+	case DI_TYPE_VARIANT:
+		v.variant = va_arg(ap, struct di_variant);
+		break;
+	case DI_TYPE_TUPLE:
+		v.tuple = va_arg(ap, struct di_tuple);
+		break;
+	case DI_TYPE_NIL:
+	case DI_TYPE_ANY:
+	case DI_LAST_TYPE:
 	default:
-		assert(0);
+		DI_PANIC("Trying to get value of invalid type from va_arg");
 	}
 
 	// if buf == NULL, the caller just want to pop the value
-	if (buf)
-		memcpy(buf, src, di_sizeof_type(t));
+	if (buf) {
+		memcpy(buf, &v, di_sizeof_type(t));
+	}
 }

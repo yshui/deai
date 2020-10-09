@@ -16,6 +16,14 @@
 #include "di_internal.h"
 #include "utils.h"
 
+static const struct di_object_internal dead_weakly_referenced_object = {
+	.ref_count = 0,
+	.weak_ref_count = 1, // Keep this object from being freed
+};
+
+const struct di_weak_object *const dead_weak_ref =
+    (const struct di_weak_object *)&dead_weakly_referenced_object;
+
 const void *null_ptr = NULL;
 // clang-format off
 static_assert(sizeof(struct di_object) == sizeof(struct di_object_internal),

@@ -115,3 +115,5 @@ static void unused __clang_cleanup_func(void (^*dfunc)(void)) {
 #else
 #define PTR_POISON ((void *)0xc01dcafe)
 #endif
+
+#define VA_ARG_HEAD(x, ...) x
