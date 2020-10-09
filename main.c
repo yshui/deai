@@ -21,6 +21,7 @@
 
 #include <deai/deai.h>
 #include <deai/helper.h>
+#include <deai/builtin/log.h>
 
 #include <config.h>
 
@@ -383,6 +384,44 @@ void di_terminate(struct deai *p) {
 	kill(0, SIGTERM);
 }
 
+/// Add an object as a root to keep it alive
+void di_add_root(struct di_object *di, const char *key, struct di_object *obj) {
+	di_getmi(di, log);
+
+	char *buf;
+	asprintf(&buf, "__root_%s", key);
+	int rc = di_add_member_clone(di, buf, DI_TYPE_OBJECT, obj);
+	if (rc != 0) {
+		di_log_va(logm, DI_LOG_ERROR, "cannot add root\n");
+	}
+	free(buf);
+}
+
+/// Remove an object from roots
+void di_remove_root(struct di_object *di, const char *key) {
+	di_getmi(di, log);
+
+	char *buf;
+	asprintf(&buf, "__root_%s", key);
+	int rc = di_remove_member(di, buf);
+	if (rc != 0) {
+		di_log_va(logm, DI_LOG_ERROR, "cannot remove root\n");
+	}
+	free(buf);
+}
+
+/// Remove all roots
+void di_clear_roots(struct di_object *di_) {
+	static const char *const root_prefix = "__root_";
+	auto di = (struct di_object_internal *)di_;
+	struct di_member *i, *tmp;
+	HASH_ITER(hh, di->members, i, tmp) {
+		if (strncmp(i->name, root_prefix, strlen(root_prefix)) == 0) {
+			di_remove_member(di_, i->name);
+		}
+	}
+}
+
 int main(int argc, char *argv[]) {
 #ifdef TRACK_OBJECTS
 	INIT_LIST_HEAD(&all_objects);
@@ -413,6 +452,9 @@ int main(int argc, char *argv[]) {
 	DI_CHECK_OK(di_method(p, "load_plugin", load_plugin, char *));
 	DI_CHECK_OK(di_method(p, "register_module", di_register_module_method, char *,
 	                      struct di_object *));
+	DI_CHECK_OK(di_method(p, "add_root", di_add_root, const char *, struct di_object *));
+	DI_CHECK_OK(di_method(p, "remove_root", di_remove_root, const char *));
+	DI_CHECK_OK(di_method(p, "clear_roots", di_clear_roots));
 	DI_CHECK_OK(di_method(p, "chdir", di_chdir, char *));
 	DI_CHECK_OK(di_method(p, "exec", di_exec, struct di_array));
 
