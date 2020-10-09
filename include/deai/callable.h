@@ -15,11 +15,11 @@ enum { MAX_NARGS = 128,
 struct di_closure;
 
 int di_call_object(struct di_object *nonnull o, di_type_t *nonnull rtype,
-                   void *nullable *nonnull ret, ...);
+                   union di_value *nonnull ret, ...);
 int di_call_objectv(struct di_object *nonnull obj, di_type_t *nonnull rtype,
-                    void *nullable *nonnull ret, va_list);
+                    union di_value *nonnull ret, va_list);
 int di_call_objectt(struct di_object *nonnull, di_type_t *nonnull,
-                    void *nullable *nonnull, struct di_tuple);
+                    union di_value *nonnull, struct di_tuple);
 struct di_closure *nullable di_create_closure(void (*nonnull fn)(void), di_type_t rtype,
                                               int ncaptures, const di_type_t *nullable captypes,
                                               const void *nonnull const *nullable captures,

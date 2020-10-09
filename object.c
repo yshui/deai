@@ -17,8 +17,8 @@
 #include "utils.h"
 
 static const struct di_object_internal dead_weakly_referenced_object = {
-	.ref_count = 0,
-	.weak_ref_count = 1, // Keep this object from being freed
+    .ref_count = 0,
+    .weak_ref_count = 1,        // Keep this object from being freed
 };
 
 const struct di_weak_object *const dead_weak_ref =
@@ -32,39 +32,34 @@ static_assert(alignof(struct di_object) == alignof(struct di_object_internal),
               "di_object alignment mismatch");
 // clang-format on
 
-#define gen_callx(fnname, getter)                                                           \
-	int fnname(struct di_object *o, const char *name, di_type_t *rt, void **ret, ...) { \
-		void *val;                                                                  \
-		int rc = getter(o, name, DI_TYPE_OBJECT, &val);                             \
-		if (rc != 0)                                                                \
-			return rc;                                                          \
-                                                                                            \
-		DI_ASSERT(val != NULL, "Successful get returned NULL");                     \
-		auto m = *(struct di_object **)val;                                         \
-		DI_ASSERT(m != NULL, "Found NULL object reference");                        \
-		free((void *)val);                                                          \
-                                                                                            \
-		va_list ap;                                                                 \
-		va_start(ap, ret);                                                          \
-		rc = di_call_objectv(m, rt, ret, ap);                                       \
-                                                                                            \
-		di_unref_object(m);                                                         \
-		return rc;                                                                  \
+#define gen_callx(fnname, getter)                                                        \
+	int fnname(struct di_object *o, const char *name, di_type_t *rt,                 \
+	           union di_value *ret, ...) {                                           \
+		struct di_object *val;                                                   \
+		int rc = getter(o, name, DI_TYPE_OBJECT, (union di_value *)&val);        \
+		if (rc != 0) {                                                           \
+			return rc;                                                       \
+		}                                                                        \
+                                                                                         \
+		va_list ap;                                                              \
+		va_start(ap, ret);                                                       \
+		rc = di_call_objectv(val, rt, ret, ap);                                  \
+                                                                                         \
+		di_unref_object(val);                                                    \
+		return rc;                                                               \
 	}
 
 PUBLIC gen_callx(di_callx, di_getxt);
 
-PUBLIC int di_rawcallxn(struct di_object *o, const char *name, di_type_t *rt, void **ret,
-                        struct di_tuple t) {
-	void *val;
-	int rc = di_rawgetxt(o, name, DI_TYPE_OBJECT, &val);
+PUBLIC int di_rawcallxn(struct di_object *o, const char *name, di_type_t *rt,
+                        union di_value *ret, struct di_tuple t) {
+	struct di_object *val;
+	int rc = di_rawgetxt(o, name, DI_TYPE_OBJECT, (union di_value *)&val);
 	if (rc != 0) {
 		return rc;
 	}
 
-	auto m = *(struct di_object_internal * nonnull *)val;
-	free((void *)val);
-
+	auto m = (struct di_object_internal * nonnull) val;
 	if (!m->call) {
 		return -EINVAL;
 	}
@@ -76,8 +71,10 @@ PUBLIC int di_rawcallxn(struct di_object *o, const char *name, di_type_t *rt, vo
 }
 
 // Call "<prefix>_<name>" with "<prefix>" as fallback
-static int call_handler_with_fallback(struct di_object *o, const char *prefix, const char *name,
-                                      struct di_variant arg, di_type_t *rtype, void **ret) {
+static int
+call_handler_with_fallback(struct di_object *nonnull o, const char *nonnull prefix,
+                           const char *nonnull name, struct di_variant arg,
+                           di_type_t *nullable rtype, union di_value *nullable ret) {
 	// Internal names doesn't go through handler
 	if (strncmp(name, "__", 2) == 0) {
 		return -ENOENT;
@@ -86,7 +83,7 @@ static int call_handler_with_fallback(struct di_object *o, const char *prefix, c
 	char *buf;
 	asprintf(&buf, "%s_%s", prefix, name);
 	di_type_t rtype2;
-	void *ret2;
+	union di_value ret2;
 
 	struct di_variant args[2] = {arg, DI_VARIANT_INIT};
 	struct di_tuple tmp = {
@@ -98,10 +95,10 @@ static int call_handler_with_fallback(struct di_object *o, const char *prefix, c
 	    .length = arg.type != DI_LAST_TYPE ? 1 : 0,
 	    .elements = args,
 	};
-	int rc2 = di_rawcallxn(o, buf, &rtype2, &ret2, tmp);
+	int rc = di_rawcallxn(o, buf, &rtype2, &ret2, tmp);
 	free(buf);
 
-	if (rc2 != -ENOENT) {
+	if (rc != -ENOENT) {
 		goto ret;
 	}
 
@@ -114,18 +111,17 @@ static int call_handler_with_fallback(struct di_object *o, const char *prefix, c
 	    .value = &(union di_value){.string_literal = name},
 	};
 
-	rc2 = di_rawcallxn(o, prefix, &rtype2, &ret2, tmp);
+	rc = di_rawcallxn(o, prefix, &rtype2, &ret2, tmp);
 ret:
-	if (rc2 == 0) {
+	if (rc == 0) {
 		if (ret && rtype) {
 			*rtype = rtype2;
 			*ret = ret2;
 		} else {
-			di_free_value(rtype2, ret2);
-			free(ret2);
+			di_free_value(rtype2, &ret2);
 		}
 	}
-	return rc2;
+	return rc;
 }
 
 PUBLIC int di_setx(struct di_object *o, const char *name, di_type_t type, void *val) {
@@ -165,7 +161,8 @@ PUBLIC int di_setx(struct di_object *o, const char *name, di_type_t type, void *
 	return rc;
 }
 
-PUBLIC int di_rawgetx(struct di_object *o, const char *name, di_type_t *type, void **ret) {
+PUBLIC int
+di_rawgetx(struct di_object *o, const char *name, di_type_t *type, union di_value *ret) {
 	auto m = di_lookup(o, name);
 
 	// nil type is treated as non-existent
@@ -175,26 +172,27 @@ PUBLIC int di_rawgetx(struct di_object *o, const char *name, di_type_t *type, vo
 
 	*type = m->type;
 	assert(di_sizeof_type(m->type) != 0);
-	void *v = calloc(1, di_sizeof_type(m->type));
-	di_copy_value(m->type, v, m->data);
-
-	*ret = v;
+	di_copy_value(m->type, ret, m->data);
 	return 0;
 }
 
-// Recusively unpack a variant until something not variant is reached.
+// Recusively unpack a variant until it only contains something that's not a variant
 static void
-_extract_variant(struct di_variant *var, di_type_t *nonnull type, void **nonnull ret) {
+di_flatten_variant(struct di_variant *var) {
+	// `var` might be overwritten by changing `ret`, so keep a copy first
 	if (var->type == DI_TYPE_VARIANT) {
-		return _extract_variant(&var->value->variant, type, ret);
+		assert(&var->value->variant != var);
+		di_flatten_variant(&var->value->variant);
+		union di_value *inner = var->value;
+		var->type = var->value->variant.type;
+		var->value = var->value->variant.value;
+		if (inner) {
+			free(inner);
+		}
 	}
-	*type = var->type;
-	*ret = var->value;
-	var->value = NULL;
-	var->type = DI_TYPE_NIL;
 }
 
-PUBLIC int di_getx(struct di_object *o, const char *name, di_type_t *type, void **ret) {
+PUBLIC int di_getx(struct di_object *o, const char *name, di_type_t *type, union di_value *ret) {
 	int rc = di_rawgetx(o, name, type, ret);
 	if (rc == 0) {
 		return 0;
@@ -207,36 +205,43 @@ PUBLIC int di_getx(struct di_object *o, const char *name, di_type_t *type, void 
 	}
 
 	if (*type == DI_TYPE_VARIANT) {
-		struct di_variant *var = *ret;
-		_extract_variant(var, type, ret);
-		di_free_value(DI_TYPE_VARIANT, var);
-		free(var);
-		if (*type == DI_LAST_TYPE) {
+		struct di_variant *var = &ret->variant;
+		di_flatten_variant(var);
+		if (var->type == DI_LAST_TYPE) {
 			return -ENOENT;
+		}
+		*type = var->type;
+
+		if (var->value != NULL) {
+			union di_value *tmp = var->value;
+			memcpy(ret, var->value, di_sizeof_type(var->type));
+			free(tmp);
 		}
 	}
 	return 0;
 }
 
-#define gen_tfunc(name, getter)                                                          \
-	int name(struct di_object *o, const char *prop, di_type_t rtype, void **ret) {   \
-		void *ret2;                                                              \
-		di_type_t rt;                                                            \
-		int rc = getter(o, prop, &rt, &ret2);                                    \
-		if (rc != 0)                                                             \
-			return rc;                                                       \
-                                                                                         \
-		bool cloned = false;                                                     \
-		rc = di_type_conversion(rt, ret2, rtype, ret, &cloned);                  \
-		if (cloned) {                                                            \
-			assert(ret2 != *ret);                                            \
-			di_free_value(rt, ret2);                                         \
-			free((void *)ret2);                                              \
-		}                                                                        \
-		if (rc != 0)                                                             \
-			return rc;                                                       \
-                                                                                         \
-		return rc;                                                               \
+#define gen_tfunc(name, getter)                                                                 \
+	int name(struct di_object *o, const char *prop, di_type_t rtype, union di_value *ret) { \
+		union di_value ret2;                                                            \
+		di_type_t rt;                                                                   \
+		int rc = getter(o, prop, &rt, &ret2);                                           \
+		if (rc != 0) {                                                                  \
+			return rc;                                                              \
+		}                                                                               \
+		bool cloned = false;                                                            \
+		void *retx = NULL;                                                              \
+		rc = di_type_conversion(rt, &ret2, rtype, &retx, &cloned);                      \
+		if (cloned) {                                                                   \
+			di_free_value(rt, &ret2);                                               \
+		}                                                                               \
+		if (rc == 0) {                                                                  \
+			memcpy(ret, retx, di_sizeof_type(rtype));                               \
+			if (cloned) {                                                           \
+				free(retx);                                                     \
+			}                                                                       \
+		}                                                                               \
+		return rc;                                                                      \
 	}
 
 PUBLIC gen_tfunc(di_getxt, di_getx);
@@ -247,8 +252,8 @@ PUBLIC int di_set_type(struct di_object *o, const char *tyname) {
 }
 
 PUBLIC const char *di_get_type(struct di_object *o) {
-	void *ret;
-	int rc = di_rawgetxt(o, "__type", DI_TYPE_STRING_LITERAL, &ret);
+	const char *ret;
+	int rc = di_rawgetxt(o, "__type", DI_TYPE_STRING_LITERAL, (union di_value *)&ret);
 	if (rc != 0) {
 		if (rc == -ENOENT) {
 			return "deai:object";
@@ -256,9 +261,7 @@ PUBLIC const char *di_get_type(struct di_object *o) {
 		return ERR_PTR(rc);
 	}
 
-	const char *r = *(const char **)ret;
-	free((void *)ret);
-	return r;
+	return ret;
 }
 
 PUBLIC bool di_check_type(struct di_object *o, const char *tyname) {
@@ -591,7 +594,7 @@ PUBLIC bool di_is_object_callable(struct di_object *nonnull obj) {
 
 PUBLIC void di_free_tuple(struct di_tuple t) {
 	for (int i = 0; i < t.length; i++) {
-		di_free_value(DI_TYPE_VARIANT, &t.elements[i]);
+		di_free_value(DI_TYPE_VARIANT, (union di_value *)&t.elements[i]);
 	}
 	free(t.elements);
 }
@@ -604,7 +607,7 @@ PUBLIC void di_free_array(struct di_array arr) {
 	free(arr.arr);
 }
 
-PUBLIC void di_free_value(di_type_t t, void *ptr) {
+PUBLIC void di_free_value(di_type_t t, union di_value *ptr) {
 	if (t == DI_TYPE_NIL) {
 		return;
 	}
@@ -923,13 +926,12 @@ PUBLIC int di_emitn(struct di_object *o, const char *name, struct di_tuple t) {
 			goto next;
 		}
 		di_type_t rtype;
-		void *ret = NULL;
+		union di_value ret;
 		int rc =
 		    ((struct di_object_internal *)l->handler)->call(l->handler, &rtype, &ret, t);
 
 		if (rc == 0) {
-			di_free_value(rtype, ret);
-			free(ret);
+			di_free_value(rtype, &ret);
 		} else {
 			fprintf(stderr, "Failed to call a listener callback: %s\n",
 			        strerror(-rc));

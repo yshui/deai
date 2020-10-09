@@ -572,7 +572,7 @@ static DBusHandlerResult _dbus_filter(DBusConnection *conn, DBusMessage *msg, vo
 	} else {
 		_bus_name *ni;
 		list_for_each_entry (ni, &c->known_names, sibling) {
-			if (strcmp(ni->unique, bus_name)) {
+			if (strcmp(ni->unique, bus_name) != 0) {
 				continue;
 			}
 			asprintf(&sig, "%%%s%%%s%%%s.%s", ni->well_known, path, ifc, mbr);
@@ -584,7 +584,7 @@ static DBusHandlerResult _dbus_filter(DBusConnection *conn, DBusMessage *msg, vo
 			free(sig);
 		}
 	}
-	di_free_value(DI_TYPE_TUPLE, &t);
+	di_free_value(DI_TYPE_TUPLE, (union di_value *)&t);
 	di_unref_object(ud);
 	return DBUS_HANDLER_RESULT_HANDLED;
 }

@@ -551,20 +551,19 @@ int main(int argc, char *argv[]) {
 	}
 
 	di_type_t rt;
-	void *retd = NULL;
+	union di_value retd;
 	ret = di_rawcallxn(mod, method, &rt, &retd, (struct di_tuple){nargs, di_args});
 	if (ret != 0) {
 		fprintf(stderr, "Failed to call \"%s.%s\"\n", modname ? modname : "", method);
 		exit(EXIT_FAILURE);
 	}
 
-	di_free_value(rt, retd);
-	free(retd);
+	di_free_value(rt, &retd);
 	free(method);
 	free(modname);
 
 	for (int i = 0; i < nargs; i++) {
-		di_free_value(DI_TYPE_VARIANT, &di_args[i]);
+		di_free_value(DI_TYPE_VARIANT, (union di_value *)&di_args[i]);
 	}
 	free(di_args);
 

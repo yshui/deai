@@ -10,8 +10,8 @@
 #include <assert.h>
 #include <stdio.h>
 
-#include "utils.h"
 #include "di_internal.h"
+#include "utils.h"
 
 struct di_error {
 	struct di_object_internal;
@@ -29,8 +29,9 @@ PUBLIC struct di_object *di_new_error(const char *fmt, ...) {
 
 	char *errmsg;
 	int ret = asprintf(&errmsg, fmt, ap);
-	if (ret < 0)
+	if (ret < 0) {
 		errmsg = strdup(fmt);
+	}
 
 	struct di_error *err = di_new_object_with_type(struct di_error);
 	err->msg = errmsg;
@@ -54,7 +55,7 @@ typedef struct {
 	char *signal;
 } _di_proxied_signal;
 
-static int _emit_proxied_signal(struct di_object *o, di_type_t *rt, void **ret,
+static int _emit_proxied_signal(struct di_object *o, di_type_t *rt, union di_value *ret,
                                 struct di_tuple t) {
 	auto p = (_di_proxied_signal *)o;
 	di_emitn(p->proxy, p->signal, t);
@@ -78,8 +79,9 @@ static void _del_proxied_signal(struct di_object *_sig) {
 // This is intended to be called in proxy's "__new_signal" method
 PUBLIC int di_proxy_signal(struct di_object *src, const char *srcsig,
                            struct di_object *proxy, const char *proxysig) {
-	if (strncmp(srcsig, "__", 2) == 0)
+	if (strncmp(srcsig, "__", 2) == 0) {
 		return -EPERM;
+	}
 
 	auto c = di_new_object_with_type(_di_proxied_signal);
 	c->signal = strdup(proxysig);
@@ -95,8 +97,9 @@ PUBLIC int di_proxy_signal(struct di_object *src, const char *srcsig,
 	di_unref_object((void *)c);
 	free(buf);
 
-	if (ret != 0)
+	if (ret != 0) {
 		return ret;
+	}
 
 	auto l = di_listen_to(src, srcsig, (void *)c);
 	di_set_detach(l, _del_proxied_signal, (void *)c);

@@ -131,8 +131,9 @@ typedef enum di_type {
 
 struct di_object;
 struct di_tuple;
+union di_value;
 typedef int (*di_call_fn_t)(struct di_object *nonnull, di_type_t *nonnull rt,
-                            void *nullable *nonnull ret, struct di_tuple);
+                            union di_value *nonnull ret, struct di_tuple);
 typedef void (*di_dtor_fn_t)(struct di_object *nonnull);
 struct di_signal;
 struct di_listener;
@@ -192,9 +193,9 @@ union di_value {
 /// * ENOENT: if the member object doesn't exist.
 ///
 /// @param[out] rt The return type of the function
-/// @param[out] ret The return value
+/// @param[out] ret The return value, MUST BE a pointer to a full di_value
 int di_rawcallxn(struct di_object *nonnull o, const char *nonnull name,
-                 di_type_t *nonnull rt, void *nullable *nonnull ret, struct di_tuple args);
+                 di_type_t *nonnull rt, union di_value *nonnull ret, struct di_tuple args);
 
 /// Like `di_rawcallxn`, but also calls getter functions to fetch the member object. And
 /// the arguments are pass as variadic arguments. Arguments are passed as pairs of type
@@ -202,7 +203,7 @@ int di_rawcallxn(struct di_object *nonnull o, const char *nonnull name,
 ///
 /// You shouldn't use this function directly, use the `di_call` macro if you are using C.
 int di_callx(struct di_object *nonnull o, const char *nonnull name, di_type_t *nonnull rt,
-             void *nullable *nonnull ret, ...);
+             union di_value *nonnull ret, ...);
 
 /// Change the value of member `prop` of object `o`. It will call the setter if one exists.
 ///
@@ -222,10 +223,10 @@ int di_setx(struct di_object *nonnull o, const char *nonnull prop, di_type_t typ
 /// * ENOENT: member `prop` not found.
 ///
 /// @param[out] type Type of the value
-/// @param[out] ret The value
+/// @param[out] ret The value, MUST BE a pointer to a full `union di_value`
 /// @return 0 for success, or an error code.
 int di_rawgetx(struct di_object *nonnull o, const char *nonnull prop,
-               di_type_t *nonnull type, void *nullable *nonnull ret);
+               di_type_t *nonnull type, union di_value *nonnull ret);
 
 /// Like `di_rawgetx`, but tries to do automatic type conversion to the desired type `type`.
 ///
@@ -238,7 +239,7 @@ int di_rawgetx(struct di_object *nonnull o, const char *nonnull prop,
 /// @param[out] ret The value
 /// @return 0 for success, or an error code.
 int di_rawgetxt(struct di_object *nonnull o, const char *nonnull prop, di_type_t type,
-                void *nullable *nonnull ret);
+                union di_value *nonnull ret);
 
 /// Like `di_rawgetx`, but also calls getter functions if `prop` is not found.
 /// The getter functions are the generic getter "__get", or the specialized getter
@@ -248,11 +249,11 @@ int di_rawgetxt(struct di_object *nonnull o, const char *nonnull prop, di_type_t
 /// generic getter ("__get") to indicate that `prop` doesn't exist in `o`. Specifialized
 /// getter cannot return DI_LAST_TYPE.
 int di_getx(struct di_object *nonnull o, const char *nonnull prop,
-            di_type_t *nonnull type, void *nullable *nonnull ret);
+            di_type_t *nonnull type, union di_value *nonnull ret);
 
 /// Like `di_rawgetxt`, but also calls getter functions if `prop` is not found.
 int di_getxt(struct di_object *nonnull o, const char *nonnull prop, di_type_t type,
-             void *nullable *nonnull ret);
+             union di_value *nonnull ret);
 
 /// Set the "__type" member of the object `o`. By convention, "__type" names the type of
 /// the object. Type names should be formated as "<namespace>:<type>". The "deai"
@@ -325,7 +326,7 @@ void di_free_array(struct di_array);
 
 /// Free a `value` of type `t`. This function does not free the storage space used by
 /// `value`. This is to make this function usable for values stored on the stack.
-void di_free_value(di_type_t t, void *nullable value);
+void di_free_value(di_type_t t, union di_value *nullable value);
 
 /// Copy value of type `t` from `src` to `dst`. It's assumed that `dst` has enough memory
 /// space to hold a value of type `t`, and that `dst` doesn't contain a valid value

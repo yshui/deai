@@ -50,18 +50,16 @@ int di_proxy_signal(struct di_object *nonnull src, const char *nonnull srcsig,
 		di_setx(o, prop, di_typeof(__tmp), &__tmp);                              \
 	})
 
-#define di_get(o, prop, r)                                                               \
-	({                                                                               \
-		int rc;                                                                  \
-		void *ret;                                                               \
-		do {                                                                     \
-			rc = di_getxt((void *)(o), prop, di_typeof(r), &ret);            \
-			if (rc != 0)                                                     \
-				break;                                                   \
-			(r) = *(typeof(r) *)ret;                                         \
-			free((void *)ret);                                               \
-		} while (0);                                                             \
-		rc;                                                                      \
+#define di_get(o, prop, r)                                                                      \
+	({                                                                                      \
+		int rc;                                                                         \
+		do {                                                                            \
+			rc = di_getxt((void *)(o), prop, di_typeof(r), (union di_value *)&(r)); \
+			if (rc != 0) {                                                          \
+				break;                                                          \
+			}                                                                       \
+		} while (0);                                                                    \
+		rc;                                                                             \
 	})
 
 #define di_gets(o, prop, r)                                                              \
@@ -173,14 +171,13 @@ int di_proxy_signal(struct di_object *nonnull src, const char *nonnull srcsig,
 		int rc = 0;                                                              \
 		do {                                                                     \
 			di_type_t rtype;                                                 \
-			void *ret;                                                       \
+			union di_value ret;                                              \
 			rc = di_callx((struct di_object *)(o), (name), &rtype, &ret,     \
 			              di_arg_list(__VA_ARGS__));                         \
 			if (rc != 0) {                                                   \
 				break;                                                   \
 			}                                                                \
-			di_free_value(rtype, (void *)ret);                               \
-			free((void *)ret);                                               \
+			di_free_value(rtype, &ret);                                      \
 		} while (0);                                                             \
 		rc;                                                                      \
 	})
@@ -190,19 +187,18 @@ int di_proxy_signal(struct di_object *nonnull src, const char *nonnull srcsig,
 		int rc = 0;                                                              \
 		do {                                                                     \
 			di_type_t rtype;                                                 \
-			void *ret;                                                       \
+			union di_value ret;                                              \
 			rc = di_callx((struct di_object *)(o), (name), &rtype, &ret,     \
 			              di_arg_list(__VA_ARGS__));                         \
-			if (rc != 0)                                                     \
+			if (rc != 0) {                                                   \
 				break;                                                   \
+			}                                                                \
 			if (di_typeof(r) != rtype) {                                     \
-				di_free_value(rtype, ret);                               \
-				free(ret);                                               \
+				di_free_value(rtype, &ret);                              \
 				rc = -EINVAL;                                            \
 				break;                                                   \
 			}                                                                \
-			(r) = *(typeof(r) *)ret;                                         \
-			free(ret);                                                       \
+			(r) = *(typeof(r) *)&ret;                                        \
 		} while (0);                                                             \
 		rc;                                                                      \
 	})
@@ -352,7 +348,8 @@ static inline unused const char *nonnull di_type_to_string(di_type_t type) {
 	switch (type) {
 		LIST_APPLY(TYPE_CASE, SEP_COLON, NIL, ANY, BOOL, INT, UINT, NINT, NUINT,
 		           FLOAT, STRING, STRING_LITERAL);
-		LIST_APPLY(TYPE_CASE, SEP_COLON, TUPLE, ARRAY, VARIANT, OBJECT, WEAK_OBJECT, POINTER);
+		LIST_APPLY(TYPE_CASE, SEP_COLON, TUPLE, ARRAY, VARIANT, OBJECT,
+		           WEAK_OBJECT, POINTER);
 	case DI_LAST_TYPE:
 		return "LAST_TYPE";
 	}

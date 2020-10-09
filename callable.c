@@ -48,13 +48,7 @@ struct di_closure {
 	di_type_t atypes[];
 };
 
-static inline void *allocate_for_return(di_type_t rtype) {
-	auto sz = di_sizeof_type(rtype);
-	if (sz < sizeof(ffi_arg)) {
-		sz = sizeof(ffi_arg);
-	}
-	return malloc(sz);
-}
+static_assert(sizeof(union di_value) >= sizeof(ffi_arg), "ffi_arg is too big");
 
 static int
 _di_typed_trampoline(ffi_cif *cif, void (*fn)(void), void *ret, const di_type_t *fnats,
@@ -107,7 +101,8 @@ _di_typed_trampoline(ffi_cif *cif, void (*fn)(void), void *ret, const di_type_t 
 					break;
 				case DI_TYPE_ANY:
 				case DI_LAST_TYPE:
-					DI_PANIC("Impossible types appeared in arguments");
+					DI_PANIC("Impossible types appeared in "
+					         "arguments");
 				case DI_TYPE_NIL:
 				case DI_TYPE_VARIANT:
 					unreachable();
@@ -145,8 +140,8 @@ out:
 	return rc;
 }
 
-static int
-method_trampoline(struct di_object *o, di_type_t *rtype, void **ret, struct di_tuple t) {
+static int method_trampoline(struct di_object *o, di_type_t *rtype, union di_value *ret,
+                             struct di_tuple t) {
 	if (!di_check_type(o, "deai:method")) {
 		return -EINVAL;
 	}
@@ -158,31 +153,23 @@ method_trampoline(struct di_object *o, di_type_t *rtype, void **ret, struct di_t
 
 	*rtype = tm->rtype;
 
-	if (di_sizeof_type(tm->rtype) != 0) {
-		*ret = allocate_for_return(tm->rtype);
-	} else {
-		*ret = NULL;
-	}
-
-	void *weak_this;
-	int rc = di_rawgetxt(o, "__this", DI_TYPE_WEAK_OBJECT, &weak_this);
+	struct di_weak_object *weak_this;
+	int rc = di_rawgetxt(o, "__this", DI_TYPE_WEAK_OBJECT, (union di_value *)&weak_this);
 	DI_CHECK(rc == 0, "this pointer not found in method?");
 
-	with_object_cleanup(di_object) this =
-	    di_upgrade_weak_ref(*(struct di_weak_object **)weak_this);
-	di_free_value(DI_TYPE_WEAK_OBJECT, weak_this);
-	free(weak_this);
+	with_object_cleanup(di_object) this = di_upgrade_weak_ref(weak_this);
+	di_drop_weak_ref(&weak_this);
 
 	if (this == NULL) {
 		// this pointer is gone
 		return -EBADF;
 	}
-	return _di_typed_trampoline(&tm->cif, tm->fn, *ret, tm->atypes + 1, 1,
+	return _di_typed_trampoline(&tm->cif, tm->fn, ret, tm->atypes + 1, 1,
 	                            (const void *[]){&this}, t);
 }
 
-static int
-closure_trampoline(struct di_object *o, di_type_t *rtype, void **ret, struct di_tuple t) {
+static int closure_trampoline(struct di_object *o, di_type_t *rtype, union di_value *ret,
+                              struct di_tuple t) {
 	if (!di_check_type(o, "deai:closure")) {
 		return -EINVAL;
 	}
@@ -194,13 +181,7 @@ closure_trampoline(struct di_object *o, di_type_t *rtype, void **ret, struct di_
 
 	*rtype = cl->rtype;
 
-	if (di_sizeof_type(cl->rtype) != 0) {
-		*ret = allocate_for_return(cl->rtype);
-	} else {
-		*ret = NULL;
-	}
-
-	return _di_typed_trampoline(&cl->cif, cl->fn, *ret, cl->atypes + cl->nargs0,
+	return _di_typed_trampoline(&cl->cif, cl->fn, ret, cl->atypes + cl->nargs0,
 	                            cl->nargs0, cl->cargs, t);
 }
 
@@ -332,7 +313,8 @@ PUBLIC int di_add_method(struct di_object *o, const char *name, void (*fn)(void)
 }
 
 // va_args version of di_call_callable
-PUBLIC int di_call_objectv(struct di_object *_obj, di_type_t *rtype, void **ret, va_list ap) {
+PUBLIC int
+di_call_objectv(struct di_object *_obj, di_type_t *rtype, union di_value *ret, va_list ap) {
 	auto obj = (struct di_object_internal *)_obj;
 	if (!obj->call) {
 		return -EINVAL;
@@ -367,15 +349,15 @@ PUBLIC int di_call_objectv(struct di_object *_obj, di_type_t *rtype, void **ret,
 	return obj->call(_obj, rtype, ret, tu);
 }
 
-PUBLIC int di_call_object(struct di_object *o, di_type_t *rtype, void **ret, ...) {
+PUBLIC int di_call_object(struct di_object *o, di_type_t *rtype, union di_value *ret, ...) {
 	va_list ap;
 
 	va_start(ap, ret);
 	return di_call_objectv(o, rtype, ret, ap);
 }
 
-PUBLIC int di_call_objectt(struct di_object *nonnull obj, di_type_t *nonnull rt,
-                           void *nullable *nonnull ret, struct di_tuple args) {
+PUBLIC int di_call_objectt(struct di_object *obj, di_type_t *rt, union di_value *ret,
+                           struct di_tuple args) {
 	auto internal = (struct di_object_internal *)obj;
 	return internal->call(obj, rt, ret, args);
 }

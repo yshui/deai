@@ -155,9 +155,21 @@ static void lua_ref_dtor(struct di_lua_ref *t) {
 	t->s = NULL;
 }
 
-static void *di_lua_type_to_di(lua_State *L, int i, di_type_t *t);
+static int di_lua_type_to_di(lua_State *L, int i, di_type_t *t, union di_value *ret);
 
-static int di_lua_table_get(struct di_object *m, di_type_t *rt, void **ret, struct di_tuple tu) {
+static inline int di_lua_type_to_di_variant(lua_State *L, int i, struct di_variant *var) {
+	int rc = di_lua_type_to_di(L, i, &var->type, NULL);
+	if (rc != 0) {
+		return rc;
+	}
+
+	var->value = malloc(di_sizeof_type(var->type));
+	di_lua_type_to_di(L, i, &var->type, var->value);
+	return 0;
+}
+
+static int
+di_lua_table_get(struct di_object *m, di_type_t *rt, union di_value *ret, struct di_tuple tu) {
 	struct lua_table_getter *g = (void *)m;
 	struct di_lua_ref *t = g->t;
 	if (tu.length != 1) {
@@ -179,7 +191,7 @@ static int di_lua_table_get(struct di_object *m, di_type_t *rt, void **ret, stru
 	lua_pushstring(L, key);
 	lua_gettable(L, -2);
 
-	*ret = di_lua_type_to_di(L, -1, rt);
+	DI_OK_OR_RET(di_lua_type_to_di(L, -1, rt, ret));
 
 	di_lua_xchg_env(L, s);
 	return 0;
@@ -230,23 +242,20 @@ static int _di_lua_method_handler(lua_State *L, const char *name, struct di_obje
 	int error_argi = 0;
 	// Translate lua arguments
 	for (int i = 2; i <= nargs; i++) {
-		void *tmp = di_lua_type_to_di(L, i, &t.elements[i - 2].type);
-		if (t.elements[i - 2].type >= DI_LAST_TYPE) {
+		if (di_lua_type_to_di_variant(L, i, &t.elements[i - 2]) != 0) {
 			error_argi = i;
 			goto err;
 		}
-		t.elements[i - 2].value = tmp;
 	}
 
-	void *ret;
+	union di_value ret;
 	di_type_t rtype;
 	int rc = di_call_objectt(m, &rtype, &ret, t);
 	int nret;
 
 	if (rc == 0) {
-		nret = di_lua_pushvariant(L, NULL, (struct di_variant){ret, rtype});
-		di_free_value(rtype, ret);
-		free(ret);
+		nret = di_lua_pushvariant(L, NULL, (struct di_variant){&ret, rtype});
+		di_free_value(rtype, &ret);
 	}
 
 err:
@@ -419,20 +428,19 @@ static struct di_object *di_lua_load_script(struct di_object *obj, const char *p
 
 	struct di_module *m = (void *)obj;
 	{
-		struct di_lua_state **L = NULL;
+		union di_value L;
 		di_type_t vtype;
-		int rc = di_rawgetx(obj, "__lua_state", &vtype, (void **)&L);
+		int rc = di_rawgetx(obj, "__lua_state", &vtype, &L);
 
 		// Don't hold ref. If lua module goes away first, script will become
 		// defunct so that's fine.
 		if (rc != 0) {
 			lua_new_state(m);
-			rc = di_rawgetx(obj, "__lua_state", &vtype, (void **)&L);
+			rc = di_rawgetx(obj, "__lua_state", &vtype, &L);
 		}
 		assert(vtype == DI_TYPE_OBJECT);
 
-		s->L = *L;
-		free(L);
+		s->L = (void *)L.object;
 	}
 
 	struct di_lua_state *L = s->L;
@@ -481,15 +489,16 @@ static int di_lua_table_to_array(lua_State *L, int index, int nelem, di_type_t e
 		di_type_t t;
 		lua_rawgeti(L, index, i);
 
-		void *retd = di_lua_type_to_di(L, -1, &t);
+		union di_value retd;
+		di_lua_type_to_di(L, -1, &t, &retd);
 		lua_pop(L, 1);
 		if (t != elemt) {
+			// Auto convert int to double
 			assert(t == DI_TYPE_INT && elemt == DI_TYPE_FLOAT);
-			((double *)ret->arr)[i - 1] = *(int64_t *)retd;
+			((double *)ret->arr)[i - 1] = retd.int_;
 		} else {
-			memcpy(ret->arr + sz * (i - 1), retd, sz);
+			memcpy(ret->arr + sz * (i - 1), &retd, sz);
 		}
-		free(retd);
 	}
 	ret->length = nelem;
 	return 0;
@@ -518,9 +527,10 @@ static bool di_lua_checkarray(lua_State *L, int index, int *nelem, di_type_t *el
 	// get arr[1]
 	lua_rawgeti(L, index, i++);
 
-	void *ret = di_lua_type_to_di(L, -1, elemt);
-	di_free_value(*elemt, ret);
-	free(ret);
+	// get the type of the first element
+	union di_value ret;
+	di_lua_type_to_di(L, -1, elemt, &ret);
+	di_free_value(*elemt, &ret);
 	// Pop 2 value, top of stack is the key
 	lua_pop(L, 2);
 
@@ -535,10 +545,10 @@ static bool di_lua_checkarray(lua_State *L, int index, int *nelem, di_type_t *el
 	while (lua_next(L, index) != 0) {
 		lua_rawgeti(L, index, i++);
 
+		// Get the type of the i-th element
 		di_type_t t;
-		ret = di_lua_type_to_di(L, -1, &t);
-		di_free_value(t, ret);
-		free(ret);
+		di_lua_type_to_di(L, -1, &t, &ret);
+		di_free_value(t, &ret);
 		// pop 2 value (lua_next and lua_rawgeti)
 		lua_pop(L, 2);
 
@@ -564,8 +574,8 @@ static bool di_lua_checkarray(lua_State *L, int index, int *nelem, di_type_t *el
 	return true;
 }
 
-static int
-call_lua_function(struct di_lua_ref *ref, di_type_t *rt, void **ret, struct di_tuple t) {
+static int call_lua_function(struct di_lua_ref *ref, di_type_t *rt, union di_value *ret,
+                             struct di_tuple t) {
 	if (!ref->s) {
 		return -EBADF;
 	}
@@ -594,18 +604,21 @@ call_lua_function(struct di_lua_ref *ref, di_type_t *rt, void **ret, struct di_t
 
 	di_unref_object((void *)s);
 
-	*ret = di_lua_type_to_di(L, -1, rt);
+	di_lua_type_to_di(L, -1, rt, ret);
 	return 0;
 }
 
-static void *di_lua_type_to_di(lua_State *L, int i, di_type_t *t) {
-#define ret_arg(i, ty, t2, gfn)                                                          \
+/// Convert lua value at index `i` to a deai value.
+/// The value is not popped. If `ret` is NULL, the value is not returned, but the type
+/// will always be returned
+static int di_lua_type_to_di(lua_State *L, int i, di_type_t *t, union di_value *ret) {
+#define ret_arg(i, field, gfn)                                                           \
 	do {                                                                             \
-		void *__ret;                                                             \
-		*t = ty;                                                                 \
-		__ret = calloc(1, sizeof(t2));                                           \
-		*(t2 *)__ret = gfn(L, i);                                                \
-		return __ret;                                                            \
+		*t = di_typeof(ret->field);                                              \
+		if (ret != NULL) {                                                       \
+			ret->field = gfn(L, i);                                          \
+		}                                                                        \
+		return 0;                                                                \
 	} while (0)
 #define tostringdup(L, i) strdup(lua_tostring(L, i))
 #define todiobj(L, i) (struct di_object *)lua_type_to_di_object(L, i, call_lua_function)
@@ -616,24 +629,23 @@ static void *di_lua_type_to_di(lua_State *L, int i, di_type_t *t) {
 		x;                                                                       \
 	})
 	int nelem;
-	void *ret;
 	di_type_t elemt;
 	switch (lua_type(L, i)) {
 	case LUA_TBOOLEAN:
-		ret_arg(i, DI_TYPE_BOOL, bool, lua_toboolean);
+		ret_arg(i, bool_, lua_toboolean);
 	case LUA_TNUMBER:
 		if (lua_isinteger(L, i)) {
-			ret_arg(i, DI_TYPE_INT, int64_t, lua_tointeger);
+			ret_arg(i, int_, lua_tointeger);
 		} else {
-			ret_arg(i, DI_TYPE_FLOAT, double, lua_tonumber);
+			ret_arg(i, float_, lua_tonumber);
 		}
 	case LUA_TSTRING:
-		ret_arg(i, DI_TYPE_STRING, const char *, tostringdup);
+		ret_arg(i, string, tostringdup);
 	case LUA_TUSERDATA:
 		if (!di_lua_isproxy(L, i)) {
 			goto type_error;
 		}
-		ret_arg(i, DI_TYPE_OBJECT, void *, toobjref);
+		ret_arg(i, object, toobjref);
 	case LUA_TTABLE:;
 		// Non-array tables, and tables with metatable shoudl become an di_object
 		bool has_metatable = lua_getmetatable(L, i);
@@ -642,8 +654,9 @@ static void *di_lua_type_to_di(lua_State *L, int i, di_type_t *t) {
 		}
 		if (!di_lua_checkarray(L, i, &nelem, &elemt) || has_metatable) {
 			*t = DI_TYPE_OBJECT;
-			ret = malloc(sizeof(struct di_object *));
-			*(void **)ret = lua_type_to_di_object(L, i, NULL);
+			if (ret != NULL) {
+				ret->object = (void *)lua_type_to_di_object(L, i, NULL);
+			}
 		} else {
 			// Empty table should be pushed as unit, because empty tables can
 			// either be interpreted as an empty di_array or an empty
@@ -653,23 +666,23 @@ static void *di_lua_type_to_di(lua_State *L, int i, di_type_t *t) {
 			if (!nelem) {
 				assert(elemt == DI_TYPE_ANY);
 				*t = DI_TYPE_NIL;
-				ret = NULL;
 			} else {
 				*t = DI_TYPE_ARRAY;
-				ret = calloc(1, sizeof(struct di_array));
-				di_lua_table_to_array(L, i, nelem, elemt, ret);
+				if (ret) {
+					di_lua_table_to_array(L, i, nelem, elemt, &ret->array);
+				}
 			}
 		}
-		return ret;
+		return 0;
 	case LUA_TFUNCTION:
-		ret_arg(i, DI_TYPE_OBJECT, struct di_object *, todiobj);
+		ret_arg(i, object, todiobj);
 	case LUA_TNIL:
 		*t = DI_TYPE_NIL;
-		return NULL;
+		return 0;
 	type_error:
 	default:
-		*t = -1;
-		return NULL;
+		*t = DI_TYPE_NIL;
+		return -ENOTSUP;
 	}
 #undef ret_arg
 #undef tostringdup
@@ -841,22 +854,27 @@ int di_lua_emit_signal(lua_State *L) {
 	struct di_object *o = lua_touserdata(L, lua_upvalueindex(1));
 	const char *signame = luaL_checkstring(L, 1);
 	int top = lua_gettop(L);
+	int rc = 0;
 
 	struct di_tuple t;
 	t.elements = tmalloc(struct di_variant, top - 1);
 	t.length = top - 1;
 
 	for (int i = 2; i <= top; i++) {
-		t.elements[i - 2].value = di_lua_type_to_di(L, i, &t.elements[i - 2].type);
+		rc = di_lua_type_to_di_variant(L, i, &t.elements[i - 2]);
+		if (rc != 0) {
+			goto err;
+		}
 	}
 
 	di_ref_object(o);
-	int ret = di_emitn(o, signame, t);
+	rc = di_emitn(o, signame, t);
 	di_unref_object(o);
 
+err:
 	di_free_tuple(t);
 
-	if (ret != 0) {
+	if (rc != 0) {
 		return luaL_error(L, "Failed to emit signal %s", signame);
 	}
 	return 0;
@@ -874,7 +892,7 @@ static int di_lua_upgrade_weak_ref(lua_State *L) {
 
 static int di_lua_weak_ref(lua_State *L) {
 	struct di_object *strong = lua_touserdata(L, lua_upvalueindex(1));
-	union di_value weak = { .weak_object = di_weakly_ref_object(strong) };
+	union di_value weak = {.weak_object = di_weakly_ref_object(strong)};
 	return di_lua_pushvariant(
 	    L, NULL, (struct di_variant){.type = DI_TYPE_WEAK_OBJECT, .value = &weak});
 }
@@ -939,15 +957,14 @@ static int di_lua_getter(lua_State *L) {
 	}
 
 	di_type_t rt;
-	void *ret;
+	union di_value ret;
 	int rc = di_getx(ud, key, &rt, &ret);
 	if (rc != 0) {
 		lua_pushnil(L);
 		return 1;
 	}
-	rc = di_lua_pushvariant(L, key, (struct di_variant){ret, rt});
-	di_free_value(rt, (void *)ret);
-	free((void *)ret);
+	rc = di_lua_pushvariant(L, key, (struct di_variant){&ret, rt});
+	di_free_value(rt, &ret);
 	return rc;
 }
 
@@ -966,14 +983,14 @@ static int di_lua_setter(lua_State *L) {
 	const char *key = luaL_checkstring(L, 2);
 	di_type_t vt;
 
-	void *val = di_lua_type_to_di(L, 3, &vt);
-	if (!val && vt != DI_TYPE_NIL) {
+	union di_value val;
+	int rc = di_lua_type_to_di(L, 3, &vt, &val);
+	if (rc != 0) {
 		return luaL_error(L, "unhandled lua type");
 	}
 
-	int ret = di_setx(ud, key, vt, val);
-	di_free_value(vt, val);
-	free(val);
+	int ret = di_setx(ud, key, vt, &val);
+	di_free_value(vt, &val);
 
 	if (ret != 0) {
 		if (ret == -EINVAL) {

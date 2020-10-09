@@ -56,7 +56,7 @@ static const char *level_tostring(int log_level) {
 }
 
 // Function exposed via di_object to be used by any plugins
-static int di_log(struct di_object *o, di_type_t *rt, void **ret, struct di_tuple t) {
+static int di_log(struct di_object *o, di_type_t *rt, union di_value *ret, struct di_tuple t) {
 	if (t.length != 2) {
 		return -EINVAL;
 	}
@@ -71,7 +71,6 @@ static int di_log(struct di_object *o, di_type_t *rt, void **ret, struct di_tupl
 		str = "(nil)";
 	}
 	*rt = DI_TYPE_NINT;
-	int *res = *ret = malloc(di_sizeof_type(DI_TYPE_NINT));
 
 	struct di_log *l = (void *)o;
 	if (level_lookup(log_level) > l->log_level) {
@@ -80,16 +79,16 @@ static int di_log(struct di_object *o, di_type_t *rt, void **ret, struct di_tupl
 
 	with_object_cleanup(di_object) ltgt = NULL;
 	if (di_get(l, "log_target", ltgt) != 0) {
-		*res = 0;
+		ret->nint = 0;
 		return 0;
 	}
 
 	int wrc = 0;
 	int rc = di_callr(ltgt, "write", wrc, str);
 	if (rc != 0) {
-		*res = rc;
+		ret->nint = rc;
 	} else {
-		*res = wrc;
+		ret->nint = wrc;
 	}
 	return 0;
 }
