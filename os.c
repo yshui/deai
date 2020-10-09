@@ -26,8 +26,9 @@ static void di_env_set(struct di_module *m, const char *key, const char *val) {
 
 static char *di_get_hostname(struct deai *p) {
 	struct utsname buf;
-	if (uname(&buf) != 0)
+	if (uname(&buf) != 0) {
 		return NULL;
+	}
 	return strdup(buf.nodename);
 }
 

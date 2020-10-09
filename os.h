@@ -7,4 +7,4 @@
 #pragma once
 #include <deai/deai.h>
 
-void di_init_os(struct deai *p);
+void di_init_os(struct deai *di);

@@ -22,25 +22,21 @@ static inline void typed_alloc_copy(di_type_t type, const void *src, void **dest
 	*dest = ret;
 }
 
-static inline int integer_conversion(di_type_t inty, const void *inp, di_type_t outty,
-                                     void **outp, bool *cloned) {
-	*cloned = false;
+static inline int integer_conversion(di_type_t inty, const union di_value *restrict inp,
+                                     di_type_t outty, union di_value *restrict outp) {
 	if (inty == outty) {
-		*outp = (void *)inp;
+		memcpy(outp, inp, di_sizeof_type(outty));
 		return 0;
 	}
 
-#define convert_case(srct, dstt, dstmax, dstmin)                                         \
-	case di_typeof((srct)0):                                                         \
+#define convert_case(srcfield, dstfield, dstmax, dstmin)                                 \
+	case di_typeof(((union di_value *)0)->srcfield):                                 \
 		do {                                                                     \
-			srct tmp = *(srct *)(inp);                                       \
+			__auto_type tmp = inp->srcfield;                                 \
 			if (tmp > (dstmax) || tmp < (dstmin)) {                          \
-				*outp = NULL;                                            \
 				return -ERANGE;                                          \
 			}                                                                \
-			dstt *tmp2 = malloc(sizeof(dstt));                               \
-			*tmp2 = (dstt)tmp;                                               \
-			*outp = tmp2;                                                    \
+			outp->dstfield = (typeof(outp->dstfield))tmp;                    \
 		} while (0);                                                             \
 		break
 
@@ -49,7 +45,7 @@ static inline int integer_conversion(di_type_t inty, const void *inp, di_type_t 
 		convert_case(s1, __VA_ARGS__);                                           \
 		convert_case(s2, __VA_ARGS__);                                           \
 		convert_case(s3, __VA_ARGS__);                                           \
-	case di_typeof((VA_ARG_HEAD(__VA_ARGS__))0):                                     \
+	case di_typeof(((union di_value *)0)->VA_ARG_HEAD(__VA_ARGS__)):                 \
 		unreachable();                                                           \
 	case DI_TYPE_ANY:                                                                \
 	case DI_TYPE_NIL:                                                                \
@@ -65,7 +61,6 @@ static inline int integer_conversion(di_type_t inty, const void *inp, di_type_t 
 	case DI_TYPE_POINTER:                                                            \
 	case DI_LAST_TYPE:                                                               \
 	default:                                                                         \
-		*outp = NULL;                                                            \
 		return -EINVAL;                                                          \
 	}
 
@@ -74,16 +69,16 @@ static inline int integer_conversion(di_type_t inty, const void *inp, di_type_t 
 #pragma GCC diagnostic ignored "-Wtautological-constant-out-of-range-compare"
 	switch (outty) {
 	case DI_TYPE_INT:
-		convert_switch(unsigned int, int, uint64_t, int64_t, INT64_MAX, INT64_MIN);
+		convert_switch(nuint, nint, uint, int_, INT64_MAX, INT64_MIN);
 		break;
 	case DI_TYPE_NINT:
-		convert_switch(unsigned int, uint64_t, int64_t, int, INT_MAX, INT_MIN);
+		convert_switch(nuint, uint, int_, nint, INT_MAX, INT_MIN);
 		break;
 	case DI_TYPE_UINT:
-		convert_switch(unsigned int, int, int64_t, uint64_t, UINT64_MAX, 0);
+		convert_switch(nuint, nint, int_, uint, UINT64_MAX, 0);
 		break;
 	case DI_TYPE_NUINT:
-		convert_switch(int, int64_t, uint64_t, unsigned int, UINT_MAX, 0);
+		convert_switch(nint, int_, uint, nuint, UINT_MAX, 0);
 		break;
 	case DI_TYPE_ANY:
 	case DI_TYPE_NIL:
@@ -99,14 +94,12 @@ static inline int integer_conversion(di_type_t inty, const void *inp, di_type_t 
 	case DI_TYPE_POINTER:
 	case DI_LAST_TYPE:
 	default:
-		*outp = NULL;
 		return -EINVAL;
 	}
 #pragma GCC diagnostic pop
 
 #undef convert_case
 #undef convert_switch
-	*cloned = true;
 	return 0;
 }
 
@@ -120,29 +113,27 @@ static inline bool is_integer(di_type_t t) {
 /// @param[out] cloned if false, value in `outp` is borrowed from `inp`. otherwise the
 ///                    value is cloned. always false in case of an error
 static inline int unused di_type_conversion(di_type_t inty, const union di_value *inp,
-                                            di_type_t outty, void **outp, bool *cloned) {
+                                            di_type_t outty, union di_value *outp, bool *cloned) {
 	*cloned = false;
 	if (inty == outty) {
-		*outp = (void *)inp;
+		memcpy(outp, inp, di_sizeof_type(inty));
 		return 0;
 	}
 
 	if (outty == DI_TYPE_VARIANT) {
-		auto var = tmalloc(struct di_variant, 1);
-		var->type = inty;
-		var->value = malloc(sizeof(di_sizeof_type(inty)));
-		di_copy_value(inty, var->value, inp);
+		outp->variant.type = inty;
+		outp->variant.value = malloc(sizeof(di_sizeof_type(inty)));
+		di_copy_value(inty, outp->variant.value, inp);
 		*cloned = true;
 		return 0;
 	}
 
 	if (inty == DI_TYPE_STRING && outty == DI_TYPE_STRING_LITERAL) {
-		*outp = (void *)inp;
+		outp->string_literal = inp->string;
 		return 0;
 	}
 
 	if (outty == DI_TYPE_NIL) {
-		*outp = NULL;
 		return 0;
 	}
 
@@ -152,28 +143,25 @@ static inline int unused di_type_conversion(di_type_t inty, const union di_value
 	}
 
 	if (inty == DI_TYPE_STRING_LITERAL && outty == DI_TYPE_STRING) {
-		const char **res = malloc(sizeof(const char *));
-		*res = strdup(*(const char **)inp);
-		*outp = res;
+		outp->string = strdup(inp->string_literal);
 		*cloned = true;
 		return 0;
 	}
 
 	if (is_integer(inty)) {
 		if (is_integer(outty)) {
-			return integer_conversion(inty, inp, outty, outp, cloned);
+			return integer_conversion(inty, inp, outty, outp);
 		}
 		if (outty == DI_TYPE_FLOAT) {
-			double *res = malloc(sizeof(double));
-#define convert_case(srct)                                                               \
-	case di_typeof((srct)0):                                                         \
-		*res = (double)*(srct *)inp;                                             \
+#define convert_case(srcfield)                                                           \
+	case di_typeof(((union di_value *)0)->srcfield):                                 \
+		outp->float_ = (double)inp->srcfield;                                    \
 		break;
 			switch (inty) {
-				convert_case(unsigned int);
-				convert_case(int);
-				convert_case(uint64_t);
-				convert_case(int64_t);
+				convert_case(nuint);
+				convert_case(nint);
+				convert_case(uint);
+				convert_case(int_);
 			case DI_TYPE_ANY:
 			case DI_TYPE_NIL:
 			case DI_TYPE_FLOAT:
@@ -188,19 +176,14 @@ static inline int unused di_type_conversion(di_type_t inty, const union di_value
 			case DI_TYPE_POINTER:
 			case DI_LAST_TYPE:
 			default:
-				free(res);
-				*outp = NULL;
 				return -EINVAL;
 			}
 #undef convert_case
-			*outp = res;
-			*cloned = true;
 			return 0;
 		}
 	}
 
 	// float -> integer not allowed
-	*outp = NULL;
 	return -EINVAL;
 }
 

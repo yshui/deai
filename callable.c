@@ -59,8 +59,7 @@ _di_typed_trampoline(ffi_cif *cif, void (*fn)(void), void *ret, const di_type_t 
 	assert(args.length + nargs0 <= MAX_NARGS);
 
 	struct di_variant *vars = args.elements;
-	void *null_ptr = NULL;
-	void **xargs = alloca((nargs0 + args.length) * sizeof(void *));
+	union di_value **xargs = alloca((nargs0 + args.length) * sizeof(void *));
 	bool *args_cloned = alloca(args.length * sizeof(bool));
 	memcpy(xargs, args0, sizeof(void *) * nargs0);
 	memset(xargs + nargs0, 0, sizeof(void *) * args.length);
@@ -71,15 +70,15 @@ _di_typed_trampoline(ffi_cif *cif, void (*fn)(void), void *ret, const di_type_t 
 		// Type check and implicit conversion
 		// conversion between all types of integers are allowed
 		// as long as there's no overflow
+		xargs[i] = alloca(di_sizeof_type(fnats[i - nargs0]));
 		rc = di_type_conversion(vars[i - nargs0].type, vars[i - nargs0].value,
-		                        fnats[i - nargs0], xargs + i, &args_cloned[i - nargs0]);
+		                        fnats[i - nargs0], xargs[i], &args_cloned[i - nargs0]);
 		if (rc != 0) {
 			if (vars[i - nargs0].type == DI_TYPE_NIL) {
 				switch (fnats[i - nargs0]) {
 				case DI_TYPE_OBJECT:
 					rc = 0;
-					xargs[i] = tmalloc(struct di_object *, 1);
-					*(struct di_object **)xargs[i] =
+					xargs[i]->object =
 					    di_new_object_with_type(struct di_object);
 					args_cloned[i - nargs0] = true;
 					break;
@@ -89,14 +88,14 @@ _di_typed_trampoline(ffi_cif *cif, void (*fn)(void), void *ret, const di_type_t 
 					break;
 				case DI_TYPE_POINTER:
 					rc = 0;
-					xargs[i] = &null_ptr;
+					xargs[i]->pointer = NULL;
 					break;
 				case DI_TYPE_ARRAY:
-					xargs[i] = &(struct di_array){0, NULL, DI_TYPE_ANY};
+					xargs[i]->array = (struct di_array){0, NULL, DI_TYPE_ANY};
 					rc = 0;
 					break;
 				case DI_TYPE_TUPLE:
-					xargs[i] = &(struct di_tuple){0, NULL};
+					xargs[i]->tuple = (struct di_tuple){0, NULL};
 					rc = 0;
 					break;
 				case DI_TYPE_ANY:
@@ -133,7 +132,6 @@ out:
 	for (int i = nargs0; i < last_arg_processed; i++) {
 		if (args_cloned[i - nargs0]) {
 			di_free_value(fnats[i - nargs0], xargs[i]);
-			free((void *)xargs[i]);
 		}
 	}
 

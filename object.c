@@ -127,7 +127,7 @@ ret:
 PUBLIC int di_setx(struct di_object *o, const char *name, di_type_t type, void *val) {
 	auto mem = di_lookup(o, name);
 	int rc;
-	void *val2;
+	union di_value val2;
 	bool cloned = false;
 	if (mem) {
 		// TODO(yshui) remove the type conversion.
@@ -139,10 +139,9 @@ PUBLIC int di_setx(struct di_object *o, const char *name, di_type_t type, void *
 		if (mem->own) {
 			di_free_value(mem->type, mem->data);
 		}
-		di_copy_value(mem->type, mem->data, val2);
+		di_copy_value(mem->type, mem->data, &val2);
 		if (cloned) {
-			di_free_value(mem->type, val2);
-			free((void *)val2);
+			di_free_value(mem->type, &val2);
 		}
 		return 0;
 	}
@@ -177,8 +176,7 @@ di_rawgetx(struct di_object *o, const char *name, di_type_t *type, union di_valu
 }
 
 // Recusively unpack a variant until it only contains something that's not a variant
-static void
-di_flatten_variant(struct di_variant *var) {
+static void di_flatten_variant(struct di_variant *var) {
 	// `var` might be overwritten by changing `ret`, so keep a copy first
 	if (var->type == DI_TYPE_VARIANT) {
 		assert(&var->value->variant != var);
@@ -230,16 +228,9 @@ PUBLIC int di_getx(struct di_object *o, const char *name, di_type_t *type, union
 			return rc;                                                              \
 		}                                                                               \
 		bool cloned = false;                                                            \
-		void *retx = NULL;                                                              \
-		rc = di_type_conversion(rt, &ret2, rtype, &retx, &cloned);                      \
+		rc = di_type_conversion(rt, &ret2, rtype, ret, &cloned);                       \
 		if (cloned) {                                                                   \
 			di_free_value(rt, &ret2);                                               \
-		}                                                                               \
-		if (rc == 0) {                                                                  \
-			memcpy(ret, retx, di_sizeof_type(rtype));                               \
-			if (cloned) {                                                           \
-				free(retx);                                                     \
-			}                                                                       \
 		}                                                                               \
 		return rc;                                                                      \
 	}
