@@ -240,7 +240,7 @@ PUBLIC int di_set_type(struct di_object *o, const char *tyname) {
 
 PUBLIC const char *di_get_type(struct di_object *o) {
 	void *ret;
-	int rc = di_getxt(o, "__type", DI_TYPE_STRING_LITERAL, &ret);
+	int rc = di_rawgetxt(o, "__type", DI_TYPE_STRING_LITERAL, &ret);
 	if (rc != 0) {
 		if (rc == -ENOENT) {
 			return "deai:object";
@@ -275,6 +275,12 @@ PUBLIC struct di_object *di_new_object(size_t sz, size_t alignment) {
 	posix_memalign((void **)&obj, alignment, sz);
 	memset(obj, 0, sz);
 	obj->ref_count = 1;
+
+	// non-zero strong references will implicitly hold a weak refrence. that reference
+	// is only dropped when the object destruction finishes. this is to avoid the
+	// case where the last weak reference to the object is dropped during object
+	// destruction, thus cause the object to be freed in the middle of destruction.
+	obj->weak_ref_count = 1;
 	obj->destroyed = 0;
 
 #ifdef TRACK_OBJECTS
@@ -367,6 +373,38 @@ PUBLIC struct di_object *di_ref_object(struct di_object *_obj) {
 	return _obj;
 }
 
+PUBLIC struct di_weak_object *di_weakly_ref_object(struct di_object *_obj) {
+	auto obj = (struct di_object_internal *)_obj;
+	obj->weak_ref_count++;
+	return (struct di_weak_object *)obj;
+}
+
+PUBLIC struct di_object *nullable di_upgrade_weak_ref(struct di_weak_object *weak) {
+	assert(weak != PTR_POISON);
+	auto obj = (struct di_object_internal *)weak;
+	if (obj->ref_count > 0) {
+		return di_ref_object((struct di_object *)obj);
+	}
+	return NULL;
+}
+
+static inline void di_decrement_weak_ref_count(struct di_object_internal *obj) {
+	obj->weak_ref_count--;
+	if (obj->weak_ref_count == 0) {
+#ifdef TRACK_OBJECTS
+		list_del(&obj->siblings);
+#endif
+		free(obj);
+	}
+}
+
+PUBLIC void di_drop_weak_ref(struct di_weak_object **weak) {
+	assert(*weak != PTR_POISON);
+	auto obj = (struct di_object_internal *)*weak;
+	di_decrement_weak_ref_count(obj);
+	*weak = PTR_POISON;
+}
+
 PUBLIC void di_unref_object(struct di_object *_obj) {
 	auto obj = (struct di_object_internal *)_obj;
 	assert(obj->ref_count > 0);
@@ -374,10 +412,7 @@ PUBLIC void di_unref_object(struct di_object *_obj) {
 	if (obj->ref_count == 0) {
 		if (obj->destroyed) {
 			// If we reach here, destroy must have completed
-#ifdef TRACK_OBJECTS
-			list_del(&obj->siblings);
-#endif
-			free(obj);
+			di_decrement_weak_ref_count(obj);
 		} else {
 			di_destroy_object(_obj);
 		}
@@ -409,8 +444,13 @@ static int check_new_member(struct di_object_internal *obj, struct di_member *m)
 		return -EEXIST;
 	}
 
-	if (strncmp(m->name, "__get_", 6) == 0) {
-		const char *fname = m->name + 6;
+	static const char *const getter_prefix = "__get_";
+	const size_t getter_prefix_len = strlen(getter_prefix);
+	static const char *const setter_prefix = "__set_";
+	const size_t setter_prefix_len = strlen(setter_prefix);
+
+	if (strncmp(m->name, getter_prefix, getter_prefix_len) == 0) {
+		const char *fname = m->name + getter_prefix_len;
 		if (strncmp(fname, "__", 2) == 0) {
 			return -EINVAL;
 		}
@@ -419,8 +459,8 @@ static int check_new_member(struct di_object_internal *obj, struct di_member *m)
 		if (om) {
 			return -EEXIST;
 		}
-	} else if (strncmp(m->name, "__set_", 6) == 0) {
-		const char *fname = m->name + 6;
+	} else if (strncmp(m->name, setter_prefix, setter_prefix_len) == 0) {
+		const char *fname = m->name + setter_prefix_len;
 		if (strncmp(fname, "__", 2) == 0) {
 			return -EINVAL;
 		}
@@ -580,6 +620,9 @@ PUBLIC void di_free_value(di_type_t t, void *ptr) {
 		obj = val->object;
 		di_unref_object(obj);
 		break;
+	case DI_TYPE_WEAK_OBJECT:
+		di_drop_weak_ref(&val->weak_object);
+		break;
 	case DI_TYPE_VARIANT:
 		di_free_value(val->variant.type, val->variant.value);
 		free(val->variant.value);
@@ -647,6 +690,9 @@ PUBLIC void di_copy_value(di_type_t t, void *dst, const void *src) {
 	case DI_TYPE_OBJECT:
 		di_ref_object(srcval->object);
 		dstval->object = srcval->object;
+		break;
+	case DI_TYPE_WEAK_OBJECT:
+		dstval->weak_object = di_weakly_ref_object(srcval->object);
 		break;
 	case DI_TYPE_NIL:
 		// nothing to do
@@ -897,8 +943,8 @@ PUBLIC int di_emitn(struct di_object *o, const char *name, struct di_tuple t) {
 void di_dump_objects(void) {
 	struct di_object_internal *i;
 	list_for_each_entry (i, &all_objects, siblings) {
-		fprintf(stderr, "%p, ref count: %lu, type: %s\n", i, i->ref_count,
-		        di_get_type((void *)i));
+		fprintf(stderr, "%p, ref count: %lu strong %lu weak, type: %s\n", i,
+		        i->ref_count, i->weak_ref_count, di_get_type((void *)i));
 		for (struct di_member *m = i->members; m != NULL; m = m->hh.next) {
 			fprintf(stderr, "\tmember: %s, type: %s\n", m->name,
 			        di_type_to_string(m->type));

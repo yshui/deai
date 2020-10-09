@@ -109,3 +109,9 @@ static void unused __clang_cleanup_func(void (^*dfunc)(void)) {
 			return ERR_PTR(__di_ok_or_ret_tmp);                              \
 		}                                                                        \
 	} while (0)
+
+#if defined(__LP64__) && __LP64__
+#define PTR_POISON ((void *)0xffffffc01dcaffee)
+#else
+#define PTR_POISON ((void *)0xc01dcafe)
+#endif

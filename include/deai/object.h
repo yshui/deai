@@ -99,6 +99,9 @@ typedef enum di_type {
 	// a deai object reference
 	// C type: struct di_object *
 	DI_TYPE_OBJECT,
+	// a weak deai object reference
+	// C type: struct di_weak_object
+	DI_TYPE_WEAK_OBJECT,
 	// utf-8 string
 	// C type: char *
 	DI_TYPE_STRING,
@@ -136,9 +139,10 @@ struct di_listener;
 struct di_callable;
 struct di_member;
 struct di_module;
+struct di_weak_object;
 
 struct di_object {
-	alignas(8) char padding[64];
+	alignas(8) char padding[128];
 };
 
 struct di_array {
@@ -171,6 +175,7 @@ union di_value {
 	double float_;
 	void *nullable pointer;
 	struct di_object *nonnull object;
+	struct di_weak_object *nonnull weak_object;
 	char *nonnull string;
 	const char *nonnull string_literal;
 	struct di_array array;
@@ -295,8 +300,21 @@ void di_destroy_object(struct di_object *nonnull);
 // Detach all listeners attached to object, __detach of listeners will be called
 void di_clear_listeners(struct di_object *nonnull);
 
-struct di_object *nonnull di_ref_object(struct di_object *nonnull);
-void di_unref_object(struct di_object *nonnull);
+struct di_object *nonnull allocates(malloc) di_ref_object(struct di_object *nonnull);
+
+/// Create a weak reference to a di_object. The object could be NULL, in that case, an
+/// empty reference is created.
+struct di_weak_object *nonnull di_weakly_ref_object(struct di_object *nullable);
+
+/// Upgrade a weak object reference to an object reference.
+///
+/// @return An object reference, or NULL if the object has been freed.
+struct di_object *nullable allocates(malloc) di_upgrade_weak_ref(struct di_weak_object *nonnull);
+
+/// Drop a weak object reference. After this function returns, the passed pointer will
+/// become invalid
+void di_drop_weak_ref(struct di_weak_object *nonnull *nonnull);
+void frees(malloc, 1) di_unref_object(struct di_object *nonnull);
 
 void di_set_object_dtor(struct di_object *nonnull, di_dtor_fn_t nullable);
 void di_set_object_call(struct di_object *nonnull, di_call_fn_t nullable);
@@ -341,6 +359,8 @@ static inline unused size_t di_sizeof_type(di_type_t t) {
 	case DI_TYPE_OBJECT:
 	case DI_TYPE_POINTER:
 		return sizeof(void *);
+	case DI_TYPE_WEAK_OBJECT:
+		return sizeof(struct di_weak_object *);
 	case DI_TYPE_BOOL:
 		return sizeof(bool);
 	}

@@ -52,10 +52,14 @@ di.event.timer(0.2).on("elapsed", true, function()
     outs = o.randr.outputs
     for _, i in pairs(outs) do
         print(i.name, i.backlight, i.max_backlight)
-        vc = i.view.config
-        print(vc.x, vc.y, vc.width, vc.height, vc.rotation, vc.reflection)
-        i.view.config = {x=vc.x, y=vc.y, rotation=vc.rotation, reflection=vc.reflection, mode=modes[1].id}
-        print(i.view.outputs[1].name)
+        local vc = i.view.config
+        if vc then
+            print(vc.x, vc.y, vc.width, vc.height, vc.rotation, vc.reflection)
+            i.view.config = {x=vc.x, y=vc.y, rotation=vc.rotation, reflection=vc.reflection, mode=modes[1].id}
+        end
+        if i.view.outputs then
+            print(i.view.outputs[1].name)
+        end
     end
 
     di.spawn.run({"xrandr", "--output", "screen", "--off"}, true)

@@ -176,8 +176,9 @@ int di_proxy_signal(struct di_object *nonnull src, const char *nonnull srcsig,
 			void *ret;                                                       \
 			rc = di_callx((struct di_object *)(o), (name), &rtype, &ret,     \
 			              di_arg_list(__VA_ARGS__));                         \
-			if (rc != 0)                                                     \
+			if (rc != 0) {                                                   \
 				break;                                                   \
+			}                                                                \
 			di_free_value(rtype, (void *)ret);                               \
 			free((void *)ret);                                               \
 		} while (0);                                                             \
@@ -351,7 +352,7 @@ static inline unused const char *nonnull di_type_to_string(di_type_t type) {
 	switch (type) {
 		LIST_APPLY(TYPE_CASE, SEP_COLON, NIL, ANY, BOOL, INT, UINT, NINT, NUINT,
 		           FLOAT, STRING, STRING_LITERAL);
-		LIST_APPLY(TYPE_CASE, SEP_COLON, TUPLE, ARRAY, VARIANT, OBJECT, POINTER);
+		LIST_APPLY(TYPE_CASE, SEP_COLON, TUPLE, ARRAY, VARIANT, OBJECT, WEAK_OBJECT, POINTER);
 	case DI_LAST_TYPE:
 		return "LAST_TYPE";
 	}

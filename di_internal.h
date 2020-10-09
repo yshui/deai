@@ -33,14 +33,15 @@ struct di_object_internal {
 	di_call_fn_t nullable call;
 
 	uint64_t ref_count;
+	uint64_t weak_ref_count;
 	uint8_t destroyed;
 
 #ifdef TRACK_OBJECTS
-	char padding[7];
+	char padding[63];
 	struct list_head siblings;
 #else
 	// Reserved for future use
-	char padding[23];
+	char padding[79];
 #endif
 };
 

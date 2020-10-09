@@ -20,6 +20,20 @@
 # define __has_feature(x) 0
 #endif
 
+#ifndef __has_attribute
+# define __has_attribute(x) 0
+#endif
+
+#if __has_attribute(ownership_returns)
+# define allocates(name) __attribute__((ownership_returns(name)))
+# define frees(name, id) __attribute__((ownership_takes(name, id)))
+# define holds(name, id) __attribute__((ownership_holds(name, id)))
+#else
+# define allocates(name)
+# define frees(name, id)
+# define holds(name, id)
+#endif
+
 #if !__has_feature(nullability)
 # define nonnull
 # define nullable

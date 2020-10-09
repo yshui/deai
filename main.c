@@ -493,7 +493,8 @@ int main(int argc, char *argv[]) {
 	// (3) Load default plugins
 	int ret = load_plugin_dir(p, DI_PLUGIN_INSTALL_DIR);
 	if (ret != 0) {
-		fprintf(stderr, "Failed to load plugins\n");
+		fprintf(stderr, "Failed to load plugins from \"%s\", which is fine.\n",
+		        DI_PLUGIN_INSTALL_DIR);
 	}
 
 	struct di_object *mod = NULL;

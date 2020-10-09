@@ -76,6 +76,7 @@ struct di_lua_script {
 
 static int di_lua_pushvariant(lua_State *L, const char *name, struct di_variant var);
 static int di_lua_getter(lua_State *L);
+static int di_lua_getter_for_weak_object(lua_State *L);
 static int di_lua_setter(lua_State *L);
 
 static int di_lua_errfunc(lua_State *L) {
@@ -106,7 +107,7 @@ static void di_lua_free_script(struct di_lua_script *s) {
 	s->L = NULL;
 }
 
-static bool di_lua_isobject(lua_State *L, int index) {
+static bool di_lua_isproxy(lua_State *L, int index) {
 	bool ret = false;
 	do {
 		if (!lua_isuserdata(L, index)) {
@@ -129,8 +130,8 @@ static bool di_lua_isobject(lua_State *L, int index) {
 	return ret;
 }
 
-static struct di_object *di_lua_checkobject(lua_State *L, int index) {
-	if (di_lua_isobject(L, index)) {
+static void *di_lua_checkproxy(lua_State *L, int index) {
+	if (di_lua_isproxy(L, index)) {
 		return *(struct di_object **)lua_touserdata(L, index);
 	}
 	luaL_argerror(L, index, "not a di_object");
@@ -266,50 +267,83 @@ static int di_lua_method_handler(lua_State *L) {
 }
 
 static int di_lua_gc(lua_State *L) {
-	struct di_object *o = di_lua_checkobject(L, 1);
+	struct di_object *o = di_lua_checkproxy(L, 1);
 	// fprintf(stderr, "lua gc %p\n", lo);
 	di_unref_object(o);
 	return 0;
 }
 
-const luaL_Reg di_lua_methods[] = {
+static int di_lua_gc_for_weak_object(lua_State *L) {
+	struct di_weak_object *weak = di_lua_checkproxy(L, 1);
+	di_drop_weak_ref(&weak);
+	return 0;
+}
+
+const luaL_Reg di_lua_object_methods[] = {
     {"__index", di_lua_getter},
     {"__newindex", di_lua_setter},
     {"__gc", di_lua_gc},
     {0, 0},
 };
 
-static void di_lua_create_metatable_for_object(lua_State *L, const luaL_Reg *reg) {
-	lua_pushcclosure(L, di_lua_method_handler, 2);
+const luaL_Reg di_lua_weak_object_methods[] = {
+    {"__index", di_lua_getter_for_weak_object},
+    {"__gc", di_lua_gc_for_weak_object},
+    {0, 0},
+};
 
+// Expected stack layout:
+//
+// | name of the object |   -- if callable == true
+// | the object (light) |   -- for use with method_handler closure, if callable == true
+// |  the object (full) |
+static void
+di_lua_create_metatable_for_object(lua_State *L, const luaL_Reg *reg, bool callable) {
+	if (callable) {
+		lua_pushcclosure(L, di_lua_method_handler, 2);
+	}
+
+	// Stack layout here:
+	//
+	// |      closure      |   -- if callable == true
+	// | the object (full) |
 	lua_newtable(L);
 	luaL_setfuncs(L, reg, 0);
 	lua_pushliteral(L, "__deai");
 	lua_pushboolean(L, true);
 	lua_rawset(L, -3);
 
-	lua_insert(L, -2);
-	lua_pushliteral(L, "__call");
-	lua_insert(L, -2);
-	lua_rawset(L, -3);
+	if (callable) {
+		// Stack: [ metatable, closure, object ]
+		lua_insert(L, -2);
+		lua_pushliteral(L, "__call");
+		lua_insert(L, -2);
+		// Stack: [ closure, "__call", metatable, object ]
+		lua_rawset(L, -3);
+	}
+
+	// Stack: [ metatable, object ]
 	lua_setmetatable(L, -2);
 }
 
-static void
-di_lua_pushobject(lua_State *L, const char *name, struct di_object *o, const luaL_Reg *reg) {
+// Push an object `o` to lua stack. Note this function doesn't increment the reference
+// count of `o`.
+static void di_lua_pushobject(lua_State *L, const char *name, struct di_object *o,
+                              const luaL_Reg *reg, bool callable) {
 	// struct di_lua_script *s;
 	void **ptr;
 	ptr = lua_newuserdata(L, sizeof(void *));
-	di_ref_object(o);
 	*ptr = o;
 
-	lua_pushlightuserdata(L, o);
-	if (name) {
-		lua_pushstring(L, name);
-	} else {
-		lua_pushstring(L, "(anonymous)");
+	if (callable) {
+		lua_pushlightuserdata(L, o);
+		if (name) {
+			lua_pushstring(L, name);
+		} else {
+			lua_pushstring(L, "(anonymous)");
+		}
 	}
-	di_lua_create_metatable_for_object(L, reg);
+	di_lua_create_metatable_for_object(L, reg, callable);
 }
 
 const char *allowed_os[] = {"time", "difftime", "clock", "tmpname", "date", NULL};
@@ -335,7 +369,8 @@ static void lua_new_state(struct di_module *m) {
 	luaL_openlibs(L->L);
 
 	struct di_object *di = (void *)di_module_get_deai(m);
-	di_lua_pushobject(L->L, "di", di, di_lua_di_methods);
+	di_ref_object(di);
+	di_lua_pushobject(L->L, "di", di, di_lua_di_methods, false);
 	// Make it a weak ref
 	// TODO(yshui) add proper weak ref
 	di_unref_object(di);
@@ -595,7 +630,7 @@ static void *di_lua_type_to_di(lua_State *L, int i, di_type_t *t) {
 	case LUA_TSTRING:
 		ret_arg(i, DI_TYPE_STRING, const char *, tostringdup);
 	case LUA_TUSERDATA:
-		if (!di_lua_isobject(L, i)) {
+		if (!di_lua_isproxy(L, i)) {
 			goto type_error;
 		}
 		ret_arg(i, DI_TYPE_OBJECT, void *, toobjref);
@@ -642,7 +677,7 @@ static void *di_lua_type_to_di(lua_State *L, int i, di_type_t *t) {
 }
 
 static int di_lua_listener_gc(lua_State *L) {
-	struct di_object *o = di_lua_checkobject(L, 1);
+	struct di_object *o = di_lua_checkproxy(L, 1);
 	// fprintf(stderr, "lua gc %p\n", lo);
 	di_stop_listener((struct di_listener *)o);
 	return 0;
@@ -681,7 +716,8 @@ static int di_lua_add_listener(lua_State *L) {
 	h->attached_listener = l;
 	di_unref_object((void *)h);
 
-	di_lua_pushobject(L, NULL, (void *)l, di_lua_methods);
+	di_ref_object((void *)l);
+	di_lua_pushobject(L, NULL, (void *)l, di_lua_object_methods, false);
 	return 1;
 }
 
@@ -748,7 +784,11 @@ static int di_lua_pushvariant(lua_State *L, const char *name, struct di_variant 
 		lua_pushlightuserdata(L, var.value->pointer);
 		return 1;
 	case DI_TYPE_OBJECT:
-		di_lua_pushobject(L, name, var.value->object, di_lua_methods);
+		di_ref_object(var.value->object);
+		di_lua_pushobject(L, name, var.value->object, di_lua_object_methods, true);
+		return 1;
+	case DI_TYPE_WEAK_OBJECT:
+		di_lua_pushobject(L, name, var.value->object, di_lua_weak_object_methods, false);
 		return 1;
 	case DI_TYPE_STRING:
 		lua_pushstring(L, var.value->string);
@@ -822,6 +862,44 @@ int di_lua_emit_signal(lua_State *L) {
 	return 0;
 }
 
+static int di_lua_upgrade_weak_ref(lua_State *L) {
+	struct di_weak_object *weak = lua_touserdata(L, lua_upvalueindex(1));
+	struct di_object *strong = di_upgrade_weak_ref(weak);
+	if (strong == NULL) {
+		return 0;
+	}
+	di_lua_pushobject(L, NULL, strong, di_lua_object_methods, true);
+	return 1;
+}
+
+static int di_lua_weak_ref(lua_State *L) {
+	struct di_object *strong = lua_touserdata(L, lua_upvalueindex(1));
+	union di_value weak = { .weak_object = di_weakly_ref_object(strong) };
+	return di_lua_pushvariant(
+	    L, NULL, (struct di_variant){.type = DI_TYPE_WEAK_OBJECT, .value = &weak});
+}
+
+static int di_lua_getter_for_weak_object(lua_State *L) {
+	/* This is __index for lua di_weak_object proxies. Weak object reference proxies
+	 * only have one method, `upgrade()`, to retrieve a strong object reference
+	 */
+
+	if (lua_gettop(L) != 2) {
+		return luaL_error(L, "wrong number of arguments to __index");
+	}
+
+	const char *key = luaL_checklstring(L, 2, NULL);
+	void *ud = di_lua_checkproxy(L, 1);
+
+	if (strcmp(key, "upgrade") == 0) {
+		lua_pushlightuserdata(L, ud);
+		lua_pushcclosure(L, di_lua_upgrade_weak_ref, 1);
+		return 1;
+	}
+
+	return 0;
+}
+
 static int di_lua_getter(lua_State *L) {
 
 	/* This is __index for lua di_object proxies. This function
@@ -836,7 +914,7 @@ static int di_lua_getter(lua_State *L) {
 	}
 
 	const char *key = luaL_checklstring(L, 2, NULL);
-	struct di_object *ud = di_lua_checkobject(L, 1);
+	struct di_object *ud = di_lua_checkproxy(L, 1);
 
 	// Eliminate special methods
 	if (strcmp(key, "on") == 0) {
@@ -852,6 +930,11 @@ static int di_lua_getter(lua_State *L) {
 	if (strcmp(key, "emit") == 0) {
 		lua_pushlightuserdata(L, ud);
 		lua_pushcclosure(L, di_lua_emit_signal, 1);
+		return 1;
+	}
+	if (strcmp(key, "weakref") == 0) {
+		lua_pushlightuserdata(L, ud);
+		lua_pushcclosure(L, di_lua_weak_ref, 1);
 		return 1;
 	}
 
@@ -879,7 +962,7 @@ static int di_lua_setter(lua_State *L) {
 		return luaL_error(L, "wrong number of arguments to __newindex");
 	}
 
-	struct di_object *ud = di_lua_checkobject(L, 1);
+	struct di_object *ud = di_lua_checkproxy(L, 1);
 	const char *key = luaL_checkstring(L, 2);
 	di_type_t vt;
 

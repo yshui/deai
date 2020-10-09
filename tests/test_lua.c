@@ -4,6 +4,11 @@
 
 #include "common.h"
 
+/// Convenient method to create an empty di_object
+static struct di_object *create_di_object(struct di_object *unused obj) {
+	return di_new_object_with_type(struct di_object);
+}
+
 PUBLIC int di_plugin_init(struct deai *di) {
 	di_remove_member((struct di_object *)di, "lua");
 	di_remove_member((struct di_object *)di, "xorg");
@@ -16,14 +21,17 @@ PUBLIC int di_plugin_init(struct deai *di) {
 	di_getmi(di, lua);
 	assert(luam);
 
+	di_method(di, "create_di_object", create_di_object);
+
 	struct di_array dargv;
 	di_get(di, "argv", dargv);
 
 	const char **argv = dargv.arr;
 	for (int i = 0; i < dargv.length; i++) {
 		if (strcmp(argv[i], "--") == 0) {
-			if (i + 1 < dargv.length)
+			if (i + 1 < dargv.length) {
 				di_call(luam, "load_script", argv[i + 1]);
+			}
 			break;
 		}
 	}
