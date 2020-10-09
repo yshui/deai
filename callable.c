@@ -15,9 +15,6 @@
 
 struct di_typed_method {
 	struct di_object_internal;
-
-	/// The `this` pointer, which is passed as the first argument to the function.
-	struct di_object *this;
 	void (*nonnull fn)(void);
 
 	/// Number of arguments
@@ -167,7 +164,19 @@ method_trampoline(struct di_object *o, di_type_t *rtype, void **ret, struct di_t
 		*ret = NULL;
 	}
 
-	void *this = tm->this;
+	void *weak_this;
+	int rc = di_rawgetxt(o, "__this", DI_TYPE_WEAK_OBJECT, &weak_this);
+	DI_CHECK(rc == 0, "this pointer not found in method?");
+
+	with_object_cleanup(di_object) this =
+	    di_upgrade_weak_ref(*(struct di_weak_object **)weak_this);
+	di_free_value(DI_TYPE_WEAK_OBJECT, weak_this);
+	free(weak_this);
+
+	if (this == NULL) {
+		// this pointer is gone
+		return -EBADF;
+	}
 	return _di_typed_trampoline(&tm->cif, tm->fn, *ret, tm->atypes + 1, 1,
 	                            (const void *[]){&this}, t);
 }
@@ -315,7 +324,10 @@ PUBLIC int di_add_method(struct di_object *o, const char *name, void (*fn)(void)
 
 	DI_OK_OR_RET(di_set_type((void *)f, "deai:method"));
 
-	f->this = o;
+	auto weak_this = di_weakly_ref_object(o);
+	di_add_member_clone((struct di_object *)f, "__this", DI_TYPE_WEAK_OBJECT, weak_this);
+	di_drop_weak_ref(&weak_this);
+
 	return di_add_member_move(o, name, (di_type_t[]){DI_TYPE_OBJECT}, (void **)&f);
 }
 
