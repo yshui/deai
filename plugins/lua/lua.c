@@ -989,15 +989,20 @@ static int di_lua_setter(lua_State *L) {
 		return luaL_error(L, "unhandled lua type");
 	}
 
-	int ret = di_setx(ud, key, vt, &val);
-	di_free_value(vt, &val);
+	int ret;
+	if (vt == DI_TYPE_NIL) {
+		ret = di_remove_member(ud, key);
+	} else {
+		ret = di_setx(ud, key, vt, &val);
+		di_free_value(vt, &val);
+	}
 
 	if (ret != 0) {
 		if (ret == -EINVAL) {
 			return luaL_error(L, "property %s type mismatch", key);
 		}
 		if (ret == -ENOENT) {
-			return luaL_error(L, "property %s doesn't exist or is read only", key);
+			return luaL_error(L, "property %s doesn't exist", key);
 		}
 	}
 	return 0;
