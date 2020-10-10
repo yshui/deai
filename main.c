@@ -253,14 +253,6 @@ static void kill_all_descendants(void) {
 void di_dtor(struct deai *di) {
 	*di->quit = true;
 
-	// Drop all the anonymous roots
-	struct di_anonymous_root *i, *tmp;
-	list_for_each_entry_safe(i, tmp, &di->anonymous_roots, siblings) {
-		di_unref_object(i->obj);
-
-		// Note we cannot free `i` here, cause someone is still holding it.
-	}
-
 #ifdef HAVE_SETPROCTITLE
 	for (int i = 0; i < di->argc; i++) {
 		free(di->argv[i]);
@@ -393,29 +385,21 @@ void di_terminate(struct deai *p) {
 }
 
 /// Add an named object as a root to keep it alive
-void di_add_root(struct di_object *di, const char *key, struct di_object *obj) {
-	di_getmi(di, log);
-
+bool di_add_root(struct di_object *di, const char *key, struct di_object *obj) {
 	char *buf;
 	asprintf(&buf, "__root_%s", key);
 	int rc = di_add_member_clone(di, buf, DI_TYPE_OBJECT, obj);
-	if (rc != 0) {
-		di_log_va(logm, DI_LOG_ERROR, "cannot add root\n");
-	}
 	free(buf);
+	return rc == 0;
 }
 
 /// Remove an named root from roots
-void di_remove_root(struct di_object *di, const char *key) {
-	di_getmi(di, log);
-
+bool di_remove_root(struct di_object *di, const char *key) {
 	char *buf;
 	asprintf(&buf, "__root_%s", key);
 	int rc = di_remove_member_raw(di, buf);
-	if (rc != 0) {
-		di_log_va(logm, DI_LOG_ERROR, "cannot remove root\n");
-	}
 	free(buf);
+	return rc == 0;
 }
 
 /// Remove all named roots
@@ -434,11 +418,11 @@ void di_clear_roots(struct di_object *di_) {
 /// but the caller instead needs to keep a handle to the root in order to remove it.
 ///
 /// Forgetting about the returned handle is leaking memory.
-void *di_add_anonymous_root(struct di_object *obj, struct di_object *root) {
-	auto di = (struct deai *)obj;
+void *di_add_anonymous_root(struct di_weak_object *obj, struct di_object *root) {
+	auto roots = (struct di_roots *)obj;
 	auto aroot = tmalloc(struct di_anonymous_root, 1);
 	aroot->obj = di_ref_object(root);
-	list_add(&aroot->siblings, &di->anonymous_roots);
+	list_add(&aroot->siblings, &roots->anonymous_roots);
 	return aroot;
 }
 
@@ -450,18 +434,40 @@ void di_remove_anonymous_root(struct di_object *obj, void *root_handle) {
 	free(aroot);
 }
 
+void di_roots_dtor(struct di_object *obj) {
+	// Drop all the anonymous roots
+	auto roots = (struct di_roots *)obj;
+	struct di_anonymous_root *i, *tmp;
+	list_for_each_entry_safe(i, tmp, &roots->anonymous_roots, siblings) {
+		di_unref_object(i->obj);
+
+		// Note we cannot free `i` here, cause someone is still holding it.
+	}
+}
+
 int main(int argc, char *argv[]) {
 #ifdef TRACK_OBJECTS
 	INIT_LIST_HEAD(&all_objects);
 #endif
-	struct deai *p = di_new_object_with_type(struct deai);
+	auto p = di_new_object_with_type(struct deai);
+	auto roots = di_new_object_with_type(struct di_roots);
+	INIT_LIST_HEAD(&roots->anonymous_roots);
+	DI_CHECK_OK(di_method(roots, "add", di_add_root, const char *, struct di_object *));
+	DI_CHECK_OK(di_method(roots, "remove", di_remove_root, const char *));
+	DI_CHECK_OK(di_method(roots, "clear", di_clear_roots));
+	DI_CHECK_OK(di_method(roots, "add_anonymous", di_add_anonymous_root, struct di_object *));
+	DI_CHECK_OK(di_method(roots, "remove_anonymous", di_remove_anonymous_root, void *));
+	di_set_object_dtor((struct di_object *)roots, di_roots_dtor);
+
+	auto weak_roots = di_weakly_ref_object((struct di_object *)roots);
+	DI_CHECK_OK(di_member(p, "roots", weak_roots));
+
 	int exit_code = 0;
 	bool quit = false;
 	p->loop = EV_DEFAULT;
 	p->exit_code = &exit_code;
 	p->quit = &quit;
 	p->dtor = (void *)di_dtor;
-	INIT_LIST_HEAD(&p->anonymous_roots);
 
 	// We want to be our own process group leader
 	setpgid(0, 0);
@@ -481,11 +487,6 @@ int main(int argc, char *argv[]) {
 	DI_CHECK_OK(di_method(p, "load_plugin", load_plugin, char *));
 	DI_CHECK_OK(di_method(p, "register_module", di_register_module_method, char *,
 	                      struct di_object *));
-	DI_CHECK_OK(di_method(p, "add_root", di_add_root, const char *, struct di_object *));
-	DI_CHECK_OK(di_method(p, "remove_root", di_remove_root, const char *));
-	DI_CHECK_OK(di_method(p, "clear_roots", di_clear_roots));
-	DI_CHECK_OK(di_method(p, "add_anonymous_root", di_add_anonymous_root, struct di_object *));
-	DI_CHECK_OK(di_method(p, "remove_anonymous_root", di_remove_anonymous_root, void *));
 	DI_CHECK_OK(di_method(p, "chdir", di_chdir, char *));
 	DI_CHECK_OK(di_method(p, "exec", di_exec, struct di_array));
 
@@ -604,6 +605,10 @@ int main(int argc, char *argv[]) {
 	if (!quit) {
 		ev_run(p->loop, 0);
 	}
+
+	di_unref_object((struct di_object *)roots);
+	// Set to NULL so the leak checker can catch leaks
+	roots = NULL;
 
 	return exit_code;
 }

@@ -1,5 +1,6 @@
 obj = di:create_di_object()
-di:add_root("test_root", obj)
+roots = di.roots:upgrade()
+roots:add("test_root", obj)
 weak = obj:weakref()
 obj = nil
 
@@ -9,7 +10,7 @@ collectgarbage("collect")
 obj = weak:upgrade()
 assert(obj ~= nil)
 
-di:remove_root("test_root")
+roots:remove("test_root")
 obj = nil
 
 collectgarbage("collect")
@@ -19,13 +20,13 @@ obj = weak:upgrade()
 assert(obj == nil)
 
 obj = di:create_di_object()
-di:add_root("test_root", obj)
+roots:add("test_root", obj)
 weak = obj:weakref()
 obj = nil
 
 collectgarbage("collect")
 
-di:clear_roots()
+roots:clear()
 
 -- check if clear_roots works
 obj = weak:upgrade()
