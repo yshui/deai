@@ -157,12 +157,12 @@ static struct di_object *di_file_new_watch(struct di_module *f, struct di_array 
 	struct di_object *tmpo = (void *)fw;
 	auto cl = di_closure(di_file_ioev, true, (tmpo));
 	fw->fdev_listener = di_listen_to(fw->fdev, "read", (void *)cl);
-	di_set_detach(fw->fdev_listener, trivial_destroyed_handler, (void *)fw);
 	di_unref_object((void *)cl);
 
 	const char **arr = paths.arr;
-	for (int i = 0; i < paths.length; i++)
+	for (int i = 0; i < paths.length; i++) {
 		di_file_add_watch(fw, arr[i]);
+	}
 
 	return (void *)fw;
 }

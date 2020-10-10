@@ -279,6 +279,9 @@ int di_proxy_signal(struct di_object *nonnull src, const char *nonnull srcsig,
 		rc;                                                                      \
 	})
 
+// Note: this is just used to create a value of `type`, but this value is not guaranteed
+// to be a valid value for `type` at runtime. This is only meant to be used for compile
+// time metaprogramming
 #define TYPE_INIT(type)                                                                  \
 	_Generic((type *)0, \
 	struct di_array *: DI_ARRAY_INIT, \
@@ -322,20 +325,6 @@ static inline void nonnull_args(1) __free_objp(struct di_object *nullable *nonnu
 
 static void unused nonnull_all trivial_destroyed_handler(struct di_object *nonnull o) {
 	di_destroy_object(o);
-}
-
-static void unused nonnull_all trivial_detach(struct di_object *nonnull o) {
-	di_destroy_object(o);
-}
-
-typedef void (*nonnull di_detach_fn_t)(struct di_object *nonnull);
-
-static inline int nonnull_all di_set_detach(struct di_listener *nonnull l,
-                                            di_detach_fn_t fn, struct di_object *nonnull o) {
-	struct di_closure *cl = di_closure(fn, true, (o));
-	int ret = di_add_member_clone((struct di_object *)l, "__detach", DI_TYPE_OBJECT, cl);
-	di_unref_object((void *)cl);
-	return ret;
 }
 
 static inline unused const char *nonnull di_type_to_string(di_type_t type) {

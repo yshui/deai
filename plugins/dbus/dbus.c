@@ -455,7 +455,6 @@ static unsigned int _dbus_add_watch(DBusWatch *w, void *ud) {
 
 	dbus_watch_set_data(w, l, (void *)di_stop_listener);
 
-	di_set_detach(l, (void *)di_dbus_shutdown, (void *)oc);
 	return true;
 }
 

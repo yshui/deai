@@ -106,7 +106,6 @@ PUBLIC int di_proxy_signal(struct di_object *src, const char *srcsig,
 	}
 
 	auto l = di_listen_to(src, srcsig, (void *)c);
-	di_set_detach(l, _del_proxied_signal, (void *)c);
 	c->l = l;
 	return 0;
 }

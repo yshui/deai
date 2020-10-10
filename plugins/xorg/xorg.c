@@ -30,8 +30,9 @@ define_trivial_cleanup_t(xcb_generic_error_t);
 
 static void di_xorg_free_sub(struct di_xorg_ext *x) {
 	if (x->dc) {
-		if (x->free)
+		if (x->free) {
 			x->free(x);
+		}
 		HASH_DEL(x->dc->xext, x);
 		di_unref_object((void *)x->dc);
 		x->dc = NULL;
@@ -39,8 +40,9 @@ static void di_xorg_free_sub(struct di_xorg_ext *x) {
 }
 
 static void xorg_disconnect(struct di_xorg_connection *xc) {
-	if (!xc->xcb_fd)
+	if (!xc->xcb_fd) {
 		return;
+	}
 
 	di_stop_listener(xc->xcb_fdlistener);
 	di_unref_object((void *)xc->xcb_fd);
@@ -456,9 +458,6 @@ static struct di_object *di_xorg_connect_to(struct di_xorg *x, const char *displ
 	di_unref_object((void *)cl);
 
 	di_set_object_dtor((void *)dc, (void *)xorg_disconnect);
-
-	ABRT_IF_ERR(di_set_detach(dc->xcb_fdlistener, (di_detach_fn_t)xorg_disconnect,
-	                          (void *)dc));
 
 	di_method(dc, "__get", di_xorg_get_ext, char *);
 	di_method(dc, "__get_xrdb", di_xorg_get_resource);
