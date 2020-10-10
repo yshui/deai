@@ -355,7 +355,7 @@ static struct di_array di_get_argv(struct deai *p) {
 	return ret;
 }
 
-PUBLIC int di_register_module(struct deai *p, const char *name, struct di_module **m) {
+PUBLIC_DEAI_API int di_register_module(struct deai *p, const char *name, struct di_module **m) {
 	int ret =
 	    di_add_member_move((void *)p, name, (di_type_t[]){DI_TYPE_OBJECT}, (void **)m);
 	return ret;

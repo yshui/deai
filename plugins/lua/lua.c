@@ -979,7 +979,7 @@ static int di_lua_meta_newindex(lua_State *L) {
 	return 0;
 }
 
-PUBLIC int di_plugin_init(struct deai *di) {
+PUBLIC_DEAI_API int di_plugin_init(struct deai *di) {
 	auto m = di_new_module(di);
 
 	di_method(m, "load_script", di_lua_load_script, char *);

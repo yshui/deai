@@ -44,4 +44,4 @@
 # define null_unspecified _Null_unspecified
 #endif
 
-#define PUBLIC __attribute__((visibility("default")))
+#define PUBLIC_DEAI_API __attribute__((visibility("default")))

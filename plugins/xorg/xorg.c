@@ -478,7 +478,7 @@ static struct di_object *di_xorg_connect_to(struct di_xorg *x, const char *displ
 static struct di_object *di_xorg_connect(struct di_xorg *x) {
 	return di_xorg_connect_to(x, NULL);
 }
-PUBLIC int di_plugin_init(struct deai *di) {
+PUBLIC_DEAI_API int di_plugin_init(struct deai *di) {
 	auto x = di_new_module(di);
 
 	di_method(x, "connect", di_xorg_connect);

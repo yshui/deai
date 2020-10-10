@@ -13,7 +13,7 @@ static void takes_string_and_modify(void *obj unused, char *str) {
 	*str = '\0';
 }
 
-PUBLIC int di_plugin_init(struct deai *di) {
+PUBLIC_DEAI_API int di_plugin_init(struct deai *di) {
 	DI_CHECK_OK(di_method(di, "takes_string", takes_string, char *));
 	DI_CHECK_OK(di_method(di, "takes_string_and_modify", takes_string_and_modify, char *));
 

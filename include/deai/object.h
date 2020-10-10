@@ -194,16 +194,18 @@ union di_value {
 ///
 /// @param[out] rt The return type of the function
 /// @param[out] ret The return value, MUST BE a pointer to a full di_value
-int di_rawcallxn(struct di_object *nonnull o, const char *nonnull name, di_type_t *nonnull rt,
-                 union di_value *nonnull ret, struct di_tuple args, bool *nonnull called);
+PUBLIC_DEAI_API int
+di_rawcallxn(struct di_object *nonnull o, const char *nonnull name, di_type_t *nonnull rt,
+             union di_value *nonnull ret, struct di_tuple args, bool *nonnull called);
 
 /// Like `di_rawcallxn`, but also calls getter functions to fetch the member object. And
 /// the arguments are pass as variadic arguments. Arguments are passed as pairs of type
 /// ids and values, end with DI_LAST_TYPE.
 ///
 /// You shouldn't use this function directly, use the `di_call` macro if you are using C.
-int di_callx(struct di_object *nonnull o, const char *nonnull name, di_type_t *nonnull rt,
-             union di_value *nonnull ret, struct di_tuple args, bool *nonnull called);
+PUBLIC_DEAI_API int
+di_callx(struct di_object *nonnull o, const char *nonnull name, di_type_t *nonnull rt,
+         union di_value *nonnull ret, struct di_tuple args, bool *nonnull called);
 
 /// Change the value of member `prop` of object `o`.
 ///
@@ -216,8 +218,8 @@ int di_callx(struct di_object *nonnull o, const char *nonnull name, di_type_t *n
 ///
 /// @param[in] type The type of the value
 /// @param[in] val The value
-int di_setx(struct di_object *nonnull o, const char *nonnull prop, di_type_t type,
-            void *nullable val);
+PUBLIC_DEAI_API int di_setx(struct di_object *nonnull o, const char *nonnull prop,
+                            di_type_t type, void *nullable val);
 
 /// Fetch a member with name `prop` from an object `o`, without calling the getter
 /// functions. The value is cloned, then returned.
@@ -229,8 +231,8 @@ int di_setx(struct di_object *nonnull o, const char *nonnull prop, di_type_t typ
 /// @param[out] type Type of the value
 /// @param[out] ret The value, MUST BE a pointer to a full `union di_value`
 /// @return 0 for success, or an error code.
-int di_rawgetx(struct di_object *nonnull o, const char *nonnull prop,
-               di_type_t *nonnull type, union di_value *nonnull ret);
+PUBLIC_DEAI_API int di_rawgetx(struct di_object *nonnull o, const char *nonnull prop,
+                               di_type_t *nonnull type, union di_value *nonnull ret);
 
 /// Like `di_rawgetx`, but tries to do automatic type conversion to the desired type `type`.
 ///
@@ -242,8 +244,8 @@ int di_rawgetx(struct di_object *nonnull o, const char *nonnull prop,
 ///
 /// @param[out] ret The value
 /// @return 0 for success, or an error code.
-int di_rawgetxt(struct di_object *nonnull o, const char *nonnull prop, di_type_t type,
-                union di_value *nonnull ret);
+PUBLIC_DEAI_API int di_rawgetxt(struct di_object *nonnull o, const char *nonnull prop,
+                                di_type_t type, union di_value *nonnull ret);
 
 /// Like `di_rawgetx`, but also calls getter functions if `prop` is not found.
 /// The getter functions are the generic getter "__get", or the specialized getter
@@ -254,50 +256,53 @@ int di_rawgetxt(struct di_object *nonnull o, const char *nonnull prop, di_type_t
 /// are automatically unpacked recursively. A variant of DI_LAST_TYPE can be used by the
 /// generic getter ("__get") to indicate that `prop` doesn't exist in `o`. Specifialized
 /// getter cannot return DI_LAST_TYPE.
-int di_getx(struct di_object *nonnull o, const char *nonnull prop,
-            di_type_t *nonnull type, union di_value *nonnull ret);
+PUBLIC_DEAI_API int di_getx(struct di_object *nonnull o, const char *nonnull prop,
+                            di_type_t *nonnull type, union di_value *nonnull ret);
 
 /// Like `di_rawgetxt`, but also calls getter functions if `prop` is not found.
-int di_getxt(struct di_object *nonnull o, const char *nonnull prop, di_type_t type,
-             union di_value *nonnull ret);
+PUBLIC_DEAI_API int di_getxt(struct di_object *nonnull o, const char *nonnull prop,
+                             di_type_t type, union di_value *nonnull ret);
 
 /// Set the "__type" member of the object `o`. By convention, "__type" names the type of
 /// the object. Type names should be formated as "<namespace>:<type>". The "deai"
 /// namespace is used by deai.
 ///
 /// @param[in] type The type name, must be a string literal
-int di_set_type(struct di_object *nonnull o, const char *nonnull type);
+PUBLIC_DEAI_API int di_set_type(struct di_object *nonnull o, const char *nonnull type);
 
 /// Get the type name of the object
 ///
 /// @return A const string, the type name. It shouldn't be freed.
-const char *nonnull di_get_type(struct di_object *nonnull o);
+PUBLIC_DEAI_API const char *nonnull di_get_type(struct di_object *nonnull o);
 
 /// Check if the type of the object is `type`
-bool di_check_type(struct di_object *nonnull o, const char *nonnull type);
+PUBLIC_DEAI_API bool di_check_type(struct di_object *nonnull o, const char *nonnull type);
 
 /// Add value (*address) with type `*type` as a member named `name` of object `o`. This
 /// function takes the ownership of *address. After this call, `*type` and `*address` will
 /// be set to invalid values.
-PUBLIC int nonnull_all di_add_member_move(struct di_object *nonnull o, const char *nonnull name,
-                                          di_type_t *nonnull type, void *nonnull address);
+PUBLIC_DEAI_API int nonnull_all di_add_member_move(struct di_object *nonnull o,
+                                                   const char *nonnull name,
+                                                   di_type_t *nonnull type,
+                                                   void *nonnull address);
 
 /// Add a value with type `type` as a member named `name` of object `o`. This function
 /// will cloned the value before adding it as a member.
-PUBLIC int nonnull_all di_add_member_clone(struct di_object *nonnull o,
-                                           const char *nonnull name, di_type_t, ...);
+PUBLIC_DEAI_API int nonnull_all di_add_member_clone(struct di_object *nonnull o,
+                                                    const char *nonnull name, di_type_t, ...);
 
 /// Remove a member of object `o`, without calling the deleter.
-int di_remove_member_raw(struct di_object *nonnull o, const char *nonnull name);
+PUBLIC_DEAI_API int di_remove_member_raw(struct di_object *nonnull o, const char *nonnull name);
 /// Remove a member of object `o`, or call its deleter.
 /// If the specialized deleter `__delete_<name>` exists, it will be called; if not,
 /// the generic deleter, `__delete`, will be tried. At last, this function will try to
 /// find and remove a member with name `name`.
 ///
 /// `name` cannot name an internal member
-int di_remove_member(struct di_object *nonnull o, const char *nonnull name);
-struct di_member *nullable di_lookup(struct di_object *nonnull o, const char *nonnull name);
-struct di_object *nullable di_new_object(size_t sz, size_t alignment);
+PUBLIC_DEAI_API int di_remove_member(struct di_object *nonnull o, const char *nonnull name);
+PUBLIC_DEAI_API struct di_member *nullable di_lookup(struct di_object *nonnull o,
+                                                     const char *nonnull name);
+PUBLIC_DEAI_API struct di_object *nullable di_new_object(size_t sz, size_t alignment);
 
 struct di_listener *nullable di_listen_to(struct di_object *nonnull o, const char *nonnull name,
                                           struct di_object *nullable h);
@@ -308,47 +313,49 @@ struct di_listener *nullable di_listen_to_once(struct di_object *nonnull o,
 // Unscribe from a signal from the listener side. __detach is not called in this case
 // It's guaranteed after calling this, the handler and __detach method will never be
 // called
-int di_stop_listener(struct di_listener *nullable);
+PUBLIC_DEAI_API int di_stop_listener(struct di_listener *nullable);
 /// Emit a signal with `name`, and `args`. The emitter of the signal is responsible of
 /// freeing `args`.
-int di_emitn(struct di_object *nonnull, const char *nonnull name, struct di_tuple args);
+PUBLIC_DEAI_API int
+di_emitn(struct di_object *nonnull, const char *nonnull name, struct di_tuple args);
 // Call object dtor, remove all listeners and members from the object. And free the
 // memory
 // if the ref count drop to 0 after this process
-void di_destroy_object(struct di_object *nonnull);
+PUBLIC_DEAI_API void di_destroy_object(struct di_object *nonnull);
 
-struct di_object *nonnull allocates(malloc) di_ref_object(struct di_object *nonnull);
+PUBLIC_DEAI_API struct di_object *
+    nonnull allocates(malloc) di_ref_object(struct di_object *nonnull);
 
 /// Create a weak reference to a di_object. The object could be NULL, in that case, an
 /// empty reference is created.
-struct di_weak_object *nonnull di_weakly_ref_object(struct di_object *nullable);
+PUBLIC_DEAI_API struct di_weak_object *nonnull di_weakly_ref_object(struct di_object *nullable);
 
 /// Upgrade a weak object reference to an object reference.
 ///
 /// @return An object reference, or NULL if the object has been freed.
-struct di_object *
+PUBLIC_DEAI_API struct di_object *
     nullable allocates(malloc) di_upgrade_weak_ref(struct di_weak_object *nonnull);
 
 /// Drop a weak object reference. After this function returns, the passed pointer will
 /// become invalid
-void di_drop_weak_ref(struct di_weak_object *nonnull *nonnull);
-void frees(malloc, 1) di_unref_object(struct di_object *nonnull);
+PUBLIC_DEAI_API void di_drop_weak_ref(struct di_weak_object *nonnull *nonnull);
+PUBLIC_DEAI_API void frees(malloc, 1) di_unref_object(struct di_object *nonnull);
 
-void di_set_object_dtor(struct di_object *nonnull, di_dtor_fn_t nullable);
-void di_set_object_call(struct di_object *nonnull, di_call_fn_t nullable);
-bool di_is_object_callable(struct di_object *nonnull);
+PUBLIC_DEAI_API void di_set_object_dtor(struct di_object *nonnull, di_dtor_fn_t nullable);
+PUBLIC_DEAI_API void di_set_object_call(struct di_object *nonnull, di_call_fn_t nullable);
+PUBLIC_DEAI_API bool di_is_object_callable(struct di_object *nonnull);
 
-void di_free_tuple(struct di_tuple);
-void di_free_array(struct di_array);
+PUBLIC_DEAI_API void di_free_tuple(struct di_tuple);
+PUBLIC_DEAI_API void di_free_array(struct di_array);
 
 /// Free a `value` of type `t`. This function does not free the storage space used by
 /// `value`. This is to make this function usable for values stored on the stack.
-void di_free_value(di_type_t t, union di_value *nullable value);
+PUBLIC_DEAI_API void di_free_value(di_type_t t, union di_value *nullable value);
 
 /// Copy value of type `t` from `src` to `dst`. It's assumed that `dst` has enough memory
 /// space to hold a value of type `t`, and that `dst` doesn't contain a valid value
 /// beforehand
-void di_copy_value(di_type_t t, void *nullable dest, const void *nullable src);
+PUBLIC_DEAI_API void di_copy_value(di_type_t t, void *nullable dest, const void *nullable src);
 
 static inline unused size_t di_sizeof_type(di_type_t t) {
 	switch (t) {
@@ -436,4 +443,4 @@ static const struct di_variant unused DI_VARIANT_INIT = {NULL, DI_TYPE_NIL};
 unused define_object_cleanup(di_object);
 
 /// A valid but non-upgradeable weak reference
-PUBLIC extern const struct di_weak_object *const nonnull dead_weak_ref;
+PUBLIC_DEAI_API extern const struct di_weak_object *const nonnull dead_weak_ref;

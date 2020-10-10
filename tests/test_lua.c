@@ -9,7 +9,7 @@ static struct di_object *create_di_object(struct di_object *unused obj) {
 	return di_new_object_with_type(struct di_object);
 }
 
-PUBLIC int di_plugin_init(struct deai *di) {
+PUBLIC_DEAI_API int di_plugin_init(struct deai *di) {
 	di_remove_member_raw((struct di_object *)di, "lua");
 	di_remove_member_raw((struct di_object *)di, "xorg");
 	di_remove_member_raw((struct di_object *)di, "file");

@@ -145,7 +145,7 @@ static struct di_object *stderr_target(struct di_log *l) {
 }
 
 // Public API to be used by C plugins
-__attribute__((format(printf, 3, 4))) PUBLIC int
+__attribute__((format(printf, 3, 4))) PUBLIC_DEAI_API int
 di_log_va(struct di_object *o, int log_level, const char *fmt, ...) {
 	struct di_log *l = (void *)o;
 	if (log_level > l->log_level) {
@@ -172,7 +172,7 @@ static int set_log_level(struct di_log *l, char *ll) {
 	return -1;
 }
 
-PUBLIC int di_set_log_level(struct di_object *o, int log_level) {
+PUBLIC_DEAI_API int di_set_log_level(struct di_object *o, int log_level) {
 	if (log_level > DI_LOG_DEBUG) {
 		return -1;
 	}

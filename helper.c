@@ -18,12 +18,12 @@ struct di_error {
 	char *msg;
 };
 
-PUBLIC void di_free_error(struct di_object *o) {
+PUBLIC_DEAI_API void di_free_error(struct di_object *o) {
 	auto err = (struct di_error *)o;
 	free(err->msg);
 }
 
-PUBLIC struct di_object *di_new_error(const char *fmt, ...) {
+PUBLIC_DEAI_API struct di_object *di_new_error(const char *fmt, ...) {
 	va_list ap;
 	va_start(ap, fmt);
 
@@ -45,7 +45,7 @@ PUBLIC struct di_object *di_new_error(const char *fmt, ...) {
 	return (void *)err;
 }
 
-PUBLIC int di_gmethod(struct di_object *o, const char *name, void (*fn)(void)) {
+PUBLIC_DEAI_API int di_gmethod(struct di_object *o, const char *name, void (*fn)(void)) {
 	with_object_cleanup(di_object) m = di_new_object_with_type(struct di_object);
 	((struct di_object_internal *)m)->call = (void *)fn;
 
@@ -81,7 +81,7 @@ static void _del_proxied_signal(struct di_object *_sig) {
 // Add a listener to src for "srcsig". When "srcsig" is emitted, the proxy will emit
 // "proxysig"
 // This is intended to be called in proxy's "__new_signal" method
-PUBLIC int di_proxy_signal(struct di_object *src, const char *srcsig,
+PUBLIC_DEAI_API int di_proxy_signal(struct di_object *src, const char *srcsig,
                            struct di_object *proxy, const char *proxysig) {
 	if (strncmp(srcsig, "__", 2) == 0) {
 		return -EPERM;
