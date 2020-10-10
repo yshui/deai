@@ -13,25 +13,12 @@
 #include "di_internal.h"
 #include "utils.h"
 
-struct di_typed_method {
-	struct di_object_internal;
-	void (*nonnull fn)(void);
-
-	/// Number of arguments
-	int nargs;
-	/// Return type
-	di_type_t rtype;
-	ffi_cif cif;
-	/// Expected types of the arguments
-	di_type_t atypes[];
-};
-
 struct di_closure {
 	struct di_object_internal;
 
 	/// Captured values, we don't explicitly save their types.
 	/// `cif` contains the information of how to pass them to the function
-	const void **cargs;
+	const union di_value *nonnull *nullable cargs;
 	void (*nonnull fn)(void);
 
 	/// Number of actual arguments
@@ -49,7 +36,8 @@ static_assert(sizeof(union di_value) >= sizeof(ffi_arg), "ffi_arg is too big");
 
 static int
 _di_typed_trampoline(ffi_cif *cif, void (*fn)(void), void *ret, const di_type_t *fnats,
-                     int nargs0, const void *const *args0, struct di_tuple args) {
+                     int nargs0, const union di_value *const nonnull *nullable args0,
+                     struct di_tuple args) {
 	assert(args.length == 0 || args.elements != NULL);
 	assert(nargs0 == 0 || args0 != NULL);
 	assert(args.length >= 0 && nargs0 >= 0);
@@ -169,8 +157,8 @@ static void free_closure(struct di_object *o) {
 
 struct di_closure *
 di_create_closure(void (*fn)(void), di_type_t rtype, int ncaptures,
-                  const di_type_t *capture_types, const void *const *captures, int nargs,
-                  const di_type_t *arg_types) {
+                  const di_type_t *capture_types, const union di_value *const *captures,
+                  int nargs, const di_type_t *arg_types) {
 	if (ncaptures < 0 || nargs < 0 || ncaptures + nargs > MAX_NARGS) {
 		return ERR_PTR(-E2BIG);
 	}

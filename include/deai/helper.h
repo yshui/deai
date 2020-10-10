@@ -116,15 +116,17 @@ int di_proxy_signal(struct di_object *nonnull src, const char *nonnull srcsig,
 #define STRINGIFY(x) #x
 
 #define addressof(x) (&((typeof(x)[]){x})[0])
+#define addressof_di_value(x) ((union di_value *)addressof(x))
 
 #define di_type_pair(v) di_typeof(v), v,
 
 #define object_cleanup __attribute__((cleanup(__free_objp)))
 
-#define capture(...)                                                                       \
-	VA_ARGS_LENGTH(__VA_ARGS__)                                                        \
-	, (di_type_t[]){LIST_APPLY(di_typeof, SEP_COMMA, __VA_ARGS__)}, (const void *[]) { \
-		LIST_APPLY(addressof, SEP_COMMA, __VA_ARGS__)                              \
+#define capture(...)                                                                     \
+	VA_ARGS_LENGTH(__VA_ARGS__)                                                      \
+	, (di_type_t[]){LIST_APPLY(di_typeof, SEP_COMMA, __VA_ARGS__)},                  \
+	    (const union di_value *[]) {                                                 \
+		LIST_APPLY(addressof_di_value, SEP_COMMA, __VA_ARGS__)                   \
 	}
 
 #define capture_types(...) LIST_APPLY_pre(typeof, SEP_COMMA, __VA_ARGS__)
