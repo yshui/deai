@@ -703,21 +703,22 @@ const luaL_Reg di_lua_listener_methods[] = {
     {0, 0},
 };
 
+// Stack: [ object, string, boolean (optional), lua closure ]
 static int di_lua_add_listener(lua_State *L) {
 	bool once = false;
-	if (lua_gettop(L) == 3) {
-		once = lua_toboolean(L, 2);
-		lua_remove(L, 2);
+	struct di_object *o = di_lua_checkproxy(L, 1);
+
+	if (lua_gettop(L) == 4) {
+		once = lua_toboolean(L, 3);
+		lua_remove(L, 3);
 	}
-	if (lua_gettop(L) != 2) {
-		return luaL_error(L, "'on' takes 2 or 3 arguments");
+	if (lua_gettop(L) != 3) {
+		return luaL_error(L, "'on' takes 3 or 4 arguments");
 	}
 
-	struct di_object *o = lua_touserdata(L, lua_upvalueindex(1));
-
-	const char *signame = luaL_checklstring(L, 1, NULL);
+	const char *signame = luaL_checklstring(L, 2, NULL);
 	if (lua_type(L, -1) != LUA_TFUNCTION) {
-		return luaL_argerror(L, 2, "not a function");
+		return luaL_argerror(L, 3, "not a function");
 	}
 
 	auto h = lua_type_to_di_object(L, -1, call_lua_function);
@@ -732,19 +733,6 @@ static int di_lua_add_listener(lua_State *L) {
 	di_ref_object((void *)l);
 	di_lua_pushobject(L, NULL, (void *)l, di_lua_object_methods, false);
 	return 1;
-}
-
-static int di_lua_call_method(lua_State *L) {
-	struct di_object *o = lua_touserdata(L, lua_upvalueindex(1));
-	const char *name = luaL_checklstring(L, 1, NULL);
-	struct di_object *m;
-
-	int rc = di_get(o, name, m);
-	if (rc != 0) {
-		return luaL_error(L, "method %s not found", name);
-	}
-
-	return _di_lua_method_handler(L, name, m);
 }
 
 /// Push a variant value onto the lua stack. Since lua is a dynamically typed language,
@@ -850,18 +838,19 @@ pushnumber:
 	return 1;
 }
 
+// Stack: [ object, string (signal name), arguments... ]
 int di_lua_emit_signal(lua_State *L) {
-	struct di_object *o = lua_touserdata(L, lua_upvalueindex(1));
-	const char *signame = luaL_checkstring(L, 1);
+	struct di_object *o = di_lua_checkproxy(L, 1);
+	const char *signame = luaL_checkstring(L, 2);
 	int top = lua_gettop(L);
 	int rc = 0;
 
 	struct di_tuple t;
-	t.elements = tmalloc(struct di_variant, top - 1);
-	t.length = top - 1;
+	t.elements = tmalloc(struct di_variant, top - 2);
+	t.length = top - 2;
 
-	for (int i = 2; i <= top; i++) {
-		rc = di_lua_type_to_di_variant(L, i, &t.elements[i - 2]);
+	for (int i = 3; i <= top; i++) {
+		rc = di_lua_type_to_di_variant(L, i, &t.elements[i - 3]);
 		if (rc != 0) {
 			goto err;
 		}
@@ -881,7 +870,7 @@ err:
 }
 
 static int di_lua_upgrade_weak_ref(lua_State *L) {
-	struct di_weak_object *weak = lua_touserdata(L, lua_upvalueindex(1));
+	struct di_weak_object *weak = di_lua_checkproxy(L, 1);
 	struct di_object *strong = di_upgrade_weak_ref(weak);
 	if (strong == NULL) {
 		return 0;
@@ -890,8 +879,9 @@ static int di_lua_upgrade_weak_ref(lua_State *L) {
 	return 1;
 }
 
+// Stack: [ object ]
 static int di_lua_weak_ref(lua_State *L) {
-	struct di_object *strong = lua_touserdata(L, lua_upvalueindex(1));
+	struct di_object *strong = di_lua_checkproxy(L, 1);
 	union di_value weak = {.weak_object = di_weakly_ref_object(strong)};
 	return di_lua_pushvariant(
 	    L, NULL, (struct di_variant){.type = DI_TYPE_WEAK_OBJECT, .value = &weak});
@@ -907,11 +897,9 @@ static int di_lua_getter_for_weak_object(lua_State *L) {
 	}
 
 	const char *key = luaL_checklstring(L, 2, NULL);
-	void *ud = di_lua_checkproxy(L, 1);
 
 	if (strcmp(key, "upgrade") == 0) {
-		lua_pushlightuserdata(L, ud);
-		lua_pushcclosure(L, di_lua_upgrade_weak_ref, 1);
+		lua_pushcclosure(L, di_lua_upgrade_weak_ref, 0);
 		return 1;
 	}
 
@@ -936,23 +924,15 @@ static int di_lua_getter(lua_State *L) {
 
 	// Eliminate special methods
 	if (strcmp(key, "on") == 0) {
-		lua_pushlightuserdata(L, ud);
-		lua_pushcclosure(L, di_lua_add_listener, 1);
-		return 1;
-	}
-	if (strcmp(key, "call") == 0) {
-		lua_pushlightuserdata(L, ud);
-		lua_pushcclosure(L, di_lua_call_method, 1);
+		lua_pushcclosure(L, di_lua_add_listener, 0);
 		return 1;
 	}
 	if (strcmp(key, "emit") == 0) {
-		lua_pushlightuserdata(L, ud);
-		lua_pushcclosure(L, di_lua_emit_signal, 1);
+		lua_pushcclosure(L, di_lua_emit_signal, 0);
 		return 1;
 	}
 	if (strcmp(key, "weakref") == 0) {
-		lua_pushlightuserdata(L, ud);
-		lua_pushcclosure(L, di_lua_weak_ref, 1);
+		lua_pushcclosure(L, di_lua_weak_ref, 0);
 		return 1;
 	}
 
