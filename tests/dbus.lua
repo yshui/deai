@@ -53,3 +53,7 @@ dbusl:on("exit", function()
     call_with_error(o, "org.dummy.Dummy", 1)
     call_with_error(o, "org.dummy.Dummy", "asdf")
 end)
+
+di.event:timer(2):on('elapsed', function()
+    di:quit()
+end)
