@@ -276,10 +276,16 @@ const char *nonnull di_get_type(struct di_object *nonnull o);
 /// Check if the type of the object is `type`
 bool di_check_type(struct di_object *nonnull o, const char *nonnull type);
 
-int nonnull_all di_add_member_move(struct di_object *nonnull o, const char *nonnull name,
-                                   di_type_t *nonnull, void *nonnull address);
-int nonnull_all di_add_member_clone(struct di_object *nonnull o, const char *nonnull name,
-                                    di_type_t, ...);
+/// Add value (*address) with type `*type` as a member named `name` of object `o`. This
+/// function takes the ownership of *address. After this call, `*type` and `*address` will
+/// be set to invalid values.
+PUBLIC int nonnull_all di_add_member_move(struct di_object *nonnull o, const char *nonnull name,
+                                          di_type_t *nonnull type, void *nonnull address);
+
+/// Add a value with type `type` as a member named `name` of object `o`. This function
+/// will cloned the value before adding it as a member.
+PUBLIC int nonnull_all di_add_member_clone(struct di_object *nonnull o,
+                                           const char *nonnull name, di_type_t, ...);
 
 /// Remove a member of object `o`, without calling the deleter.
 int di_remove_member_raw(struct di_object *nonnull o, const char *nonnull name);

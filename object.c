@@ -62,7 +62,7 @@ static int di_call_internal(struct di_object *self, struct di_object *method_, d
 	           union di_value *ret, struct di_tuple args, bool *called) {            \
 		struct di_object *val;                                                   \
 		*called = false;                                                         \
-		int rc = getter(self, name, DI_TYPE_OBJECT, (union di_value *)&val);        \
+		int rc = getter(self, name, DI_TYPE_OBJECT, (union di_value *)&val);     \
 		if (rc != 0) {                                                           \
 			return rc;                                                       \
 		}                                                                        \
@@ -148,9 +148,8 @@ PUBLIC int di_setx(struct di_object *o, const char *name, di_type_t type, void *
 		if (rc != 0) {
 			return rc;
 		}
-		if (mem->own) {
-			di_free_value(mem->type, mem->data);
-		}
+		di_free_value(mem->type, mem->data);
+		// No need to reallocate mem->data here since the type didn't change
 		di_copy_value(mem->type, mem->data, &val2);
 		if (cloned) {
 			di_free_value(mem->type, &val2);
@@ -320,10 +319,8 @@ PUBLIC struct di_module *di_new_module(struct deai *di) {
 static void _di_remove_member_raw(struct di_object_internal *obj, struct di_member *m) {
 	HASH_DEL(*(struct di_member **)&obj->members, m);
 
-	if (m->own) {
-		di_free_value(m->type, m->data);
-		free(m->data);
-	}
+	di_free_value(m->type, m->data);
+	free(m->data);
 	free(m->name);
 	free(m);
 }
@@ -494,16 +491,7 @@ static int di_insert_member(struct di_object_internal *obj, struct di_member *m)
 	return 0;
 }
 
-// `own` actually have 2 meanings: 1) do we own the value `*v` points to (e.g. do
-// we hold a ref to a di_object) 2) do we own the memory location `v` points to
-//
-// right now, own = true means we own both of those, and own = false means we own
-// neither
-//
-// Which means, if own = true, after di_add_member returns, the ref to the value
-// `*v` points to is consumed, and the memory location `v` points to is freed
-static int di_add_member(struct di_object_internal *o, const char *name, bool own,
-                         di_type_t t, void *v) {
+static int di_add_member(struct di_object_internal *o, const char *name, di_type_t t, void *v) {
 	if (!name) {
 		return -EINVAL;
 	}
@@ -512,21 +500,19 @@ static int di_add_member(struct di_object_internal *o, const char *name, bool ow
 	m->type = t;
 	m->data = v;
 	m->name = strdup(name);
-	m->own = own;
 
 	int ret = di_insert_member(o, m);
 	if (ret != 0) {
-		if (own) {
-			di_free_value(t, v);
-			free(v);
-		}
+		di_free_value(t, v);
+		free(v);
+
 		free(m->name);
 		free(m);
 	}
 	return ret;
 }
 
-PUBLIC int di_add_member_clone(struct di_object *o, const char *name, di_type_t t, ...) {
+int di_add_member_clone(struct di_object *o, const char *name, di_type_t t, ...) {
 	if (di_sizeof_type(t) == 0) {
 		return -EINVAL;
 	}
@@ -542,10 +528,10 @@ PUBLIC int di_add_member_clone(struct di_object *o, const char *name, di_type_t 
 	di_copy_value(t, v, nv);
 	free(nv);
 
-	return di_add_member((struct di_object_internal *)o, name, true, t, v);
+	return di_add_member((struct di_object_internal *)o, name, t, v);
 }
 
-PUBLIC int di_add_member_move(struct di_object *o, const char *name, di_type_t *t, void *addr) {
+int di_add_member_move(struct di_object *o, const char *name, di_type_t *t, void *addr) {
 	auto sz = di_sizeof_type(*t);
 	if (sz == 0) {
 		return -EINVAL;
@@ -558,7 +544,7 @@ PUBLIC int di_add_member_move(struct di_object *o, const char *name, di_type_t *
 	*t = DI_TYPE_NIL;
 	memset(addr, 0, sz);
 
-	return di_add_member((struct di_object_internal *)o, name, true, tt, taddr);
+	return di_add_member((struct di_object_internal *)o, name, tt, taddr);
 }
 
 PUBLIC struct di_member *di_lookup(struct di_object *_obj, const char *name) {

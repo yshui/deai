@@ -21,7 +21,6 @@ struct di_member {
 	char *nonnull name;
 	void *nonnull data;
 	di_type_t type;
-	bool own;
 	UT_hash_handle hh;
 };
 
