@@ -18,7 +18,6 @@ struct di_ioev {
 	struct di_object_internal;
 	ev_io evh;
 	struct deai *di;
-	struct di_listener *d;
 	bool running;
 };
 
@@ -26,14 +25,12 @@ struct di_timer {
 	struct di_object_internal;
 	ev_timer evt;
 	struct deai *di;
-	struct di_listener *d;
 };
 
 struct di_periodic {
 	struct di_object_internal;
 	ev_periodic pt;
 	struct deai *di;
-	struct di_listener *d;
 };
 
 static void di_ioev_callback(EV_P_ ev_io *w, int revents) {
@@ -65,38 +62,43 @@ static void di_periodic_callback(EV_P_ ev_periodic *w, int revents) {
 
 static void di_start_ioev(struct di_object *obj) {
 	struct di_ioev *ev = (void *)obj;
-	if (!ev->di)
+	if (!ev->di) {
 		return;
-	if (ev->running)
+	}
+	if (ev->running) {
 		return;
+	}
 	ev_io_start(ev->di->loop, &ev->evh);
 	ev->running = true;
 }
 
 static void di_stop_ioev(struct di_object *obj) {
 	struct di_ioev *ev = (void *)obj;
-	if (!ev->di)
+	if (!ev->di) {
 		return;
-	if (!ev->running)
+	}
+	if (!ev->running) {
 		return;
+	}
 	ev_io_stop(ev->di->loop, &ev->evh);
 	ev->running = false;
 }
 
 static void di_toggle_ioev(struct di_object *obj) {
 	struct di_ioev *ev = (void *)obj;
-	if (!ev->di)
+	if (!ev->di) {
 		return;
-	if (ev->running)
+	}
+	if (ev->running) {
 		ev_io_stop(ev->di->loop, &ev->evh);
-	else
+	} else {
 		ev_io_start(ev->di->loop, &ev->evh);
+	}
 	ev->running = !ev->running;
 }
 
 static void di_ioev_dtor(struct di_object *obj) {
 	struct di_ioev *ev = (void *)obj;
-	di_stop_listener(ev->d);
 	ev_io_stop(ev->di->loop, &ev->evh);
 	di_unref_object((void *)ev->di);
 	ev->di = NULL;
@@ -108,18 +110,17 @@ static struct di_object *di_create_ioev(struct di_object *obj, int fd, int t) {
 	di_set_type((void *)ret, "deai.builtin.event:ioev");
 
 	unsigned int flags = 0;
-	if (t & IOEV_READ)
+	if (t & IOEV_READ) {
 		flags |= EV_READ;
-	if (t & IOEV_WRITE)
+	}
+	if (t & IOEV_WRITE) {
 		flags |= EV_WRITE;
+	}
 
 	ev_io_init(&ret->evh, di_ioev_callback, fd, flags);
 	ev_io_start(em->di->loop, &ret->evh);
 	ret->di = em->di;
 	di_ref_object((void *)ret->di);
-
-	ret->d = di_listen_to_destroyed((void *)em->di, trivial_destroyed_handler,
-	                                (void *)ret);
 
 	di_method(ret, "start", di_start_ioev);
 	di_method(ret, "stop", di_stop_ioev);
@@ -133,22 +134,23 @@ static struct di_object *di_create_ioev(struct di_object *obj, int fd, int t) {
 
 static void di_timer_dtor(struct di_object *obj) {
 	struct di_timer *ev = (void *)obj;
-	di_stop_listener(ev->d);
 	ev_timer_stop(ev->di->loop, &ev->evt);
 	di_unref_object((void *)ev->di);
 	ev->di = NULL;
 }
 
 static void di_timer_again(struct di_timer *obj) {
-	if (!obj->di)
+	if (!obj->di) {
 		return;
+	}
 
 	ev_timer_again(obj->di->loop, &obj->evt);
 }
 
 static void di_timer_set(struct di_timer *obj, double t) {
-	if (!obj->di)
+	if (!obj->di) {
 		return;
+	}
 
 	obj->evt.repeat = t;
 	ev_timer_again(obj->di->loop, &obj->evt);
@@ -167,9 +169,6 @@ static struct di_object *di_create_timer(struct di_object *obj, double timeout) 
 	// Set the timeout and restart the timer
 	di_method(ret, "__set_timeout", di_timer_set, double);
 
-	ret->d = di_listen_to_destroyed((void *)em->di, trivial_destroyed_handler,
-	                                (void *)ret);
-
 	ev_init(&ret->evt, di_timer_callback);
 	ret->evt.repeat = timeout;
 	ev_timer_again(em->di->loop, &ret->evt);
@@ -177,15 +176,15 @@ static struct di_object *di_create_timer(struct di_object *obj, double timeout) 
 }
 
 static void periodic_dtor(struct di_periodic *p) {
-	di_stop_listener(p->d);
 	ev_periodic_stop(p->di->loop, &p->pt);
 	di_unref_object((void *)p->di);
 	p->di = NULL;
 }
 
 static void periodic_set(struct di_periodic *p, double interval, double offset) {
-	if (!p->di)
+	if (!p->di) {
 		return;
+	}
 	ev_periodic_set(&p->pt, offset, interval, NULL);
 	ev_periodic_again(p->di->loop, &p->pt);
 }
@@ -201,9 +200,6 @@ di_create_periodic(struct di_module *evm, double interval, double offset) {
 	di_method(ret, "set", periodic_set, double, double);
 	ev_periodic_init(&ret->pt, di_periodic_callback, offset, interval, NULL);
 	ev_periodic_start(ret->di->loop, &ret->pt);
-
-	ret->d = di_listen_to_destroyed((void *)evm->di, trivial_destroyed_handler,
-	                                (void *)ret);
 
 	return (void *)ret;
 }
