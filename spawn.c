@@ -24,6 +24,15 @@
 #include "uthash.h"
 #include "utils.h"
 
+/// Object type: ChildProcess
+///
+/// Represent a child process. When recycled, the child process will be left running. To
+/// stop the process, you have to explicitly call `kill`
+///
+/// Signals:
+/// * stderr_line(line: string) a line has been written to stderr by the child
+/// * stdout_line(line: string) a line has been written to stdout by the child
+/// * exit(exit_code, signal) the child process has exited
 struct child {
 	struct di_object;
 	pid_t pid;
@@ -121,7 +130,6 @@ static void sigchld_handler(EV_P_ ev_child *w, int revents) {
 
 static void child_destroy(struct di_object *obj) {
 	auto c = (struct child *)obj;
-	kill(c->pid, SIGTERM);
 	if (c->err) {
 		string_buf_clear(c->err);
 	}
@@ -143,16 +151,24 @@ static void stderr_cb(EV_P_ ev_io *w, int revents) {
 	output_handler(c, w->fd, c->err, "stderr_line");
 }
 
+/// Get the pid of the child process
 static uint64_t get_child_pid(struct child *c) {
 	return (uint64_t)c->pid;
 }
 
+/// Kill the child process with signal `sig`
 static void kill_child(struct child *c, int sig) {
 	kill(c->pid, sig);
 }
 
 define_trivial_cleanup(char *, free_charpp);
 
+/// Start a child process, with arguments `argv`. If `ignore_output` is true, the output
+/// of the child process will be redirected to '/dev/null'
+///
+/// Returns an object representing the child object.
+///
+/// Return object type: ChildProcess
 struct di_object *di_spawn_run(struct di_spawn *p, struct di_array argv, bool ignore_output) {
 	if (argv.elem_type != DI_TYPE_STRING) {
 		return di_new_error("Invalid argv type");
