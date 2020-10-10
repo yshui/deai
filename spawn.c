@@ -65,8 +65,6 @@ static inline void child_cleanup(struct child *c) {
 	}
 
 	struct deai *di = c->di;
-	di_unref_object((void *)c);
-
 	// It's fine if di's dtor is invoked on this stack frame
 	di_unref_object((void *)di);
 }
