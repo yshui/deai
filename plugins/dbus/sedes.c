@@ -123,35 +123,33 @@ _dbus_deserialize_array(DBusMessageIter *i, struct di_array *retp, int type, int
 
 /// Deserialize a dbus struct to a di_array of di_variants
 void _dbus_deserialize_struct(DBusMessageIter *i, void *retp) {
-	struct di_array t = DI_ARRAY_INIT;
+	struct di_tuple t = DI_TUPLE_INIT;
 	DBusMessageIter tmpi = *i;
 	while (dbus_message_iter_get_arg_type(&tmpi) != DBUS_TYPE_INVALID) {
 		dbus_message_iter_next(&tmpi);
 		t.length++;
 	}
 
-	auto vars = tmalloc(struct di_variant, t.length);
-	t.arr = vars;
-	t.elem_type = DI_TYPE_VARIANT;
+	t.elements = tmalloc(struct di_variant, t.length);
 	for (int x = 0; x < t.length; x++) {
 		int type = dbus_message_iter_get_arg_type(i);
-		vars[x].type = _dbus_type_to_di(type);
+		t.elements[x].type = _dbus_type_to_di(type);
 
-		vars[x].value = calloc(1, di_sizeof_type(vars[x].type));
+		t.elements[x].value = calloc(1, di_sizeof_type(t.elements[x].type));
 		di_type_t rtype;
-		_dbus_deserialize_one(i, vars[x].value, &rtype, type);
+		_dbus_deserialize_one(i, t.elements[x].value, &rtype, type);
 
 		// Dict type can't be discerned from the outer type alone (which
 		// would be array).
 		// If deserialize_one returns an object and we expect an array,
 		// that means it's a dbus dict.
-		if (rtype == DI_TYPE_OBJECT && vars[x].type == DI_TYPE_ARRAY) {
-			vars[x].type = rtype;
+		if (rtype == DI_TYPE_OBJECT && t.elements[x].type == DI_TYPE_ARRAY) {
+			t.elements[x].type = rtype;
 		}
-		assert(rtype == vars[x].type);
+		assert(rtype == t.elements[x].type);
 		dbus_message_iter_next(i);
 	}
-	*(struct di_array *)retp = t;
+	*(struct di_tuple *)retp = t;
 }
 
 static void _dbus_deserialize_dict(DBusMessageIter *i, void *retp, int length) {
