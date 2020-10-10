@@ -466,8 +466,7 @@ int main(int argc, char *argv[]) {
 #endif
 	DI_CHECK_OK(di_method(p, "__get_argv", di_get_argv));
 
-	DI_CHECK_OK(di_add_member_ref((void *)p, "proctitle", DI_TYPE_STRING_LITERAL,
-	                              &p->proctitle));
+	DI_CHECK_OK(di_field(p, proctitle));
 
 	struct di_ev_signal sigintw;
 	sigintw.ud = p;

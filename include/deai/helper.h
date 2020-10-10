@@ -255,11 +255,11 @@ int di_proxy_signal(struct di_object *nonnull src, const char *nonnull srcsig,
 /// Register a field of struct `o` as a read only member of the di_object, by using a
 /// field getter
 #define di_field(o, name)                                                                    \
-	do {                                                                                 \
+	({                                                                                   \
 		__auto_type __deai_tmp_field_getter =                                        \
-		    di_new_field_getter(di_typeof((o)->name), offsetof(typeof(*(o)), name));    \
+		    di_new_field_getter(di_typeof((o)->name), offsetof(typeof(*(o)), name)); \
 		di_member((struct di_object *)(o), "__get_" #name, __deai_tmp_field_getter); \
-	} while (0)
+	})
 
 #define di_member(o, name, v)                                                            \
 	di_add_member_move((struct di_object *)(o), name, (di_type_t[]){di_typeof(v)}, &(v))

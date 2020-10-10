@@ -278,8 +278,6 @@ bool di_check_type(struct di_object *nonnull o, const char *nonnull type);
 
 int nonnull_all di_add_member_move(struct di_object *nonnull o, const char *nonnull name,
                                    di_type_t *nonnull, void *nonnull address);
-int nonnull_all di_add_member_ref(struct di_object *nonnull o, const char *nonnull name,
-                                  di_type_t, void *nonnull address);
 int nonnull_all di_add_member_clone(struct di_object *nonnull o, const char *nonnull name,
                                     di_type_t, ...);
 

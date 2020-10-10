@@ -36,7 +36,11 @@ PUBLIC struct di_object *di_new_error(const char *fmt, ...) {
 	struct di_error *err = di_new_object_with_type(struct di_error);
 	err->msg = errmsg;
 
-	di_add_member_ref((void *)err, "errmsg", DI_TYPE_STRING, &err->msg);
+	auto errmsg_getter =
+	    di_new_field_getter(DI_TYPE_STRING_LITERAL, offsetof(struct di_error, msg));
+	di_add_member_clone((void *)err, "__get_errmsg", DI_TYPE_OBJECT, errmsg_getter);
+	di_unref_object(errmsg_getter);
+
 	err->dtor = di_free_error;
 	return (void *)err;
 }

@@ -561,10 +561,6 @@ PUBLIC int di_add_member_move(struct di_object *o, const char *name, di_type_t *
 	return di_add_member((struct di_object_internal *)o, name, true, tt, taddr);
 }
 
-PUBLIC int di_add_member_ref(struct di_object *o, const char *name, di_type_t t, void *addr) {
-	return di_add_member((struct di_object_internal *)o, name, false, t, addr);
-}
-
 PUBLIC struct di_member *di_lookup(struct di_object *_obj, const char *name) {
 	auto obj = (struct di_object_internal *)_obj;
 	struct di_member *ret = NULL;
