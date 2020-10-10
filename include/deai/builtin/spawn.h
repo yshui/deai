@@ -19,4 +19,4 @@ struct di_spawn;
  *            /dev/null
  */
 struct di_object *
-di_spawn_run(struct di_spawn *s, struct di_array argv, bool ignore_output);
+di_spawn_run(struct di_spawn *p, struct di_array argv, bool ignore_output);

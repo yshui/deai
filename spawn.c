@@ -6,8 +6,8 @@
 
 #include <ev.h>
 #include <fcntl.h>
-#include <unistd.h>
 #include <sys/wait.h>
+#include <unistd.h>
 
 #ifdef __FreeBSD__
 #include <sys/procctl.h>
@@ -32,7 +32,6 @@ struct child {
 	ev_io outw, errw;
 
 	struct string_buf *out, *err;
-	struct di_listener *d;
 	struct deai *di;
 };
 
@@ -55,7 +54,6 @@ static inline void child_cleanup(struct child *c) {
 		close(c->errw.fd);
 		free(c->err);
 	}
-	di_clear_listeners((void *)c);
 
 	struct deai *di = c->di;
 	di_unref_object((void *)c);
@@ -64,8 +62,7 @@ static inline void child_cleanup(struct child *c) {
 	di_unref_object((void *)di);
 }
 
-static void
-output_handler(struct child *c, int fd, struct string_buf *b, const char *ev) {
+static void output_handler(struct child *c, int fd, struct string_buf *b, const char *ev) {
 	static char buf[4096];
 	int ret;
 	while ((ret = read(fd, buf, sizeof(buf))) > 0) {
@@ -80,8 +77,9 @@ output_handler(struct child *c, int fd, struct string_buf *b, const char *ev) {
 					out = string_buf_dump(b);
 					di_emit(c, ev, out);
 					free(out);
-				} else
+				} else {
 					di_emit(c, ev, pos);
+				}
 				pos = eol + 1;
 			} else {
 				string_buf_lpush(b, pos, len);
@@ -93,11 +91,11 @@ output_handler(struct child *c, int fd, struct string_buf *b, const char *ev) {
 
 static void sigchld_handler(EV_P_ ev_child *w, int revents) {
 	struct child *c = container_of(w, struct child, w);
-	di_stop_listener(c->d);
 
 	int sig = 0;
-	if (WIFSIGNALED(w->rstatus))
+	if (WIFSIGNALED(w->rstatus)) {
 		sig = WTERMSIG(w->rstatus);
+	}
 
 	int ec = WEXITSTATUS(w->rstatus);
 	if (c->out) {
@@ -121,12 +119,15 @@ static void sigchld_handler(EV_P_ ev_child *w, int revents) {
 	child_cleanup(c);
 }
 
-static void child_destroy(struct child *c) {
+static void child_destroy(struct di_object *obj) {
+	auto c = (struct child *)obj;
 	kill(c->pid, SIGTERM);
-	if (c->err)
+	if (c->err) {
 		string_buf_clear(c->err);
-	if (c->out)
+	}
+	if (c->out) {
 		string_buf_clear(c->out);
+	}
 	child_cleanup(c);
 }
 
@@ -152,35 +153,40 @@ static void kill_child(struct child *c, int sig) {
 
 define_trivial_cleanup(char *, free_charpp);
 
-struct di_object *
-di_spawn_run(struct di_spawn *p, struct di_array argv, bool ignore_output) {
-	if (argv.elem_type != DI_TYPE_STRING)
+struct di_object *di_spawn_run(struct di_spawn *p, struct di_array argv, bool ignore_output) {
+	if (argv.elem_type != DI_TYPE_STRING) {
 		return di_new_error("Invalid argv type");
+	}
 
 	with_cleanup(free_charpp) char **nargv = tmalloc(char *, argv.length + 1);
 	memcpy(nargv, argv.arr, sizeof(void *) * argv.length);
 
 	int opfds[2], epfds[2], ifd;
 	if (!ignore_output) {
-		if (pipe(opfds) < 0 || pipe(epfds) < 0)
+		if (pipe(opfds) < 0 || pipe(epfds) < 0) {
 			return di_new_error("Failed to open pipe");
+		}
 
 		if (fcntl(opfds[0], F_SETFD, FD_CLOEXEC) < 0 ||
-		    fcntl(epfds[0], F_SETFD, FD_CLOEXEC) < 0)
+		    fcntl(epfds[0], F_SETFD, FD_CLOEXEC) < 0) {
 			return di_new_error("Can't set cloexec");
+		}
 
 		if (fcntl(opfds[0], F_SETFL, O_NONBLOCK) < 0 ||
-		    fcntl(epfds[0], F_SETFL, O_NONBLOCK) < 0)
+		    fcntl(epfds[0], F_SETFL, O_NONBLOCK) < 0) {
 			return di_new_error("Can't set non block");
+		}
 	} else {
 		opfds[1] = open("/dev/null", O_WRONLY);
 		epfds[1] = open("/dev/null", O_WRONLY);
-		if (opfds[1] < 0 || epfds[1] < 0)
+		if (opfds[1] < 0 || epfds[1] < 0) {
 			return di_new_error("Can't open /dev/null");
+		}
 	}
 	ifd = open("/dev/null", O_RDONLY);
-	if (ifd < 0)
+	if (ifd < 0) {
 		return di_new_error("Can't open /dev/null");
+	}
 
 	auto pid = fork();
 	if (pid == 0) {
@@ -189,8 +195,9 @@ di_spawn_run(struct di_spawn *p, struct di_array argv, bool ignore_output) {
 			close(epfds[0]);
 		}
 		if (dup2(ifd, STDIN_FILENO) < 0 || dup2(opfds[1], STDOUT_FILENO) < 0 ||
-		    dup2(epfds[1], STDERR_FILENO) < 0)
+		    dup2(epfds[1], STDERR_FILENO) < 0) {
 			_exit(1);
+		}
 		close(opfds[1]);
 		close(epfds[1]);
 		close(ifd);
@@ -203,10 +210,12 @@ di_spawn_run(struct di_spawn *p, struct di_array argv, bool ignore_output) {
 	close(opfds[1]);
 	close(epfds[1]);
 
-	if (pid < 0)
+	if (pid < 0) {
 		return di_new_error("Failed to fork");
+	}
 
 	auto cp = di_new_object_with_type(struct child);
+	di_set_object_dtor((struct di_object *)cp, child_destroy);
 	di_method(cp, "__get_pid", get_child_pid);
 	di_method(cp, "kill", kill_child, int);
 	cp->pid = pid;
@@ -225,9 +234,6 @@ di_spawn_run(struct di_spawn *p, struct di_array argv, bool ignore_output) {
 	ev_child_init(&cp->w, sigchld_handler, pid, 0);
 	ev_child_start(p->di->loop, &cp->w);
 
-	cp->d =
-	    di_listen_to_destroyed((void *)p->di, (void *)child_destroy, (void *)cp);
-
 	// child object can't die before the child process
 	di_ref_object((void *)cp);
 	di_ref_object((void *)cp->di);
@@ -242,8 +248,9 @@ void di_init_spawn(struct deai *di) {
 #else
 	int ret = prctl(PR_SET_CHILD_SUBREAPER, 1);
 #endif
-	if (ret != 0)
+	if (ret != 0) {
 		return;
+	}
 
 	auto m = di_new_module_with_size(di, sizeof(struct di_spawn));
 	m->di = di;

@@ -335,13 +335,6 @@ static inline int nonnull_all di_set_detach(struct di_listener *nonnull l,
 	return ret;
 }
 
-static inline struct di_listener *ret_nonnull nonnull_all di_listen_to_destroyed(
-    struct di_object *nonnull o, di_detach_fn_t fn, struct di_object *nonnull o2) {
-	struct di_listener *ret = di_listen_to(o, "__destroyed", NULL);
-	di_set_detach(ret, fn, o2);
-	return ret;
-}
-
 static inline unused const char *nonnull di_type_to_string(di_type_t type) {
 #define TYPE_CASE(name)                                                                  \
 	case DI_TYPE_##name:                                                             \

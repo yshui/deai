@@ -57,7 +57,6 @@ struct di_lua_ref {
 	struct di_object;
 	int tref;
 	struct di_lua_script *s;
-	struct di_listener *d;
 	struct di_listener *attached_listener;
 };
 
@@ -138,7 +137,6 @@ static void *di_lua_checkproxy(lua_State *L, int index) {
 }
 
 static void lua_ref_dtor(struct di_lua_ref *t) {
-	di_stop_listener(t->d);
 	luaL_unref(t->s->L->L, LUA_REGISTRYINDEX, t->tref);
 	di_unref_object((void *)t->s);
 	if (t->attached_listener) {
@@ -217,7 +215,6 @@ static struct di_lua_ref *lua_type_to_di_object(lua_State *L, int i, void *call)
 	di_add_member_move((void *)o, "__get", (di_type_t[]){DI_TYPE_OBJECT}, (void **)&getter);
 	di_set_object_dtor((void *)o, (void *)lua_ref_dtor);
 	di_set_object_call((void *)o, call);
-	o->d = di_listen_to_destroyed((void *)s->L, trivial_destroyed_handler, (void *)o);
 
 	// Need to return
 	return o;

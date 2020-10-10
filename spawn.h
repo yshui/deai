@@ -8,4 +8,4 @@
 
 #include <deai/deai.h>
 
-void di_init_spawn(struct deai *p);
+void di_init_spawn(struct deai *di);
