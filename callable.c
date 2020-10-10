@@ -172,27 +172,28 @@ static void free_closure(struct di_object *o) {
 	free(cl->cif.arg_types);
 }
 
-PUBLIC struct di_closure *
-di_create_closure(void (*fn)(void), di_type_t rtype, int nargs0, const di_type_t *cats,
-                  const void *const *cargs, int nargs, const di_type_t *ats, bool weak_capture) {
-	if (nargs0 < 0 || nargs < 0 || nargs0 + nargs > MAX_NARGS) {
+struct di_closure *
+di_create_closure(void (*fn)(void), di_type_t rtype, int ncaptures,
+                  const di_type_t *capture_types, const void *const *captures, int nargs,
+                  const di_type_t *arg_types, bool weak_capture) {
+	if (ncaptures < 0 || nargs < 0 || ncaptures + nargs > MAX_NARGS) {
 		return ERR_PTR(-E2BIG);
 	}
 
-	for (int i = 0; i < nargs0; i++) {
-		if (di_sizeof_type(cats[i]) == 0) {
+	for (int i = 0; i < ncaptures; i++) {
+		if (di_sizeof_type(capture_types[i]) == 0) {
 			return ERR_PTR(-EINVAL);
 		}
 	}
 
 	for (int i = 0; i < nargs; i++) {
-		if (di_sizeof_type(ats[i]) == 0) {
+		if (di_sizeof_type(arg_types[i]) == 0) {
 			return ERR_PTR(-EINVAL);
 		}
 	}
 
 	struct di_closure *cl = (void *)di_new_object(
-	    sizeof(struct di_closure) + sizeof(di_type_t) * (nargs0 + nargs),
+	    sizeof(struct di_closure) + sizeof(di_type_t) * (ncaptures + nargs),
 	    alignof(struct di_closure));
 
 	cl->rtype = rtype;
@@ -200,32 +201,32 @@ di_create_closure(void (*fn)(void), di_type_t rtype, int nargs0, const di_type_t
 	cl->fn = fn;
 	cl->dtor = free_closure;
 	cl->nargs = nargs;
-	cl->nargs0 = nargs0;
+	cl->nargs0 = ncaptures;
 	cl->weak_capture = weak_capture;
 
-	if (nargs0) {
-		memcpy(cl->atypes, cats, sizeof(di_type_t) * nargs0);
+	if (ncaptures) {
+		memcpy(cl->atypes, capture_types, sizeof(di_type_t) * ncaptures);
 	}
 	if (nargs) {
-		memcpy(cl->atypes + nargs0, ats, sizeof(di_type_t) * nargs);
+		memcpy(cl->atypes + ncaptures, arg_types, sizeof(di_type_t) * nargs);
 	}
 
-	auto ffiret = di_ffi_prep_cif(&cl->cif, nargs0 + nargs, cl->rtype, cl->atypes);
+	auto ffiret = di_ffi_prep_cif(&cl->cif, ncaptures + nargs, cl->rtype, cl->atypes);
 	if (ffiret != FFI_OK) {
 		free(cl);
 		return ERR_PTR(-EINVAL);
 	}
 
-	if (nargs0) {
-		cl->cargs = malloc(sizeof(void *) * nargs0);
+	if (ncaptures) {
+		cl->cargs = malloc(sizeof(void *) * ncaptures);
 	}
 
-	for (int i = 0; i < nargs0; i++) {
-		void *dst = malloc(di_sizeof_type(cats[i]));
+	for (int i = 0; i < ncaptures; i++) {
+		void *dst = malloc(di_sizeof_type(capture_types[i]));
 		if (!weak_capture) {
-			di_copy_value(cats[i], dst, cargs[i]);
+			di_copy_value(capture_types[i], dst, captures[i]);
 		} else {
-			memcpy(dst, cargs[i], di_sizeof_type(cats[i]));
+			memcpy(dst, captures[i], di_sizeof_type(capture_types[i]));
 		}
 		cl->cargs[i] = dst;
 	}
@@ -235,8 +236,8 @@ di_create_closure(void (*fn)(void), di_type_t rtype, int nargs0, const di_type_t
 	return cl;
 }
 
-PUBLIC int di_add_method(struct di_object *o, const char *name, void (*fn)(void),
-                         di_type_t rtype, int nargs, ...) {
+int di_add_method(struct di_object *o, const char *name, void (*fn)(void),
+                  di_type_t rtype, int nargs, ...) {
 	if (nargs < 0 || nargs + 1 > MAX_NARGS) {
 		return -EINVAL;
 	}
@@ -259,8 +260,7 @@ PUBLIC int di_add_method(struct di_object *o, const char *name, void (*fn)(void)
 }
 
 // va_args version of di_call_callable
-PUBLIC int
-di_call_objectv(struct di_object *_obj, di_type_t *rtype, union di_value *ret, va_list ap) {
+int di_call_objectv(struct di_object *_obj, di_type_t *rtype, union di_value *ret, va_list ap) {
 	auto obj = (struct di_object_internal *)_obj;
 	if (!obj->call) {
 		return -EINVAL;
@@ -295,15 +295,48 @@ di_call_objectv(struct di_object *_obj, di_type_t *rtype, union di_value *ret, v
 	return obj->call(_obj, rtype, ret, tu);
 }
 
-PUBLIC int di_call_object(struct di_object *o, di_type_t *rtype, union di_value *ret, ...) {
+struct di_field_getter {
+	struct di_object_internal;
+	di_type_t type;
+	ptrdiff_t offset;
+};
+
+static int di_field_getter_call(struct di_object *getter, di_type_t *rtype,
+                                union di_value *ret, struct di_tuple args) {
+	DI_CHECK(di_check_type(getter, "deai:field_getter"));
+
+	if (args.elements[0].type != DI_TYPE_OBJECT) {
+		DI_ASSERT(false, "first argument to getter is not an object");
+		return -EINVAL;
+	}
+
+	auto object = (char *)args.elements[0].value->object;
+	auto field_getter = (struct di_field_getter *)getter;
+	*rtype = field_getter->type;
+
+	memcpy(ret, object + field_getter->offset, di_sizeof_type(field_getter->type));
+	return 0;
+}
+
+struct di_object *di_new_field_getter(di_type_t type, ptrdiff_t offset) {
+	auto ret = di_new_object_with_type(struct di_field_getter);
+	auto obj = (struct di_object *)ret;
+	ret->offset = offset;
+	ret->type = type;
+	ret->call = di_field_getter_call;
+	di_set_type(obj, "deai:field_getter");
+	return obj;
+}
+
+int di_call_object(struct di_object *o, di_type_t *rtype, union di_value *ret, ...) {
 	va_list ap;
 
 	va_start(ap, ret);
 	return di_call_objectv(o, rtype, ret, ap);
 }
 
-PUBLIC int di_call_objectt(struct di_object *obj, di_type_t *rt, union di_value *ret,
-                           struct di_tuple args) {
+int di_call_objectt(struct di_object *obj, di_type_t *rt, union di_value *ret,
+                    struct di_tuple args) {
 	auto internal = (struct di_object_internal *)obj;
 	return internal->call(obj, rt, ret, args);
 }

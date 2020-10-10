@@ -166,7 +166,10 @@ di_lua_di_getter(struct di_object *m, di_type_t *rt, union di_value *ret, struct
 	}
 
 	struct di_variant *vars = tu.elements;
-	DI_CHECK(vars[0].type == DI_TYPE_OBJECT);
+	if (vars[0].type != DI_TYPE_OBJECT) {
+		DI_ASSERT(false, "first argument to getter is not an object");
+		return -EINVAL;
+	}
 
 	auto t = (struct di_lua_ref *)vars[0].value->object;
 	if (vars[1].type != DI_TYPE_STRING && vars[1].type != DI_TYPE_STRING_LITERAL) {

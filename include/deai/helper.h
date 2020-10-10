@@ -173,7 +173,7 @@ int di_proxy_signal(struct di_object *nonnull src, const char *nonnull srcsig,
 			union di_value ret;                                              \
 			bool called;                                                     \
 			rc = di_callx((struct di_object *)(o), (name), &rtype, &ret,     \
-			              di_tuple(__VA_ARGS__), &called);                \
+			              di_tuple(__VA_ARGS__), &called);                   \
 			if (rc != 0) {                                                   \
 				break;                                                   \
 			}                                                                \
@@ -190,7 +190,7 @@ int di_proxy_signal(struct di_object *nonnull src, const char *nonnull srcsig,
 			union di_value ret;                                              \
 			bool called;                                                     \
 			rc = di_callx((struct di_object *)(o), (name), &rtype, &ret,     \
-			              di_tuple(__VA_ARGS__), &called);                \
+			              di_tuple(__VA_ARGS__), &called);                   \
 			if (rc != 0) {                                                   \
 				break;                                                   \
 			}                                                                \
@@ -252,11 +252,14 @@ int di_proxy_signal(struct di_object *nonnull src, const char *nonnull srcsig,
 
 #define di_emit(o, name, ...) di_emitn((struct di_object *)o, name, di_tuple(__VA_ARGS__))
 
-#define _di_field(o, name)                                                               \
-	di_add_member_ref((struct di_object *)(o), #name, di_typeof((o)->name), &((o)->name))
-
-/// Register a field of struct `o` as a read only member of the di_object
-#define di_field(o, name) _di_field(o, name)
+/// Register a field of struct `o` as a read only member of the di_object, by using a
+/// field getter
+#define di_field(o, name)                                                                    \
+	do {                                                                                 \
+		__auto_type __deai_tmp_field_getter =                                        \
+		    di_new_field_getter(di_typeof((o)->name), offsetof(typeof(*(o)), name));    \
+		di_member((struct di_object *)(o), "__get_" #name, __deai_tmp_field_getter); \
+	} while (0)
 
 #define di_member(o, name, v)                                                            \
 	di_add_member_move((struct di_object *)(o), name, (di_type_t[]){di_typeof(v)}, &(v))
