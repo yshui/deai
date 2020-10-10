@@ -40,9 +40,6 @@ struct di_closure {
 	int nargs0;
 	/// Return type
 	di_type_t rtype;
-	// TODO(yshui) add a weak_ref type.
-	/// Whether the captured values are weakly referenced
-	bool weak_capture;
 	ffi_cif cif;
 	/// Expected types of the arguments
 	di_type_t atypes[];
@@ -163,9 +160,7 @@ static void free_closure(struct di_object *o) {
 
 	struct di_closure *cl = (void *)o;
 	for (int i = 0; i < cl->nargs0; i++) {
-		if (!cl->weak_capture) {
-			di_free_value(cl->atypes[i], (void *)cl->cargs[i]);
-		}
+		di_free_value(cl->atypes[i], (void *)cl->cargs[i]);
 		free((void *)cl->cargs[i]);
 	}
 	free(cl->cargs);
@@ -175,7 +170,7 @@ static void free_closure(struct di_object *o) {
 struct di_closure *
 di_create_closure(void (*fn)(void), di_type_t rtype, int ncaptures,
                   const di_type_t *capture_types, const void *const *captures, int nargs,
-                  const di_type_t *arg_types, bool weak_capture) {
+                  const di_type_t *arg_types) {
 	if (ncaptures < 0 || nargs < 0 || ncaptures + nargs > MAX_NARGS) {
 		return ERR_PTR(-E2BIG);
 	}
@@ -202,7 +197,6 @@ di_create_closure(void (*fn)(void), di_type_t rtype, int ncaptures,
 	cl->dtor = free_closure;
 	cl->nargs = nargs;
 	cl->nargs0 = ncaptures;
-	cl->weak_capture = weak_capture;
 
 	if (ncaptures) {
 		memcpy(cl->atypes, capture_types, sizeof(di_type_t) * ncaptures);
@@ -223,11 +217,7 @@ di_create_closure(void (*fn)(void), di_type_t rtype, int ncaptures,
 
 	for (int i = 0; i < ncaptures; i++) {
 		void *dst = malloc(di_sizeof_type(capture_types[i]));
-		if (!weak_capture) {
-			di_copy_value(capture_types[i], dst, captures[i]);
-		} else {
-			memcpy(dst, captures[i], di_sizeof_type(capture_types[i]));
-		}
+		di_copy_value(capture_types[i], dst, captures[i]);
 		cl->cargs[i] = dst;
 	}
 
@@ -255,7 +245,7 @@ int di_add_method(struct di_object *o, const char *name, void (*fn)(void),
 	va_end(ap);
 
 	ats[0] = DI_TYPE_OBJECT;
-	auto f = di_create_closure(fn, rtype, 0, NULL, NULL, nargs + 1, ats, false);
+	auto f = di_create_closure(fn, rtype, 0, NULL, NULL, nargs + 1, ats);
 	return di_add_member_move(o, name, (di_type_t[]){DI_TYPE_OBJECT}, (void **)&f);
 }
 

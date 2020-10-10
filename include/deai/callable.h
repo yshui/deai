@@ -25,8 +25,7 @@ struct di_closure *nullable di_create_closure(void (*nonnull fn)(void), di_type_
                                               int ncaptures,
                                               const di_type_t *nullable capture_types,
                                               const void *nullable const *nullable captures,
-                                              int nargs, const di_type_t *nullable arg_types,
-                                              bool weak_capture);
+                                              int nargs, const di_type_t *nullable arg_types);
 PUBLIC int di_add_method(struct di_object *nonnull object, const char *nonnull name,
                          void (*nonnull fn)(void), di_type_t rtype, int nargs, ...);
 

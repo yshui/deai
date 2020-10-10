@@ -129,10 +129,10 @@ int di_proxy_signal(struct di_object *nonnull src, const char *nonnull srcsig,
 
 #define capture_types(...) LIST_APPLY_pre(typeof, SEP_COMMA, __VA_ARGS__)
 
-#define di_closure(fn, weak, caps, ...)                                                       \
+#define di_closure(fn, caps, ...)                                                             \
 	di_create_closure((void *)fn, di_return_typeid(fn capture_types caps, ##__VA_ARGS__), \
 	                  capture caps, VA_ARGS_LENGTH(__VA_ARGS__),                          \
-	                  (di_type_t[]){LIST_APPLY(di_typeid, SEP_COMMA, __VA_ARGS__)}, weak)
+	                  (di_type_t[]){LIST_APPLY(di_typeid, SEP_COMMA, __VA_ARGS__)})
 
 #define _di_getm(di, modn, on_err)                                                       \
 	object_cleanup struct di_object *modn##m = NULL;                                 \
@@ -159,7 +159,7 @@ int di_proxy_signal(struct di_object *nonnull src, const char *nonnull srcsig,
 	do {                                                                             \
 		di_getmi(di, event);                                                     \
 		assert(eventm);                                                          \
-		auto cl = di_closure(fn, false, cap);                                    \
+		auto cl = di_closure(fn, cap);                                           \
 		di_listen_to_once(eventm, "prepare", (void *)cl, true);                  \
 		di_unref_object((void *)cl);                                             \
 	} while (0)
@@ -294,10 +294,12 @@ int di_proxy_signal(struct di_object *nonnull src, const char *nonnull srcsig,
 	char **: NULL, \
 	const char **: NULL, \
 	struct di_object **: NULL, \
+	struct di_weak_object **: NULL, \
 	void **: NULL, \
 	double *: 0.0, \
 	bool *: false \
 	)
+
 #define gen_args(...) LIST_APPLY(TYPE_INIT, SEP_COMMA, ##__VA_ARGS__)
 
 #define di_return_typeof(fn, ...) typeof(fn(gen_args(__VA_ARGS__)))

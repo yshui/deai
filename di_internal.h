@@ -105,6 +105,7 @@ static inline ffi_type *nullable di_type_to_ffi(di_type_t in) {
 	    [DI_TYPE_FLOAT] = &ffi_type_double,
 	    [DI_TYPE_POINTER] = &ffi_type_pointer,
 	    [DI_TYPE_OBJECT] = &ffi_type_pointer,
+	    [DI_TYPE_WEAK_OBJECT] = &ffi_type_pointer,
 	    [DI_TYPE_STRING] = &ffi_type_pointer,
 	    [DI_TYPE_STRING_LITERAL] = &ffi_type_pointer,
 	    [DI_TYPE_ARRAY] = &ffi_type_di_array,

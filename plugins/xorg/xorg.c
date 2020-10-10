@@ -69,10 +69,12 @@ static void xorg_disconnect(struct di_xorg_connection *xc) {
 	xc->xcb_fdlistener = NULL;
 }
 
-static void di_xorg_ioev(struct di_xorg_connection *dc) {
+static void di_xorg_ioev(struct di_weak_object *weak) {
 	// di_get_log(dc->x->di);
 	// di_log_va((void *)log, DI_LOG_DEBUG, "xcb ioev\n");
 
+	auto dc = (struct di_xorg_connection *)di_upgrade_weak_ref(weak);
+	DI_CHECK(dc != NULL, "got ioev events but the listener has died");
 	xcb_generic_event_t *ev;
 
 	while ((ev = xcb_poll_for_event(dc->c))) {
@@ -81,8 +83,9 @@ static void di_xorg_ioev(struct di_xorg_connection *dc) {
 		struct di_xorg_ext *ex, *tmp;
 		HASH_ITER (hh, dc->xext, ex, tmp) {
 			int status = ex->handle_event(ex, ev);
-			if (status != 1)
+			if (status != 1) {
 				break;
+			}
 		}
 		free(ev);
 	}
@@ -210,7 +213,7 @@ static struct di_variant di_xorg_get_ext(struct di_xorg_connection *xc, const ch
 			return (struct di_variant){.type = DI_TYPE_OBJECT, .value = ret};
 		}
 	}
-	return (struct di_variant){ .type = DI_LAST_TYPE, .value = NULL };
+	return (struct di_variant){.type = DI_LAST_TYPE, .value = NULL};
 }
 
 struct xscreen {
@@ -452,8 +455,8 @@ static struct di_object *di_xorg_connect_to(struct di_xorg *x, const char *displ
 
 	di_callr(eventm, "fdevent", dc->xcb_fd, xcb_get_file_descriptor(dc->c), IOEV_READ);
 
-	struct di_object *odc = (void *)dc;
-	auto cl = di_closure(di_xorg_ioev, true, (odc));
+	auto odc = di_weakly_ref_object((struct di_object *)dc);
+	auto cl = di_closure(di_xorg_ioev, (odc));
 	dc->xcb_fdlistener = di_listen_to(dc->xcb_fd, "read", (void *)cl);
 	di_unref_object((void *)cl);
 

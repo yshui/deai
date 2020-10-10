@@ -142,9 +142,9 @@ static void di_dbus_watch_name(_di_dbus_connection *c, const char *busname) {
 	auto ret = di_dbus_send(c, msg);
 	dbus_message_unref(msg);
 
-	// Cast busname to "char *" so di_closure would clone it.
-	auto cl = di_closure(di_dbus_update_name_from_msg, false,
-	                     ((void *)c, (char *)busname), void *);
+	// Cast busname to "char *" so ri_closure would clone it.
+	auto cl =
+	    di_closure(di_dbus_update_name_from_msg, ((void *)c, (char *)busname), void *);
 	di_listen_to_once(ret, "reply", (struct di_object *)cl, true);
 	di_unref_object((void *)cl);
 	di_unref_object((void *)ret);
@@ -246,7 +246,7 @@ static void _dbus_lookup_member(_di_dbus_object *o, const char *method,
                                 bool is_signal, struct di_object *closure) {
 	auto p = _dbus_introspect(o);
 
-	auto cl = di_closure(_dbus_lookup_member_cb, false,
+	auto cl = di_closure(_dbus_lookup_member_cb,
 	                     (method, is_signal, closure), void *);
 	di_listen_to_once(p, "reply", (void *)cl, true);
 	di_unref_object((void *)cl);
@@ -283,8 +283,8 @@ _dbus_call_method(const char *iface, const char *method, struct di_tuple t) {
 	auto dobj = (_di_dbus_object *)t.elements[0].value->object;
 
 	struct di_tuple shifted_args = {
-		.length = t.length - 1,
-		.elements = t.elements + 1,
+	    .length = t.length - 1,
+	    .elements = t.elements + 1,
 	};
 
 	// XXX: probably better to destroy all objects when disconnect from bus
@@ -302,7 +302,7 @@ _dbus_call_method(const char *iface, const char *method, struct di_tuple t) {
 
 	auto ret = di_new_object_with_type(struct di_object);
 	auto p = di_dbus_send(dobj->c, msg);
-	auto cl = di_closure(_dbus_call_method_reply_cb, false, (ret), void *);
+	auto cl = di_closure(_dbus_call_method_reply_cb, (ret), void *);
 	di_listen_to_once(p, "reply", (void *)cl, true);
 	di_unref_object((void *)cl);
 	di_unref_object((void *)p);
@@ -444,7 +444,7 @@ static unsigned int _dbus_add_watch(DBusWatch *w, void *ud) {
 		return false;
 	}
 
-	auto cl = di_closure(ioev_callback, true, ((void *)oc->conn, (void *)w), int);
+	auto cl = di_closure(ioev_callback, ((void *)oc->conn, (void *)w), int);
 	auto l = di_listen_to(ioev, "io", (void *)cl);
 	di_unref_object((void *)cl);
 

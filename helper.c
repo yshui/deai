@@ -96,7 +96,7 @@ PUBLIC int di_proxy_signal(struct di_object *src, const char *srcsig,
 	asprintf(&buf, "__del_signal_%s", proxysig);
 
 	// Let the __del_signal method hold the only ref to proxied_signal
-	auto cl = di_closure(_del_proxied_signal, false, ((struct di_object *)c));
+	auto cl = di_closure(_del_proxied_signal, ((struct di_object *)c));
 	int ret = di_add_member_move(proxy, buf, (di_type_t[]){DI_TYPE_OBJECT}, (void **)&cl);
 	di_unref_object((void *)c);
 	free(buf);

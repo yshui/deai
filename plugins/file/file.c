@@ -31,24 +31,32 @@ struct di_file_watch {
 	struct di_file_watch_entry *byname, *bywd;
 };
 
-static int di_file_ioev(struct di_file_watch *o) {
+static int di_file_ioev(struct di_weak_object *weak) {
+	auto fw = (struct di_file_watch *)di_upgrade_weak_ref(weak);
+	DI_CHECK(fw != NULL, "got ioev events but the listener has died");
+
 	char evbuf[sizeof(struct inotify_event) + NAME_MAX + 1];
 	struct inotify_event *ev = (void *)evbuf;
-	int ret = read(o->fd, evbuf, sizeof(evbuf));
-	int off = 0;
+	int ret = read(fw->fd, evbuf, sizeof(evbuf));
+	ptrdiff_t off = 0;
 	while (off < ret) {
 		char *path = "";
-		if (ev->len > 0)
+		if (ev->len > 0) {
 			path = ev->name;
+		}
 
 		struct di_file_watch_entry *we = NULL;
-		HASH_FIND_INT(o->bywd, &ev->wd, we);
-		if (!we)
+		HASH_FIND_INT(fw->bywd, &ev->wd, we);
+		if (!we) {
 			// ???
 			continue;
-#define emit(m, name)                                                               \
-	if (ev->mask & m)                                                           \
-	di_emit(o, name, we->fname, path)
+		}
+#define emit(m, name)                                                                    \
+	do {                                                                             \
+		if (ev->mask & (m)) {                                                      \
+			di_emit(fw, name, we->fname, path);                              \
+		}                                                                        \
+	} while (0)
 		emit(IN_CREATE, "create");
 		emit(IN_ACCESS, "access");
 		emit(IN_ATTRIB, "attrib");
@@ -59,10 +67,12 @@ static int di_file_ioev(struct di_file_watch *o) {
 		emit(IN_MODIFY, "modify");
 		emit(IN_MOVE_SELF, "move-self");
 		emit(IN_OPEN, "open");
-		if (ev->mask & IN_MOVED_FROM)
-			di_emit(o, "moved-from", we->fname, path, ev->cookie);
-		if (ev->mask & IN_MOVED_TO)
-			di_emit(o, "moved-to", we->fname, path, ev->cookie);
+		if (ev->mask & IN_MOVED_FROM) {
+			di_emit(fw, "moved-from", we->fname, path, ev->cookie);
+		}
+		if (ev->mask & IN_MOVED_TO) {
+			di_emit(fw, "moved-to", we->fname, path, ev->cookie);
+		}
 #undef emit
 		off += sizeof(struct inotify_event) + ev->len;
 		ev = (void *)(evbuf + off);
@@ -71,8 +81,9 @@ static int di_file_ioev(struct di_file_watch *o) {
 }
 
 static int di_file_add_watch(struct di_file_watch *fw, const char *path) {
-	if (!path)
+	if (!path) {
 		return -EINVAL;
+	}
 
 	int ret = inotify_add_watch(fw->fd, path, IN_ALL_EVENTS);
 	if (ret >= 0) {
@@ -88,21 +99,25 @@ static int di_file_add_watch(struct di_file_watch *fw, const char *path) {
 }
 
 static void di_file_add_many_watch(struct di_file_watch *fw, struct di_array paths) {
-	if (paths.length > 0 && paths.elem_type != DI_TYPE_STRING)
+	if (paths.length > 0 && paths.elem_type != DI_TYPE_STRING) {
 		return;
+	}
 	const char **arr = paths.arr;
-	for (int i = 0; i < paths.length; i++)
+	for (int i = 0; i < paths.length; i++) {
 		di_file_add_watch(fw, arr[i]);
+	}
 }
 
 static int di_file_rm_watch(struct di_file_watch *fw, const char *path) {
-	if (!path)
+	if (!path) {
 		return -EINVAL;
+	}
 
 	struct di_file_watch_entry *we = NULL;
 	HASH_FIND(hh2, fw->byname, path, strlen(path), we);
-	if (!we)
+	if (!we) {
 		return -ENOENT;
+	}
 
 	inotify_rm_watch(fw->fd, we->wd);
 	HASH_DEL(fw->bywd, we);
@@ -113,8 +128,9 @@ static int di_file_rm_watch(struct di_file_watch *fw, const char *path) {
 }
 
 static void stop_file_watcher(struct di_file_watch *fw) {
-	if (!fw->fdev)
+	if (!fw->fdev) {
 		return;
+	}
 
 	close(fw->fd);
 
@@ -135,12 +151,14 @@ static void stop_file_watcher(struct di_file_watch *fw) {
 }
 
 static struct di_object *di_file_new_watch(struct di_module *f, struct di_array paths) {
-	if (paths.length > 0 && paths.elem_type != DI_TYPE_STRING)
+	if (paths.length > 0 && paths.elem_type != DI_TYPE_STRING) {
 		return di_new_error("Argument needs to be an array of strings");
+	}
 
 	auto ifd = inotify_init1(IN_NONBLOCK | IN_CLOEXEC);
-	if (ifd < 0)
+	if (ifd < 0) {
 		return di_new_error("Failed to create new inotify file descriptor");
+	}
 
 	auto fw = di_new_object_with_type(struct di_file_watch);
 	di_set_type((void *)fw, "deai.plugin.file:watch");
@@ -154,8 +172,8 @@ static struct di_object *di_file_new_watch(struct di_module *f, struct di_array 
 	di_mgetm(f, event, di_new_error("Can't find event module"));
 	di_callr(eventm, "fdevent", fw->fdev, fw->fd, IOEV_READ);
 
-	struct di_object *tmpo = (void *)fw;
-	auto cl = di_closure(di_file_ioev, true, (tmpo));
+	auto tmpo = di_weakly_ref_object((struct di_object *)fw);
+	auto cl = di_closure(di_file_ioev, (tmpo));
 	fw->fdev_listener = di_listen_to(fw->fdev, "read", (void *)cl);
 	di_unref_object((void *)cl);
 
