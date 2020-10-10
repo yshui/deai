@@ -458,11 +458,6 @@ int main(int argc, char *argv[]) {
 	DI_CHECK_OK(di_method(p, "chdir", di_chdir, char *));
 	DI_CHECK_OK(di_method(p, "exec", di_exec, struct di_array));
 
-	/**
-	 * XXX: Quit method should delay the __destroyed signal until control flow
-	 * gets back to the mainloop. The destruction shouldn't happen on someone
-	 * else's stack frame
-	 */
 	DI_CHECK_OK(di_method(p, "quit", di_prepare_quit));
 	DI_CHECK_OK(di_method(p, "exit", di_prepare_exit, int));
 	DI_CHECK_OK(di_method(p, "terminate", di_terminate));

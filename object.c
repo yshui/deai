@@ -360,7 +360,6 @@ PUBLIC void di_destroy_object(struct di_object *_obj) {
 		fprintf(stderr, "warning: destroy object multiple times\n");
 	}
 	obj->destroyed = 1;
-	di_clear_listeners(_obj);
 
 	// Call dtor before removing members to allow the dtor to check __type
 	// Never call dtor more than once
@@ -755,13 +754,6 @@ static struct di_listener *di_new_listener(void) {
 	return l;
 }
 
-// __destroyed is a special signal, it doesn't hold reference to the object
-// (otherwise the object won't be freed, catch 22), and __new_/__del_ methods
-// are not called for it
-#define is_destroy(n) (strcmp(n, "__destroyed") == 0)
-
-// Returned listener has 1 ref, which is dropped when the listener stops.
-// You don't usually need to ref a listener
 PUBLIC struct di_listener *
 di_listen_to_once(struct di_object *_obj, const char *name, struct di_object *h, bool once) {
 	auto obj = (struct di_object_internal *)_obj;
@@ -776,7 +768,7 @@ di_listen_to_once(struct di_object *_obj, const char *name, struct di_object *h,
 
 		INIT_LIST_HEAD(&sig->listeners);
 		HASH_ADD_KEYPTR(hh, obj->signals, sig->name, strlen(sig->name), sig);
-		if (!is_destroy(name)) {
+		if (strncmp(name, "__", 2) != 0) {
 			bool handler_found;
 			call_handler_with_fallback(_obj, "__new_signal", sig->name,
 			                           (struct di_variant){NULL, DI_LAST_TYPE},
@@ -805,50 +797,6 @@ di_listen_to(struct di_object *o, const char *name, struct di_object *h) {
 	return di_listen_to_once(o, name, h, false);
 }
 
-/**
- * Remove all listeners from an object.
- * @param o the object.
- */
-PUBLIC void di_clear_listeners(struct di_object *_obj) {
-	auto obj = (struct di_object_internal *)_obj;
-	struct di_signal *sig, *tsig;
-	HASH_ITER (hh, obj->signals, sig, tsig) {
-		if (!is_destroy(sig->name)) {
-			bool handler_found;
-			call_handler_with_fallback(_obj, "__del_signal", sig->name,
-			                           (struct di_variant){NULL, DI_LAST_TYPE},
-			                           NULL, NULL, &handler_found);
-		}
-
-		// unrefing object, calling detach might cause some other listeners
-		// in the linked list to be stopped, which is not accounted for by
-		// list_for_each_entry_safe. So we need to clear listeners in 2
-		// stages
-		struct di_listener *l, *nl;
-
-		// First, set ->signal to NULL, so di_stop_listener won't do anything
-		list_for_each_entry (l, &sig->listeners, siblings)
-			l->signal = NULL;
-
-		// Then, actually do the cleaning work
-		list_for_each_entry_safe (l, nl, &sig->listeners, siblings) {
-			list_del(&l->siblings);
-			if (l->handler) {
-				di_unref_object(l->handler);
-			}
-			di_call(l, "__detach");
-			di_unref_object((void *)l);
-		}
-
-		HASH_DEL(obj->signals, sig);
-		if (!is_destroy(sig->name)) {
-			di_unref_object(_obj);
-		}
-		free(sig->name);
-		free(sig);
-	}
-}
-
 PUBLIC int di_stop_listener(struct di_listener *l) {
 	// The caller announce the intention to stop this listener
 	// meaning they don't want the __detach to be called anymore
@@ -865,7 +813,8 @@ PUBLIC int di_stop_listener(struct di_listener *l) {
 	l->signal->nlisteners--;
 	if (list_empty(&l->signal->listeners)) {
 		HASH_DEL(((struct di_object_internal *)l->signal->owner)->signals, l->signal);
-		if (!is_destroy(l->signal->name)) {
+		// Don't call deleter for internal signal names
+		if (strncmp(l->signal->name, "__", 2) != 0) {
 			bool handler_found;
 			call_handler_with_fallback(l->signal->owner, "__del_signal",
 			                           l->signal->name,
@@ -887,7 +836,6 @@ PUBLIC int di_stop_listener(struct di_listener *l) {
 }
 
 PUBLIC int di_emitn(struct di_object *o, const char *name, struct di_tuple t) {
-	assert(!is_destroy(name));
 	if (t.length > MAX_NARGS) {
 		return -E2BIG;
 	}

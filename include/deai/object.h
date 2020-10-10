@@ -313,9 +313,6 @@ int di_emitn(struct di_object *nonnull, const char *nonnull name, struct di_tupl
 // if the ref count drop to 0 after this process
 void di_destroy_object(struct di_object *nonnull);
 
-// Detach all listeners attached to object, __detach of listeners will be called
-void di_clear_listeners(struct di_object *nonnull);
-
 struct di_object *nonnull allocates(malloc) di_ref_object(struct di_object *nonnull);
 
 /// Create a weak reference to a di_object. The object could be NULL, in that case, an
