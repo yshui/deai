@@ -51,7 +51,6 @@ struct di_lua_state {
 	struct di_object;
 	lua_State *L;
 	struct di_module *m;
-	struct di_listener *d;
 };
 
 struct di_lua_ref {
@@ -365,7 +364,6 @@ const luaL_Reg di_lua_di_methods[] = {
 };
 
 static void lua_state_dtor(struct di_lua_state *obj) {
-	di_stop_listener(obj->d);
 	lua_close(obj->L);
 	di_remove_member_raw((void *)obj->m, "__lua_state");
 }
@@ -400,8 +398,6 @@ static void lua_new_state(struct di_module *m) {
 	}
 	lua_setglobal(L->L, "os");
 	lua_pop(L->L, 1);
-	L->d = di_listen_to_destroyed((void *)di_module_get_deai(m),
-	                              trivial_destroyed_handler, (void *)L);
 
 	auto Lo = (struct di_object *)L;
 	di_member(m, "__lua_state", Lo);
