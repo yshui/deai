@@ -876,8 +876,10 @@ static int di_lua_upgrade_weak_ref(lua_State *L) {
 static int di_lua_weak_ref(lua_State *L) {
 	struct di_object *strong = di_lua_checkproxy(L, 1);
 	union di_value weak = {.weak_object = di_weakly_ref_object(strong)};
-	return di_lua_pushvariant(
+	int nret = di_lua_pushvariant(
 	    L, NULL, (struct di_variant){.type = DI_TYPE_WEAK_OBJECT, .value = &weak});
+	di_drop_weak_ref(&weak.weak_object);
+	return nret;
 }
 
 static int di_lua_meta_newindex_for_weak_object(lua_State *L) {
