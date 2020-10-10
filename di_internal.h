@@ -48,6 +48,11 @@ struct di_object_internal {
 extern thread_local struct list_head all_objects;
 #endif
 
+struct di_anonymous_root {
+	struct di_object *nonnull obj;
+	struct list_head siblings;
+};
+
 struct deai {
 	struct di_object_internal;
 	struct ev_loop *nonnull loop;
@@ -60,6 +65,7 @@ struct deai {
 
 	int *nonnull exit_code;
 	bool *nonnull quit;
+	struct list_head anonymous_roots;
 };
 
 struct di_module {

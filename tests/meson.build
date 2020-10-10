@@ -24,5 +24,12 @@ foreach t : test_cases
        ], timeout: 3)
 endforeach
 
-conversion_test = shared_library('conversion_test', 'conversion_test.c', c_args: base_c_args, name_prefix: '', include_directories: incs)
-test('conversion_test', deai_exe, args: ['load_plugin', 's:' + conversion_test.full_path()])
+core_test_cases = [
+  'conversion_test.c',
+  'anonymous_root_test.c'
+]
+
+foreach t : core_test_cases
+  test_so = shared_library(t.underscorify(), t, c_args: base_c_args, name_prefix: '', include_directories: incs)
+  test(t.underscorify()+'_test', deai_exe, args: ['load_plugin', 's:' + test_so.full_path()])
+endforeach
