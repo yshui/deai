@@ -272,8 +272,20 @@ static void _dbus_call_method_reply_cb(struct di_object *sig, void *msg) {
 	di_destroy_object(sig);
 }
 
-static struct di_object *_dbus_call_method(_di_dbus_object *dobj, const char *iface,
-                                           const char *method, struct di_tuple t) {
+static struct di_object *
+_dbus_call_method(const char *iface, const char *method, struct di_tuple t) {
+	// The first argument is the dbus object
+	if (t.length == 0 || t.elements[0].type != DI_TYPE_OBJECT) {
+		return di_new_error("first argument to dbus method call is not a dbus "
+		                    "object");
+	}
+
+	auto dobj = (_di_dbus_object *)t.elements[0].value->object;
+
+	struct di_tuple shifted_args = {
+		.length = t.length - 1,
+		.elements = t.elements + 1,
+	};
 
 	// XXX: probably better to destroy all objects when disconnect from bus
 	if (!dobj->c->conn) {
@@ -284,7 +296,7 @@ static struct di_object *_dbus_call_method(_di_dbus_object *dobj, const char *if
 	DBusMessageIter i;
 	dbus_message_iter_init_append(msg, &i);
 
-	if (_dbus_serialize_struct(&i, t) < 0) {
+	if (_dbus_serialize_struct(&i, shifted_args) < 0) {
 		return di_new_error("Can't serialize arguments");
 	}
 
@@ -308,7 +320,6 @@ static void di_free_dbus_object(struct di_object *o) {
 
 typedef struct {
 	struct di_object;
-	_di_dbus_object *dobj;
 	char *method;
 	char *interface;
 } _di_dbus_method;
@@ -317,15 +328,13 @@ static void di_dbus_free_method(struct di_object *o) {
 	auto dbus_method = (_di_dbus_method *)o;
 	free(dbus_method->method);
 	free(dbus_method->interface);
-	di_unref_object((void *)dbus_method->dobj);
 }
 
 static int
 call_dbus_method(struct di_object *m, di_type_t *rt, union di_value *ret, struct di_tuple t) {
 	auto dbus_method = (_di_dbus_method *)m;
 	*rt = DI_TYPE_OBJECT;
-	ret->object = _dbus_call_method(dbus_method->dobj, dbus_method->interface,
-	                                dbus_method->method, t);
+	ret->object = _dbus_call_method(dbus_method->interface, dbus_method->method, t);
 	return 0;
 }
 
@@ -350,7 +359,6 @@ static struct di_object *di_dbus_object_getter(_di_dbus_object *dobj, const char
 	auto ret = di_new_object_with_type(_di_dbus_method);
 	ret->method = m;
 	ret->interface = ifc;
-	ret->dobj = dobj;
 	di_ref_object((void *)dobj);
 
 	di_set_object_dtor((void *)ret, di_dbus_free_method);
