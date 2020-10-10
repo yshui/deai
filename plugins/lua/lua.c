@@ -74,9 +74,9 @@ struct di_lua_script {
 };
 
 static int di_lua_pushvariant(lua_State *L, const char *name, struct di_variant var);
-static int di_lua_getter(lua_State *L);
-static int di_lua_getter_for_weak_object(lua_State *L);
-static int di_lua_setter(lua_State *L);
+static int di_lua_meta_index(lua_State *L);
+static int di_lua_meta_newindex_for_weak_object(lua_State *L);
+static int di_lua_meta_newindex(lua_State *L);
 
 static int di_lua_errfunc(lua_State *L) {
 	/* Convert error to string, to prevent a follow-up error with lua_concat. */
@@ -137,12 +137,6 @@ static void *di_lua_checkproxy(lua_State *L, int index) {
 	unreachable();
 }
 
-struct lua_table_getter {
-	struct di_object;
-
-	struct di_lua_ref *t;
-};
-
 static void lua_ref_dtor(struct di_lua_ref *t) {
 	di_stop_listener(t->d);
 	luaL_unref(t->s->L->L, LUA_REGISTRYINDEX, t->tref);
@@ -168,19 +162,20 @@ static inline int di_lua_type_to_di_variant(lua_State *L, int i, struct di_varia
 }
 
 static int
-di_lua_table_get(struct di_object *m, di_type_t *rt, union di_value *ret, struct di_tuple tu) {
-	struct lua_table_getter *g = (void *)m;
-	struct di_lua_ref *t = g->t;
-	if (tu.length != 1) {
+di_lua_di_getter(struct di_object *m, di_type_t *rt, union di_value *ret, struct di_tuple tu) {
+	if (tu.length != 2) {
 		return -EINVAL;
 	}
 
 	struct di_variant *vars = tu.elements;
-	if (vars[0].type != DI_TYPE_STRING && vars[0].type != DI_TYPE_STRING_LITERAL) {
+	DI_CHECK(vars[0].type == DI_TYPE_OBJECT);
+
+	auto t = (struct di_lua_ref *)vars[0].value->object;
+	if (vars[1].type != DI_TYPE_STRING && vars[1].type != DI_TYPE_STRING_LITERAL) {
 		return -EINVAL;
 	}
 
-	const char *key = vars[0].value->string_literal;
+	const char *key = vars[1].value->string_literal;
 
 	struct di_lua_script *s = t->s;
 	lua_State *L = t->s->L->L;
@@ -197,7 +192,8 @@ di_lua_table_get(struct di_object *m, di_type_t *rt, union di_value *ret, struct
 }
 
 static struct di_lua_ref *lua_type_to_di_object(lua_State *L, int i, void *call) {
-	// TODO(yshui): need to make sure that same lua object get same di object
+	// TODO(yshui): probably a good idea to make sure that same lua object get same
+	// di object?
 	struct di_lua_script *s;
 
 	// retrive the script object from lua registry
@@ -216,9 +212,8 @@ static struct di_lua_ref *lua_type_to_di_object(lua_State *L, int i, void *call)
 	lua_pushinteger(L, o->tref);
 	lua_rawget(L, LUA_REGISTRYINDEX);
 
-	auto getter = di_new_object_with_type(struct lua_table_getter);
-	di_set_object_call((void *)getter, di_lua_table_get);
-	getter->t = o;
+	auto getter = di_new_object_with_type(struct di_object);
+	di_set_object_call((void *)getter, di_lua_di_getter);
 	di_add_member_move((void *)o, "__get", (di_type_t[]){DI_TYPE_OBJECT}, (void **)&getter);
 	di_set_object_dtor((void *)o, (void *)lua_ref_dtor);
 	di_set_object_call((void *)o, call);
@@ -288,14 +283,14 @@ static int di_lua_gc_for_weak_object(lua_State *L) {
 }
 
 const luaL_Reg di_lua_object_methods[] = {
-    {"__index", di_lua_getter},
-    {"__newindex", di_lua_setter},
+    {"__index", di_lua_meta_index},
+    {"__newindex", di_lua_meta_newindex},
     {"__gc", di_lua_gc},
     {0, 0},
 };
 
 const luaL_Reg di_lua_weak_object_methods[] = {
-    {"__index", di_lua_getter_for_weak_object},
+    {"__index", di_lua_meta_newindex_for_weak_object},
     {"__gc", di_lua_gc_for_weak_object},
     {0, 0},
 };
@@ -358,8 +353,8 @@ const char *allowed_os[] = {"time", "difftime", "clock", "tmpname", "date", NULL
 
 // the "di" global variable doesn't care about __gc
 const luaL_Reg di_lua_di_methods[] = {
-    {"__index", di_lua_getter},
-    {"__newindex", di_lua_setter},
+    {"__index", di_lua_meta_index},
+    {"__newindex", di_lua_meta_newindex},
     {0, 0},
 };
 
@@ -693,8 +688,8 @@ static int di_lua_listener_gc(lua_State *L) {
 }
 
 const luaL_Reg di_lua_listener_methods[] = {
-    {"__index", di_lua_getter},
-    {"__newindex", di_lua_setter},
+    {"__index", di_lua_meta_index},
+    {"__newindex", di_lua_meta_newindex},
     {"__gc", di_lua_listener_gc},
     {0, 0},
 };
@@ -883,7 +878,7 @@ static int di_lua_weak_ref(lua_State *L) {
 	    L, NULL, (struct di_variant){.type = DI_TYPE_WEAK_OBJECT, .value = &weak});
 }
 
-static int di_lua_getter_for_weak_object(lua_State *L) {
+static int di_lua_meta_newindex_for_weak_object(lua_State *L) {
 	/* This is __index for lua di_weak_object proxies. Weak object reference proxies
 	 * only have one method, `upgrade()`, to retrieve a strong object reference
 	 */
@@ -902,7 +897,7 @@ static int di_lua_getter_for_weak_object(lua_State *L) {
 	return 0;
 }
 
-static int di_lua_getter(lua_State *L) {
+static int di_lua_meta_index(lua_State *L) {
 
 	/* This is __index for lua di_object proxies. This function
 	 * will first try to lookup method with the requested name.
@@ -944,7 +939,7 @@ static int di_lua_getter(lua_State *L) {
 	return rc;
 }
 
-static int di_lua_setter(lua_State *L) {
+static int di_lua_meta_newindex(lua_State *L) {
 
 	/* This is the __newindex function for lua di_object proxies,
 	 * this translate calls to corresponding __set_<name>
