@@ -83,7 +83,7 @@ static void di_dbus_update_name(_di_dbus_connection *c, const char *wk, const ch
 	if (!old || *old != '\0') {
 		// remove out dated entries
 		list_for_each_entry_safe (i, ni, &c->known_names, sibling) {
-			if (strcmp(wk, i->well_known)) {
+			if (strcmp(wk, i->well_known) != 0) {
 				continue;
 			}
 
@@ -150,8 +150,9 @@ static void di_dbus_watch_name(_di_dbus_connection *c, const char *busname) {
 
 static void di_dbus_unwatch_name(_di_dbus_connection *c, const char *busname) {
 	// stop watching for name changes
-	if (!c->conn)
+	if (!c->conn) {
 		return;
+	}
 
 	char *match;
 	asprintf(&match,
@@ -310,17 +311,19 @@ typedef struct {
 	char *interface;
 } _di_dbus_method;
 
-static void di_dbus_free_method(_di_dbus_method *o) {
-	free(o->method);
-	free(o->interface);
-	di_unref_object((void *)o->dobj);
+static void di_dbus_free_method(struct di_object *o) {
+	auto dbus_method = (_di_dbus_method *)o;
+	free(dbus_method->method);
+	free(dbus_method->interface);
+	di_unref_object((void *)dbus_method->dobj);
 }
 
-static int call_dbus_method(_di_dbus_method *m, di_type_t *rt, void **ret, struct di_tuple t) {
+static int
+call_dbus_method(struct di_object *m, di_type_t *rt, union di_value *ret, struct di_tuple t) {
+	auto dbus_method = (_di_dbus_method *)m;
 	*rt = DI_TYPE_OBJECT;
-	auto retd = tmalloc(struct di_object *, 1);
-	*retd = _dbus_call_method(m->dobj, m->interface, m->method, t);
-	*ret = retd;
+	ret->object = _dbus_call_method(dbus_method->dobj, dbus_method->interface,
+	                                dbus_method->method, t);
 	return 0;
 }
 
@@ -348,8 +351,8 @@ static struct di_object *di_dbus_object_getter(_di_dbus_object *dobj, const char
 	ret->dobj = dobj;
 	di_ref_object((void *)dobj);
 
-	di_set_object_dtor((void *)ret, (void *)di_dbus_free_method);
-	di_set_object_call((void *)ret, (void *)call_dbus_method);
+	di_set_object_dtor((void *)ret, di_dbus_free_method);
+	di_set_object_call((void *)ret, call_dbus_method);
 	return (void *)ret;
 }
 
