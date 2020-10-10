@@ -1,15 +1,15 @@
-di.load_plugin("./plugins/xorg/di_xorg.so")
-di.spawn.run({"Xvfb", ":1", "-screen", "0", "1600x1200x24+32"}, true)
-di.spawn.run({"Xvfb", ":2", "-screen", "0", "1600x1200x24+32"}, true)
+di:load_plugin("./plugins/xorg/di_xorg.so")
+di.spawn:run({"Xvfb", ":1", "-screen", "0", "1600x1200x24+32"}, true)
+di.spawn:run({"Xvfb", ":2", "-screen", "0", "1600x1200x24+32"}, true)
 di.os.env.DISPLAY=":1"
 
-di.event.timer(0.2).on("elapsed", true, function()
+di.event:timer(0.2):on("elapsed", true, function()
     -- wait a awhile for Xvfb to start
-    o = di.xorg.connect()
+    o = di.xorg:connect()
     assert(o.asdf == nil)
     if o.errmsg then
         print(o.errmsg)
-        di.exit(1)
+        di:exit(1)
         return
     end
     print(o.xrdb)
@@ -17,7 +17,7 @@ di.event.timer(0.2).on("elapsed", true, function()
     print(o.xrdb)
 
     xi = o.xinput
-    xi.on("new-device", function(dev)
+    xi:on("new-device", function(dev)
         print(string.format("new device %s %s %s %d", dev.type, dev.use, dev.name, dev.id))
         print("enabled:", dev.props["Device Enabled"][1])
         dev.props["Coordinate Transformation Matrix"] = {2, 0, 0, 0, 2, 0, 0, 0, 2}
@@ -28,19 +28,19 @@ di.event.timer(0.2).on("elapsed", true, function()
         end
     end)
 
-    o.key.new({"mod4"}, "d", false).on("pressed", function()
+    o.key:new({"mod4"}, "d", false):on("pressed", function()
         print("pressed")
     end)
 
     -- test the new-device event
-    di.spawn.run({"xinput", "create-master", "b"}, true)
+    di.spawn:run({"xinput", "create-master", "b"}, true)
     -- test key events
-    di.spawn.run({"xdotool", "key", "super+d"}, true)
+    di.spawn:run({"xdotool", "key", "super+d"}, true)
 
-    o.randr.on("view-change", function()
+    o.randr:on("view-change", function()
         print("view-change")
     end)
-    o.randr.on("output-change", function()
+    o.randr:on("output-change", function()
         print("output-change")
     end)
 
@@ -62,21 +62,21 @@ di.event.timer(0.2).on("elapsed", true, function()
         end
     end
 
-    di.spawn.run({"xrandr", "--output", "screen", "--off"}, true)
+    di.spawn:run({"xrandr", "--output", "screen", "--off"}, true)
 
-    di.event.timer(1).on("elapsed", true, function()
+    di.event:timer(1):on("elapsed", true, function()
         devs = xi.devices
         for _, d in pairs(devs) do
             print(string.format("device: %s %s %s %d", d.type, d.use, d.name, d.id))
         end
 
-        o.disconnect()
-        o = di.xorg.connect_to(":2")
+        o:disconnect()
+        o = di.xorg:connect_to(":2")
         if o.errmsg then
             print(o.errmsg)
-            di.exit(1)
+            di:exit(1)
             return
         end
-        di.quit()
+        di:quit()
     end)
 end)

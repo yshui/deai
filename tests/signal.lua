@@ -1,9 +1,9 @@
 a = {}
 
-di.register_module("test_a", a)
-di.test_a.on("ev", function(a, i)
-    print(a, i)
+di:register_module("test_a", a)
+di.test_a:on("ev", function(i)
+    print(i)
     assert(i == 20)
-    di.quit()
+    di:quit()
 end)
-di.test_a.emit("ev", 20)
+di.test_a:emit("ev", 20)

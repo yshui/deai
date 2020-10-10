@@ -1,1 +1,1 @@
-di.quit()
+di:quit()
