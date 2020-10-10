@@ -189,7 +189,14 @@ static void _dbus_deserialize_one(DBusMessageIter *i, void *retp, di_type_t *oty
 				    &i2, retp, dbus_message_iter_get_element_count(i));
 			}
 		}
+
 		*otype = DI_TYPE_ARRAY;
+		if (type2 == DBUS_TYPE_INVALID) {
+			// I think this means the array is empty, dbus doc is a bit vague
+			// on this
+			*(struct di_array *)retp = DI_ARRAY_INIT;
+			return;
+		}
 		return _dbus_deserialize_array(&i2, retp, type2,
 		                               dbus_message_iter_get_element_count(i));
 	}
