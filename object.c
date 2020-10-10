@@ -69,8 +69,8 @@ static int di_call_internal(struct di_object *self, struct di_object *method_, d
 		return di_call_internal(self, val, rt, ret, args, called);               \
 	}
 
-PUBLIC_DEAI_API gen_callx(di_callx, di_getxt);
-PUBLIC_DEAI_API gen_callx(di_rawcallxn, di_rawgetxt);
+gen_callx(di_callx, di_getxt);
+gen_callx(di_rawcallxn, di_rawgetxt);
 
 /// Call "<prefix>_<name>" with "<prefix>" as fallback
 ///
@@ -194,7 +194,7 @@ static void di_flatten_variant(struct di_variant *var) {
 	}
 }
 
-PUBLIC_DEAI_API int di_getx(struct di_object *o, const char *name, di_type_t *type, union di_value *ret) {
+int di_getx(struct di_object *o, const char *name, di_type_t *type, union di_value *ret) {
 	int rc = di_rawgetx(o, name, type, ret);
 	if (rc == 0) {
 		return 0;
@@ -314,7 +314,7 @@ struct di_module *di_new_module_with_size(struct deai *di, size_t size) {
 	return (void *)pm;
 }
 
-PUBLIC_DEAI_API struct di_module *di_new_module(struct deai *di) {
+struct di_module *di_new_module(struct deai *di) {
 	return di_new_module_with_size(di, sizeof(struct di_module));
 }
 
@@ -327,7 +327,7 @@ static void _di_remove_member_raw(struct di_object_internal *obj, struct di_memb
 	free(m);
 }
 
-PUBLIC_DEAI_API int di_remove_member_raw(struct di_object *obj, const char *name) {
+int di_remove_member_raw(struct di_object *obj, const char *name) {
 	auto m = di_lookup(obj, name);
 	if (!m) {
 		return -ENOENT;
@@ -337,7 +337,7 @@ PUBLIC_DEAI_API int di_remove_member_raw(struct di_object *obj, const char *name
 	return 0;
 }
 
-PUBLIC_DEAI_API int di_remove_member(struct di_object *obj, const char *name) {
+int di_remove_member(struct di_object *obj, const char *name) {
 	bool handler_found;
 	int rc2 = call_handler_with_fallback(obj, "__delete", name,
 	                                     (struct di_variant){NULL, DI_LAST_TYPE},
@@ -350,7 +350,7 @@ PUBLIC_DEAI_API int di_remove_member(struct di_object *obj, const char *name) {
 }
 
 // Try to never call destroy twice on something. Although it's fine to do so
-PUBLIC_DEAI_API void di_destroy_object(struct di_object *_obj) {
+void di_destroy_object(struct di_object *_obj) {
 	auto obj = (struct di_object_internal *)_obj;
 
 	// Prevent destroy from being called while we are destroying
@@ -387,7 +387,7 @@ PUBLIC_DEAI_API void di_destroy_object(struct di_object *_obj) {
 	di_unref_object(_obj);
 }
 
-PUBLIC_DEAI_API struct di_object *di_ref_object(struct di_object *_obj) {
+struct di_object *di_ref_object(struct di_object *_obj) {
 	auto obj = (struct di_object_internal *)_obj;
 	obj->ref_count++;
 	return _obj;
@@ -549,36 +549,36 @@ int di_add_member_move(struct di_object *o, const char *name, di_type_t *t, void
 	return di_add_member((struct di_object_internal *)o, name, tt, taddr);
 }
 
-PUBLIC_DEAI_API struct di_member *di_lookup(struct di_object *_obj, const char *name) {
+struct di_member *di_lookup(struct di_object *_obj, const char *name) {
 	auto obj = (struct di_object_internal *)_obj;
 	struct di_member *ret = NULL;
 	HASH_FIND_STR(obj->members, name, ret);
 	return (void *)ret;
 }
 
-PUBLIC_DEAI_API void di_set_object_dtor(struct di_object *nonnull obj, di_dtor_fn_t nullable dtor) {
+void di_set_object_dtor(struct di_object *nonnull obj, di_dtor_fn_t nullable dtor) {
 	auto internal = (struct di_object_internal *)obj;
 	internal->dtor = dtor;
 }
 
-PUBLIC_DEAI_API void di_set_object_call(struct di_object *nonnull obj, di_call_fn_t nullable call) {
+void di_set_object_call(struct di_object *nonnull obj, di_call_fn_t nullable call) {
 	auto internal = (struct di_object_internal *)obj;
 	internal->call = call;
 }
 
-PUBLIC_DEAI_API bool di_is_object_callable(struct di_object *nonnull obj) {
+bool di_is_object_callable(struct di_object *nonnull obj) {
 	auto internal = (struct di_object_internal *)obj;
 	return internal->call != NULL;
 }
 
-PUBLIC_DEAI_API void di_free_tuple(struct di_tuple t) {
+void di_free_tuple(struct di_tuple t) {
 	for (int i = 0; i < t.length; i++) {
 		di_free_value(DI_TYPE_VARIANT, (union di_value *)&t.elements[i]);
 	}
 	free(t.elements);
 }
 
-PUBLIC_DEAI_API void di_free_array(struct di_array arr) {
+void di_free_array(struct di_array arr) {
 	size_t step = di_sizeof_type(arr.elem_type);
 	for (int i = 0; i < arr.length; i++) {
 		di_free_value(arr.elem_type, arr.arr + step * i);
@@ -586,7 +586,7 @@ PUBLIC_DEAI_API void di_free_array(struct di_array arr) {
 	free(arr.arr);
 }
 
-PUBLIC_DEAI_API void di_free_value(di_type_t t, union di_value *ptr) {
+void di_free_value(di_type_t t, union di_value *ptr) {
 	if (t == DI_TYPE_NIL) {
 		return;
 	}
@@ -637,7 +637,7 @@ PUBLIC_DEAI_API void di_free_value(di_type_t t, union di_value *ptr) {
 	}
 }
 
-PUBLIC_DEAI_API void di_copy_value(di_type_t t, void *dst, const void *src) {
+void di_copy_value(di_type_t t, void *dst, const void *src) {
 	const struct di_array *arr;
 	const struct di_tuple *tuple;
 	union di_value *dstval = dst;
@@ -738,7 +738,7 @@ static struct di_listener *di_new_listener(void) {
 	return l;
 }
 
-PUBLIC_DEAI_API struct di_listener *
+struct di_listener *
 di_listen_to_once(struct di_object *_obj, const char *name, struct di_object *h, bool once) {
 	auto obj = (struct di_object_internal *)_obj;
 	assert(!obj->destroyed);
@@ -776,12 +776,12 @@ di_listen_to_once(struct di_object *_obj, const char *name, struct di_object *h,
 	return l;
 }
 
-PUBLIC_DEAI_API struct di_listener *
+struct di_listener *
 di_listen_to(struct di_object *o, const char *name, struct di_object *h) {
 	return di_listen_to_once(o, name, h, false);
 }
 
-PUBLIC_DEAI_API int di_stop_listener(struct di_listener *l) {
+int di_stop_listener(struct di_listener *l) {
 	// The caller announce the intention to stop this listener
 	// meaning they don't want the __detach to be called anymore
 	//
@@ -819,7 +819,7 @@ PUBLIC_DEAI_API int di_stop_listener(struct di_listener *l) {
 	return 0;
 }
 
-PUBLIC_DEAI_API int di_emitn(struct di_object *o, const char *name, struct di_tuple t) {
+int di_emitn(struct di_object *o, const char *name, struct di_tuple t) {
 	if (t.length > MAX_NARGS) {
 		return -E2BIG;
 	}

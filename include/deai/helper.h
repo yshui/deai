@@ -19,14 +19,14 @@
 #define CONCAT1(a, b) CONCAT2(a, b)
 #define CONCAT(a, b) CONCAT1(a, b)
 
-struct di_object *ret_nonnull di_new_error(const char *nonnull fmt, ...);
+PUBLIC_DEAI_API struct di_object *ret_nonnull di_new_error(const char *nonnull fmt, ...);
 
 int di_gmethod(struct di_object *nonnull o, const char *nonnull name,
                void (*nonnull fn)(void)) nonnull_args(1, 2, 3);
 
-int di_proxy_signal(struct di_object *nonnull src, const char *nonnull srcsig,
-                    struct di_object *nonnull proxy, const char *nonnull proxysig)
-    nonnull_args(1, 2, 3, 4);
+PUBLIC_DEAI_API int di_proxy_signal(struct di_object *nonnull src, const char *nonnull srcsig,
+                                    struct di_object *nonnull proxy,
+                                    const char *nonnull proxysig) nonnull_args(1, 2, 3, 4);
 
 #define DTOR(o) ((struct di_object *)(o))->dtor
 

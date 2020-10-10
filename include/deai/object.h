@@ -7,6 +7,7 @@
 #pragma once
 
 #include <deai/compiler.h>
+#include <deai/common.h>
 
 #include <assert.h>
 #include <errno.h>
@@ -302,11 +303,13 @@ PUBLIC_DEAI_API struct di_member *nullable di_lookup(struct di_object *nonnull o
                                                      const char *nonnull name);
 PUBLIC_DEAI_API struct di_object *nullable di_new_object(size_t sz, size_t alignment);
 
-struct di_listener *nullable di_listen_to(struct di_object *nonnull o, const char *nonnull name,
-                                          struct di_object *nullable h);
-struct di_listener *nullable di_listen_to_once(struct di_object *nonnull o,
-                                               const char *nonnull name,
-                                               struct di_object *nullable h, bool once);
+PUBLIC_DEAI_API struct di_listener *nullable di_listen_to(struct di_object *nonnull o,
+                                                          const char *nonnull name,
+                                                          struct di_object *nullable h);
+PUBLIC_DEAI_API struct di_listener *nullable di_listen_to_once(struct di_object *nonnull o,
+                                                               const char *nonnull name,
+                                                               struct di_object *nullable h,
+                                                               bool once);
 
 // Unscribe from a signal from the listener side. __detach is not called in this case
 // It's guaranteed after calling this, the handler and __detach method will never be

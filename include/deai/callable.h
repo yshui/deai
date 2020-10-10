@@ -6,6 +6,7 @@
 
 #pragma once
 #include <deai/object.h>
+#include <deai/common.h>
 
 #include <stdarg.h>
 
