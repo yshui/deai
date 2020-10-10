@@ -633,7 +633,7 @@ static struct di_object *di_dbus_get_session_bus(struct di_object *o) {
 	return (void *)ret;
 }
 
-PUBLIC_DEAI_API int di_plugin_init(struct deai *di) {
+DEAI_PLUGIN_ENTRY_POINT(di) {
 	auto m = di_new_module(di);
 
 	di_getter(m, session_bus, di_dbus_get_session_bus);

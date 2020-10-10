@@ -12,7 +12,6 @@ test_cases = [
   'kill.lua',
   'x.lua',
   'log.lua',
-  'array_op.lua',
   'weak.lua',
   'roots.lua',
 ]

@@ -6,8 +6,6 @@
 
 #pragma once
 
-// XXX merge into deai.h
-
 #include <deai/compiler.h>
 
 #include <assert.h>

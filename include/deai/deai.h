@@ -2,7 +2,7 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
-/* Copyright (c) 2017, Yuxuan Shui <yshuiv7@gmail.com> */
+/* Copyright (c) 2017, 2020 Yuxuan Shui <yshuiv7@gmail.com> */
 
 #pragma once
 #include <stdbool.h>
@@ -43,3 +43,7 @@ struct di_module *di_new_module(struct deai *);
 int di_register_module(struct deai *, const char *, struct di_module **);
 
 #define di_new_object_with_type(type) (type *)di_new_object(sizeof(type), alignof(type))
+
+/// Define a entry point for a deai plugin. Your entry point function will take a single
+/// argument `arg`, which points to the core deai object.
+#define DEAI_PLUGIN_ENTRY_POINT(arg) PUBLIC_DEAI_API int di_plugin_init(struct deai *arg)

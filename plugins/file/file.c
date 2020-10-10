@@ -184,7 +184,7 @@ static struct di_object *di_file_new_watch(struct di_module *f, struct di_array 
 
 	return (void *)fw;
 }
-PUBLIC_DEAI_API int di_plugin_init(struct deai *di) {
+DEAI_PLUGIN_ENTRY_POINT(di) {
 	auto fm = di_new_module(di);
 	di_method(fm, "watch", di_file_new_watch, struct di_array);
 	di_register_module(di, "file", &fm);
