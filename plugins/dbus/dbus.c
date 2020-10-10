@@ -142,9 +142,9 @@ static void di_dbus_watch_name(_di_dbus_connection *c, const char *busname) {
 	auto ret = di_dbus_send(c, msg);
 	dbus_message_unref(msg);
 
-	char *busname_owned = strdup(busname);
+	// Cast busname to "char *" so di_closure would clone it.
 	auto cl = di_closure(di_dbus_update_name_from_msg, false,
-	                     ((void *)c, busname_owned), void *);
+	                     ((void *)c, (char *)busname), void *);
 	di_listen_to_once(ret, "reply", (struct di_object *)cl, true);
 	di_unref_object((void *)cl);
 	di_unref_object((void *)ret);
