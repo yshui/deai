@@ -331,8 +331,8 @@ di_lua_create_metatable_for_object(lua_State *L, const luaL_Reg *reg, bool calla
 
 // Push an object `o` to lua stack. Note this function doesn't increment the reference
 // count of `o`.
-static void di_lua_pushobject(lua_State *L, const char *name, struct di_object *o,
-                              const luaL_Reg *reg, bool callable) {
+static void
+di_lua_pushproxy(lua_State *L, const char *name, void *o, const luaL_Reg *reg, bool callable) {
 	// struct di_lua_script *s;
 	void **ptr;
 	ptr = lua_newuserdata(L, sizeof(void *));
@@ -372,7 +372,7 @@ static void lua_new_state(struct di_module *m) {
 
 	struct di_object *di = (void *)di_module_get_deai(m);
 	di_ref_object(di);
-	di_lua_pushobject(L->L, "di", di, di_lua_di_methods, false);
+	di_lua_pushproxy(L->L, "di", di, di_lua_di_methods, false);
 	// Make it a weak ref
 	// TODO(yshui) add proper weak ref
 	di_unref_object(di);
@@ -722,7 +722,7 @@ static int di_lua_add_listener(lua_State *L) {
 	di_unref_object((void *)h);
 
 	di_ref_object((void *)l);
-	di_lua_pushobject(L, NULL, (void *)l, di_lua_object_methods, false);
+	di_lua_pushproxy(L, NULL, (void *)l, di_lua_object_methods, false);
 	return 1;
 }
 
@@ -754,6 +754,7 @@ static int di_lua_pushvariant(lua_State *L, const char *name, struct di_variant 
 	lua_Number n;
 	struct di_array *arr;
 	struct di_tuple *tuple;
+	struct di_weak_object *weak;
 	int step;
 	switch (var.type) {
 	case DI_TYPE_NUINT:
@@ -777,10 +778,11 @@ static int di_lua_pushvariant(lua_State *L, const char *name, struct di_variant 
 		return 1;
 	case DI_TYPE_OBJECT:
 		di_ref_object(var.value->object);
-		di_lua_pushobject(L, name, var.value->object, di_lua_object_methods, true);
+		di_lua_pushproxy(L, name, var.value->object, di_lua_object_methods, true);
 		return 1;
 	case DI_TYPE_WEAK_OBJECT:
-		di_lua_pushobject(L, name, var.value->object, di_lua_weak_object_methods, false);
+		di_copy_value(DI_TYPE_WEAK_OBJECT, &weak, &var.value->weak_object);
+		di_lua_pushproxy(L, name, weak, di_lua_weak_object_methods, false);
 		return 1;
 	case DI_TYPE_STRING:
 		lua_pushstring(L, var.value->string);
@@ -866,7 +868,7 @@ static int di_lua_upgrade_weak_ref(lua_State *L) {
 	if (strong == NULL) {
 		return 0;
 	}
-	di_lua_pushobject(L, NULL, strong, di_lua_object_methods, true);
+	di_lua_pushproxy(L, NULL, strong, di_lua_object_methods, true);
 	return 1;
 }
 
