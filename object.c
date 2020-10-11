@@ -16,6 +16,20 @@
 #include "di_internal.h"
 #include "utils.h"
 
+struct di_signal {
+	char *name;
+	int nlisteners;
+	struct di_weak_object *owner;
+	struct list_head listeners;
+	UT_hash_handle hh;
+};
+
+// This is essentially a fat weak reference, from object to its listeners.
+struct di_listener {
+	struct di_weak_object *listen_handle;
+	struct list_head siblings;
+};
+
 static const struct di_object_internal dead_weakly_referenced_object = {
     .ref_count = 0,
     .weak_ref_count = 1,        // Keep this object from being freed
@@ -362,13 +376,23 @@ void di_destroy_object(struct di_object *_obj) {
 	}
 	obj->destroyed = 1;
 
-	// Call dtor before removing members, so the dtor can still make use
-	// of whatever is stored in the object
-	// Never call dtor more than once
+	// Call dtor before removing members and signals, so the dtor can still make use
+	// of whatever is stored in the object, and emit more signals.
+	// But this also means signal and member deleters won't be called for them.
 	if (obj->dtor) {
 		auto tmp = obj->dtor;
+		// Never call dtor more than once
 		obj->dtor = NULL;
 		tmp(_obj);
+	}
+
+	struct di_signal *sig, *tmpsig;
+	HASH_ITER (hh, obj->signals, sig, tmpsig) {
+		// Detach the signal structs from this object, don't free them.
+		// The signal structs are collectively owned by the listener structs,
+		// which in turn is owned by the listen handles, and will be freed when
+		// the listen handles are dropped.
+		HASH_DEL(obj->signals, sig);
 	}
 
 	struct di_member *m = (void *)obj->members;
@@ -706,20 +730,6 @@ void di_copy_value(di_type_t t, void *dst, const void *src) {
 	}
 }
 
-struct di_signal {
-	char *name;
-	int nlisteners;
-	struct di_weak_object *owner;
-	struct list_head listeners;
-	UT_hash_handle hh;
-};
-
-// This is essentially a fat weak reference, from object to its listeners.
-struct di_listener {
-	struct di_weak_object *listen_handle;
-	struct list_head siblings;
-};
-
 struct di_listen_handle {
 	struct di_object_internal;
 	struct di_signal *nonnull signal;
@@ -754,6 +764,7 @@ static void di_listen_handle_dtor(struct di_object *nonnull obj) {
 				    &handler_found);
 			}
 		}
+		di_drop_weak_ref(&lh->signal->owner);
 		free(lh->signal->name);
 		free(lh->signal);
 	}
