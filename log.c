@@ -95,10 +95,6 @@ struct log_file {
 	FILE *f;
 };
 
-static int _stderr_write(struct di_object *t, char *log) {
-	return fputs(log, stderr);
-}
-
 static int file_target_write(struct log_file *lf, char *log) {
 	auto rc = fputs(log, lf->f);
 	auto len = strlen(log);
@@ -130,14 +126,16 @@ static struct di_object *file_target(struct di_log *l, const char *filename, boo
 		return di_new_error("Can't set cloexec");
 	}
 	auto lf = di_new_object_with_type(struct log_file);
+	di_set_type((struct di_object *)lf, "deai.builtin.log:FileTarget");
 	lf->f = f;
 	lf->dtor = (void *)file_target_dtor;
 	di_method(lf, "write", file_target_write, char *);
 	return (void *)lf;
 }
 
-static struct di_object *stderr_target(struct di_log *l) {
+static struct di_object *stderr_target(struct di_log *unused l) {
 	auto ls = di_new_object_with_type(struct log_file);
+	di_set_type((struct di_object *)ls, "deai.builtin.log:StderrTarget");
 	ls->f = stderr;
 	ls->dtor = NULL;
 	di_method(ls, "write", file_target_write, char *);
@@ -189,8 +187,7 @@ void di_init_log(struct deai *di) {
 	struct di_log *l = (void *)lm;
 	l->log_level = DI_LOG_ERROR;
 
-	auto dtgt = di_new_object_with_type(struct di_object);
-	di_method(dtgt, "write", _stderr_write, char *);
+	auto dtgt = stderr_target(l);
 
 	di_add_member_move((struct di_object *)l, "log_target",
 	                   (di_type_t[]){DI_TYPE_OBJECT}, &dtgt);
