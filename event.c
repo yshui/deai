@@ -32,6 +32,8 @@ struct di_periodic {
 
 static void di_ioev_callback(EV_P_ ev_io *w, int revents) {
 	auto ev = container_of(w, struct di_ioev, evh);
+	// Keep ev alive during emission
+	di_object_with_cleanup unused obj = di_ref_object((struct di_object *)ev);
 	int dt = 0;
 	if (revents & EV_READ) {
 		di_emit(ev, "read");
@@ -46,6 +48,9 @@ static void di_ioev_callback(EV_P_ ev_io *w, int revents) {
 
 static void di_timer_callback(EV_P_ ev_timer *t, int revents) {
 	auto d = container_of(t, struct di_timer, evt);
+	// Keep timer alive during emission
+	di_object_with_cleanup unused obj = di_ref_object((struct di_object *)d);
+
 	double now = ev_now(EV_A);
 	di_object_with_cleanup di_obj = di_object_get_deai_strong((struct di_object *)d);
 	DI_CHECK(di_obj);
@@ -61,6 +66,9 @@ static void di_timer_callback(EV_P_ ev_timer *t, int revents) {
 
 static void di_periodic_callback(EV_P_ ev_periodic *w, int revents) {
 	auto p = container_of(w, struct di_periodic, pt);
+	// Keep timer alive during emission
+	di_object_with_cleanup unused obj = di_ref_object((struct di_object *)p);
+
 	double now = ev_now(EV_A);
 	di_emit(p, "triggered", now);
 }
@@ -248,6 +256,8 @@ struct di_prepare {
 
 static void di_prepare(EV_P_ ev_prepare *w, int revents) {
 	struct di_prepare *dep = (void *)w;
+	// Keep event module alive during emission
+	di_object_with_cleanup unused obj = di_ref_object((struct di_object *)dep->evm);
 	di_emit(dep->evm, "prepare");
 }
 

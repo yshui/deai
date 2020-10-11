@@ -99,6 +99,8 @@ static void output_handler(struct child *c, int fd, struct string_buf *b, const 
 
 static void sigchld_handler(EV_P_ ev_child *w, int revents) {
 	struct child *c = container_of(w, struct child, w);
+	// Keep child process object alive when emitting
+	di_object_with_cleanup unused obj = di_ref_object((struct di_object *)c);
 
 	int sig = 0;
 	if (WIFSIGNALED(w->rstatus)) {
