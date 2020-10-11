@@ -418,30 +418,38 @@ void di_clear_roots(struct di_object *di_) {
 /// but the caller instead needs to keep a handle to the root in order to remove it.
 ///
 /// Forgetting about the returned handle is leaking memory.
-void *di_add_anonymous_root(struct di_weak_object *obj, struct di_object *root) {
+uint64_t di_add_anonymous_root(struct di_object *obj, struct di_object *root) {
 	auto roots = (struct di_roots *)obj;
 	auto aroot = tmalloc(struct di_anonymous_root, 1);
 	aroot->obj = di_ref_object(root);
-	list_add(&aroot->siblings, &roots->anonymous_roots);
-	return aroot;
+	aroot->id = roots->next_anonymous_root_id;
+
+	DI_CHECK(roots->next_anonymous_root_id != UINT64_MAX);
+	roots->next_anonymous_root_id++;
+	HASH_ADD(hh, roots->anonymous_roots, id, sizeof(uint64_t), aroot);
+	return aroot->id;
 }
 
 /// Remove an unnamed root.
-void di_remove_anonymous_root(struct di_object *obj, void *root_handle) {
-	auto aroot = (struct di_anonymous_root *)root_handle;
-	list_del(&aroot->siblings);
-	di_unref_object(aroot->obj);
-	free(aroot);
+void di_remove_anonymous_root(struct di_object *obj, uint64_t root_handle) {
+	auto roots = (struct di_roots *)obj;
+	struct di_anonymous_root *aroot = NULL;
+	HASH_FIND(hh, roots->anonymous_roots, &root_handle, sizeof(root_handle), aroot);
+	if (aroot) {
+		HASH_DEL(roots->anonymous_roots, aroot);
+		di_unref_object(aroot->obj);
+		free(aroot);
+	}
 }
 
 void di_roots_dtor(struct di_object *obj) {
 	// Drop all the anonymous roots
 	auto roots = (struct di_roots *)obj;
 	struct di_anonymous_root *i, *tmp;
-	list_for_each_entry_safe(i, tmp, &roots->anonymous_roots, siblings) {
+	HASH_ITER(hh, roots->anonymous_roots, i, tmp) {
+		HASH_DEL(roots->anonymous_roots, i);
 		di_unref_object(i->obj);
-
-		// Note we cannot free `i` here, cause someone is still holding it.
+		free(i);
 	}
 }
 
@@ -451,12 +459,11 @@ int main(int argc, char *argv[]) {
 #endif
 	auto p = di_new_object_with_type(struct deai);
 	auto roots = di_new_object_with_type(struct di_roots);
-	INIT_LIST_HEAD(&roots->anonymous_roots);
 	DI_CHECK_OK(di_method(roots, "add", di_add_root, const char *, struct di_object *));
 	DI_CHECK_OK(di_method(roots, "remove", di_remove_root, const char *));
 	DI_CHECK_OK(di_method(roots, "clear", di_clear_roots));
 	DI_CHECK_OK(di_method(roots, "__add_anonymous", di_add_anonymous_root, struct di_object *));
-	DI_CHECK_OK(di_method(roots, "__remove_anonymous", di_remove_anonymous_root, void *));
+	DI_CHECK_OK(di_method(roots, "__remove_anonymous", di_remove_anonymous_root, uint64_t));
 	di_set_object_dtor((struct di_object *)roots, di_roots_dtor);
 
 	auto weak_roots = di_weakly_ref_object((struct di_object *)roots);

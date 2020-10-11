@@ -50,12 +50,14 @@ extern thread_local struct list_head all_objects;
 
 struct di_anonymous_root {
 	struct di_object *nonnull obj;
-	struct list_head siblings;
+	uint64_t id;
+	UT_hash_handle hh;
 };
 
 struct di_roots {
 	struct di_object_internal;
-	struct list_head anonymous_roots;
+	uint64_t next_anonymous_root_id;
+	struct di_anonymous_root *anonymous_roots;
 };
 
 struct deai {
