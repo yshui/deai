@@ -270,21 +270,17 @@ struct di_ev_prepare {
 	struct deai *di;
 };
 
+static void di_roots_dtor(struct di_object *obj);
 void di_prepare_exit(struct deai *di, int ec) {
 	*di->exit_code = ec;
-	if (di_lookup((struct di_object *)di, "__prepare_exit_listen_handle") != NULL) {
-		// Exit already scheduled, nothing to do
-		return;
-	}
+	// Drop all the roots, this should stop the program
 
-	di_object_with_cleanup eventm = NULL;
-	DI_CHECK_OK(di_get(di, "event", eventm));
+	di_weak_object_with_cleanup weak = NULL;
+	di_get(di, "roots", weak);
 
-	// Schedule the destruction of the core deai object on the next round of the event
-	// loop.
-	di_closure_with_cleanup cl = di_closure(di_destroy_object, ((struct di_object *)di));
-	auto lh = di_listen_to(eventm, "prepare", (struct di_object *)cl);
-	di_member(di, "__prepare_exit_listen_handle", lh);
+	di_object_with_cleanup roots = di_upgrade_weak_ref(weak);
+	di_call(roots, "clear");
+	di_roots_dtor(roots);
 }
 
 void di_prepare_quit(struct deai *di) {
@@ -397,7 +393,7 @@ void di_terminate(struct deai *p) {
 }
 
 /// Add an named object as a root to keep it alive
-bool di_add_root(struct di_object *di, const char *key, struct di_object *obj) {
+static bool di_add_root(struct di_object *di, const char *key, struct di_object *obj) {
 	char *buf;
 	asprintf(&buf, "__root_%s", key);
 	int rc = di_add_member_clone(di, buf, DI_TYPE_OBJECT, obj);
@@ -406,7 +402,7 @@ bool di_add_root(struct di_object *di, const char *key, struct di_object *obj) {
 }
 
 /// Remove an named root from roots
-bool di_remove_root(struct di_object *di, const char *key) {
+static bool di_remove_root(struct di_object *di, const char *key) {
 	char *buf;
 	asprintf(&buf, "__root_%s", key);
 	int rc = di_remove_member_raw(di, buf);
@@ -415,7 +411,7 @@ bool di_remove_root(struct di_object *di, const char *key) {
 }
 
 /// Remove all named roots
-void di_clear_roots(struct di_object *di_) {
+static void di_clear_roots(struct di_object *di_) {
 	static const char *const root_prefix = "__root_";
 	auto di = (struct di_object_internal *)di_;
 	struct di_member *i, *tmp;
@@ -429,7 +425,7 @@ void di_clear_roots(struct di_object *di_) {
 /// Add an unnamed root. Unlike the named roots, these roots don't need a unique name,
 /// but the caller instead needs to keep a handle to the root in order to remove it.
 /// The returned handle is guaranteed to be greater than 0
-uint64_t di_add_anonymous_root(struct di_object *obj, struct di_object *root) {
+static uint64_t di_add_anonymous_root(struct di_object *obj, struct di_object *root) {
 	auto roots = (struct di_roots *)obj;
 	DI_CHECK(roots->next_anonymous_root_id != 0, "anonymous root id overflown");
 
@@ -442,7 +438,7 @@ uint64_t di_add_anonymous_root(struct di_object *obj, struct di_object *root) {
 }
 
 /// Remove an unnamed root.
-void di_remove_anonymous_root(struct di_object *obj, uint64_t root_handle) {
+static void di_remove_anonymous_root(struct di_object *obj, uint64_t root_handle) {
 	auto roots = (struct di_roots *)obj;
 	struct di_anonymous_root *aroot = NULL;
 	HASH_FIND(hh, roots->anonymous_roots, &root_handle, sizeof(root_handle), aroot);
@@ -453,7 +449,7 @@ void di_remove_anonymous_root(struct di_object *obj, uint64_t root_handle) {
 	}
 }
 
-void di_roots_dtor(struct di_object *obj) {
+static void di_roots_dtor(struct di_object *obj) {
 	// Drop all the anonymous roots
 	auto roots = (struct di_roots *)obj;
 	struct di_anonymous_root *i, *tmp;
@@ -497,6 +493,8 @@ int main(int argc, char *argv[]) {
 	auto weak_roots = di_weakly_ref_object((struct di_object *)roots);
 	DI_CHECK_OK(di_member(p, "roots", weak_roots));
 
+	// exit_code and quit cannot be owned by struct deai, because they are read
+	// after struct deai is freed.
 	int exit_code = 0;
 	bool quit = false;
 	p->loop = EV_DEFAULT;
