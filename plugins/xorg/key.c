@@ -33,32 +33,42 @@ struct keybinding {
 };
 
 static int name_to_mod(const char *keyname) {
-	if (strcasecmp(keyname, "Shift") == 0)
+	if (strcasecmp(keyname, "Shift") == 0) {
 		return XCB_MOD_MASK_SHIFT;
-	if (strcasecmp(keyname, "Lock") == 0)
+	}
+	if (strcasecmp(keyname, "Lock") == 0) {
 		return XCB_MOD_MASK_LOCK;
-	if (strcasecmp(keyname, "Ctrl") == 0 || strcasecmp(keyname, "Control") == 0)
+	}
+	if (strcasecmp(keyname, "Ctrl") == 0 || strcasecmp(keyname, "Control") == 0) {
 		return XCB_MOD_MASK_CONTROL;
-	if (strcasecmp(keyname, "Mod1") == 0)
+	}
+	if (strcasecmp(keyname, "Mod1") == 0) {
 		return XCB_MOD_MASK_1;
-	if (strcasecmp(keyname, "Mod2") == 0)
+	}
+	if (strcasecmp(keyname, "Mod2") == 0) {
 		return XCB_MOD_MASK_2;
-	if (strcasecmp(keyname, "Mod3") == 0)
+	}
+	if (strcasecmp(keyname, "Mod3") == 0) {
 		return XCB_MOD_MASK_3;
-	if (strcasecmp(keyname, "Mod4") == 0)
+	}
+	if (strcasecmp(keyname, "Mod4") == 0) {
 		return XCB_MOD_MASK_4;
-	if (strcasecmp(keyname, "Mod5") == 0)
+	}
+	if (strcasecmp(keyname, "Mod5") == 0) {
 		return XCB_MOD_MASK_5;
-	if (strcasecmp(keyname, "Any") == 0)
+	}
+	if (strcasecmp(keyname, "Any") == 0) {
 		/* this is misnamed but correct */
 		return XCB_BUTTON_MASK_ANY;
+	}
 	return XCB_NO_SYMBOL;
 }
 
 static void ungrab(struct keybinding *kb) {
 	auto s = screen_of_display(kb->k->dc->c, kb->k->dc->dflt_scrn);
-	for (int i = 0; kb->keycodes[i] != XCB_NO_SYMBOL; i++)
+	for (int i = 0; kb->keycodes[i] != XCB_NO_SYMBOL; i++) {
 		xcb_ungrab_key(kb->k->dc->c, kb->keycodes[i], s->root, kb->modifiers);
+	}
 }
 
 static void binding_dtor(struct keybinding *kb) {
@@ -77,8 +87,9 @@ static int refresh_binding(struct keybinding *kb) {
 	}
 
 	auto kc = xcb_key_symbols_get_keycode(kb->k->keysyms, kb->keysym);
-	if (kc == NULL)
+	if (kc == NULL) {
 		return -1;
+	}
 
 	kb->keycodes = kc;
 
@@ -91,9 +102,9 @@ static int refresh_binding(struct keybinding *kb) {
 		                                XCB_GRAB_MODE_SYNC));
 		if (err) {
 			di_mgetmi(dc->x, log);
-			if (logm)
-				di_log_va(logm, DI_LOG_ERROR, "Cannot grab %c",
-				          kb->keycodes[i]);
+			if (logm) {
+				di_log_va(logm, DI_LOG_ERROR, "Cannot grab %c\n", kb->keycodes[i]);
+			}
 			free(err);
 		}
 	}
@@ -102,22 +113,26 @@ static int refresh_binding(struct keybinding *kb) {
 
 struct di_object *
 new_binding(struct xorg_key *k, struct di_array modifiers, char *key, bool replay) {
-	if (!k->dc)
+	if (!k->dc) {
 		return di_new_error("Connection died");
+	}
 
 	xkb_keysym_t ks = xkb_keysym_from_name(key, XKB_KEYSYM_CASE_INSENSITIVE);
-	if (ks == XKB_KEY_NoSymbol)
+	if (ks == XKB_KEY_NoSymbol) {
 		return di_new_error("Invalid key name");
+	}
 
-	if (modifiers.length > 0 && modifiers.elem_type != DI_TYPE_STRING)
+	if (modifiers.length > 0 && modifiers.elem_type != DI_TYPE_STRING) {
 		return di_new_error("Invalid modifiers");
+	}
 
 	int mod = 0;
 	const char **arr = modifiers.arr;
 	for (int i = 0; i < modifiers.length; i++) {
 		int tmp = name_to_mod(arr[i]);
-		if (tmp == XCB_NO_SYMBOL)
+		if (tmp == XCB_NO_SYMBOL) {
 			return di_new_error("Invalid modifiers");
+		}
 		mod |= tmp;
 	}
 
@@ -149,17 +164,20 @@ static void free_key(struct xorg_key *k) {
 define_trivial_cleanup_t(xcb_get_modifier_mapping_reply_t);
 uint16_t mod_from_keycode(struct di_xorg_connection *dc, xcb_keycode_t kc) {
 	with_cleanup_t(xcb_get_modifier_mapping_reply_t) r =
-	    xcb_get_modifier_mapping_reply(dc->c, xcb_get_modifier_mapping(dc->c),
-	                                   NULL);
-	if (r == NULL || !r->keycodes_per_modifier)
+	    xcb_get_modifier_mapping_reply(dc->c, xcb_get_modifier_mapping(dc->c), NULL);
+	if (r == NULL || !r->keycodes_per_modifier) {
 		return 0;
+	}
 	auto kcs = xcb_get_modifier_mapping_keycodes(r);
-	if (kcs == NULL)
+	if (kcs == NULL) {
 		return 0;
+	}
 	uint16_t ret = 0;
-	for (uint32_t i = 0; i < r->length; i++)
-		if (kcs[i] != XCB_NO_SYMBOL && kcs[i] == kc)
+	for (uint32_t i = 0; i < r->length; i++) {
+		if (kcs[i] != XCB_NO_SYMBOL && kcs[i] == kc) {
 			ret |= (1 << (i / r->keycodes_per_modifier));
+		}
+	}
 	return ret;
 }
 
@@ -188,18 +206,21 @@ static int handle_key(struct di_xorg_ext *ext, xcb_generic_event_t *ev) {
 		break;
 	case XCB_MAPPING_NOTIFY:;
 		xcb_mapping_notify_event_t *me = (void *)ev;
-		if (me->request == XCB_MAPPING_POINTER)
+		if (me->request == XCB_MAPPING_POINTER) {
 			return 1;
+		}
 		if (xcb_refresh_keyboard_mapping(k->keysyms, me) == 1) {
 			struct keybinding *kb;
 			list_for_each_entry (kb, &k->bindings, siblings) {
 				int ret = refresh_binding(kb);
-				if (ret != 0)
+				if (ret != 0) {
 					di_destroy_object((void *)kb);
+				}
 			}
 		}
 		return 1;
-	default: return 1;
+	default:
+		return 1;
 	}
 
 	struct keybinding *kb, *nkb;
@@ -209,11 +230,14 @@ static int handle_key(struct di_xorg_ext *ext, xcb_generic_event_t *ev) {
 	bool replay = true;
 	list_for_each_entry_safe (kb, nkb, &k->bindings, siblings) {
 		__label__ match, end;
-		if (kb->modifiers != mod)
+		if (kb->modifiers != mod) {
 			continue;
-		for (int i = 0; kb->keycodes[i] != XCB_NO_SYMBOL; i++)
-			if (kb->keycodes[i] == kc)
+		}
+		for (int i = 0; kb->keycodes[i] != XCB_NO_SYMBOL; i++) {
+			if (kb->keycodes[i] == kc) {
 				goto match;
+			}
+		}
 	end:
 		di_unref_object((void *)kb);
 		continue;
@@ -223,18 +247,17 @@ static int handle_key(struct di_xorg_ext *ext, xcb_generic_event_t *ev) {
 		goto end;
 	}
 
-	if (replay)
-		xcb_allow_events(ext->dc->c, XCB_ALLOW_REPLAY_KEYBOARD,
-		                 XCB_CURRENT_TIME);
-	else
-		xcb_allow_events(ext->dc->c, XCB_ALLOW_SYNC_KEYBOARD,
-		                 XCB_CURRENT_TIME);
+	if (replay) {
+		xcb_allow_events(ext->dc->c, XCB_ALLOW_REPLAY_KEYBOARD, XCB_CURRENT_TIME);
+	} else {
+		xcb_allow_events(ext->dc->c, XCB_ALLOW_SYNC_KEYBOARD, XCB_CURRENT_TIME);
+	}
 	xcb_flush(ext->dc->c);
 	return 0;
 }
 
 struct di_xorg_ext *new_key(struct di_xorg_connection *dc) {
-	auto k = di_new_object_with_type(struct xorg_key);
+	auto k = di_new_object_with_type2(struct xorg_key, "deai.plugin.xorg:Key");
 	k->dc = dc;
 	k->free = (void *)free_key;
 	k->handle_event = handle_key;

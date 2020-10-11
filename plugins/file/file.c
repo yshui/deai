@@ -151,7 +151,7 @@ static struct di_object *di_file_new_watch(struct di_module *f, struct di_array 
 	}
 
 	auto fw = di_new_object_with_type(struct di_file_watch);
-	di_set_type((void *)fw, "deai.plugin.file:watch");
+	di_set_type((void *)fw, "deai.plugin.file:Watch");
 	fw->fd = ifd;
 	di_set_object_dtor((void *)fw, (void *)stop_file_watcher);
 

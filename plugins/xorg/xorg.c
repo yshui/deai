@@ -220,7 +220,7 @@ struct xscreen {
 static struct di_object *get_screen(struct di_xorg_connection *dc) {
 	auto scrn = screen_of_display(dc->c, dc->dflt_scrn);
 
-	auto ret = di_new_object_with_type(struct xscreen);
+	auto ret = di_new_object_with_type2(struct xscreen, "deai.plugin.xorg:Screen");
 	ret->height = scrn->height_in_pixels;
 	ret->width = scrn->width_in_pixels;
 
@@ -445,8 +445,9 @@ static struct di_object *di_xorg_connect_to(struct di_xorg *x, const char *displ
 
 	di_mgetm(x, event, di_new_error("Can't get event module"));
 
-	struct di_xorg_connection *dc = di_new_object_with_type(struct di_xorg_connection);
-	di_set_type((void *)dc, "deai.plugin.xorg:connection");
+	struct di_xorg_connection *dc =
+	    di_new_object_with_type2(struct di_xorg_connection, "deai.plugin.xorg:"
+	                                                        "Connection");
 	dc->c = c;
 	dc->dflt_scrn = scrn;
 

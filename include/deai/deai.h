@@ -9,10 +9,10 @@
 #include <stdint.h>
 #include <stdlib.h>
 
-#include <deai/compiler.h>
-#include <deai/common.h>
-#include <deai/object.h>
 #include <deai/callable.h>
+#include <deai/common.h>
+#include <deai/compiler.h>
+#include <deai/object.h>
 
 struct deai;
 
@@ -38,13 +38,23 @@ static inline bool IS_ERR_OR_NULL(const void *ptr) {
 	return unlikely(!ptr) || IS_ERR_VALUE((unsigned long)ptr);
 }
 
+static inline struct di_object *unused
+di_new_object_with_type_name(size_t size, size_t alignment, const char *type) {
+	__auto_type ret = di_new_object(size, alignment);
+	di_set_type(ret, type);
+	return ret;
+}
+
 typedef void (*init_fn_t)(struct deai *);
 
 PUBLIC_DEAI_API struct di_module *di_new_module(struct deai *);
 PUBLIC_DEAI_API int di_register_module(struct deai *, const char *, struct di_module **);
 
 #define di_new_object_with_type(type) (type *)di_new_object(sizeof(type), alignof(type))
+#define di_new_object_with_type2(type, di_type)                                          \
+	(type *)di_new_object_with_type_name(sizeof(type), alignof(type), di_type)
 
 /// Define a entry point for a deai plugin. Your entry point function will take a single
 /// argument `arg`, which points to the core deai object.
-#define DEAI_PLUGIN_ENTRY_POINT(arg) visibility_default int di_plugin_init(struct deai *arg)
+#define DEAI_PLUGIN_ENTRY_POINT(arg)                                                     \
+	visibility_default int di_plugin_init(struct deai *arg)

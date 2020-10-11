@@ -373,7 +373,7 @@ static struct di_array
 di_xorg_xinput_get_prop(struct di_xorg_xinput_device *dev, const char *name) {
 	if (!dev->xi->dc) {
 		return DI_ARRAY_INIT;
-}
+	}
 
 	struct di_xorg_connection *dc = dev->xi->dc;
 
@@ -384,7 +384,7 @@ di_xorg_xinput_get_prop(struct di_xorg_xinput_device *dev, const char *name) {
 
 	if (e) {
 		return ret;
-}
+	}
 
 	auto float_atom = di_xorg_intern_atom(dc, "FLOAT", &e);
 
@@ -395,7 +395,7 @@ di_xorg_xinput_get_prop(struct di_xorg_xinput_device *dev, const char *name) {
 
 	if (prop->type == XCB_ATOM_NONE) {
 		return ret;
-}
+	}
 
 	size_t plen = prop->bytes_after;
 	free(prop);
@@ -407,7 +407,7 @@ di_xorg_xinput_get_prop(struct di_xorg_xinput_device *dev, const char *name) {
 
 	if (prop->type == XCB_ATOM_NONE) {
 		return ret;
-}
+	}
 
 	if (prop->type == XCB_ATOM_INTEGER || prop->type == XCB_ATOM_CARDINAL) {
 		ret.elem_type = DI_TYPE_INT;
@@ -418,7 +418,7 @@ di_xorg_xinput_get_prop(struct di_xorg_xinput_device *dev, const char *name) {
 	} else {
 		if (logm) {
 			di_log_va(logm, DI_LOG_WARN, "Unknown property type %d\n", prop->type);
-}
+		}
 		return ret;
 	}
 
@@ -426,7 +426,7 @@ di_xorg_xinput_get_prop(struct di_xorg_xinput_device *dev, const char *name) {
 		if (logm) {
 			di_log_va(logm, DI_LOG_WARN, "Xorg returns invalid format %d\n",
 			          prop->format);
-}
+		}
 		return ret;
 	}
 	if ((prop->type == float_atom || prop->type == XCB_ATOM_ATOM) && prop->format != 32) {
@@ -471,7 +471,9 @@ di_xorg_xinput_get_prop(struct di_xorg_xinput_device *dev, const char *name) {
 }
 
 static struct di_object *di_xorg_xinput_props(struct di_xorg_xinput_device *dev) {
-	auto obj = di_new_object_with_type(struct di_xorg_xinput_device);
+	auto obj = di_new_object_with_type2(struct di_xorg_xinput_device, "deai.plugin."
+	                                                                  "xorg.xi:"
+	                                                                  "Device");
 	obj->deviceid = dev->deviceid;
 	obj->xi = dev->xi;
 
@@ -485,7 +487,9 @@ static void free_xi_device_object(struct di_xorg_xinput_device *dev) {
 }
 
 static struct di_object *di_xorg_make_object_for_devid(struct di_xorg_xinput *xi, int deviceid) {
-	auto obj = di_new_object_with_type(struct di_xorg_xinput_device);
+	auto obj = di_new_object_with_type2(struct di_xorg_xinput_device, "deai.plugin."
+	                                                                  "xorg.xi:"
+	                                                                  "Device");
 
 	obj->deviceid = deviceid;
 	obj->xi = xi;
@@ -509,7 +513,7 @@ static struct di_object *di_xorg_make_object_for_devid(struct di_xorg_xinput *xi
 static struct di_array di_xorg_get_all_devices(struct di_xorg_xinput *xi) {
 	if (!xi->dc) {
 		return DI_ARRAY_INIT;
-}
+	}
 
 	with_cleanup_t(xcb_input_xi_query_device_reply_t) r = xcb_input_xi_query_device_reply(
 	    xi->dc->c, xcb_input_xi_query_device(xi->dc->c, 0), NULL);
@@ -518,7 +522,7 @@ static struct di_array di_xorg_get_all_devices(struct di_xorg_xinput *xi) {
 	int ndev = 0;
 	for (; ri.rem; xcb_input_xi_device_info_next(&ri)) {
 		ndev++;
-}
+	}
 
 	struct di_array ret;
 	ret.length = ndev;
@@ -527,7 +531,7 @@ static struct di_array di_xorg_get_all_devices(struct di_xorg_xinput *xi) {
 		ret.arr = tmalloc(void *, ndev);
 	} else {
 		ret.arr = NULL;
-}
+	}
 
 	struct di_object **arr = ret.arr;
 	ri = xcb_input_xi_query_device_infos_iterator(r);
@@ -542,12 +546,12 @@ static struct di_array di_xorg_get_all_devices(struct di_xorg_xinput *xi) {
 static int handle_xinput_event(struct di_xorg_xinput *xi, xcb_generic_event_t *ev) {
 	if (ev->response_type != XCB_GE_GENERIC) {
 		return 1;
-}
+	}
 
 	xcb_ge_generic_event_t *gev = (void *)ev;
 	if (gev->extension != xi->opcode) {
 		return 1;
-}
+	}
 
 	// di_getm(xi->dc->x->di, log);
 	if (gev->event_type == XCB_INPUT_HIERARCHY) {
@@ -560,13 +564,13 @@ static int handle_xinput_event(struct di_xorg_xinput *xi, xcb_generic_event_t *e
 			// info->deviceid, info->flags);
 			if (info->flags & XCB_INPUT_HIERARCHY_MASK_SLAVE_ADDED) {
 				di_emit(xi, "new-device", obj);
-}
+			}
 			if (info->flags & XCB_INPUT_HIERARCHY_MASK_DEVICE_ENABLED) {
 				di_emit(xi, "device-enabled", obj);
-}
+			}
 			if (info->flags & XCB_INPUT_HIERARCHY_MASK_DEVICE_DISABLED) {
 				di_emit(xi, "device-disabled", obj);
-}
+			}
 			di_unref_object(obj);
 		}
 	}
@@ -577,15 +581,16 @@ struct di_xorg_ext *new_xinput(struct di_xorg_connection *dc) {
 	char *extname = "XInputExtension";
 	if (!xorg_has_extension(dc->c, extname)) {
 		return NULL;
-}
+	}
 
 	auto cookie = xcb_query_extension(dc->c, strlen(extname), extname);
 	auto r = xcb_query_extension_reply(dc->c, cookie, NULL);
 	if (!r) {
 		return NULL;
-}
+	}
 
-	auto xi = di_new_object_with_type(struct di_xorg_xinput);
+	auto xi = di_new_object_with_type2(struct di_xorg_xinput, "deai.plugin.xorg:"
+	                                                          "XiExt");
 	xi->ec.mask_len = 1;        // 4 bytes unit
 	xi->ec.deviceid = 0;        // alldevice
 	xi->opcode = r->major_opcode;

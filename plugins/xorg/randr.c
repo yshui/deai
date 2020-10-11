@@ -98,7 +98,9 @@ static struct di_object *get_output_info(struct di_xorg_output *o) {
 		return di_new_object_with_type(struct di_object);
 	}
 
-	auto ret = di_new_object_with_type(struct di_xorg_output_info);
+	auto ret = di_new_object_with_type2(struct di_xorg_output_info, "deai.plugin."
+	                                                                "xorg.randr:"
+	                                                                "OutputInfo");
 	ret->name = strndup((char *)xcb_randr_get_output_info_name(r),
 	                    xcb_randr_get_output_info_name_length(r));
 	ret->connection = r->connection;
@@ -140,7 +142,9 @@ static struct di_object *get_view_config(struct di_xorg_view *v) {
 		return di_new_object_with_type(struct di_object);
 	}
 
-	auto ret = di_new_object_with_type(struct di_xorg_view_config);
+	auto ret = di_new_object_with_type2(struct di_xorg_view_config, "deai.plugin."
+	                                                                "xorg.randr:"
+	                                                                "ViewConfig");
 	ret->x = cr->x;
 	ret->y = cr->y;
 	ret->width = cr->width;
@@ -326,7 +330,9 @@ static struct di_object *
 make_object_for_output(struct di_xorg_randr *rr, xcb_randr_output_t oid) {
 	assert(rr->dc);
 
-	auto obj = di_new_object_with_type(struct di_xorg_output);
+	auto obj = di_new_object_with_type2(struct di_xorg_output, "deai.plugin.xorg."
+	                                                           "randr:"
+	                                                           "Output");
 	di_set_type((void *)obj, "deai.plugin.xorg:randr_output");
 	obj->rr = rr;
 	obj->oid = oid;
@@ -368,8 +374,8 @@ static void view_dtor(struct di_xorg_view *v) {
 static struct di_object *make_object_for_view(struct di_xorg_randr *rr, xcb_randr_crtc_t cid) {
 	assert(rr->dc);
 
-	auto obj = di_new_object_with_type(struct di_xorg_view);
-	di_set_type((void *)obj, "deai.plugin.xorg:randr_view");
+	auto obj = di_new_object_with_type2(struct di_xorg_view, "deai.plugin.xorg.randr:"
+	                                                         "View");
 	obj->rr = rr;
 	obj->cid = cid;
 
@@ -489,7 +495,8 @@ static struct di_array rr_outputs(struct di_xorg_randr *rr) {
 
 static struct di_object *
 make_object_for_modes(struct di_xorg_randr *rr, xcb_randr_mode_info_t *m) {
-	auto o = di_new_object_with_type(struct di_xorg_mode);
+	auto o = di_new_object_with_type2(struct di_xorg_mode, "deai.plugin.xorg.randr:"
+	                                                       "Mode");
 	o->id = m->id;
 	o->width = m->width;
 	o->height = m->height;
@@ -551,7 +558,8 @@ struct di_xorg_ext *new_randr(struct di_xorg_connection *dc) {
 		return NULL;
 	}
 
-	auto rr = di_new_object_with_type(struct di_xorg_randr);
+	auto rr = di_new_object_with_type2(struct di_xorg_randr, "deai.plugin.xorg:"
+	                                                         "RandrExt");
 	rr->opcode = r->major_opcode;
 	rr->handle_event = (void *)handle_randr_event;
 	rr->dc = dc;

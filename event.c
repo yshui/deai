@@ -123,12 +123,13 @@ static void di_toggle_ioev(struct di_object *obj) {
 static struct di_object *di_create_ioev(struct di_object *obj, int fd, int t) {
 	struct di_module *em = (void *)obj;
 	auto ret = di_new_object_with_type(struct di_ioev);
+	di_set_type((void *)ret, "deai.builtin.event:IoEv");
+
 	auto di_obj = di_module_get_deai(em);
 	if (di_obj == NULL) {
 		return di_new_error("deai is shutting down...");
 	}
 
-	di_set_type((void *)ret, "deai.builtin.event:ioev");
 
 	unsigned int flags = 0;
 	if (t & IOEV_READ) {
@@ -192,7 +193,7 @@ static void di_timer_set(struct di_timer *obj, double t) {
 static struct di_object *di_create_timer(struct di_object *obj, double timeout) {
 	struct di_module *em = (void *)obj;
 	auto ret = di_new_object_with_type(struct di_timer);
-	di_set_type((void *)ret, "deai.builtin.event:timer");
+	di_set_type((void *)ret, "deai.builtin.event:Timer");
 	auto di_obj = di_module_get_deai(em);
 	if (di_obj == NULL) {
 		return di_new_error("deai is shutting down...");
@@ -235,7 +236,7 @@ static void periodic_set(struct di_periodic *p, double interval, double offset) 
 static struct di_object *
 di_create_periodic(struct di_module *evm, double interval, double offset) {
 	auto ret = di_new_object_with_type(struct di_periodic);
-	di_set_type((void *)ret, "deai.builtin.event:periodic");
+	di_set_type((void *)ret, "deai.builtin.event:Periodic");
 	auto di_obj = di_module_get_deai(evm);
 
 	ret->dtor = (void *)periodic_dtor;

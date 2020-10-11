@@ -46,6 +46,7 @@ void di_init_os(struct deai *di) {
 	struct di_module *m = di_new_module(di);
 
 	struct di_object *o = di_new_object_with_type(struct di_object);
+	di_set_type(o, "deai.builtin.os:Env");
 
 	di_method(o, "__get", di_env_get, const char *);
 	di_method(o, "__set", di_env_set, const char *, const char *);

@@ -57,6 +57,8 @@ static void di_free_pending_reply(_di_dbus_pending_reply *p) {
 
 static struct di_object *di_dbus_send(_di_dbus_connection *c, DBusMessage *msg) {
 	auto ret = di_new_object_with_type(_di_dbus_pending_reply);
+	di_set_type((struct di_object *)ret, "deai.plugin.dbus:DBusPendingReplyRaw");
+
 	bool rc = dbus_connection_send_with_reply(c->conn, msg, &ret->p, -1);
 	if (!rc) {
 		di_unref_object((void *)ret);
@@ -332,6 +334,8 @@ _dbus_call_method(const char *iface, const char *method, struct di_tuple t) {
 	}
 
 	auto ret = di_new_object_with_type(struct di_object);
+	di_set_type(ret, "deai.plugin.dbus:DBusPendingReply");
+
 	auto p = di_dbus_send(dobj->c, msg);
 	di_weak_object_with_cleanup weak = di_weakly_ref_object(ret);
 	di_closure_with_cleanup cl = di_closure(_dbus_call_method_reply_cb, (weak), void *);
@@ -390,6 +394,7 @@ static struct di_object *di_dbus_object_getter(_di_dbus_object *dobj, const char
 	}
 
 	auto ret = di_new_object_with_type(_di_dbus_method);
+	di_set_type((struct di_object *)ret, "deai.plugin.dbus:DBusMethod");
 	ret->method = m;
 	ret->interface = ifc;
 	di_ref_object((void *)dobj);
@@ -410,6 +415,8 @@ static struct di_object *
 di_dbus_get_object(struct di_object *o, const char *bus, const char *obj) {
 	_di_dbus_connection *oc = (void *)o;
 	auto ret = di_new_object_with_type(_di_dbus_object);
+	di_set_type((struct di_object *)ret, "deai.plugin.dbus:DBusObject");
+
 	ret->c = oc;
 	di_ref_object((void *)oc);
 	di_dbus_watch_name(oc, bus);
@@ -687,6 +694,8 @@ static struct di_object *di_dbus_get_session_bus(struct di_object *o) {
 
 	dbus_connection_set_exit_on_disconnect(conn, 0);
 	auto ret = di_new_object_with_type(_di_dbus_connection);
+	di_set_type((struct di_object *)ret, "deai.plugin.dbus:DBusConnection");
+
 	ret->conn = conn;
 	ret->di = di;
 	INIT_LIST_HEAD(&ret->known_names);
