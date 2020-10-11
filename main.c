@@ -455,8 +455,8 @@ int main(int argc, char *argv[]) {
 	DI_CHECK_OK(di_method(roots, "add", di_add_root, const char *, struct di_object *));
 	DI_CHECK_OK(di_method(roots, "remove", di_remove_root, const char *));
 	DI_CHECK_OK(di_method(roots, "clear", di_clear_roots));
-	DI_CHECK_OK(di_method(roots, "add_anonymous", di_add_anonymous_root, struct di_object *));
-	DI_CHECK_OK(di_method(roots, "remove_anonymous", di_remove_anonymous_root, void *));
+	DI_CHECK_OK(di_method(roots, "__add_anonymous", di_add_anonymous_root, struct di_object *));
+	DI_CHECK_OK(di_method(roots, "__remove_anonymous", di_remove_anonymous_root, void *));
 	di_set_object_dtor((struct di_object *)roots, di_roots_dtor);
 
 	auto weak_roots = di_weakly_ref_object((struct di_object *)roots);

@@ -13,7 +13,7 @@ DEAI_PLUGIN_ENTRY_POINT(di) {
 	DI_CHECK(roots);
 
 	void *root_handle;
-	di_callr(roots, "add_anonymous", root_handle, object);
+	di_callr(roots, "__add_anonymous", root_handle, object);
 	auto weak = di_weakly_ref_object(object);
 	di_unref_object(object);
 
@@ -21,7 +21,7 @@ DEAI_PLUGIN_ENTRY_POINT(di) {
 	DI_CHECK(object != NULL);
 	di_unref_object(object);
 
-	di_call(roots, "remove_anonymous", root_handle);
+	di_call(roots, "__remove_anonymous", root_handle);
 	object = di_upgrade_weak_ref(weak);
 	DI_CHECK(object == NULL);
 
