@@ -6,19 +6,22 @@ endif
 if not cc.has_header('ev.h')
   error('libev header not found')
 endif
-test_c_args = [
+test_common_args = [
     '-fno-strict-aliasing',
     '-fplan9-extensions',
     '-fms-extensions',
     '-Wno-microsoft-anon-tag',
     '-Wnullability-completeness',
-    '-Werror=incompatible-pointer-types',
-    '-Werror=int-conversion',
     '-Werror=switch-enum',
     '-Werror=nonnull',
-    '-Werror=implicit',
     '-Werror=implicit-fallthrough',
     '-Wall'
+]
+
+test_c_args = [
+    '-Werror=incompatible-pointer-types',
+    '-Werror=int-conversion',
+    '-Werror=implicit',
 ]
 
 if get_option('b_sanitize').contains('undefined')
@@ -34,7 +37,7 @@ endif
 
 base_c_args = []
 base_ld_args = [ '-rdynamic' ]
-foreach arg: test_c_args
+foreach arg: test_common_args + test_c_args
   if cc.has_argument(arg)
     base_c_args = base_c_args + [ arg ]
   endif
@@ -42,7 +45,7 @@ endforeach
 
 base_cpp_args = []
 cpp = meson.get_compiler('cpp')
-foreach arg: test_c_args
+foreach arg: test_common_args
   if cpp.has_argument(arg)
     base_cpp_args = base_cpp_args + [ arg ]
   endif

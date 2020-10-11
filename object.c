@@ -259,6 +259,7 @@ gen_tfunc(di_getxt, di_getx);
 gen_tfunc(di_rawgetxt, di_rawgetx);
 
 int di_set_type(struct di_object *o, const char *type) {
+	di_remove_member_raw(o, "__type");
 	return di_add_member_clone(o, "__type", DI_TYPE_STRING_LITERAL, type);
 }
 

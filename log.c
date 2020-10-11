@@ -183,6 +183,7 @@ void di_init_log(struct deai *di) {
 	if (!lm) {
 		return;
 	}
+	di_set_type((struct di_object *)lm, "deai.builtin:LogModule");
 
 	struct di_log *l = (void *)lm;
 	l->log_level = DI_LOG_ERROR;

@@ -1,4 +1,5 @@
 #pragma once
+#include <cassert>
 #include <cstdlib>
 #include <memory>
 #include <optional>
@@ -20,11 +21,19 @@ struct ObjectRefDeleter {
 	}
 };
 
+/// A reference to the generic di_object. Inherit this class to define references to more
+/// specific objects. You should define a `type` for the type name in the derived class.
+/// Optionally you can also define "create", if your object can be created directly.
 struct ObjectRef {
-      private:
+      protected:
 	std::unique_ptr<c_api::di_object, ObjectRefDeleter> inner;
 
       public:
+	inline static const std::string type = "deai:object";
+	static auto create() -> ObjectRef {
+		return ObjectRef{c_api::di_new_object(sizeof(c_api::di_object),
+		                                      alignof(c_api::di_object))};
+	}
 	/// Create an owning Object reference from an owning c_api
 	/// object reference.
 	ObjectRef(c_api::di_object *&obj) : inner(obj) {
@@ -37,12 +46,21 @@ struct ObjectRef {
 
 	/// Clone this reference. This will increment the reference count on the
 	/// inner di_object.
-	[[nodiscard]] auto clone() const -> ObjectRef {
-		return ObjectRef{c_api::di_ref_object(inner.get())};
+	ObjectRef(const ObjectRef &other)
+	    : ObjectRef{c_api::di_ref_object(other.inner.get())} {
+	}
+
+	template <typename T, std::enable_if_t<std::is_base_of_v<ObjectRef, T>, int> = 0>
+	auto cast() && -> std::optional<T> {
+		if (c_api::di_check_type(inner.get(), T::type.c_str())) {
+			return T{inner.release()};
+		}
+		return std::nullopt;
 	}
 
 	auto operator[](const std::string &key) -> Variant;
 };
+
 struct Variant {
       private:
 	c_api::di_type type;
@@ -118,12 +136,13 @@ inline auto ObjectRef::operator[](const std::string &key) -> Variant {
 
 	return Variant{type, ret};
 }
-
 }        // namespace deai
 
 #define DEAI_CPP_PLUGIN_ENTRY_POINT(arg)                                                     \
+	/* NOLINTNEXTLINE(bugprone-macro-parentheses) */                                     \
 	static auto di_cpp_plugin_init(deai::ObjectRef &&arg)->int;                          \
 	extern "C" visibility_default auto di_plugin_init(deai::c_api::di_object *di)->int { \
 		return di_cpp_plugin_init(deai::ObjectRef{deai::c_api::di_ref_object(di)});  \
 	}                                                                                    \
+	/* NOLINTNEXTLINE(bugprone-macro-parentheses) */                                     \
 	static auto di_cpp_plugin_init(deai::ObjectRef &&arg)->int
