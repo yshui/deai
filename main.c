@@ -446,11 +446,24 @@ void di_roots_dtor(struct di_object *obj) {
 	// Drop all the anonymous roots
 	auto roots = (struct di_roots *)obj;
 	struct di_anonymous_root *i, *tmp;
+
+	// Grab a list of objects we need to free first. Because destroying an object can
+	// cause another anonymous root to be removed anywhere on the list, HASH_ITER is
+	// not enough to handle this scenario.
+	auto total_roots = HASH_COUNT(roots->anonymous_roots);
+	auto objects_to_free = tmalloc(struct di_object *, total_roots);
+	size_t index = 0;
 	HASH_ITER(hh, roots->anonymous_roots, i, tmp) {
 		HASH_DEL(roots->anonymous_roots, i);
-		di_unref_object(i->obj);
+		objects_to_free[index++] = i->obj;
 		free(i);
 	}
+	DI_CHECK(index == total_roots);
+
+	for (size_t i = 0; i < total_roots; i++) {
+		di_unref_object(objects_to_free[i]);
+	}
+	free(objects_to_free);
 }
 
 int main(int argc, char *argv[]) {
