@@ -477,8 +477,11 @@ static struct di_object *di_lua_load_script(struct di_object *obj, const char *p
 		const char *err = lua_tostring(s->L->L, -1);
 		di_log_va(logm, DI_LOG_ERROR, "Failed to load lua script %s: %s\n", path, err);
 		lua_pop(s->L->L, 2);
+		// Create the error object before freeing the script object. Because after
+		// that the error string might be freed.
+		auto errobj = di_new_error("Failed to load lua script %s: %s\n", path, err);
 		di_unref_object((void *)s);
-		return di_new_error("Failed to load lua script %s: %s\n", path, err);
+		return errobj;
 	}
 
 	s->path = strdup(path);
