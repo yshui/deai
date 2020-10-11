@@ -471,7 +471,7 @@ static void di_dbus_shutdown(_di_dbus_connection *conn) {
 
 	// Keep the listen handle alive as a root. As this is the dtor for `conn`, we
 	// cannot keep the handle inside `conn`.
-	di_weak_object_with_cleanup weak_roots;
+	di_weak_object_with_cleanup weak_roots = NULL;
 	di_get(conn->di, "roots", weak_roots);
 
 	di_object_with_cleanup roots = di_upgrade_weak_ref(weak_roots);

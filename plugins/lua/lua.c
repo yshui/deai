@@ -451,7 +451,7 @@ static struct di_object *di_lua_load_script(struct di_object *obj, const char *p
 
 	struct di_module *m = (void *)obj;
 	{
-		di_weak_object_with_cleanup weak_lua_state;
+		di_weak_object_with_cleanup weak_lua_state = NULL;
 		s->L = NULL;
 
 		int rc = di_get(m, "__lua_state", weak_lua_state);
@@ -750,7 +750,7 @@ static int di_lua_add_listener(lua_State *L) {
 	struct di_lua_script *s;
 	di_lua_get_env(L, s);
 
-	di_weak_object_with_cleanup weak_roots;
+	di_weak_object_with_cleanup weak_roots = NULL;
 	di_object_with_cleanup di = di_module_get_deai(s->L->m);
 	di_get(di, "roots", weak_roots);
 

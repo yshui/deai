@@ -277,7 +277,7 @@ void di_prepare_exit(struct deai *di, int ec) {
 		return;
 	}
 
-	di_object_with_cleanup eventm;
+	di_object_with_cleanup eventm = NULL;
 	DI_CHECK_OK(di_get(di, "event", eventm));
 
 	// Schedule the destruction of the core deai object on the next round of the event
