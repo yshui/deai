@@ -460,7 +460,7 @@ static void di_roots_dtor(struct di_object *obj) {
 	auto total_roots = HASH_COUNT(roots->anonymous_roots);
 	auto objects_to_free = tmalloc(struct di_object *, total_roots);
 	size_t index = 0;
-	HASH_ITER(hh, roots->anonymous_roots, i, tmp) {
+	HASH_ITER (hh, roots->anonymous_roots, i, tmp) {
 		HASH_DEL(roots->anonymous_roots, i);
 		objects_to_free[index++] = i->obj;
 		free(i);
@@ -485,7 +485,8 @@ int main(int argc, char *argv[]) {
 	DI_CHECK_OK(di_method(roots, "add", di_add_root, const char *, struct di_object *));
 	DI_CHECK_OK(di_method(roots, "remove", di_remove_root, const char *));
 	DI_CHECK_OK(di_method(roots, "clear", di_clear_roots));
-	DI_CHECK_OK(di_method(roots, "__add_anonymous", di_add_anonymous_root, struct di_object *));
+	DI_CHECK_OK(di_method(roots, "__add_anonymous", di_add_anonymous_root,
+	                      struct di_object *));
 	DI_CHECK_OK(di_method(roots, "__remove_anonymous", di_remove_anonymous_root, uint64_t));
 	di_set_object_dtor((struct di_object *)roots, di_roots_dtor);
 	roots->next_anonymous_root_id = 1;
@@ -620,6 +621,15 @@ int main(int argc, char *argv[]) {
 	if (ret != 0) {
 		fprintf(stderr, "Failed to call \"%s.%s\"\n", modname ? modname : "", method);
 		exit(EXIT_FAILURE);
+	}
+
+	if (rt == DI_TYPE_OBJECT) {
+		char *errmsg = NULL;
+		if (di_get(retd.object, "errmsg", errmsg) == 0) {
+			fprintf(stderr, "The function you called returned an error message: %s\n",
+			        errmsg);
+			free(errmsg);
+		}
 	}
 
 	di_free_value(rt, &retd);
