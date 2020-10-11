@@ -158,7 +158,7 @@ int di_setx(struct di_object *o, const char *prop, di_type_t type, void *val) {
 	if (mem) {
 		// TODO(yshui) remove the type conversion.
 		// If automatic type conversion is desired, you should use a setter
-		rc = di_type_conversion(type, val, mem->type, &val2, &cloned);
+		rc = di_type_conversion(type, val, mem->type, &val2, true, &cloned);
 		if (rc != 0) {
 			return rc;
 		}
@@ -248,7 +248,7 @@ int di_getx(struct di_object *o, const char *prop, di_type_t *type, union di_val
 			return rc;                                                              \
 		}                                                                               \
 		bool cloned = false;                                                            \
-		rc = di_type_conversion(rt, &ret2, rtype, ret, &cloned);                        \
+		rc = di_type_conversion(rt, &ret2, rtype, ret, false, &cloned);                 \
 		if (cloned) {                                                                   \
 			di_free_value(rt, &ret2);                                               \
 		}                                                                               \

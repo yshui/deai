@@ -59,7 +59,8 @@ _di_typed_trampoline(ffi_cif *cif, void (*fn)(void), void *ret, const di_type_t 
 		// as long as there's no overflow
 		xargs[i] = alloca(di_sizeof_type(fnats[i - nargs0]));
 		rc = di_type_conversion(vars[i - nargs0].type, vars[i - nargs0].value,
-		                        fnats[i - nargs0], xargs[i], &args_cloned[i - nargs0]);
+		                        fnats[i - nargs0], xargs[i], true,
+		                        &args_cloned[i - nargs0]);
 		if (rc != 0) {
 			if (vars[i - nargs0].type == DI_TYPE_NIL) {
 				switch (fnats[i - nargs0]) {

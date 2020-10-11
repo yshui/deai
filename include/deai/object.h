@@ -216,7 +216,7 @@ di_callx(struct di_object *nonnull o, const char *nonnull name, di_type_t *nonnu
 /// type of `prop`. This WILL change!
 ///
 /// @param[in] type The type of the value
-/// @param[in] val The value
+/// @param[in] val The value, borrowed
 PUBLIC_DEAI_API int di_setx(struct di_object *nonnull o, const char *nonnull prop,
                             di_type_t type, void *nullable val);
 

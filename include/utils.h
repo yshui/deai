@@ -110,10 +110,14 @@ static inline bool is_integer(di_type_t t) {
 /// Convert value `inp` to type `outty`. `*outp != inp` if and only if a conversion
 /// happened. And if a conversion did happen, it's safe to free the original value.
 ///
-/// @param[out] cloned if false, value in `outp` is borrowed from `inp`. otherwise the
+/// @param[in] borrowing Whether the `inp` value is owned or borrowed. Some conversion can
+//                       not be performed if the caller owns the value, as that would
+//                       cause memory leakage.
+/// @param[out] cloned If false, value in `outp` is borrowed from `inp`. otherwise the
 ///                    value is cloned. always false in case of an error
 static inline int unused di_type_conversion(di_type_t inty, const union di_value *inp,
-                                            di_type_t outty, union di_value *outp, bool *cloned) {
+                                            di_type_t outty, union di_value *outp,
+                                            bool borrowing, bool *cloned) {
 	*cloned = false;
 	if (inty == outty) {
 		memcpy(outp, inp, di_sizeof_type(inty));
@@ -128,7 +132,10 @@ static inline int unused di_type_conversion(di_type_t inty, const union di_value
 		return 0;
 	}
 
-	if (inty == DI_TYPE_STRING && outty == DI_TYPE_STRING_LITERAL) {
+	if (inty == DI_TYPE_STRING && outty == DI_TYPE_STRING_LITERAL && borrowing) {
+		// If we own the inp string, we can't do this, because we are responsible
+		// of freeing it. But if we free it, the returned string literal can't be
+		// used. If we don't, nobody will, because string literals aren't freed.
 		outp->string_literal = inp->string;
 		return 0;
 	}
@@ -139,7 +146,7 @@ static inline int unused di_type_conversion(di_type_t inty, const union di_value
 
 	if (inty == DI_TYPE_VARIANT) {
 		return di_type_conversion(inp->variant.type, inp->variant.value, outty,
-		                          outp, cloned);
+		                          outp, borrowing, cloned);
 	}
 
 	if (inty == DI_TYPE_STRING_LITERAL && outty == DI_TYPE_STRING) {
