@@ -1,4 +1,4 @@
-project('deai', 'c', default_options: ['b_lundef=false'])
+project('deai', ['c', 'cpp'], default_options: ['b_lundef=false', 'cpp_std=c++17'])
 cc = meson.get_compiler('c')
 if not cc.has_argument('-fvisibility=hidden') or not cc.has_argument('-fms-extensions')
   error('Unsupported compiler')
@@ -37,6 +37,14 @@ base_ld_args = [ '-rdynamic' ]
 foreach arg: test_c_args
   if cc.has_argument(arg)
     base_c_args = base_c_args + [ arg ]
+  endif
+endforeach
+
+base_cpp_args = []
+cpp = meson.get_compiler('cpp')
+foreach arg: test_c_args
+  if cpp.has_argument(arg)
+    base_cpp_args = base_cpp_args + [ arg ]
   endif
 endforeach
 

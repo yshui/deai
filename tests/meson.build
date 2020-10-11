@@ -27,10 +27,11 @@ endforeach
 core_test_cases = [
   'conversion_test.c',
   'anonymous_root_test.c',
-  'drop_event_source_when_listener_is_attached.c'
+  'drop_event_source_when_listener_is_attached.c',
+  'c++_test.cc',
 ]
 
 foreach t : core_test_cases
-  test_so = shared_library(t.underscorify(), t, c_args: base_c_args, name_prefix: '', include_directories: incs)
+  test_so = shared_library(t.underscorify(), t, c_args: base_c_args, cpp_args: base_cpp_args, name_prefix: '', include_directories: incs)
   test(t.underscorify()+'_test', deai_exe, args: ['load_plugin', 's:' + test_so.full_path()])
 endforeach
