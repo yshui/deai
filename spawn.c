@@ -41,7 +41,6 @@ struct child {
 	ev_io outw, errw;
 
 	struct string_buf *out, *err;
-	struct deai *di;
 };
 
 struct di_spawn {
@@ -51,7 +50,13 @@ struct di_spawn {
 };
 
 static inline void child_cleanup(struct child *c) {
-	EV_P = c->di->loop;
+	di_object_with_cleanup di_obj = di_object_get_deai_strong((struct di_object *)c);
+	if (di_obj == NULL) {
+		return;
+	}
+
+	auto di = (struct deai *)di_obj;
+	EV_P = di->loop;
 	ev_child_stop(EV_A_ & c->w);
 	if (c->out) {
 		ev_io_stop(EV_A_ & c->outw);
@@ -63,10 +68,6 @@ static inline void child_cleanup(struct child *c) {
 		close(c->errw.fd);
 		free(c->err);
 	}
-
-	struct deai *di = c->di;
-	// It's fine if di's dtor is invoked on this stack frame
-	di_unref_object((void *)di);
 }
 
 static void output_handler(struct child *c, int fd, struct string_buf *b, const char *ev) {
@@ -124,6 +125,8 @@ static void sigchld_handler(EV_P_ ev_child *w, int revents) {
 	di_emit(c, "exit", ec, sig);
 
 	child_cleanup(c);
+	// This object won't generate an further events, so drop the reference to di
+	di_remove_member_raw((struct di_object *)c, "__deai");
 }
 
 static void child_destroy(struct di_object *obj) {
@@ -170,6 +173,10 @@ define_trivial_cleanup(char *, free_charpp);
 struct di_object *di_spawn_run(struct di_spawn *p, struct di_array argv, bool ignore_output) {
 	if (argv.elem_type != DI_TYPE_STRING) {
 		return di_new_error("Invalid argv type");
+	}
+	auto obj = di_module_get_deai((struct di_module *)p);
+	if (obj == NULL) {
+		return di_new_error("deai is shutting down...");
 	}
 
 	with_cleanup(free_charpp) char **nargv = tmalloc(char *, argv.length + 1);
@@ -233,25 +240,24 @@ struct di_object *di_spawn_run(struct di_spawn *p, struct di_array argv, bool ig
 	di_method(cp, "__get_pid", get_child_pid);
 	di_method(cp, "kill", kill_child, int);
 	cp->pid = pid;
+
+	auto di = (struct deai *)obj;
 	if (!ignore_output) {
 		cp->out = string_buf_new();
 		cp->err = string_buf_new();
 
 		ev_io_init(&cp->outw, stdout_cb, opfds[0], EV_READ);
-		ev_io_start(p->di->loop, &cp->outw);
+		ev_io_start(di->loop, &cp->outw);
 
 		ev_io_init(&cp->errw, stderr_cb, epfds[0], EV_READ);
-		ev_io_start(p->di->loop, &cp->errw);
+		ev_io_start(di->loop, &cp->errw);
 	}
-	cp->di = p->di;
 
 	ev_child_init(&cp->w, sigchld_handler, pid, 0);
-	ev_child_start(p->di->loop, &cp->w);
+	ev_child_start(di->loop, &cp->w);
 
-	// child object can't die before the child process
-	di_ref_object((void *)cp);
-	di_ref_object((void *)cp->di);
-
+	// Keep a reference from the ChildProcess object to deai, to keep it alive
+	di_member(cp, "__deai", obj);
 	return (void *)cp;
 }
 
@@ -267,8 +273,6 @@ void di_init_spawn(struct deai *di) {
 	}
 
 	auto m = di_new_module_with_size(di, sizeof(struct di_spawn));
-	m->di = di;
-
 	di_method(m, "run", di_spawn_run, struct di_array, bool);
 
 	di_register_module(di, "spawn", &m);

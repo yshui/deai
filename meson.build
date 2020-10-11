@@ -70,7 +70,6 @@ deai_exe = executable('deai', [
   'os.c',
   'spawn.c',
   'string_buf.c',
-  'module.c'
 ], c_args: base_c_args
 , dependencies: [libev, libffi, dl]
 , include_directories: incs

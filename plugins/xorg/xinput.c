@@ -8,7 +8,6 @@
 #include <deai/compiler.h>
 #include <deai/deai.h>
 #include <deai/helper.h>
-#include <deai/module.h>
 
 #include <assert.h>
 #include <ctype.h>

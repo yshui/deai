@@ -7,7 +7,6 @@
 #pragma once
 
 #include <deai/deai.h>
-#include <deai/module.h>
 #include <string.h>
 
 #include <limits.h>
@@ -136,13 +135,19 @@ PUBLIC_DEAI_API int di_proxy_signal(struct di_object *nonnull src, const char *n
 	                  capture caps, VA_ARGS_LENGTH(__VA_ARGS__),                          \
 	                  (di_type_t[]){LIST_APPLY(di_typeid, SEP_COMMA, __VA_ARGS__)})
 
-#define _di_getm(di, modn, on_err)                                                       \
+#define _di_getm(di_expr, modn, on_err)                                                  \
 	object_cleanup struct di_object *modn##m = NULL;                                 \
 	do {                                                                             \
-		struct di_object *__o;                                                   \
-		int rc = di_get(di, #modn, __o);                                         \
-		if (rc != 0)                                                             \
+		int rc = 0;                                                              \
+		di_object_with_cleanup __deai_tmp_di = (struct di_object *)(di_expr);    \
+		if (__deai_tmp_di == NULL) {                                                        \
 			on_err;                                                          \
+		}                                                                        \
+		struct di_object *__o;                                                   \
+		rc = di_get(__deai_tmp_di, #modn, __o);                                             \
+		if (rc != 0) {                                                           \
+			on_err;                                                          \
+		}                                                                        \
 		if (!di_check_type(__o, "deai:module")) {                                \
 			rc = -EINVAL;                                                    \
 			on_err;                                                          \
@@ -364,4 +369,49 @@ static inline unused const char *nonnull di_type_to_string(di_type_t type) {
 		return "LAST_TYPE";
 	}
 	unreachable();
+}
+
+#define __DEAI_MEMBER_NAME "__deai"
+
+static inline struct di_object *nullable unused di_object_get_deai_weak(struct di_object *nonnull o) {
+	di_weak_object_with_cleanup weak = NULL;
+	di_get(o, __DEAI_MEMBER_NAME, weak);
+
+	if (weak == NULL) {
+		return NULL;
+	}
+	return di_upgrade_weak_ref(weak);
+}
+
+static inline struct di_object *nullable unused di_object_get_deai_strong(struct di_object *nonnull o) {
+	struct di_object *strong = NULL;
+	di_get(o, __DEAI_MEMBER_NAME, strong);
+	return strong;
+}
+
+/// Downgrade the __deai member from a strong reference to a weak reference
+static inline void unused di_object_downgrade_deai(struct di_object *nonnull o) {
+	di_object_with_cleanup di_obj = NULL;
+	di_get(o, __DEAI_MEMBER_NAME, di_obj);
+	if (di_obj != NULL) {
+		__auto_type weak = di_weakly_ref_object(di_obj);
+		di_remove_member_raw(o, __DEAI_MEMBER_NAME);
+		di_member(o, __DEAI_MEMBER_NAME, weak);
+	}
+}
+/// Upgrade the __deai member from a weak reference to a strong reference
+static inline void unused di_object_upgrade_deai(struct di_object *nonnull o) {
+	di_weak_object_with_cleanup di_obj = NULL;
+	di_get(o, __DEAI_MEMBER_NAME, di_obj);
+	if (di_obj != NULL) {
+		__auto_type strong = di_upgrade_weak_ref(di_obj);
+		di_remove_member_raw(o, __DEAI_MEMBER_NAME);
+		if (strong != NULL) {
+			di_member(o, "__deai", strong);
+		}
+	}
+}
+
+static inline struct di_object *nullable unused di_module_get_deai(struct di_module *nonnull o) {
+	return di_object_get_deai_weak((struct di_object *)o);
 }

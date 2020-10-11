@@ -309,7 +309,9 @@ struct di_module *di_new_module_with_size(struct deai *di, size_t size) {
 	struct di_module *pm = (void *)di_new_object(size, alignof(max_align_t));
 
 	di_set_type((void *)pm, "deai:module");
-	pm->di = di;
+
+	auto weak = di_weakly_ref_object((struct di_object *)di);
+	di_member(pm, "__deai", weak);
 
 	return (void *)pm;
 }

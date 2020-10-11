@@ -14,7 +14,6 @@
 #include <deai/builtin/log.h>
 #include <deai/deai.h>
 #include <deai/helper.h>
-#include <deai/module.h>
 
 #include "compat.h"
 #include "list.h"
@@ -115,7 +114,7 @@ static bool di_lua_isproxy(lua_State *L, int index) {
 			break;
 		}
 
-		lua_pushliteral(L, "__deai");
+		lua_pushliteral(L, "__is_deai_proxy");
 		lua_rawget(L, -2);
 		if (lua_isnil(L, -1)) {
 			break;
@@ -123,7 +122,7 @@ static bool di_lua_isproxy(lua_State *L, int index) {
 
 		ret = true;
 	} while (0);
-	// Pops 1 boolean (__deai) and 1 metatable
+	// Pops 1 boolean (__is_deai_proxy) and 1 metatable
 	lua_pop(L, 2);
 	return ret;
 }
@@ -312,7 +311,7 @@ di_lua_create_metatable_for_object(lua_State *L, const luaL_Reg *reg, bool calla
 	// | the object (full) |
 	lua_newtable(L);
 	luaL_setfuncs(L, reg, 0);
-	lua_pushliteral(L, "__deai");
+	lua_pushliteral(L, "__is_deai_proxy");
 	lua_pushboolean(L, true);
 	lua_rawset(L, -3);
 

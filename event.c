@@ -17,20 +17,17 @@
 struct di_ioev {
 	struct di_object_internal;
 	ev_io evh;
-	struct deai *di;
 	bool running;
 };
 
 struct di_timer {
 	struct di_object_internal;
 	ev_timer evt;
-	struct deai *di;
 };
 
 struct di_periodic {
 	struct di_object_internal;
 	ev_periodic pt;
-	struct deai *di;
 };
 
 static void di_ioev_callback(EV_P_ ev_io *w, int revents) {
@@ -50,8 +47,16 @@ static void di_ioev_callback(EV_P_ ev_io *w, int revents) {
 static void di_timer_callback(EV_P_ ev_timer *t, int revents) {
 	auto d = container_of(t, struct di_timer, evt);
 	double now = ev_now(EV_A);
-	ev_timer_stop(d->di->loop, t);
+	di_object_with_cleanup di_obj = di_object_get_deai_strong((struct di_object *)d);
+	DI_CHECK(di_obj);
+
+	auto di = (struct deai *)di_obj;
+	ev_timer_stop(di->loop, t);
 	di_emit(d, "elapsed", now);
+
+	// This object won't generate further event until the user calls `again`
+	// So drop the strong __deai reference
+	di_object_downgrade_deai((struct di_object *)d);
 }
 
 static void di_periodic_callback(EV_P_ ev_periodic *w, int revents) {
@@ -62,51 +67,59 @@ static void di_periodic_callback(EV_P_ ev_periodic *w, int revents) {
 
 static void di_start_ioev(struct di_object *obj) {
 	struct di_ioev *ev = (void *)obj;
-	if (!ev->di) {
-		return;
-	}
 	if (ev->running) {
 		return;
 	}
-	ev_io_start(ev->di->loop, &ev->evh);
+
+	auto di_obj = di_object_get_deai_weak(obj);
+	if (di_obj == NULL) {
+		// deai is shutting down
+		return;
+	}
+
+	auto di = (struct deai *)di_obj;
+	ev_io_start(di->loop, &ev->evh);
 	ev->running = true;
+	di_object_upgrade_deai(obj);
 }
 
 static void di_stop_ioev(struct di_object *obj) {
 	struct di_ioev *ev = (void *)obj;
-	if (!ev->di) {
-		return;
-	}
 	if (!ev->running) {
 		return;
 	}
-	ev_io_stop(ev->di->loop, &ev->evh);
+
+	di_object_with_cleanup di_obj = di_object_get_deai_strong(obj);
+	if (di_obj == NULL) {
+		return;
+	}
+
+	auto di = (struct deai *)di_obj;
+	ev_io_stop(di->loop, &ev->evh);
 	ev->running = false;
+
+	// This object won't generate further event until the user calls `start`
+	// So drop the strong __deai reference
+	di_object_downgrade_deai(obj);
 }
 
 static void di_toggle_ioev(struct di_object *obj) {
 	struct di_ioev *ev = (void *)obj;
-	if (!ev->di) {
-		return;
-	}
 	if (ev->running) {
-		ev_io_stop(ev->di->loop, &ev->evh);
+		di_stop_ioev(obj);
 	} else {
-		ev_io_start(ev->di->loop, &ev->evh);
+		di_start_ioev(obj);
 	}
-	ev->running = !ev->running;
-}
-
-static void di_ioev_dtor(struct di_object *obj) {
-	struct di_ioev *ev = (void *)obj;
-	ev_io_stop(ev->di->loop, &ev->evh);
-	di_unref_object((void *)ev->di);
-	ev->di = NULL;
 }
 
 static struct di_object *di_create_ioev(struct di_object *obj, int fd, int t) {
 	struct di_module *em = (void *)obj;
 	auto ret = di_new_object_with_type(struct di_ioev);
+	auto di_obj = di_module_get_deai(em);
+	if (di_obj == NULL) {
+		return di_new_error("deai is shutting down...");
+	}
+
 	di_set_type((void *)ret, "deai.builtin.event:ioev");
 
 	unsigned int flags = 0;
@@ -118,89 +131,113 @@ static struct di_object *di_create_ioev(struct di_object *obj, int fd, int t) {
 	}
 
 	ev_io_init(&ret->evh, di_ioev_callback, fd, flags);
-	ev_io_start(em->di->loop, &ret->evh);
-	ret->di = em->di;
-	di_ref_object((void *)ret->di);
+	{
+		auto di = (struct deai *)di_obj;
+		ev_io_start(di->loop, &ret->evh);
+	}
+
+	// Started ioev has strong ref to ddi
+	// Stopped has weak ref
+	di_member(ret, __DEAI_MEMBER_NAME, di_obj);
 
 	di_method(ret, "start", di_start_ioev);
 	di_method(ret, "stop", di_stop_ioev);
 	di_method(ret, "toggle", di_toggle_ioev);
 	di_method(ret, "close", di_destroy_object);
 
-	ret->dtor = di_ioev_dtor;
+	ret->dtor = di_stop_ioev;
 	ret->running = true;
 	return (void *)ret;
 }
 
-static void di_timer_dtor(struct di_object *obj) {
+static void di_timer_stop(struct di_object *obj) {
 	struct di_timer *ev = (void *)obj;
-	ev_timer_stop(ev->di->loop, &ev->evt);
-	di_unref_object((void *)ev->di);
-	ev->di = NULL;
+	di_object_with_cleanup di_obj = di_object_get_deai_strong(obj);
+	if (di_obj == NULL) {
+		// deai is shutting down
+		return;
+	}
+
+	auto di = (struct deai *)di_obj;
+	ev_timer_stop(di->loop, &ev->evt);
+	di_object_downgrade_deai(obj);
 }
 
 static void di_timer_again(struct di_timer *obj) {
-	if (!obj->di) {
+	auto di_obj = di_object_get_deai_weak((struct di_object *)obj);
+	if (di_obj == NULL) {
+		// deai is shutting down
 		return;
 	}
 
-	ev_timer_again(obj->di->loop, &obj->evt);
+	auto di = (struct deai *)di_obj;
+	ev_timer_again(di->loop, &obj->evt);
+	di_object_upgrade_deai((struct di_object *)obj);
 }
 
 static void di_timer_set(struct di_timer *obj, double t) {
-	if (!obj->di) {
-		return;
-	}
-
+	di_timer_stop((struct di_object *)obj);
 	obj->evt.repeat = t;
-	ev_timer_again(obj->di->loop, &obj->evt);
+	di_timer_again(obj);
 }
 
 static struct di_object *di_create_timer(struct di_object *obj, double timeout) {
 	struct di_module *em = (void *)obj;
 	auto ret = di_new_object_with_type(struct di_timer);
 	di_set_type((void *)ret, "deai.builtin.event:timer");
-	ret->di = em->di;
-	di_ref_object((void *)ret->di);
+	auto di_obj = di_module_get_deai(em);
+	if (di_obj == NULL) {
+		return di_new_error("deai is shutting down...");
+	}
 
-	ret->dtor = di_timer_dtor;
+	ret->dtor = di_timer_stop;
 	di_method(ret, "again", di_timer_again);
+	di_method(ret, "stop", di_timer_stop);
 
 	// Set the timeout and restart the timer
 	di_method(ret, "__set_timeout", di_timer_set, double);
 
 	ev_init(&ret->evt, di_timer_callback);
 	ret->evt.repeat = timeout;
-	ev_timer_again(em->di->loop, &ret->evt);
-	return (void *)ret;
+
+	auto di = (struct deai *)di_obj;
+	ev_timer_again(di->loop, &ret->evt);
+
+	// Started timers have strong references to di
+	// Stopped ones have weak ones
+	di_member(ret, __DEAI_MEMBER_NAME, di_obj);
+	return (struct di_object *)ret;
 }
 
 static void periodic_dtor(struct di_periodic *p) {
-	ev_periodic_stop(p->di->loop, &p->pt);
-	di_unref_object((void *)p->di);
-	p->di = NULL;
+	di_object_with_cleanup di_obj = di_object_get_deai_strong((struct di_object *)p);
+	auto di = (struct deai *)di_obj;
+	ev_periodic_stop(di->loop, &p->pt);
 }
 
 static void periodic_set(struct di_periodic *p, double interval, double offset) {
-	if (!p->di) {
-		return;
-	}
+	di_object_with_cleanup di_obj = di_object_get_deai_strong((struct di_object *)p);
+	DI_CHECK(di_obj != NULL);
 	ev_periodic_set(&p->pt, offset, interval, NULL);
-	ev_periodic_again(p->di->loop, &p->pt);
+
+	auto di = (struct deai *)di_obj;
+	ev_periodic_again(di->loop, &p->pt);
 }
 
 static struct di_object *
 di_create_periodic(struct di_module *evm, double interval, double offset) {
 	auto ret = di_new_object_with_type(struct di_periodic);
 	di_set_type((void *)ret, "deai.builtin.event:periodic");
-	ret->di = evm->di;
-	di_ref_object((void *)ret->di);
+	auto di_obj = di_module_get_deai(evm);
 
 	ret->dtor = (void *)periodic_dtor;
 	di_method(ret, "set", periodic_set, double, double);
 	ev_periodic_init(&ret->pt, di_periodic_callback, offset, interval, NULL);
-	ev_periodic_start(ret->di->loop, &ret->pt);
 
+	auto di = (struct deai *)di_obj;
+	ev_periodic_start(di->loop, &ret->pt);
+
+	di_member(ret, __DEAI_MEMBER_NAME, di_obj);
 	return (void *)ret;
 }
 

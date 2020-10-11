@@ -57,7 +57,7 @@ struct di_anonymous_root {
 struct di_roots {
 	struct di_object_internal;
 	uint64_t next_anonymous_root_id;
-	struct di_anonymous_root *anonymous_roots;
+	struct di_anonymous_root *nullable anonymous_roots;
 };
 
 struct deai {
@@ -76,7 +76,6 @@ struct deai {
 
 struct di_module {
 	struct di_object;
-	struct deai *nonnull di;
 	UT_hash_handle hh;
 };
 
