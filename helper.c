@@ -13,36 +13,20 @@
 #include "di_internal.h"
 #include "utils.h"
 
-struct di_error {
-	struct di_object_internal;
-	char *msg;
-};
-
-void di_free_error(struct di_object *o) {
-	auto err = (struct di_error *)o;
-	free(err->msg);
-}
-
 struct di_object *di_new_error(const char *fmt, ...) {
 	va_list ap;
 	va_start(ap, fmt);
 
 	char *errmsg;
-	int ret = asprintf(&errmsg, fmt, ap);
+	int ret = vasprintf(&errmsg, fmt, ap);
 	if (ret < 0) {
 		errmsg = strdup(fmt);
 	}
 
-	struct di_error *err = di_new_object_with_type(struct di_error);
-	err->msg = errmsg;
-
-	auto errmsg_getter =
-	    di_new_field_getter(DI_TYPE_STRING_LITERAL, offsetof(struct di_error, msg));
-	di_add_member_clone((void *)err, "__get_errmsg", DI_TYPE_OBJECT, errmsg_getter);
-	di_unref_object(errmsg_getter);
-
-	err->dtor = di_free_error;
-	return (void *)err;
+	auto err = di_new_object_with_type(struct di_object);
+	di_set_type(err, "deai:Error");
+	di_member(err, "errmsg", errmsg);
+	return err;
 }
 
 int di_gmethod(struct di_object *o, const char *name, void (*fn)(void)) {
