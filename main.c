@@ -471,7 +471,10 @@ int main(int argc, char *argv[]) {
 	INIT_LIST_HEAD(&all_objects);
 #endif
 	auto p = di_new_object_with_type(struct deai);
+	di_set_type((struct di_object *)p, "deai:Core");
+
 	auto roots = di_new_object_with_type(struct di_roots);
+	di_set_type((struct di_object *)roots, "deai:Roots");
 	DI_CHECK_OK(di_method(roots, "add", di_add_root, const char *, struct di_object *));
 	DI_CHECK_OK(di_method(roots, "remove", di_remove_root, const char *));
 	DI_CHECK_OK(di_method(roots, "clear", di_clear_roots));
@@ -515,6 +518,10 @@ int main(int argc, char *argv[]) {
 	DI_CHECK_OK(di_method(p, "terminate", di_terminate));
 #ifdef HAVE_SETPROCTITLE
 	DI_CHECK_OK(di_method(p, "__set_proctitle", di_set_pr_name, char *));
+#endif
+#ifdef TRACK_OBJECTS
+	auto closure = (struct di_object *)di_closure(di_dump_objects, ());
+	di_member(p, "dump_objects", closure);
 #endif
 	DI_CHECK_OK(di_method(p, "__get_argv", di_get_argv));
 

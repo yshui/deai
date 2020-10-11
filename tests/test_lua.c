@@ -5,8 +5,10 @@
 #include "common.h"
 
 /// Convenient method to create an empty di_object
-static struct di_object *create_di_object(struct di_object *unused obj) {
-	return di_new_object_with_type(struct di_object);
+static struct di_object *create_di_object(struct di_object *unused _) {
+	auto obj = di_new_object_with_type(struct di_object);
+	di_set_type(obj, "deai.test:TestObject");
+	return obj;
 }
 
 DEAI_PLUGIN_ENTRY_POINT(di) {

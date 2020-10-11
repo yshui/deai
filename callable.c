@@ -281,7 +281,7 @@ struct di_field_getter {
 
 static int di_field_getter_call(struct di_object *getter, di_type_t *rtype,
                                 union di_value *ret, struct di_tuple args) {
-	DI_CHECK(di_check_type(getter, "deai:field_getter"));
+	DI_CHECK(di_check_type(getter, "deai:FieldGetter"));
 
 	if (args.elements[0].type != DI_TYPE_OBJECT) {
 		DI_ASSERT(false, "first argument to getter is not an object");
@@ -302,7 +302,7 @@ struct di_object *di_new_field_getter(di_type_t type, ptrdiff_t offset) {
 	ret->offset = offset;
 	ret->type = type;
 	ret->call = di_field_getter_call;
-	di_set_type(obj, "deai:field_getter");
+	di_set_type(obj, "deai:FieldGetter");
 	return obj;
 }
 

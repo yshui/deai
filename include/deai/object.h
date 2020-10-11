@@ -6,8 +6,8 @@
 
 #pragma once
 
-#include <deai/compiler.h>
 #include <deai/common.h>
+#include <deai/compiler.h>
 
 #include <assert.h>
 #include <errno.h>
@@ -351,12 +351,12 @@ PUBLIC_DEAI_API void di_free_array(struct di_array);
 
 /// Free a `value` of type `t`. This function does not free the storage space used by
 /// `value`. This is to make this function usable for values stored on the stack.
-PUBLIC_DEAI_API void di_free_value(di_type_t t, union di_value *nullable value);
+PUBLIC_DEAI_API void di_free_value(di_type_t t, union di_value *nullable value_ptr);
 
 /// Copy value of type `t` from `src` to `dst`. It's assumed that `dst` has enough memory
 /// space to hold a value of type `t`, and that `dst` doesn't contain a valid value
 /// beforehand
-PUBLIC_DEAI_API void di_copy_value(di_type_t t, void *nullable dest, const void *nullable src);
+PUBLIC_DEAI_API void di_copy_value(di_type_t t, void *nullable dst, const void *nullable src);
 
 static inline unused size_t di_sizeof_type(di_type_t t) {
 	switch (t) {

@@ -238,6 +238,7 @@ struct di_object *di_spawn_run(struct di_spawn *p, struct di_array argv, bool ig
 	}
 
 	auto cp = di_new_object_with_type(struct child);
+	di_set_type((struct di_object *)cp, "deai:ChildProcess");
 	di_set_object_dtor((struct di_object *)cp, child_destroy);
 	di_method(cp, "__get_pid", get_child_pid);
 	di_method(cp, "kill", kill_child, int);

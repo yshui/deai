@@ -194,14 +194,14 @@ static void di_flatten_variant(struct di_variant *var) {
 	}
 }
 
-int di_getx(struct di_object *o, const char *name, di_type_t *type, union di_value *ret) {
-	int rc = di_rawgetx(o, name, type, ret);
+int di_getx(struct di_object *o, const char *prop, di_type_t *type, union di_value *ret) {
+	int rc = di_rawgetx(o, prop, type, ret);
 	if (rc == 0) {
 		return 0;
 	}
 
 	bool handler_found;
-	rc = call_handler_with_fallback(o, "__get", name,
+	rc = call_handler_with_fallback(o, "__get", prop,
 	                                (struct di_variant){NULL, DI_LAST_TYPE}, type,
 	                                ret, &handler_found);
 	if (rc != 0) {
@@ -362,7 +362,8 @@ void di_destroy_object(struct di_object *_obj) {
 	}
 	obj->destroyed = 1;
 
-	// Call dtor before removing members to allow the dtor to check __type
+	// Call dtor before removing members, so the dtor can still make use
+	// of whatever is stored in the object
 	// Never call dtor more than once
 	if (obj->dtor) {
 		auto tmp = obj->dtor;
@@ -588,13 +589,13 @@ void di_free_array(struct di_array arr) {
 	free(arr.arr);
 }
 
-void di_free_value(di_type_t t, union di_value *ptr) {
+void di_free_value(di_type_t t, union di_value *value_ptr) {
 	if (t == DI_TYPE_NIL) {
 		return;
 	}
 
 	// If t != DI_TYPE_UINT, then `ptr_` cannot be NULL
-	union di_value *nonnull val = ptr;
+	union di_value *nonnull val = value_ptr;
 	struct di_object *nonnull obj;
 	char *nonnull string;
 	switch (t) {

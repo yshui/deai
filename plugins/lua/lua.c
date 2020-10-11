@@ -73,7 +73,7 @@ struct di_lua_script {
 
 static int di_lua_pushvariant(lua_State *L, const char *name, struct di_variant var);
 static int di_lua_meta_index(lua_State *L);
-static int di_lua_meta_newindex_for_weak_object(lua_State *L);
+static int di_lua_meta_index_for_weak_object(lua_State *L);
 static int di_lua_meta_newindex(lua_State *L);
 
 static int di_lua_errfunc(lua_State *L) {
@@ -203,6 +203,7 @@ static struct di_lua_ref *lua_type_to_di_object(lua_State *L, int i, void *call)
 	lua_pop(L, 1);        // pop the script object
 
 	auto o = di_new_object_with_type(struct di_lua_ref);
+	di_set_type((struct di_object *)o, "deai.plugin.lua:LuaRef");
 	o->tref = luaL_ref(L, LUA_REGISTRYINDEX);        // this pops the table from
 	                                                 // stack, we need to put it back
 	o->s = s;
@@ -281,15 +282,15 @@ static int di_lua_gc_for_weak_object(lua_State *L) {
 	return 0;
 }
 
-const luaL_Reg di_lua_object_methods[] = {
+static const luaL_Reg di_lua_object_methods[] = {
     {"__index", di_lua_meta_index},
     {"__newindex", di_lua_meta_newindex},
     {"__gc", di_lua_gc},
     {0, 0},
 };
 
-const luaL_Reg di_lua_weak_object_methods[] = {
-    {"__index", di_lua_meta_newindex_for_weak_object},
+static const luaL_Reg di_lua_weak_object_methods[] = {
+    {"__index", di_lua_meta_index_for_weak_object},
     {"__gc", di_lua_gc_for_weak_object},
     {0, 0},
 };
@@ -414,6 +415,7 @@ static struct di_object *di_lua_load_script(struct di_object *obj, const char *p
 	}
 
 	auto s = di_new_object_with_type(struct di_lua_script);
+	di_set_type((struct di_object *)s, "deai.plugin.lua:LuaScript");
 	di_set_object_dtor((void *)s, (void *)di_lua_free_script);
 
 	struct di_module *m = (void *)obj;
@@ -881,7 +883,7 @@ static int di_lua_weak_ref(lua_State *L) {
 	return nret;
 }
 
-static int di_lua_meta_newindex_for_weak_object(lua_State *L) {
+static int di_lua_meta_index_for_weak_object(lua_State *L) {
 	/* This is __index for lua di_weak_object proxies. Weak object reference proxies
 	 * only have one method, `upgrade()`, to retrieve a strong object reference
 	 */
