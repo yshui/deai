@@ -62,11 +62,13 @@ static inline void child_cleanup(struct child *c) {
 		ev_io_stop(EV_A_ & c->outw);
 		close(c->outw.fd);
 		free(c->out);
+		c->out = NULL;
 	}
 	if (c->err) {
 		ev_io_stop(EV_A_ & c->errw);
 		close(c->errw.fd);
 		free(c->err);
+		c->err = NULL;
 	}
 }
 
