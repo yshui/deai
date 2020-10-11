@@ -58,6 +58,9 @@ conf.set('TRACK_OBJECTS', get_option('track_objects'))
 conf.set('plugin_install_dir', get_option('prefix')+'/'+plugin_install_dir)
 configure_file(input: 'config.h.in', output: 'config.h', configuration: conf)
 subdir('scripts')
+
+libutils = static_library('libutils', ['string_buf.c'], include_directories: incs)
+
 subdir('plugins')
 
 deai_exe = executable('deai', [

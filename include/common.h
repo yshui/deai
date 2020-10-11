@@ -117,3 +117,5 @@ static void unused __clang_cleanup_func(void (^*dfunc)(void)) {
 #endif
 
 #define VA_ARG_HEAD(x, ...) x
+
+#define ARRAY_SIZE(x) (sizeof(x) / sizeof((x)[0]))

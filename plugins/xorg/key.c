@@ -11,6 +11,7 @@
 #include <xkbcommon/xkbcommon-names.h>
 #include <xkbcommon/xkbcommon.h>
 #include "list.h"
+#include "string_buf.h"
 #include "xorg.h"
 
 struct xorg_key {
@@ -32,32 +33,21 @@ struct keybinding {
 	bool replay;
 };
 
+static const char *const modifier_names[] = {
+    "shift", "lock", "control", "mod1", "mod2", "mod3", "mod4", "mod5",
+};
+
 static int name_to_mod(const char *keyname) {
-	if (strcasecmp(keyname, "Shift") == 0) {
-		return XCB_MOD_MASK_SHIFT;
+	for (int i = 0, mask = 1; i < ARRAY_SIZE(modifier_names); i++, mask *= 2) {
+		if (strcasecmp(keyname, modifier_names[i]) == 0) {
+			return mask;
+		}
 	}
-	if (strcasecmp(keyname, "Lock") == 0) {
-		return XCB_MOD_MASK_LOCK;
-	}
-	if (strcasecmp(keyname, "Ctrl") == 0 || strcasecmp(keyname, "Control") == 0) {
+	if (strcasecmp(keyname, "ctrl") == 0) {
+		// Alternative name for control
 		return XCB_MOD_MASK_CONTROL;
 	}
-	if (strcasecmp(keyname, "Mod1") == 0) {
-		return XCB_MOD_MASK_1;
-	}
-	if (strcasecmp(keyname, "Mod2") == 0) {
-		return XCB_MOD_MASK_2;
-	}
-	if (strcasecmp(keyname, "Mod3") == 0) {
-		return XCB_MOD_MASK_3;
-	}
-	if (strcasecmp(keyname, "Mod4") == 0) {
-		return XCB_MOD_MASK_4;
-	}
-	if (strcasecmp(keyname, "Mod5") == 0) {
-		return XCB_MOD_MASK_5;
-	}
-	if (strcasecmp(keyname, "Any") == 0) {
+	if (strcasecmp(keyname, "any") == 0) {
 		/* this is misnamed but correct */
 		return XCB_BUTTON_MASK_ANY;
 	}
@@ -69,6 +59,35 @@ static void ungrab(struct keybinding *kb) {
 	for (int i = 0; kb->keycodes[i] != XCB_NO_SYMBOL; i++) {
 		xcb_ungrab_key(kb->k->dc->c, kb->keycodes[i], s->root, kb->modifiers);
 	}
+}
+
+static char *describe_keybinding(struct keybinding *kb) {
+	const size_t MAX_KEYNAME_LEN = 128;
+	char keyname[MAX_KEYNAME_LEN];
+	if (xkb_keysym_get_name(kb->keysym, keyname, sizeof(keyname)) == -1) {
+		strcpy(keyname, "(invalid)");
+	}
+
+	auto buf = string_buf_new();
+	bool first_modifier = true;
+	for (int i = 0, mask = 1; i < ARRAY_SIZE(modifier_names); i++, mask *= 2) {
+		if (kb->modifiers & mask) {
+			if (!first_modifier) {
+				string_buf_push(buf, "+");
+			}
+			string_buf_push(buf, modifier_names[i]);
+			first_modifier = false;
+		}
+	}
+	if (!first_modifier) {
+		string_buf_push(buf, "+");
+	}
+	string_buf_push(buf, keyname);
+
+	char *ret = string_buf_dump(buf);
+	free(buf);
+
+	return ret;
 }
 
 static void binding_dtor(struct keybinding *kb) {
@@ -103,7 +122,11 @@ static int refresh_binding(struct keybinding *kb) {
 		if (err) {
 			di_mgetmi(dc->x, log);
 			if (logm) {
-				di_log_va(logm, DI_LOG_ERROR, "Cannot grab %c\n", kb->keycodes[i]);
+				char *description = describe_keybinding(kb);
+				di_log_va(logm, DI_LOG_ERROR,
+				          "Cannot grab %#x, for keybinding %s\n",
+				          kb->keycodes[i], description);
+				free(description);
 			}
 			free(err);
 		}

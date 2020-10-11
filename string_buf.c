@@ -61,7 +61,7 @@ void string_buf_clear(struct string_buf *buf) {
 }
 
 char *string_buf_dump(struct string_buf *buf) {
-	int len = 0;
+	size_t len = 0;
 
 	struct string_buf_node *tmp = buf->head;
 	while(tmp) {
