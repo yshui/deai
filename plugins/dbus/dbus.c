@@ -437,7 +437,10 @@ static unsigned int _dbus_add_watch(DBusWatch *w, void *ud) {
 	}
 
 	struct di_object *ioev;
-	di_getm(oc->di, event, false);
+	di_object_with_cleanup eventm = NULL;
+	if (di_get(oc->di, "event", eventm) != 0) {
+		return false;
+	}
 	int rc = di_callr(eventm, "fdevent", ioev, fd, dt);
 	if (rc != 0) {
 		return false;

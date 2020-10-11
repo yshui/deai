@@ -99,12 +99,14 @@ static void di_xorg_ioev(struct di_weak_object *weak) {
 const char *di_xorg_get_atom_name(struct di_xorg_connection *xc, xcb_atom_t atom) {
 	struct di_atom_entry *ae = NULL;
 	HASH_FIND(hh, xc->a_byatom, &atom, sizeof(atom), ae);
-	if (ae)
+	if (ae) {
 		return ae->name;
+	}
 
 	auto r = xcb_get_atom_name_reply(xc->c, xcb_get_atom_name(xc->c, atom), NULL);
-	if (!r)
+	if (!r) {
 		return NULL;
+	}
 
 	ae = tmalloc(struct di_atom_entry, 1);
 	ae->name = strndup(xcb_get_atom_name_name(r), xcb_get_atom_name_name_length(r));
@@ -124,8 +126,9 @@ xcb_atom_t di_xorg_intern_atom(struct di_xorg_connection *xc, const char *name,
 	*e = NULL;
 
 	HASH_FIND(hh2, xc->a_byname, name, strlen(name), ae);
-	if (ae)
+	if (ae) {
 		return ae->atom;
+	}
 
 	auto r = xcb_intern_atom_reply(xc->c, xcb_intern_atom(xc->c, 0, strlen(name), name), e);
 	if (!r) {

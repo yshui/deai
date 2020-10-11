@@ -140,11 +140,11 @@ PUBLIC_DEAI_API int di_proxy_signal(struct di_object *nonnull src, const char *n
 	do {                                                                             \
 		int rc = 0;                                                              \
 		di_object_with_cleanup __deai_tmp_di = (struct di_object *)(di_expr);    \
-		if (__deai_tmp_di == NULL) {                                                        \
+		if (__deai_tmp_di == NULL) {                                             \
 			on_err;                                                          \
 		}                                                                        \
 		struct di_object *__o;                                                   \
-		rc = di_get(__deai_tmp_di, #modn, __o);                                             \
+		rc = di_get(__deai_tmp_di, #modn, __o);                                  \
 		if (rc != 0) {                                                           \
 			on_err;                                                          \
 		}                                                                        \
@@ -155,8 +155,6 @@ PUBLIC_DEAI_API int di_proxy_signal(struct di_object *nonnull src, const char *n
 		modn##m = __o;                                                           \
 	} while (0)
 
-#define di_getm(di, modn, on_err) _di_getm(di, modn, return (on_err))
-#define di_getmi(di, modn) _di_getm(di, modn, break)
 #define di_mgetm(mod, modn, on_err)                                                      \
 	_di_getm(di_module_get_deai((struct di_module *)(mod)), modn, return (on_err))
 #define di_mgetmi(mod, modn)                                                             \
@@ -164,11 +162,11 @@ PUBLIC_DEAI_API int di_proxy_signal(struct di_object *nonnull src, const char *n
 
 #define di_schedule_call(di, fn, cap)                                                    \
 	do {                                                                             \
-		di_getmi(di, event);                                                     \
+		di_object_with_cleanup eventm;                                           \
+		di_get(di, "event", eventm);                                             \
 		assert(eventm);                                                          \
-		auto cl = di_closure(fn, cap);                                           \
+		di_closure_with_cleanup cl = di_closure(fn, cap);                        \
 		di_listen_to_once(eventm, "prepare", (void *)cl, true);                  \
-		di_unref_object((void *)cl);                                             \
 	} while (0)
 
 // call but ignore return
