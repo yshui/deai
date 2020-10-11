@@ -25,9 +25,6 @@ struct di_file_watch {
 	struct di_object;
 	int fd;
 
-	struct di_object *fdev;
-	struct di_listener *fdev_listener;
-
 	struct di_file_watch_entry *byname, *bywd;
 };
 
@@ -128,7 +125,7 @@ static int di_file_rm_watch(struct di_file_watch *fw, const char *path) {
 }
 
 static void stop_file_watcher(struct di_file_watch *fw) {
-	if (!fw->fdev) {
+	if (!di_has_member(fw, "__inotify_fd_event")) {
 		return;
 	}
 
@@ -141,13 +138,6 @@ static void stop_file_watcher(struct di_file_watch *fw) {
 		free(we->fname);
 		free(we);
 	}
-	di_unref_object(fw->fdev);
-	fw->fdev = NULL;
-
-	// listener needs to be the last thing to remove
-	// because unref listeners might cause the object
-	// itself to be unref'd
-	di_stop_listener(fw->fdev_listener);
 }
 
 static struct di_object *di_file_new_watch(struct di_module *f, struct di_array paths) {
@@ -170,12 +160,16 @@ static struct di_object *di_file_new_watch(struct di_module *f, struct di_array 
 	di_method(fw, "remove", di_file_rm_watch, char *);
 	di_method(fw, "stop", di_destroy_object);
 	di_mgetm(f, event, di_new_error("Can't find event module"));
-	di_callr(eventm, "fdevent", fw->fdev, fw->fd, IOEV_READ);
+
+	struct di_object *fdevent = NULL;
+	DI_CHECK_OK(di_callr(eventm, "fdevent", fdevent, fw->fd, IOEV_READ));
 
 	auto tmpo = di_weakly_ref_object((struct di_object *)fw);
-	auto cl = di_closure(di_file_ioev, (tmpo));
-	fw->fdev_listener = di_listen_to(fw->fdev, "read", (void *)cl);
-	di_unref_object((void *)cl);
+	di_closure_with_cleanup cl = di_closure(di_file_ioev, (tmpo));
+	auto listen_handle = di_listen_to(fdevent, "read", (void *)cl);
+
+	di_member(fw, "__inotify_fd_event", fdevent);
+	di_member(fw, "__inotify_fd_event_read_listen_handle", listen_handle);
 
 	const char **arr = paths.arr;
 	for (int i = 0; i < paths.length; i++) {

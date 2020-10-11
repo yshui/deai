@@ -40,13 +40,9 @@ static void di_xorg_free_sub(struct di_xorg_ext *x) {
 }
 
 static void xorg_disconnect(struct di_xorg_connection *xc) {
-	if (!xc->xcb_fd) {
+	if (!di_has_member(xc, "__xcb_fd_event")) {
 		return;
 	}
-
-	di_stop_listener(xc->xcb_fdlistener);
-	di_unref_object((void *)xc->xcb_fd);
-	xc->xcb_fd = NULL;
 
 	if (xc->xkb_ctx) {
 		xkb_context_unref(xc->xkb_ctx);
@@ -65,8 +61,6 @@ static void xorg_disconnect(struct di_xorg_connection *xc) {
 		free(ae->name);
 		free(ae);
 	}
-
-	xc->xcb_fdlistener = NULL;
 }
 
 static void di_xorg_ioev(struct di_weak_object *weak) {
@@ -456,12 +450,15 @@ static struct di_object *di_xorg_connect_to(struct di_xorg *x, const char *displ
 	dc->c = c;
 	dc->dflt_scrn = scrn;
 
-	di_callr(eventm, "fdevent", dc->xcb_fd, xcb_get_file_descriptor(dc->c), IOEV_READ);
+	struct di_object *xcb_fd_event = NULL;
+	di_callr(eventm, "fdevent", xcb_fd_event, xcb_get_file_descriptor(dc->c), IOEV_READ);
 
 	auto odc = di_weakly_ref_object((struct di_object *)dc);
-	auto cl = di_closure(di_xorg_ioev, (odc));
-	dc->xcb_fdlistener = di_listen_to(dc->xcb_fd, "read", (void *)cl);
-	di_unref_object((void *)cl);
+	di_closure_with_cleanup cl = di_closure(di_xorg_ioev, (odc));
+	auto lh = di_listen_to(xcb_fd_event, "read", (void *)cl);
+
+	di_member(dc, "__xcb_fd_event", xcb_fd_event);
+	di_member(dc, "__xcb_fd_event_read_listen_handle", lh);
 
 	di_set_object_dtor((void *)dc, (void *)xorg_disconnect);
 

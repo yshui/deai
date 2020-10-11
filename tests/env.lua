@@ -3,7 +3,8 @@ di.os.env.PATH = "/non-existent"
 print(di.os.env.PATH)
 
 e = di.spawn:run({"ls"}, true)
-e:on("exit", function(ec, sig)
+handle = e:on("exit", function(ec, sig)
+    handle:stop()
     print(ec, sig)
     assert(ec == 1)
 end)

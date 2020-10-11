@@ -299,22 +299,24 @@ PUBLIC_DEAI_API int di_remove_member_raw(struct di_object *nonnull o, const char
 ///
 /// `name` cannot name an internal member
 PUBLIC_DEAI_API int di_remove_member(struct di_object *nonnull o, const char *nonnull name);
-PUBLIC_DEAI_API struct di_member *nullable di_lookup(struct di_object *nonnull o,
+
+/// Check whether a member with `name` exists in the object, without calling the
+/// getters. Returns non-NULL if the member exists, and NULL otherwise.
+///
+/// This function doesn't retreive the member, no reference counter is incremented.
+PUBLIC_DEAI_API struct di_member *nullable di_lookup(struct di_object *nonnull,
                                                      const char *nonnull name);
 PUBLIC_DEAI_API struct di_object *nullable di_new_object(size_t sz, size_t alignment);
 
-PUBLIC_DEAI_API struct di_listener *nullable di_listen_to(struct di_object *nonnull o,
-                                                          const char *nonnull name,
-                                                          struct di_object *nullable h);
-PUBLIC_DEAI_API struct di_listener *nullable di_listen_to_once(struct di_object *nonnull o,
-                                                               const char *nonnull name,
-                                                               struct di_object *nullable h,
-                                                               bool once);
+/// Listen to signal `name` emitted from object `o`. When the signal is emitted, handler
+/// `h` will be called. If the returned object is dropped, the listen-to relationship is
+/// automatically stopped.
+///
+/// Return object type: ListenerHandle
+PUBLIC_DEAI_API struct di_object *nullable di_listen_to(struct di_object *nonnull,
+                                                        const char *nonnull name,
+                                                        struct di_object *nullable h);
 
-// Unscribe from a signal from the listener side. __detach is not called in this case
-// It's guaranteed after calling this, the handler and __detach method will never be
-// called
-PUBLIC_DEAI_API int di_stop_listener(struct di_listener *nullable);
 /// Emit a signal with `name`, and `args`. The emitter of the signal is responsible of
 /// freeing `args`.
 PUBLIC_DEAI_API int

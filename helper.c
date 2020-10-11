@@ -52,60 +52,74 @@ int di_gmethod(struct di_object *o, const char *name, void (*fn)(void)) {
 	return di_add_member_clone(o, name, DI_TYPE_OBJECT, m);
 }
 
-typedef struct {
-	struct di_object;
-	struct di_object *proxy;
-	struct di_listener *l;
-	char *signal;
-} _di_proxied_signal;
-
 static int _emit_proxied_signal(struct di_object *o, di_type_t *rt, union di_value *ret,
                                 struct di_tuple t) {
-	auto p = (_di_proxied_signal *)o;
-	di_emitn(p->proxy, p->signal, t);
+	char *signal = NULL;
+	struct di_weak_object *weak = NULL;
+	di_get(o, "___new_signal_name", signal);
+	di_get(o, "__proxy_object", weak);
+
+	di_object_with_cleanup proxy = di_upgrade_weak_ref(weak);
+	if (proxy) {
+		di_emitn(proxy, signal, t);
+	}
+
+	free(signal);
 	return 0;
 }
 
-static void _del_proxied_signal(struct di_object *_sig) {
-	auto sig = (_di_proxied_signal *)_sig;
-	di_stop_listener(sig->l);
-	free(sig->signal);
-
-	// Remove the __del_signal, this should free the proxied_signal object
-	char *buf;
-	asprintf(&buf, "__del_signal_%s", sig->signal);
-	di_remove_member_raw(sig->proxy, buf);
-	free(buf);
+static void _del_proxied_signal(struct di_weak_object *weak, char *signal) {
+	auto proxy = di_upgrade_weak_ref(weak);
+	if (proxy) {
+		char *buf;
+		asprintf(&buf, "__proxy_%s_listen_handle", signal);
+		di_remove_member_raw(proxy, buf);
+		free(buf);
+	}
 }
 
 // Add a listener to src for "srcsig". When "srcsig" is emitted, the proxy will emit
-// "proxysig"
-// This is intended to be called in proxy's "__new_signal" method
-int di_proxy_signal(struct di_object *src, const char *srcsig,
-                           struct di_object *proxy, const char *proxysig) {
+// "proxysig" on the proxy object. The listen handle to the source signal is automatically
+// kept alive in the proxy object. And this function register a signal deleter for the
+// proxied signal to stop listening to the source signal when all the listener are gone.
+//
+// This function sets "__del_signal_<proxysig>", "__proxy_<srcsig>_listen_handle" in the
+// proxy object.
+//
+// This function doesn't allow proxying internal signals
+//
+// @return 0 or error code
+int di_proxy_signal(struct di_object *src, const char *srcsig, struct di_object *proxy,
+                    const char *proxysig) {
+	int ret = 0;
 	if (strncmp(srcsig, "__", 2) == 0) {
 		return -EPERM;
 	}
 
-	auto c = di_new_object_with_type(_di_proxied_signal);
-	c->signal = strdup(proxysig);
-	c->proxy = proxy;        // proxied signal should die when proxy die
-	((struct di_object_internal *)c)->call = _emit_proxied_signal;
+	auto c = di_new_object_with_type(struct di_object);
+	di_member_clone(c, "___new_signal_name", (char *)proxysig);
 
+	auto weak_proxy = di_weakly_ref_object(proxy);
+	di_member_clone(c, "__proxy_object", weak_proxy);
+	di_set_object_call(c, _emit_proxied_signal);
+
+	auto listen_handle = di_listen_to(src, srcsig, c);
 	char *buf;
-	asprintf(&buf, "__del_signal_%s", proxysig);
-
-	// Let the __del_signal method hold the only ref to proxied_signal
-	auto cl = di_closure(_del_proxied_signal, ((struct di_object *)c));
-	int ret = di_add_member_move(proxy, buf, (di_type_t[]){DI_TYPE_OBJECT}, (void **)&cl);
-	di_unref_object((void *)c);
+	asprintf(&buf, "__proxy_%s_listen_handle", proxysig);
+	di_member(proxy, buf, listen_handle);
 	free(buf);
 
-	if (ret != 0) {
-		return ret;
+	asprintf(&buf, "__del_signal_%s", proxysig);
+	if (!di_has_member(proxy, buf)) {
+		auto cl = (struct di_object *)di_closure(_del_proxied_signal,
+		                                         (weak_proxy, (char *)proxysig));
+		ret = di_member(proxy, buf, cl);
+		if (ret != 0) {
+			goto err;
+		}
 	}
 
-	auto l = di_listen_to(src, srcsig, (void *)c);
-	c->l = l;
+err:
+	free(buf);
 	return 0;
 }

@@ -103,11 +103,27 @@ static void di_dbus_update_name(_di_dbus_connection *c, const char *wk, const ch
 	}
 }
 
-static void di_dbus_update_name_from_msg(_di_dbus_connection *c, char *wk, DBusMessage *msg) {
+static void
+di_dbus_update_name_from_msg(struct di_weak_object *weak, char *busname, DBusMessage *msg) {
 	if (dbus_message_get_type(msg) != DBUS_MESSAGE_TYPE_METHOD_RETURN) {
 		return;
 	}
 
+	auto c = (_di_dbus_connection *)di_upgrade_weak_ref(weak);
+	// the fact we received message must mean the connection is still alive
+	DI_CHECK(c != NULL);
+
+	// Stop listening for GetNameOwner reply
+	char *buf;
+	asprintf(&buf, "__dbus_watch_%s_change_request", busname);
+	DI_CHECK_OK(di_remove_member_raw((struct di_object *)c, buf));
+	free(buf);
+
+	asprintf(&buf, "__dbus_watch_%s_change_request_listen_handle", busname);
+	DI_CHECK_OK(di_remove_member_raw((struct di_object *)c, buf));
+	free(buf);
+
+	// Update busname
 	DBusError e;
 	dbus_error_init(&e);
 	const char *unique;
@@ -115,7 +131,7 @@ static void di_dbus_update_name_from_msg(_di_dbus_connection *c, char *wk, DBusM
 	if (!ret) {
 		return;
 	}
-	di_dbus_update_name(c, wk, NULL, unique);
+	di_dbus_update_name(c, busname, NULL, unique);
 	dbus_message_unref(msg);
 }
 
@@ -141,12 +157,21 @@ static void di_dbus_watch_name(_di_dbus_connection *c, const char *busname) {
 	auto ret = di_dbus_send(c, msg);
 	dbus_message_unref(msg);
 
+	di_weak_object_with_cleanup weak = di_weakly_ref_object((struct di_object *)c);
 	// Cast busname to "char *" so ri_closure would clone it.
-	auto cl =
-	    di_closure(di_dbus_update_name_from_msg, ((void *)c, (char *)busname), void *);
-	di_listen_to_once(ret, "reply", (struct di_object *)cl, true);
-	di_unref_object((void *)cl);
-	di_unref_object((void *)ret);
+	di_closure_with_cleanup cl =
+	    di_closure(di_dbus_update_name_from_msg, (weak, (char *)busname), void *);
+	auto listen_handle = di_listen_to(ret, "reply", (struct di_object *)cl);
+
+	// Keep the listen handle and event source alive
+	char *buf;
+	asprintf(&buf, "__dbus_watch_%s_change_request", busname);
+	di_member(c, buf, ret);
+	free(buf);
+
+	asprintf(&buf, "__dbus_watch_%s_change_request_listen_handle", busname);
+	di_member(c, buf, listen_handle);
+	free(buf);
 }
 
 static void di_dbus_unwatch_name(_di_dbus_connection *c, const char *busname) {
@@ -253,7 +278,12 @@ static void _dbus_lookup_member(_di_dbus_object *o, const char *method,
 }
 #endif
 
-static void _dbus_call_method_reply_cb(struct di_object *sig, void *msg) {
+static void _dbus_call_method_reply_cb(struct di_weak_object *weak, void *msg) {
+	auto sig = di_upgrade_weak_ref(weak);
+	if (sig == NULL) {
+		return;
+	}
+
 	struct di_tuple t;
 	DBusMessageIter i;
 	dbus_message_iter_init(msg, &i);
@@ -268,7 +298,9 @@ static void _dbus_call_method_reply_cb(struct di_object *sig, void *msg) {
 	di_free_tuple(t);
 	dbus_message_unref(msg);
 
-	di_destroy_object(sig);
+	// Stop the listener
+	di_remove_member_raw(sig, "___original_object");
+	di_remove_member_raw(sig, "___original_object_listen_handle");
 }
 
 static struct di_object *
@@ -301,11 +333,13 @@ _dbus_call_method(const char *iface, const char *method, struct di_tuple t) {
 
 	auto ret = di_new_object_with_type(struct di_object);
 	auto p = di_dbus_send(dobj->c, msg);
-	auto cl = di_closure(_dbus_call_method_reply_cb, (ret), void *);
-	di_listen_to_once(p, "reply", (void *)cl, true);
-	di_unref_object((void *)cl);
-	di_unref_object((void *)p);
+	di_weak_object_with_cleanup weak = di_weakly_ref_object(ret);
+	di_closure_with_cleanup cl = di_closure(_dbus_call_method_reply_cb, (weak), void *);
+	auto listen_handle = di_listen_to(p, "reply", (void *)cl);
 	dbus_message_unref(msg);
+
+	di_member(ret, "___original_object", p);
+	di_member(ret, "___original_object_listen_handle", listen_handle);
 	return ret;
 }
 
@@ -400,7 +434,16 @@ static void ioev_callback(void *conn, void *ptr, int event) {
 	}
 }
 
-static void _dbus_shutdown(DBusConnection *conn) {
+static void
+_dbus_shutdown(struct di_weak_object *weak_di, void *root_handle_ptr, DBusConnection *conn) {
+	// Stop the listen for "prepare"
+	auto root_handle = *(uint64_t *)root_handle_ptr;
+	auto di = di_upgrade_weak_ref(weak_di);
+	if (di != NULL) {
+		di_call(di, "__remove_anonymous", root_handle);
+	}
+	free(root_handle_ptr);
+
 	dbus_connection_close(conn);
 	dbus_connection_unref(conn);
 }
@@ -412,7 +455,29 @@ static void di_dbus_shutdown(_di_dbus_connection *conn) {
 	// this function might be called in dbus dispatch function,
 	// closing connection in that context is bad.
 	// so delay the shutdown until we return to mainloop
-	di_schedule_call(conn->di, _dbus_shutdown, ((void *)conn->conn));
+	di_weak_object_with_cleanup weak_di =
+	    di_weakly_ref_object((struct di_object *)conn->di);
+	uint64_t *root_handle_storage = tmalloc(uint64_t, 1);
+	di_closure_with_cleanup shutdown = di_closure(
+	    _dbus_shutdown, (weak_di, (void *)root_handle_storage, (void *)conn->conn));
+
+	di_object_with_cleanup eventm = NULL;
+	if (di_get(conn->di, "event", eventm) != 0) {
+		return;
+	}
+
+	di_object_with_cleanup listen_handle =
+	    di_listen_to(eventm, "prepare", (struct di_object *)shutdown);
+
+	// Keep the listen handle alive as a root. As this is the dtor for `conn`, we
+	// cannot keep the handle inside `conn`.
+	di_weak_object_with_cleanup weak_roots;
+	di_get(conn->di, "roots", weak_roots);
+
+	di_object_with_cleanup roots = di_upgrade_weak_ref(weak_roots);
+	DI_CHECK(roots);
+	di_callr(roots, "__add_anonymous", *root_handle_storage, listen_handle);
+
 	conn->conn = NULL;
 	di_unref_object((void *)conn->di);
 	conn->di = NULL;
@@ -455,7 +520,7 @@ static unsigned int _dbus_add_watch(DBusWatch *w, void *ud) {
 	}
 	di_unref_object(ioev);
 
-	dbus_watch_set_data(w, l, (void *)di_stop_listener);
+	dbus_watch_set_data(w, l, (void *)di_unref_object);
 
 	return true;
 }

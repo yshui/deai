@@ -160,15 +160,6 @@ PUBLIC_DEAI_API int di_proxy_signal(struct di_object *nonnull src, const char *n
 #define di_mgetmi(mod, modn)                                                             \
 	_di_getm(di_module_get_deai((struct di_module *)(mod)), modn, break)
 
-#define di_schedule_call(di, fn, cap)                                                    \
-	do {                                                                             \
-		di_object_with_cleanup eventm;                                           \
-		di_get(di, "event", eventm);                                             \
-		assert(eventm);                                                          \
-		di_closure_with_cleanup cl = di_closure(fn, cap);                        \
-		di_listen_to_once(eventm, "prepare", (void *)cl, true);                  \
-	} while (0)
-
 // call but ignore return
 #define di_call(o, name, ...)                                                            \
 	({                                                                               \

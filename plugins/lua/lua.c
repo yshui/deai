@@ -2,8 +2,36 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
-/* Copyright (c) 2017, Yuxuan Shui <yshuiv7@gmail.com> */
+/* Copyright (c) 2017, 2020 Yuxuan Shui <yshuiv7@gmail.com> */
 
+// Q: how to prevent the user script from creating reference cycles?
+// A: this needs to be investigated, but here are a few points
+//    * lua state cannot hold strong references to listen handles. otherwise there will be
+//      cycles:
+//        lua state -> listen handle -> handler (assuming handler is a lua function) ->
+//        lua state
+//    * (more of a thing the deai core should do), objects cannot hold strong references
+//      to their listen handles. otherwise:
+//        lua state -> object -> listen handle -> handler -> lua state
+//
+//    with the above 2 points, things should be mostly fine. lua scripts can create 2
+//    kinds of strong references:
+//    * lua state -> di_object(A), by assigning di_object to lua variable
+//    * di_object(B) -> lua state, by creating a lua table and return that to deai
+//
+//    as long as the script doesn't create reference chains from A to B, things should be
+//    fine. here are some possbilities how such references can be created:
+//    * register a lua table as module, then get that module.
+//    * emit a signal with a lua table as argument, then handle that signal and store the
+//      object
+//
+//    a completely solution would probably be using mark-and-sweep GC.
+
+// To prevent reference cycles, lua doesn't hold strong reference to listen handles. But
+// that's OK. The deai core uses implicit listener deregisteration, listeners are stopped
+// when the listen handle is dropped. but the lua scripts will use a different semantic.
+// In lua scripts, the listen handles are automatically add as roots and kept alive.
+// They have to be explicitly stopped.
 #include <assert.h>
 #include <lauxlib.h>
 #include <lua.h>
@@ -56,7 +84,6 @@ struct di_lua_ref {
 	struct di_object;
 	int tref;
 	struct di_lua_script *s;
-	struct di_listener *attached_listener;
 };
 
 struct di_lua_script {
@@ -74,6 +101,7 @@ struct di_lua_script {
 static int di_lua_pushvariant(lua_State *L, const char *name, struct di_variant var);
 static int di_lua_meta_index(lua_State *L);
 static int di_lua_meta_index_for_weak_object(lua_State *L);
+static int di_lua_meta_index_for_listen_handle(lua_State *L);
 static int di_lua_meta_newindex(lua_State *L);
 
 static int di_lua_errfunc(lua_State *L) {
@@ -138,10 +166,6 @@ static void *di_lua_checkproxy(lua_State *L, int index) {
 static void lua_ref_dtor(struct di_lua_ref *t) {
 	luaL_unref(t->s->L->L, LUA_REGISTRYINDEX, t->tref);
 	di_unref_object((void *)t->s);
-	if (t->attached_listener) {
-		di_stop_listener(t->attached_listener);
-		t->attached_listener = NULL;
-	}
 	t->s = NULL;
 }
 
@@ -282,6 +306,8 @@ static int di_lua_gc_for_weak_object(lua_State *L) {
 	return 0;
 }
 
+static int di_lua_gc_for_listen_handle(lua_State *L);
+
 static const luaL_Reg di_lua_object_methods[] = {
     {"__index", di_lua_meta_index},
     {"__newindex", di_lua_meta_newindex},
@@ -292,6 +318,12 @@ static const luaL_Reg di_lua_object_methods[] = {
 static const luaL_Reg di_lua_weak_object_methods[] = {
     {"__index", di_lua_meta_index_for_weak_object},
     {"__gc", di_lua_gc_for_weak_object},
+    {0, 0},
+};
+
+static const luaL_Reg di_lua_listen_handle_methods[] = {
+    {"__index", di_lua_meta_index_for_listen_handle},
+    {"__gc", di_lua_gc_for_listen_handle},
     {0, 0},
 };
 
@@ -360,27 +392,24 @@ const luaL_Reg di_lua_di_methods[] = {
 
 static void lua_state_dtor(struct di_lua_state *obj) {
 	lua_close(obj->L);
-	di_remove_member_raw((void *)obj->m, "__lua_state");
 }
 
-static void lua_new_state(struct di_module *m) {
+static struct di_lua_state *lua_new_state(struct di_module *m) {
 	auto L = di_new_object_with_type(struct di_lua_state);
+	di_set_type((struct di_object *)L, "deai.plugin.lua:LuaState");
 	L->m = m;
 	L->L = luaL_newstate();
 	di_set_object_dtor((void *)L, (void *)lua_state_dtor);
 	luaL_openlibs(L->L);
 
 	struct di_object *di = (void *)di_module_get_deai(m);
-	di_ref_object(di);
 	di_lua_pushproxy(L->L, "di", di, di_lua_di_methods, false);
-	// Make it a weak ref
-	// TODO(yshui) add proper weak ref
-	di_unref_object(di);
 	lua_setglobal(L->L, "di");
 
-	// We have to unref di here, otherwise there will be a ref cycle:
-	// di <-> lua_module
-	// di_unref_object((void *)di);
+	// The reference from di_lua_state to di is actually kept by the lua_State,
+	// as "di" is a global in the lua_State. However, we keep di as a member of
+	// di_lua_state to take advantage of the automatic memory management.
+	di_member((struct di_object *)L, __DEAI_MEMBER_NAME, di);
 
 	// Prevent the script from using os
 	lua_getglobal(L->L, "os");
@@ -394,8 +423,10 @@ static void lua_new_state(struct di_module *m) {
 	lua_setglobal(L->L, "os");
 	lua_pop(L->L, 1);
 
-	auto Lo = (struct di_object *)L;
+	auto Lo = di_weakly_ref_object((struct di_object *)L);
 	di_member(m, "__lua_state", Lo);
+
+	return L;
 }
 
 static struct di_object *di_lua_load_script(struct di_object *obj, const char *path) {
@@ -420,19 +451,22 @@ static struct di_object *di_lua_load_script(struct di_object *obj, const char *p
 
 	struct di_module *m = (void *)obj;
 	{
-		union di_value L;
-		di_type_t vtype;
-		int rc = di_rawgetx(obj, "__lua_state", &vtype, &L);
+		di_weak_object_with_cleanup weak_lua_state;
+		s->L = NULL;
 
-		// Don't hold ref. If lua module goes away first, script will become
-		// defunct so that's fine.
-		if (rc != 0) {
-			lua_new_state(m);
-			rc = di_rawgetx(obj, "__lua_state", &vtype, &L);
+		int rc = di_get(m, "__lua_state", weak_lua_state);
+		if (rc == 0) {
+			s->L = (struct di_lua_state *)di_upgrade_weak_ref(weak_lua_state);
+		} else {
+			DI_CHECK(rc == -ENOENT);
 		}
-		assert(vtype == DI_TYPE_OBJECT);
 
-		s->L = (void *)L.object;
+		if (s->L == NULL) {
+			// __lua_state not found, or lua_state has been dropped
+			di_remove_member_raw((struct di_object *)m, "__lua_state");
+			s->L = lua_new_state(m);
+		}
+		DI_CHECK(s->L != NULL);
 	}
 
 	struct di_lua_state *L = s->L;
@@ -681,31 +715,19 @@ static int di_lua_type_to_di(lua_State *L, int i, di_type_t *t, union di_value *
 #undef todiobj
 }
 
-static int di_lua_listener_gc(lua_State *L) {
-	struct di_object *o = di_lua_checkproxy(L, 1);
-	// fprintf(stderr, "lua gc %p\n", lo);
-	di_stop_listener((struct di_listener *)o);
-	return 0;
-}
-
-const luaL_Reg di_lua_listener_methods[] = {
-    {"__index", di_lua_meta_index},
-    {"__newindex", di_lua_meta_newindex},
-    {"__gc", di_lua_listener_gc},
-    {0, 0},
+struct di_lua_listen_handle_proxy {
+	/// The source of the event
+	struct di_weak_object *roots;
+	uint64_t root_handle_for_listen_handle;
+	uint64_t root_handle_for_source;
 };
 
-// Stack: [ object, string, boolean (optional), lua closure ]
+// Stack: [ object, string, lua closure ]
 static int di_lua_add_listener(lua_State *L) {
-	bool once = false;
 	struct di_object *o = di_lua_checkproxy(L, 1);
 
-	if (lua_gettop(L) == 4) {
-		once = lua_toboolean(L, 3);
-		lua_remove(L, 3);
-	}
 	if (lua_gettop(L) != 3) {
-		return luaL_error(L, "'on' takes 3 or 4 arguments");
+		return luaL_error(L, "'on' takes 3 arguments");
 	}
 
 	const char *signame = luaL_checklstring(L, 2, NULL);
@@ -713,17 +735,34 @@ static int di_lua_add_listener(lua_State *L) {
 		return luaL_argerror(L, 3, "not a function");
 	}
 
-	auto h = lua_type_to_di_object(L, -1, call_lua_function);
+	// TODO(yshui) implement `once` listeners again.
+	// remember the once flag, wrap the handler function, stop the listener in the
+	// wrapper if once == true
+	auto handler = lua_type_to_di_object(L, -1, call_lua_function);
+	di_object_with_cleanup listen_handle = di_listen_to(o, signame, (void *)handler);
+	di_unref_object((struct di_object *)handler);
 
-	auto l = di_listen_to_once(o, signame, (void *)h, once);
-	if (IS_ERR(l)) {
-		return luaL_error(L, "failed to add listener %s", strerror((int)PTR_ERR(l)));
+	if (IS_ERR(listen_handle)) {
+		return luaL_error(L, "failed to add listener %s",
+		                  strerror((int)PTR_ERR(listen_handle)));
 	}
-	h->attached_listener = l;
-	di_unref_object((void *)h);
 
-	di_ref_object((void *)l);
-	di_lua_pushproxy(L, NULL, (void *)l, di_lua_object_methods, false);
+	struct di_lua_script *s;
+	di_lua_get_env(L, s);
+
+	di_weak_object_with_cleanup weak_roots;
+	di_object_with_cleanup di = di_module_get_deai(s->L->m);
+	di_get(di, "roots", weak_roots);
+
+	di_object_with_cleanup roots = di_upgrade_weak_ref(weak_roots);
+	DI_CHECK(roots);
+
+	auto proxy = tmalloc(struct di_lua_listen_handle_proxy, 1);
+	proxy->roots = di_weakly_ref_object(roots);
+
+	di_callr(roots, "__add_anonymous", proxy->root_handle_for_listen_handle, listen_handle);
+	di_callr(roots, "__add_anonymous", proxy->root_handle_for_source, o);
+	di_lua_pushproxy(L, NULL, proxy, di_lua_listen_handle_methods, false);
 	return 1;
 }
 
@@ -896,6 +935,54 @@ static int di_lua_meta_index_for_weak_object(lua_State *L) {
 
 	if (strcmp(key, "upgrade") == 0) {
 		lua_pushcclosure(L, di_lua_upgrade_weak_ref, 0);
+		return 1;
+	}
+
+	return 0;
+}
+
+static int di_lua_stop_listener(lua_State *L) {
+	struct di_lua_listen_handle_proxy *proxy = di_lua_checkproxy(L, 1);
+	if (proxy->root_handle_for_listen_handle == 0) {
+		// Already stopped
+		return 0;
+	}
+	DI_CHECK(proxy->root_handle_for_source != 0);
+
+	di_object_with_cleanup roots = di_upgrade_weak_ref(proxy->roots);
+	DI_CHECK(roots != NULL);
+
+	di_call(roots, "__remove_anonymous", proxy->root_handle_for_listen_handle);
+	di_call(roots, "__remove_anonymous", proxy->root_handle_for_source);
+	proxy->root_handle_for_listen_handle = 0;
+	proxy->root_handle_for_source = 0;
+	return 0;
+}
+
+static int di_lua_gc_for_listen_handle(lua_State *L) {
+	di_lua_stop_listener(L);
+
+	struct di_lua_listen_handle_proxy *proxy = di_lua_checkproxy(L, 1);
+	di_drop_weak_ref(&proxy->roots);
+
+	// `proxy` is not a di_object
+	free(proxy);
+	return 0;
+}
+
+static int di_lua_meta_index_for_listen_handle(lua_State *L) {
+	/* This is __index for lua listen handle proxies. These proxies only have one
+	 * method, `stop()`, to remove the listen handle from roots.
+	 */
+
+	if (lua_gettop(L) != 2) {
+		return luaL_error(L, "wrong number of arguments to __index");
+	}
+
+	const char *key = luaL_checklstring(L, 2, NULL);
+
+	if (strcmp(key, "stop") == 0) {
+		lua_pushcclosure(L, di_lua_stop_listener, 0);
 		return 1;
 	}
 

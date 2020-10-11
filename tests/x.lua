@@ -3,7 +3,10 @@ di.spawn:run({"Xvfb", ":1", "-screen", "0", "1600x1200x24+32"}, true)
 di.spawn:run({"Xvfb", ":2", "-screen", "0", "1600x1200x24+32"}, true)
 di.os.env.DISPLAY=":1"
 
-di.event:timer(0.2):on("elapsed", true, function()
+timer_handle = di.event:timer(0.2):on("elapsed", function()
+    timer_handle:stop()
+    collectgarbage("collect")
+
     -- wait a awhile for Xvfb to start
     o = di.xorg:connect()
     assert(o.asdf == nil)
@@ -64,7 +67,10 @@ di.event:timer(0.2):on("elapsed", true, function()
 
     di.spawn:run({"xrandr", "--output", "screen", "--off"}, true)
 
-    di.event:timer(1):on("elapsed", true, function()
+    local handle2
+    handle2 = di.event:timer(1):on("elapsed", function()
+        handle2:stop()
+        collectgarbage("collect")
         devs = xi.devices
         for _, d in pairs(devs) do
             print(string.format("device: %s %s %s %d", d.type, d.use, d.name, d.id))
@@ -77,6 +83,5 @@ di.event:timer(0.2):on("elapsed", true, function()
             di:exit(1)
             return
         end
-        di:quit()
     end)
 end)

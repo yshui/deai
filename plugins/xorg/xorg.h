@@ -24,8 +24,6 @@ struct di_xorg_connection {
 	struct di_xorg *x;
 	xcb_connection_t *c;
 	int dflt_scrn;
-	struct di_object *xcb_fd;
-	struct di_listener *xcb_fdlistener;
 	struct di_xorg_ext *xext;
 
 	struct xkb_context *xkb_ctx;

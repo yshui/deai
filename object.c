@@ -709,40 +709,62 @@ void di_copy_value(di_type_t t, void *dst, const void *src) {
 struct di_signal {
 	char *name;
 	int nlisteners;
-	struct di_object *owner;
+	struct di_weak_object *owner;
 	struct list_head listeners;
 	UT_hash_handle hh;
 };
 
+// This is essentially a fat weak reference, from object to its listeners.
 struct di_listener {
-	struct di_object;
-
-	struct di_object *handler;
-	struct di_signal *signal;
-
+	struct di_weak_object *listen_handle;
 	struct list_head siblings;
-	bool once;
 };
 
-static struct di_object *di_get_owner_of_listener(struct di_listener *l) {
-	di_ref_object(l->signal->owner);
-	return l->signal->owner;
+struct di_listen_handle {
+	struct di_object_internal;
+	struct di_signal *nonnull signal;
+
+	// listen_handle owns the listen_entry
+	struct di_listener *nonnull listen_entry;
+};
+
+static void di_listen_handle_dtor(struct di_object *nonnull obj) {
+	auto lh = (struct di_listen_handle *)obj;
+	DI_CHECK(lh->signal != PTR_POISON);
+	DI_CHECK(lh->listen_entry != PTR_POISON);
+
+	lh->signal->nlisteners--;
+	list_del(&lh->listen_entry->siblings);
+	if (list_empty(&lh->signal->listeners)) {
+		// Owner might have already died. In that case we just detach the listener
+		// struct from the signal struct, and potentially frees the signal struct.
+		// If the owner is still alive, we also call its signal deleter if this is
+		// the last listener of signal.
+		di_object_with_cleanup owner = di_upgrade_weak_ref(lh->signal->owner);
+		auto owner_internal = (struct di_object_internal *)owner;
+		if (owner_internal) {
+			HASH_DEL(owner_internal->signals, lh->signal);
+
+			// Don't call deleter for internal signal names
+			if (strncmp(lh->signal->name, "__", 2) != 0) {
+				bool handler_found;
+				call_handler_with_fallback(
+				    owner, "__del_signal", lh->signal->name,
+				    (struct di_variant){NULL, DI_LAST_TYPE}, NULL, NULL,
+				    &handler_found);
+			}
+		}
+		free(lh->signal->name);
+		free(lh->signal);
+	}
+
+	lh->signal = PTR_POISON;
+	di_drop_weak_ref(&lh->listen_entry->listen_handle);
+	free(lh->listen_entry);
+	lh->listen_entry = PTR_POISON;
 }
 
-static struct di_listener *di_new_listener(void) {
-	struct di_listener *l = di_new_object_with_type(struct di_listener);
-
-	// stop_listener should be set as dtor, because if a listener is
-	// alive, it's ref_count is guaranteed to be > 0
-	di_method(l, "stop", di_stop_listener);
-	di_getter(l, owner, di_get_owner_of_listener);
-
-	ABRT_IF_ERR(di_set_type((void *)l, "deai:listener"));
-	return l;
-}
-
-struct di_listener *
-di_listen_to_once(struct di_object *_obj, const char *name, struct di_object *h, bool once) {
+struct di_object *di_listen_to(struct di_object *_obj, const char *name, struct di_object *h) {
 	auto obj = (struct di_object_internal *)_obj;
 	assert(!obj->destroyed);
 
@@ -751,7 +773,7 @@ di_listen_to_once(struct di_object *_obj, const char *name, struct di_object *h,
 	if (!sig) {
 		sig = tmalloc(struct di_signal, 1);
 		sig->name = strdup(name);
-		sig->owner = _obj;
+		sig->owner = di_weakly_ref_object(_obj);
 
 		INIT_LIST_HEAD(&sig->listeners);
 		HASH_ADD_KEYPTR(hh, obj->signals, sig->name, strlen(sig->name), sig);
@@ -760,74 +782,32 @@ di_listen_to_once(struct di_object *_obj, const char *name, struct di_object *h,
 			call_handler_with_fallback(_obj, "__new_signal", sig->name,
 			                           (struct di_variant){NULL, DI_LAST_TYPE},
 			                           NULL, NULL, &handler_found);
-			di_ref_object((void *)obj);
 		}
 	}
 
-	auto l = di_new_listener();
-	l->handler = h;
-	l->signal = sig;
-	l->once = once;
+	auto l = tmalloc(struct di_listener, 1);
+	auto listen_handle = di_new_object_with_type(struct di_listen_handle);
+	DI_CHECK_OK(di_set_type((void *)listen_handle, "deai:ListenHandle"));
+	l->listen_handle = di_weakly_ref_object((struct di_object *)listen_handle);
+	listen_handle->listen_entry = l;
 
-	if (h) {
-		di_ref_object(h);
-	}
+	listen_handle->dtor = di_listen_handle_dtor;
+	listen_handle->signal = sig;
+
+	di_member_clone(listen_handle, "__handler", h);
+
 	list_add(&l->siblings, &sig->listeners);
-
 	sig->nlisteners++;
 
-	return l;
+	return (struct di_object *)listen_handle;
 }
 
-struct di_listener *
-di_listen_to(struct di_object *o, const char *name, struct di_object *h) {
-	return di_listen_to_once(o, name, h, false);
-}
-
-int di_stop_listener(struct di_listener *l) {
-	// The caller announce the intention to stop this listener
-	// meaning they don't want the __detach to be called anymore
-	//
-	// Better remove it here even though another stop operation
-	// might be in progress (indicated by ->signal == NULL)
-	di_remove_member_raw((struct di_object *)l, "__detach");
-
-	if (!l->signal) {
-		return -ENOENT;
-	}
-
-	list_del(&l->siblings);
-	l->signal->nlisteners--;
-	if (list_empty(&l->signal->listeners)) {
-		HASH_DEL(((struct di_object_internal *)l->signal->owner)->signals, l->signal);
-		// Don't call deleter for internal signal names
-		if (strncmp(l->signal->name, "__", 2) != 0) {
-			bool handler_found;
-			call_handler_with_fallback(l->signal->owner, "__del_signal",
-			                           l->signal->name,
-			                           (struct di_variant){NULL, DI_LAST_TYPE},
-			                           NULL, NULL, &handler_found);
-			di_unref_object((void *)l->signal->owner);
-		}
-		free(l->signal->name);
-		free(l->signal);
-	}
-
-	l->signal = NULL;
-	if (l->handler) {
-		di_unref_object(l->handler);
-	}
-	l->handler = NULL;
-	di_unref_object((void *)l);
-	return 0;
-}
-
-int di_emitn(struct di_object *o, const char *name, struct di_tuple t) {
-	if (t.length > MAX_NARGS) {
+int di_emitn(struct di_object *o, const char *name, struct di_tuple args) {
+	if (args.length > MAX_NARGS) {
 		return -E2BIG;
 	}
 
-	assert(t.length == 0 || (t.elements != NULL));
+	assert(args.length == 0 || (args.elements != NULL));
 
 	struct di_signal *sig;
 	HASH_FIND_STR(((struct di_object_internal *)o)->signals, name, sig);
@@ -836,34 +816,54 @@ int di_emitn(struct di_object *o, const char *name, struct di_tuple t) {
 	}
 
 	int cnt = 0;
-	struct di_listener *l, **all_l = tmalloc(struct di_listener *, sig->nlisteners);
+	struct di_weak_object **all_handle = tmalloc(struct di_weak_object *, sig->nlisteners);
 
-	// Allow listeners to be removed during emission
-	// One usecase: There're two object, A, B, where A -> B.
-	// Both A and B listen to a signal. In A's handler, A unref B,
-	// causing it to be freed. B's dtor could then remove the listener
-	list_for_each_entry (l, &sig->listeners, siblings) {
-		all_l[cnt++] = l;
-		di_ref_object((void *)l);
+	{
+		// Listen handles can be dropped during emission, in which case their
+		// listener structs will be freed too. And there is no limit on which
+		// handle can be dropped by which handler, so list_for_each_entry_safe is
+		// not enough.
+		//
+		// So first we retrieve the list of listen handles we need, and stop using
+		// the listener structs from here on.
+		struct di_listener *l;
+		list_for_each_entry (l, &sig->listeners, siblings) {
+			di_copy_value(DI_TYPE_WEAK_OBJECT, &all_handle[cnt++], &l->listen_handle);
+		}
+
+		// Q: why don't we just grab the list of handlers instead?
+		// A: because what we really care about is whether the listen handle is
+		//    alive or not. the handler object could be kept alive by something
+		//    else even though the listener has stopped. in that case we will
+		//    unnecessarily call the handler.
 	}
 
 	assert(cnt == sig->nlisteners);
-
-	// Prevent di_destroy_object from being called in the middle of an emission.
-	// e.g. One handler might remove all listeners, causing ref_count to drop to
-	// 0.
-	di_ref_object(o);
 	for (int i = 0; i < cnt; i++) {
-		__label__ next;
-		l = all_l[i];
-		if (!l->handler) {
-			// Listener stopped/null listener
-			goto next;
+		auto handle = (struct di_listen_handle *)di_upgrade_weak_ref(all_handle[i]);
+		if (!handle) {
+			// Listener has stopped, because the listen handle has been
+			// dropped
+			continue;
 		}
+
+		struct di_object *handler;
+		DI_CHECK_OK(di_get(handle, "__handler", handler));
+
+		// Drop the handle early, we have a strong reference to handler, so we
+		// don't need the handle anymore. This also allows the handle to be
+		// dropped during the handler call. If we keep a ref to the handle,
+		// dropping the handle in the handler won't take immediate effect until
+		// the handler returns, which is undesirable.
+		di_unref_object((struct di_object *)handle);
+		handle = NULL;
+
 		di_type_t rtype;
 		union di_value ret;
-		int rc =
-		    ((struct di_object_internal *)l->handler)->call(l->handler, &rtype, &ret, t);
+		int rc = di_call_objectt(handler, &rtype, &ret, args);
+
+		di_unref_object(handler);
+		di_drop_weak_ref(&all_handle[i]);
 
 		if (rc == 0) {
 			di_free_value(rtype, &ret);
@@ -871,14 +871,8 @@ int di_emitn(struct di_object *o, const char *name, struct di_tuple t) {
 			fprintf(stderr, "Failed to call a listener callback: %s\n",
 			        strerror(-rc));
 		}
-		if (l->once) {
-			di_stop_listener(l);
-		}
-	next:
-		di_unref_object((void *)l);
 	}
-	free(all_l);
-	di_unref_object(o);
+	free(all_handle);
 	return 0;
 }
 

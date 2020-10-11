@@ -270,13 +270,25 @@ struct di_ev_prepare {
 	struct deai *di;
 };
 
-void di_prepare_quit(struct deai *di) {
-	di_schedule_call(di, di_destroy_object, ((struct di_object *)di));
-}
-
 void di_prepare_exit(struct deai *di, int ec) {
 	*di->exit_code = ec;
-	di_schedule_call(di, di_destroy_object, ((struct di_object *)di));
+	if (di_lookup((struct di_object *)di, "__prepare_exit_listen_handle") != NULL) {
+		// Exit already scheduled, nothing to do
+		return;
+	}
+
+	di_object_with_cleanup eventm;
+	DI_CHECK_OK(di_get(di, "event", eventm));
+
+	// Schedule the destruction of the core deai object on the next round of the event
+	// loop.
+	di_closure_with_cleanup cl = di_closure(di_destroy_object, ((struct di_object *)di));
+	auto lh = di_listen_to(eventm, "prepare", (struct di_object *)cl);
+	di_member(di, "__prepare_exit_listen_handle", lh);
+}
+
+void di_prepare_quit(struct deai *di) {
+	di_prepare_exit(di, 0);
 }
 
 struct di_ev_signal {
