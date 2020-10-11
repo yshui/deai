@@ -416,15 +416,14 @@ void di_clear_roots(struct di_object *di_) {
 
 /// Add an unnamed root. Unlike the named roots, these roots don't need a unique name,
 /// but the caller instead needs to keep a handle to the root in order to remove it.
-///
-/// Forgetting about the returned handle is leaking memory.
+/// The returned handle is guaranteed to be greater than 0
 uint64_t di_add_anonymous_root(struct di_object *obj, struct di_object *root) {
 	auto roots = (struct di_roots *)obj;
+	DI_CHECK(roots->next_anonymous_root_id != 0, "anonymous root id overflown");
+
 	auto aroot = tmalloc(struct di_anonymous_root, 1);
 	aroot->obj = di_ref_object(root);
 	aroot->id = roots->next_anonymous_root_id;
-
-	DI_CHECK(roots->next_anonymous_root_id != UINT64_MAX);
 	roots->next_anonymous_root_id++;
 	HASH_ADD(hh, roots->anonymous_roots, id, sizeof(uint64_t), aroot);
 	return aroot->id;
@@ -481,6 +480,7 @@ int main(int argc, char *argv[]) {
 	DI_CHECK_OK(di_method(roots, "__add_anonymous", di_add_anonymous_root, struct di_object *));
 	DI_CHECK_OK(di_method(roots, "__remove_anonymous", di_remove_anonymous_root, uint64_t));
 	di_set_object_dtor((struct di_object *)roots, di_roots_dtor);
+	roots->next_anonymous_root_id = 1;
 
 	auto weak_roots = di_weakly_ref_object((struct di_object *)roots);
 	DI_CHECK_OK(di_member(p, "roots", weak_roots));
