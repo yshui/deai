@@ -30,10 +30,7 @@
 		free(*ptr);                                                              \
 		*ptr = NULL;                                                             \
 	}
-#define define_trivial_cleanup_t(type) define_trivial_cleanup(type, free_##type##p)
-
-#define with_cleanup_t(type) __attribute__((cleanup(free_##type##p))) type *
-#define with_cleanup(func) __attribute__((cleanup(func)))
+#define define_trivial_cleanup_t(type) define_trivial_cleanup(type, free_##type##pp)
 
 #define IS_BIG_ENDIAN (!*(unsigned char *)&(uint16_t){1})
 

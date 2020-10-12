@@ -432,13 +432,15 @@ static const struct di_tuple unused DI_TUPLE_INIT = {0, NULL};
 /// A constant to create an nil variant
 static const struct di_variant unused DI_VARIANT_INIT = {NULL, DI_TYPE_NIL};
 
-#define define_object_cleanup(t)                                                         \
-	static inline void free_##t(struct t *nullable *nonnull ptr) {                   \
-		if (*ptr)                                                                \
-			di_unref_object((struct di_object *)*ptr);                       \
-		*ptr = NULL;                                                             \
+#define define_object_cleanup(object_type)                                                    \
+	static inline void unused di_free_##object_type##p(                              \
+	    struct object_type *nullable *nonnull p) {                                   \
+		if (*p) {                                                                \
+			di_unref_object((struct di_object *)*p);                         \
+		}                                                                        \
+		*p = NULL;                                                               \
 	}
-#define with_object_cleanup(t) with_cleanup(free_##t) struct t *
+#define with_object_cleanup(t) with_cleanup(di_free_##t##p) struct t *
 
 unused define_object_cleanup(di_object);
 

@@ -429,7 +429,7 @@ static struct di_lua_state *lua_new_state(struct di_module *m) {
 	return L;
 }
 
-generate_cleanup(di_lua_script);
+define_object_cleanup(di_lua_script);
 static struct di_object *di_lua_load_script(struct di_object *obj, const char *path) {
 	/**
 	 * Reference count scheme for di_lua_script:
@@ -446,7 +446,7 @@ static struct di_object *di_lua_load_script(struct di_object *obj, const char *p
 		return di_new_error("Path is null");
 	}
 
-	with_di_cleanup(di_lua_script) s = di_new_object_with_type(struct di_lua_script);
+	with_object_cleanup(di_lua_script) s = di_new_object_with_type(struct di_lua_script);
 	di_set_type((struct di_object *)s, "deai.plugin.lua:LuaScript");
 	di_set_object_dtor((void *)s, (void *)di_lua_free_script);
 

@@ -314,28 +314,17 @@ PUBLIC_DEAI_API int di_proxy_signal(struct di_object *nonnull src, const char *n
 	         di_return_typeid(fn, struct di_object *, ##__VA_ARGS__)                 \
 	             LIST_APPLY_pre(di_typeid, SEP_COMMA, ##__VA_ARGS__))
 
-#define generate_cleanup(object_type)                                                    \
-	static inline void unused di_free_##object_type##p(                              \
-	    struct object_type *nullable *nonnull p) {                                   \
-		if (*p) {                                                                \
-			di_unref_object((struct di_object *)*p);                         \
-		}                                                                        \
-		*p = NULL;                                                               \
-	}
-
 static inline void unused di_free_di_weak_objectp(struct di_weak_object *nullable *nonnull p) {
 	if (*p) {
 		di_drop_weak_ref(p);
 	}
 }
 
-generate_cleanup(di_object);
-generate_cleanup(di_closure);
+define_object_cleanup(di_closure);
 
-#define with_di_cleanup(type) __attribute__((cleanup(di_free_##type##p))) struct type *
-#define di_weak_object_with_cleanup with_di_cleanup(di_weak_object)
-#define di_closure_with_cleanup with_di_cleanup(di_closure)
-#define di_object_with_cleanup with_di_cleanup(di_object)
+#define di_weak_object_with_cleanup with_object_cleanup(di_weak_object)
+#define di_closure_with_cleanup with_object_cleanup(di_closure)
+#define di_object_with_cleanup with_object_cleanup(di_object)
 
 static void unused nonnull_all trivial_destroyed_handler(struct di_object *nonnull o) {
 	di_destroy_object(o);
