@@ -259,7 +259,7 @@ PUBLIC_DEAI_API int di_proxy_signal(struct di_object *nonnull src, const char *n
 	di_add_member_move((struct di_object *)(o), name, (di_type_t[]){di_typeof(v)}, &(v))
 
 #define di_member_clone(o, name, v)                                                      \
-	di_add_member_clone((struct di_object *)(o), name, di_typeof(v), (v))
+	di_add_member_clonev((struct di_object *)(o), name, di_typeof(v), (v))
 
 #define di_getter(o, name, g) di_method(o, STRINGIFY(__get_##name), g)
 #define di_setter(o, name, s, type) di_method(o, STRINGIFY(__set_##name), s, type);

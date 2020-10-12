@@ -371,7 +371,7 @@ int di_register_module(struct deai *p, const char *name, struct di_module **m) {
 
 // Don't consumer the ref, because it breaks the usual method call sementics
 static int di_register_module_method(struct deai *p, const char *name, struct di_module *m) {
-	return di_add_member_clone((void *)p, name, DI_TYPE_OBJECT, m);
+	return di_add_member_clonev((void *)p, name, DI_TYPE_OBJECT, m);
 }
 
 define_trivial_cleanup(char *, free_charpp);
@@ -396,7 +396,7 @@ void di_terminate(struct deai *p) {
 static bool di_add_root(struct di_object *di, const char *key, struct di_object *obj) {
 	char *buf;
 	asprintf(&buf, "__root_%s", key);
-	int rc = di_add_member_clone(di, buf, DI_TYPE_OBJECT, obj);
+	int rc = di_add_member_clonev(di, buf, DI_TYPE_OBJECT, obj);
 	free(buf);
 	return rc == 0;
 }

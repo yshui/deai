@@ -285,7 +285,13 @@ PUBLIC_DEAI_API int nonnull_all di_add_member_move(struct di_object *nonnull o,
 /// Add a value with type `type` as a member named `name` of object `o`. This function
 /// will cloned the value before adding it as a member.
 PUBLIC_DEAI_API int nonnull_all di_add_member_clone(struct di_object *nonnull o,
-                                                    const char *nonnull name, di_type_t, ...);
+                                                    const char *nonnull name, di_type_t,
+                                                    const void *nonnull value);
+
+/// Add a value with type `type` as a member named `name` of object `o`. This function
+/// will cloned the value before adding it as a member.
+PUBLIC_DEAI_API int nonnull_all di_add_member_clonev(struct di_object *nonnull o,
+                                                     const char *nonnull name, di_type_t, ...);
 
 /// Remove a member of object `o`, without calling the deleter.
 PUBLIC_DEAI_API int di_remove_member_raw(struct di_object *nonnull o, const char *nonnull name);

@@ -243,7 +243,7 @@ gen_tfunc(di_rawgetxt, di_rawgetx);
 
 int di_set_type(struct di_object *o, const char *type) {
 	di_remove_member_raw(o, "__type");
-	return di_add_member_clone(o, "__type", DI_TYPE_STRING_LITERAL, type);
+	return di_add_member_clonev(o, "__type", DI_TYPE_STRING_LITERAL, type);
 }
 
 const char *di_get_type(struct di_object *o) {
@@ -525,23 +525,30 @@ static int di_add_member(struct di_object_internal *o, const char *name, di_type
 	return ret;
 }
 
-int di_add_member_clone(struct di_object *o, const char *name, di_type_t t, ...) {
+int di_add_member_clone(struct di_object *o, const char *name, di_type_t t, const void *value) {
 	if (di_sizeof_type(t) == 0) {
 		return -EINVAL;
 	}
 
-	void *nv = calloc(1, di_sizeof_type(t));
-	void *v = calloc(1, di_sizeof_type(t));
+	void *copy = calloc(1, di_sizeof_type(t));
+	di_copy_value(t, copy, value);
+
+	return di_add_member((struct di_object_internal *)o, name, t, copy);
+}
+
+int di_add_member_clonev(struct di_object *o, const char *name, di_type_t t, ...) {
+	if (di_sizeof_type(t) == 0) {
+		return -EINVAL;
+	}
+
+	union di_value nv;
 	va_list ap;
 
 	va_start(ap, t);
-	va_arg_with_di_type(ap, t, nv);
+	va_arg_with_di_type(ap, t, &nv);
 	va_end(ap);
 
-	di_copy_value(t, v, nv);
-	free(nv);
-
-	return di_add_member((struct di_object_internal *)o, name, t, v);
+	return di_add_member_clone(o, name, t, &nv);
 }
 
 int di_add_member_move(struct di_object *o, const char *name, di_type_t *t, void *addr) {

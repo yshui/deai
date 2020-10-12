@@ -35,7 +35,7 @@ int di_gmethod(struct di_object *o, const char *name, void (*fn)(void)) {
 	with_object_cleanup(di_object) m = di_new_object_with_type(struct di_object);
 	((struct di_object_internal *)m)->call = (void *)fn;
 
-	return di_add_member_clone(o, name, DI_TYPE_OBJECT, m);
+	return di_add_member_clonev(o, name, DI_TYPE_OBJECT, m);
 }
 
 static int _emit_proxied_signal(struct di_object *o, di_type_t *rt, union di_value *ret,
