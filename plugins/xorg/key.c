@@ -290,6 +290,6 @@ struct di_xorg_ext *new_key(struct di_xorg_connection *dc) {
 
 	INIT_LIST_HEAD(&k->bindings);
 
-	di_method(k, "new", new_binding, struct di_array, char *, bool);
+	di_method(k, "new", new_binding, struct di_array, const char *, bool);
 	return (void *)k;
 }

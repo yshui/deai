@@ -160,9 +160,8 @@ static void di_dbus_watch_name(_di_dbus_connection *c, const char *busname) {
 	dbus_message_unref(msg);
 
 	di_weak_object_with_cleanup weak = di_weakly_ref_object((struct di_object *)c);
-	// Cast busname to "char *" so ri_closure would clone it.
 	di_closure_with_cleanup cl =
-	    di_closure(di_dbus_update_name_from_msg, (weak, (char *)busname), void *);
+	    di_closure(di_dbus_update_name_from_msg, (weak, busname), void *);
 	auto listen_handle = di_listen_to(ret, "reply", (struct di_object *)cl);
 
 	// Keep the listen handle and event source alive

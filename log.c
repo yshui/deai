@@ -129,7 +129,7 @@ static struct di_object *file_target(struct di_log *l, const char *filename, boo
 	di_set_type((struct di_object *)lf, "deai.builtin.log:FileTarget");
 	lf->f = f;
 	lf->dtor = (void *)file_target_dtor;
-	di_method(lf, "write", file_target_write, char *);
+	di_method(lf, "write", file_target_write, const char *);
 	return (void *)lf;
 }
 
@@ -138,7 +138,7 @@ static struct di_object *stderr_target(struct di_log *unused l) {
 	di_set_type((struct di_object *)ls, "deai.builtin.log:StderrTarget");
 	ls->f = stderr;
 	ls->dtor = NULL;
-	di_method(ls, "write", file_target_write, char *);
+	di_method(ls, "write", file_target_write, const char *);
 	return (void *)ls;
 }
 
@@ -156,7 +156,7 @@ int di_log_va(struct di_object *o, int log_level, const char *fmt, ...) {
 	return ret;
 }
 
-static char *get_log_level(struct di_log *l) {
+static const char *get_log_level(struct di_log *l) {
 	return strdup(level_tostring(l->log_level));
 }
 
@@ -193,7 +193,7 @@ void di_init_log(struct deai *di) {
 	di_add_member_move((struct di_object *)l, "log_target",
 	                   (di_type_t[]){DI_TYPE_OBJECT}, &dtgt);
 	((struct di_object_internal *)l)->call = di_log;
-	di_method(l, "file_target", file_target, char *, bool);
+	di_method(l, "file_target", file_target, const char *, bool);
 	di_method(l, "stderr_target", stderr_target);
 	di_getter_setter(l, log_level, get_log_level, set_log_level);
 	di_register_module(di, "log", &lm);

@@ -76,17 +76,18 @@ static void output_handler(struct child *c, int fd, struct string_buf *b, const 
 	static char buf[4096];
 	int ret;
 	while ((ret = read(fd, buf, sizeof(buf))) > 0) {
-		char *pos = buf;
+		const char *pos = buf;
 		while (1) {
 			size_t len = buf + ret - pos;
-			char *eol = memchr(pos, '\n', len), *out;
+			char *eol = memchr(pos, '\n', len);
 			if (eol) {
 				*eol = '\0';
 				if (!string_buf_is_empty(b)) {
 					string_buf_push(b, pos);
-					out = string_buf_dump(b);
+
+					const char *out = string_buf_dump(b);
 					di_emit(c, ev, out);
-					free(out);
+					free((char *)out);
 				} else {
 					di_emit(c, ev, pos);
 				}
@@ -113,17 +114,17 @@ static void sigchld_handler(EV_P_ ev_child *w, int revents) {
 	if (c->out) {
 		output_handler(c, c->outw.fd, c->out, "stdout_line");
 		if (!string_buf_is_empty(c->out)) {
-			char *o = string_buf_dump(c->out);
+			const char *o = string_buf_dump(c->out);
 			di_emit(c, "stdout_line", o);
-			free(o);
+			free((char *)o);
 		}
 	}
 	if (c->err) {
 		output_handler(c, c->errw.fd, c->err, "stderr_line");
 		if (!string_buf_is_empty(c->err)) {
-			char *o = string_buf_dump(c->err);
+			const char *o = string_buf_dump(c->err);
 			di_emit(c, "stderr_line", o);
-			free(o);
+			free((char *)o);
 		}
 	}
 	di_emit(c, "exit", ec, sig);

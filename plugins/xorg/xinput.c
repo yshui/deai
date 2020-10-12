@@ -139,7 +139,7 @@ xcb_input_get_device_info(xcb_connection_t *c, xcb_input_device_id_t deviceid,
 	return ret;
 }
 
-static char *di_xorg_xinput_get_device_name(struct di_xorg_xinput_device *dev) {
+static const char *di_xorg_xinput_get_device_name(struct di_xorg_xinput_device *dev) {
 	if (!dev->xi->dc) {
 		return strdup("unknown");
 	}
@@ -153,7 +153,7 @@ static char *di_xorg_xinput_get_device_name(struct di_xorg_xinput_device *dev) {
 	               xcb_input_xi_device_info_name_length(info));
 }
 
-static char *di_xorg_xinput_get_device_use(struct di_xorg_xinput_device *dev) {
+static const char *di_xorg_xinput_get_device_use(struct di_xorg_xinput_device *dev) {
 	if (!dev->xi->dc) {
 		return strdup("unknown");
 	}
@@ -189,7 +189,7 @@ const char *possible_types[] = {
 };
 #endif
 
-static char *di_xorg_xinput_get_device_type(struct di_xorg_xinput_device *dev) {
+static const char *di_xorg_xinput_get_device_type(struct di_xorg_xinput_device *dev) {
 	if (!dev->xi->dc) {
 		return strdup("unknown");
 	}
@@ -215,7 +215,7 @@ static char *di_xorg_xinput_get_device_type(struct di_xorg_xinput_device *dev) {
 	char *ret = strdup(dname);
 
 	for (int i = 0; ret[i]; i++) {
-		ret[i] = (char)tolower(ret[i]);
+		ret[i] = (char)tolower((int)ret[i]);
 	}
 	return ret;
 }
@@ -477,8 +477,8 @@ static struct di_object *di_xorg_xinput_props(struct di_xorg_xinput_device *dev)
 	obj->deviceid = dev->deviceid;
 	obj->xi = dev->xi;
 
-	di_method(obj, "__get", di_xorg_xinput_get_prop, char *);
-	di_method(obj, "__set", di_xorg_xinput_set_prop, char *, struct di_array);
+	di_method(obj, "__get", di_xorg_xinput_get_prop, const char *);
+	di_method(obj, "__set", di_xorg_xinput_set_prop, const char *, struct di_array);
 	return (void *)obj;
 }
 

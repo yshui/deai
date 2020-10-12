@@ -25,7 +25,9 @@ struct di_object *di_new_error(const char *fmt, ...) {
 
 	auto err = di_new_object_with_type(struct di_object);
 	di_set_type(err, "deai:Error");
-	di_member(err, "errmsg", errmsg);
+
+	const char *tmp = errmsg;
+	di_member(err, "errmsg", tmp);
 	return err;
 }
 
@@ -38,7 +40,7 @@ int di_gmethod(struct di_object *o, const char *name, void (*fn)(void)) {
 
 static int _emit_proxied_signal(struct di_object *o, di_type_t *rt, union di_value *ret,
                                 struct di_tuple t) {
-	char *signal = NULL;
+	const char *signal = NULL;
 	struct di_weak_object *weak = NULL;
 	di_get(o, "___new_signal_name", signal);
 	di_get(o, "__proxy_object", weak);
@@ -48,7 +50,7 @@ static int _emit_proxied_signal(struct di_object *o, di_type_t *rt, union di_val
 		di_emitn(proxy, signal, t);
 	}
 
-	free(signal);
+	free((char *)signal);
 	return 0;
 }
 
@@ -93,7 +95,7 @@ int di_proxy_signal(struct di_object *src, const char *srcsig, struct di_object 
 	}
 
 	di_object_with_cleanup c = di_new_object_with_type(struct di_object);
-	di_member_clone(c, "___new_signal_name", (char *)proxysig);
+	di_member_clone(c, "___new_signal_name", (const char *)proxysig);
 
 	auto weak_proxy = di_weakly_ref_object(proxy);
 	di_member_clone(c, "__proxy_object", weak_proxy);
@@ -103,8 +105,8 @@ int di_proxy_signal(struct di_object *src, const char *srcsig, struct di_object 
 
 	di_member(proxy, listen_handle_name, listen_handle);
 	di_member_clone(proxy, event_source_name, src);
-	auto cl = (struct di_object *)di_closure(_del_proxied_signal, ((char *)proxysig),
-	                                         struct di_object *);
+	auto cl = (struct di_object *)di_closure(
+	    _del_proxied_signal, ((const char *)proxysig), struct di_object *);
 	ret = di_member(proxy, del_signal_name, cl);
 
 	return ret;

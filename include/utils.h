@@ -112,7 +112,8 @@ static inline bool is_integer(di_type_t t) {
 ///
 /// @param[in] borrowing Whether the `inp` value is owned or borrowed. Some conversion can
 //                       not be performed if the caller owns the value, as that would
-//                       cause memory leakage.
+//                       cause memory leakage. If `inp` is borrowed, `outp` must also be
+//                       borrowed downstream as well.
 /// @param[out] cloned If false, value in `outp` is borrowed from `inp`. otherwise the
 ///                    value is cloned. always false in case of an error
 static inline int unused di_type_conversion(di_type_t inty, const union di_value *inp,
@@ -140,6 +141,18 @@ static inline int unused di_type_conversion(di_type_t inty, const union di_value
 		return 0;
 	}
 
+	if (inty == DI_TYPE_STRING_LITERAL && outty == DI_TYPE_STRING) {
+		if (borrowing) {
+			outp->string = inp->string_literal;
+		} else {
+			// If downstream expect an owned string, they will try to free it,
+			// so we have to cloned the string literal
+			outp->string = strdup(inp->string_literal);
+			*cloned = true;
+		}
+		return 0;
+	}
+
 	if (outty == DI_TYPE_NIL) {
 		return 0;
 	}
@@ -147,12 +160,6 @@ static inline int unused di_type_conversion(di_type_t inty, const union di_value
 	if (inty == DI_TYPE_VARIANT) {
 		return di_type_conversion(inp->variant.type, inp->variant.value, outty,
 		                          outp, borrowing, cloned);
-	}
-
-	if (inty == DI_TYPE_STRING_LITERAL && outty == DI_TYPE_STRING) {
-		outp->string = strdup(inp->string_literal);
-		*cloned = true;
-		return 0;
 	}
 
 	if (is_integer(inty)) {

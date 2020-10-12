@@ -41,7 +41,7 @@ struct di_xorg_output_info {
 	unsigned int mm_height;
 	int connection;
 	int subpixel_order;
-	char *name;
+	const char *name;
 };
 
 // What xorg calls a crtc, we call a view.
@@ -83,7 +83,7 @@ static struct di_object *make_object_for_view(struct di_xorg_randr *rr, xcb_rand
 
 static void free_output_info(struct di_object *o) {
 	auto i = (struct di_xorg_output_info *)o;
-	free(i->name);
+	free((char *)i->name);
 }
 
 static struct di_object *get_output_info(struct di_xorg_output *o) {

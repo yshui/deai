@@ -1076,7 +1076,7 @@ static int di_lua_meta_newindex(lua_State *L) {
 DEAI_PLUGIN_ENTRY_POINT(di) {
 	auto m = di_new_module(di);
 
-	di_method(m, "load_script", di_lua_load_script, char *);
+	di_method(m, "load_script", di_lua_load_script, const char *);
 
 	di_register_module(di, "lua", &m);
 	return 0;

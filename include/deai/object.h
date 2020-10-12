@@ -101,11 +101,10 @@ typedef enum di_type {
 	// a weak deai object reference
 	// C type: struct di_weak_object
 	DI_TYPE_WEAK_OBJECT,
-	// utf-8 string
+	// immutable utf-8 string
 	// C type: char *
 	DI_TYPE_STRING,
-	// utf-8 string literal. can also mean a string whose memory is not managed by
-	// deai.
+	// immutable utf-8 string, which is not allocated on stack
 	// C type: const char *
 	DI_TYPE_STRING_LITERAL,
 	// an array. all elements in the array have the same type. see `struct di_array`
@@ -142,6 +141,7 @@ struct di_module;
 struct di_weak_object;
 
 struct di_object {
+	// NOLINTNEXTLINE(readability-magic-numbers)
 	alignas(8) char padding[128];
 };
 
@@ -176,7 +176,7 @@ union di_value {
 	void *nullable pointer;
 	struct di_object *nonnull object;
 	struct di_weak_object *nonnull weak_object;
-	char *nonnull string;
+	const char *nonnull string;
 	const char *nonnull string_literal;
 	struct di_array array;
 	struct di_tuple tuple;
@@ -403,8 +403,11 @@ static inline unused size_t di_sizeof_type(di_type_t t) {
 	unsigned int *: DI_TYPE_NUINT, \
 	int64_t *: DI_TYPE_INT, \
 	uint64_t *: DI_TYPE_UINT, \
-	char **: DI_TYPE_STRING, \
-	const char **: DI_TYPE_STRING_LITERAL, \
+	const char **: DI_TYPE_STRING, \
+	/* use a const to differentiate strings and string literals
+	 * doesn't mean string literals really must be const char *const
+	 */ \
+	const char * const*: DI_TYPE_STRING_LITERAL, \
 	struct di_object **: DI_TYPE_OBJECT, \
 	struct di_weak_object **: DI_TYPE_WEAK_OBJECT, \
 	void **: DI_TYPE_POINTER, \

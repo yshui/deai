@@ -16,7 +16,7 @@
 #include "utils.h"
 
 struct di_file_watch_entry {
-	char *fname;
+	const char *fname;
 	int wd;
 	UT_hash_handle hh, hh2;
 };
@@ -37,7 +37,7 @@ static int di_file_ioev(struct di_weak_object *weak) {
 	int ret = read(fw->fd, evbuf, sizeof(evbuf));
 	ptrdiff_t off = 0;
 	while (off < ret) {
-		char *path = "";
+		const char *path = "";
 		if (ev->len > 0) {
 			path = ev->name;
 		}
@@ -50,7 +50,7 @@ static int di_file_ioev(struct di_weak_object *weak) {
 		}
 #define emit(m, name)                                                                    \
 	do {                                                                             \
-		if (ev->mask & (m)) {                                                      \
+		if (ev->mask & (m)) {                                                    \
 			di_emit(fw, name, we->fname, path);                              \
 		}                                                                        \
 	} while (0)
@@ -119,7 +119,7 @@ static int di_file_rm_watch(struct di_file_watch *fw, const char *path) {
 	inotify_rm_watch(fw->fd, we->wd);
 	HASH_DEL(fw->bywd, we);
 	HASH_DELETE(hh2, fw->byname, we);
-	free(we->fname);
+	free((char *)we->fname);
 	free(we);
 	return 0;
 }
@@ -135,7 +135,7 @@ static void stop_file_watcher(struct di_file_watch *fw) {
 	HASH_ITER (hh, fw->bywd, we, twe) {
 		HASH_DEL(fw->bywd, we);
 		HASH_DELETE(hh2, fw->byname, we);
-		free(we->fname);
+		free((char *)we->fname);
 		free(we);
 	}
 }
@@ -156,8 +156,8 @@ static struct di_object *di_file_new_watch(struct di_module *f, struct di_array 
 	di_set_object_dtor((void *)fw, (void *)stop_file_watcher);
 
 	di_method(fw, "add", di_file_add_many_watch, struct di_array);
-	di_method(fw, "add_one", di_file_add_watch, char *);
-	di_method(fw, "remove", di_file_rm_watch, char *);
+	di_method(fw, "add_one", di_file_add_watch, const char *);
+	di_method(fw, "remove", di_file_rm_watch, const char *);
 	di_method(fw, "stop", di_destroy_object);
 	di_mgetm(f, event, di_new_error("Can't find event module"));
 

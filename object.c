@@ -614,7 +614,7 @@ void di_free_value(di_type_t t, union di_value *value_ptr) {
 		di_free_tuple(val->tuple);
 		break;
 	case DI_TYPE_STRING:
-		string = val->string;
+		string = (char *)val->string;
 		free(string);
 		break;
 	case DI_TYPE_OBJECT:

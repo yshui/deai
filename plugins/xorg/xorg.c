@@ -141,14 +141,15 @@ xcb_atom_t di_xorg_intern_atom(struct di_xorg_connection *xc, const char *name,
 	return ae->atom;
 }
 
-static char *di_xorg_get_resource(struct di_xorg_connection *xc) {
+static const char *di_xorg_get_resource(struct di_xorg_connection *xc) {
 	auto scrn = screen_of_display(xc->c, xc->dflt_scrn);
 	auto r = xcb_get_property_reply(
 	    xc->c,
 	    xcb_get_property(xc->c, 0, scrn->root, XCB_ATOM_RESOURCE_MANAGER, XCB_ATOM_ANY, 0, 0),
 	    NULL);
-	if (!r)
+	if (!r) {
 		return strdup("");
+	}
 
 	auto real_size = r->bytes_after;
 	free(r);
@@ -157,8 +158,9 @@ static char *di_xorg_get_resource(struct di_xorg_connection *xc) {
 	                           xcb_get_property(xc->c, 0, scrn->root, XCB_ATOM_RESOURCE_MANAGER,
 	                                            XCB_ATOM_ANY, 0, real_size),
 	                           NULL);
-	if (!r)
+	if (!r) {
 		return strdup("");
+	}
 
 	char *ret = strndup(xcb_get_property_value(r), xcb_get_property_value_length(r));
 	free(r);
@@ -325,7 +327,7 @@ static struct {
 }
 
 static void set_keymap(struct di_xorg_connection *xc, struct di_object *o) {
-	char *layout = NULL, *model = NULL, *variant = NULL, *options = NULL;
+	const char *layout = NULL, *model = NULL, *variant = NULL, *options = NULL;
 
 	di_mgetmi(xc->x, log);
 	if (!o || di_get(o, "layout", layout)) {
@@ -427,10 +429,10 @@ static void set_keymap(struct di_xorg_connection *xc, struct di_object *o) {
 	free(modifiers.keycodes);
 
 out:
-	free(layout);
-	free(model);
-	free(variant);
-	free(options);
+	free((char *)layout);
+	free((char *)model);
+	free((char *)variant);
+	free((char *)options);
 	free(keysyms);
 	xkb_keymap_unref(map);
 }
@@ -463,9 +465,9 @@ static struct di_object *di_xorg_connect_to(struct di_xorg *x, const char *displ
 
 	di_set_object_dtor((void *)dc, (void *)xorg_disconnect);
 
-	di_method(dc, "__get", di_xorg_get_ext, char *);
+	di_method(dc, "__get", di_xorg_get_ext, const char *);
 	di_method(dc, "__get_xrdb", di_xorg_get_resource);
-	di_method(dc, "__set_xrdb", di_xorg_set_resource, char *);
+	di_method(dc, "__set_xrdb", di_xorg_set_resource, const char *);
 	di_method(dc, "__get_screen", get_screen);
 	di_method(dc, "__set_keymap", set_keymap, struct di_object *);
 	di_method(dc, "disconnect", di_destroy_object);
@@ -484,7 +486,7 @@ DEAI_PLUGIN_ENTRY_POINT(di) {
 	auto x = di_new_module(di);
 
 	di_method(x, "connect", di_xorg_connect);
-	di_method(x, "connect_to", di_xorg_connect_to, char *);
+	di_method(x, "connect_to", di_xorg_connect_to, const char *);
 
 	di_register_module(di, "xorg", &x);
 	return 0;

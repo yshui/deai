@@ -18,7 +18,7 @@ static struct di_variant di_env_get(struct di_module *m, const char *nonnull nam
 	if (str) {
 		ret.type = DI_TYPE_STRING_LITERAL;
 		ret.value = malloc(sizeof(void *));
-		ret.value->string_literal = str;
+		di_copy_value(ret.type, ret.value, &str);
 	} else {
 		ret.type = DI_LAST_TYPE;
 		ret.value = NULL;
@@ -34,7 +34,7 @@ static void di_env_unset(struct di_module *m, const char *nonnull key) {
 	unsetenv(key);
 }
 
-static char *di_get_hostname(struct deai *p) {
+static const char *di_get_hostname(struct deai *p) {
 	struct utsname buf;
 	if (uname(&buf) != 0) {
 		return NULL;

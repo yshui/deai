@@ -3,26 +3,37 @@
 #include <assert.h>
 
 #include "common.h"
+#include "utils.h"
 
-static void takes_string(void *obj unused, char *str unused) {
+static void takes_string(const char *str unused) {
 }
 
-static void takes_string_and_modify(void *obj unused, char *str) {
-	// Make sure there is space for write
-	DI_CHECK(strlen(str) >= 1);
-	*str = '\0';
+static const char *takes_string_and_return(const char *str) {
+	// We only borrows str, so to return an owned value, we need to copy it
+	return strdup(str);
 }
 
 DEAI_PLUGIN_ENTRY_POINT(di) {
-	DI_CHECK_OK(di_method(di, "takes_string", takes_string, char *));
-	DI_CHECK_OK(di_method(di, "takes_string_and_modify", takes_string_and_modify, char *));
+	di_closure_with_cleanup test1 = di_closure(takes_string, (), const char *const);
+	di_closure_with_cleanup test2 = di_closure(takes_string_and_return, (), const char *);
 
 	di_type_t retty;
-	union di_value retval;
-	bool called;
-	di_callx((struct di_object *)di, "takes_string", &retty, &retval,
-	         di_tuple((const char *)"a string"), &called);
+	union di_value val, val2;
+	// Test borrowed string -> string_literal
+	DI_CHECK_OK(di_call_object((struct di_object *)test1, &retty, &val,
+	                           DI_TYPE_STRING, "a string", DI_LAST_TYPE));
 
-	di_call(di, "takes_string_and_modify", (const char *)"string literal");
+	// Test owned string literal -> string
+	bool cloned;
+	val.string_literal = "test";
+	di_type_conversion(DI_TYPE_STRING_LITERAL, &val, DI_TYPE_STRING, &val2, false, &cloned);
+	DI_CHECK(cloned);
+	free((char *)val2.string);
+
+	// Test borrowed string literal -> string
+	DI_CHECK_OK(di_call_object((struct di_object *)test2, &retty, &val,
+	                           DI_TYPE_STRING_LITERAL, "string literal", DI_LAST_TYPE));
+	DI_CHECK(retty == DI_TYPE_STRING);
+	free((char *)val.string);
 	return 0;
 }

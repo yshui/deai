@@ -174,26 +174,27 @@ PUBLIC_DEAI_API int di_proxy_signal(struct di_object *nonnull src, const char *n
 		rc;                                                                      \
 	})
 
-#define di_callr(o, name, r, ...)                                                        \
-	({                                                                               \
-		int rc = 0;                                                              \
-		do {                                                                     \
-			di_type_t rtype;                                                 \
-			union di_value ret;                                              \
-			bool called;                                                     \
-			rc = di_callx((struct di_object *)(o), (name), &rtype, &ret,     \
-			              di_tuple(__VA_ARGS__), &called);                   \
-			if (rc != 0) {                                                   \
-				break;                                                   \
-			}                                                                \
-			if (di_typeof(r) != rtype) {                                     \
-				di_free_value(rtype, &ret);                              \
-				rc = -EINVAL;                                            \
-				break;                                                   \
-			}                                                                \
-			(r) = *(typeof(r) *)&ret;                                        \
-		} while (0);                                                             \
-		rc;                                                                      \
+#define di_callr(o, name, r, ...)                                                          \
+	({                                                                                 \
+		int __deai_callr_rc = 0;                                                   \
+		do {                                                                       \
+			di_type_t __deai_callr_rtype;                                      \
+			union di_value __deai_callr_ret;                                   \
+			bool called;                                                       \
+			__deai_callr_rc =                                                  \
+			    di_callx((struct di_object *)(o), (name), &__deai_callr_rtype, \
+			             &__deai_callr_ret, di_tuple(__VA_ARGS__), &called);   \
+			if (__deai_callr_rc != 0) {                                        \
+				break;                                                     \
+			}                                                                  \
+			if (di_typeof(r) != __deai_callr_rtype) {                          \
+				di_free_value(__deai_callr_rtype, &__deai_callr_ret);      \
+				__deai_callr_rc = -EINVAL;                                 \
+				break;                                                     \
+			}                                                                  \
+			(r) = *(typeof(r) *)&__deai_callr_ret;                             \
+		} while (0);                                                               \
+		__deai_callr_rc;                                                           \
 	})
 
 #define di_variant(x)                                                                    \
@@ -261,18 +262,19 @@ PUBLIC_DEAI_API int di_proxy_signal(struct di_object *nonnull src, const char *n
 	di_add_member_clone((struct di_object *)(o), name, di_typeof(v), (v))
 
 #define di_getter(o, name, g) di_method(o, STRINGIFY(__get_##name), g)
+#define di_setter(o, name, s, type) di_method(o, STRINGIFY(__set_##name), s, type);
 
-#define di_getter_setter(o, name, g, s)                                                  \
-	({                                                                               \
-		int rc = 0;                                                              \
-		do {                                                                     \
-			rc = di_getter(o, name, g);                                      \
-			if (rc != 0)                                                     \
-				break;                                                   \
-			rc = di_method(o, STRINGIFY(__set_##name), s,                    \
-			               di_return_typeof(g, struct di_object *));         \
-		} while (0);                                                             \
-		rc;                                                                      \
+#define di_getter_setter(o, name, g, s)                                                      \
+	({                                                                                   \
+		int rc = 0;                                                                  \
+		do {                                                                         \
+			rc = di_getter(o, name, g);                                          \
+			if (rc != 0) {                                                       \
+				break;                                                       \
+			}                                                                    \
+			rc = di_setter(o, name, s, di_return_typeof(g, struct di_object *)); \
+		} while (0);                                                                 \
+		rc;                                                                          \
 	})
 
 // Note: this is just used to create a value of `type`, but this value is not guaranteed
@@ -287,8 +289,8 @@ PUBLIC_DEAI_API int di_proxy_signal(struct di_object *nonnull src, const char *n
 	unsigned int *: 0, \
 	int64_t *: 0, \
 	uint64_t *: 0, \
-	char **: NULL, \
 	const char **: NULL, \
+	const char * const*: NULL, \
 	struct di_object **: NULL, \
 	struct di_weak_object **: NULL, \
 	void **: NULL, \

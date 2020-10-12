@@ -332,13 +332,13 @@ static void setproctitle_init(int argc, char **argv, struct deai *p) {
 }
 static void di_set_pr_name(struct deai *p, const char *name) {
 	if (name) {
-		memset(p->proctitle, 0, p->proctitle_end - p->proctitle);
+		memset((char *)p->proctitle, 0, p->proctitle_end - p->proctitle);
 		auto nlen = strlen(name);
 
 		if (p->proctitle + nlen + 1 >= p->proctitle_end) {
 			nlen = p->proctitle_end - p->proctitle - 1;
 		}
-		strncpy(p->proctitle, name, nlen);
+		strncpy((char *)p->proctitle, name, nlen);
 	}
 }
 #else
@@ -517,18 +517,18 @@ int main(int argc, char *argv[]) {
 		exit(1);
 	}
 
-	DI_CHECK_OK(di_method(p, "load_plugin_from_dir", load_plugin_dir, char *));
-	DI_CHECK_OK(di_method(p, "load_plugin", load_plugin, char *));
-	DI_CHECK_OK(di_method(p, "register_module", di_register_module_method, char *,
-	                      struct di_object *));
-	DI_CHECK_OK(di_method(p, "chdir", di_chdir, char *));
+	DI_CHECK_OK(di_method(p, "load_plugin_from_dir", load_plugin_dir, const char *));
+	DI_CHECK_OK(di_method(p, "load_plugin", load_plugin, const char *));
+	DI_CHECK_OK(di_method(p, "register_module", di_register_module_method,
+	                      const char *, struct di_object *));
+	DI_CHECK_OK(di_method(p, "chdir", di_chdir, const char *));
 	DI_CHECK_OK(di_method(p, "exec", di_exec, struct di_array));
 
 	DI_CHECK_OK(di_method(p, "quit", di_prepare_quit));
 	DI_CHECK_OK(di_method(p, "exit", di_prepare_exit, int));
 	DI_CHECK_OK(di_method(p, "terminate", di_terminate));
 #ifdef HAVE_SETPROCTITLE
-	DI_CHECK_OK(di_method(p, "__set_proctitle", di_set_pr_name, char *));
+	DI_CHECK_OK(di_method(p, "__set_proctitle", di_set_pr_name, const char *));
 #endif
 #ifdef TRACK_OBJECTS
 	auto closure = (struct di_object *)di_closure(di_dump_objects, ());
@@ -536,7 +536,10 @@ int main(int argc, char *argv[]) {
 #endif
 	DI_CHECK_OK(di_method(p, "__get_argv", di_get_argv));
 
-	DI_CHECK_OK(di_field(p, proctitle));
+	// proctitle is a string literal, as its memory is not deai managed
+	auto proctitle_getter =
+	    di_new_field_getter(DI_TYPE_STRING_LITERAL, offsetof(struct deai, proctitle));
+	di_member(p, "__get_proctitle", proctitle_getter);
 
 	struct di_ev_signal sigintw;
 	sigintw.ud = p;
@@ -624,11 +627,11 @@ int main(int argc, char *argv[]) {
 	}
 
 	if (rt == DI_TYPE_OBJECT) {
-		char *errmsg = NULL;
+		const char *errmsg = NULL;
 		if (di_get(retd.object, "errmsg", errmsg) == 0) {
 			fprintf(stderr, "The function you called returned an error message: %s\n",
 			        errmsg);
-			free(errmsg);
+			free((char *)errmsg);
 		}
 	}
 
