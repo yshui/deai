@@ -429,6 +429,7 @@ static struct di_lua_state *lua_new_state(struct di_module *m) {
 	return L;
 }
 
+generate_cleanup(di_lua_script);
 static struct di_object *di_lua_load_script(struct di_object *obj, const char *path) {
 	/**
 	 * Reference count scheme for di_lua_script:
@@ -445,7 +446,7 @@ static struct di_object *di_lua_load_script(struct di_object *obj, const char *p
 		return di_new_error("Path is null");
 	}
 
-	auto s = di_new_object_with_type(struct di_lua_script);
+	with_di_cleanup(di_lua_script) s = di_new_object_with_type(struct di_lua_script);
 	di_set_type((struct di_object *)s, "deai.plugin.lua:LuaScript");
 	di_set_object_dtor((void *)s, (void *)di_lua_free_script);
 
@@ -480,7 +481,6 @@ static struct di_object *di_lua_load_script(struct di_object *obj, const char *p
 		// Create the error object before freeing the script object. Because after
 		// that the error string might be freed.
 		auto errobj = di_new_error("Failed to load lua script %s: %s\n", path, err);
-		di_unref_object((void *)s);
 		return errobj;
 	}
 
@@ -500,10 +500,9 @@ static struct di_object *di_lua_load_script(struct di_object *obj, const char *p
 
 		// Pop error handling function
 		lua_pop(s->L->L, 1);
-		di_unref_object((void *)s);
 		return di_new_error("Failed to run the lua script");
 	}
-	return (void *)s;
+	return di_ref_object((struct di_object *)s);
 }
 
 static int di_lua_table_to_array(lua_State *L, int index, int nelem, di_type_t elemt,
