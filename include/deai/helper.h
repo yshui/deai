@@ -148,10 +148,6 @@ PUBLIC_DEAI_API int di_proxy_signal(struct di_object *nonnull src, const char *n
 		if (rc != 0) {                                                           \
 			on_err;                                                          \
 		}                                                                        \
-		if (!di_check_type(__o, "deai:module")) {                                \
-			rc = -EINVAL;                                                    \
-			on_err;                                                          \
-		}                                                                        \
 		modn##m = __o;                                                           \
 	} while (0)
 
