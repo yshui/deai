@@ -1,4 +1,5 @@
-#include <deai/c++/deai.hh>
+#pragma once
+#include "deai.hh"
 
 namespace deai::builtin {
 namespace log {
