@@ -3,12 +3,13 @@
 
 namespace deai::builtin {
 namespace log {
-struct LogRef : public ObjectRef {
+struct Log : public Object {
 public:
 	inline static const std::string type = "deai.builtin:LogModule";
 	[[nodiscard]] auto
-	file_target(const std::string &filename, bool overwrite) const -> ObjectRef {
-		return util::call_deai_method<ObjectRef>(*this, "file_target", filename, overwrite);
+	file_target(const std::string &filename, bool overwrite) const -> Ref<Object> {
+		return util::call_deai_method_raw<Ref<Object>>(inner.get(), "file_target",
+		                                               filename, overwrite);
 	}
 };
 }        // namespace log
