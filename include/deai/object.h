@@ -209,16 +209,13 @@ di_callx(struct di_object *nonnull o, const char *nonnull name, di_type_t *nonnu
 /// Change the value of member `prop` of object `o`.
 ///
 /// If a specialized setter `__set_<prop>` exists, it will call the setter. If not, it
-/// will try the generic setter, `__set`. At last, it will try to change the value of
-/// `prop` if the exists.
-///
-/// NOTE: currently di_setx cannot change the type of `prop`, it will convert `val` to the
-/// type of `prop`. This WILL change!
+/// will try the generic setter, `__set`. Then, it will try to change the value of
+/// `prop` if the exists. At last, it will add a new member to the object
 ///
 /// @param[in] type The type of the value
-/// @param[in] val The value, borrowed
+/// @param[in] val The value, borrowed.
 PUBLIC_DEAI_API int di_setx(struct di_object *nonnull o, const char *nonnull prop,
-                            di_type_t type, void *nullable val);
+                            di_type_t type, const void *nullable val);
 
 /// Fetch a member with name `prop` from an object `o`, without calling the getter
 /// functions. The value is cloned, then returned.

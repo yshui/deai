@@ -143,40 +143,23 @@ ret:
 	return rc;
 }
 
-int di_setx(struct di_object *o, const char *prop, di_type_t type, void *val) {
+int di_setx(struct di_object *o, const char *prop, di_type_t type, const void *val) {
 	bool handler_found;
 	int rc2 = call_handler_with_fallback(
-	    o, "__set", prop, (struct di_variant){val, type}, NULL, NULL, &handler_found);
+	    o, "__set", prop, (struct di_variant){(union di_value *)val, type}, NULL,
+	    NULL, &handler_found);
 	if (handler_found) {
 		return rc2;
 	}
 
 	auto mem = di_lookup(o, prop);
-	int rc;
-	union di_value val2;
-	bool cloned = false;
 	if (mem) {
-		// TODO(yshui) remove the type conversion.
-		// If automatic type conversion is desired, you should use a setter
-		rc = di_type_conversion(type, val, mem->type, &val2, true, &cloned);
-		if (rc != 0) {
-			return rc;
-		}
-		di_free_value(mem->type, mem->data);
-		// No need to reallocate mem->data here since the type didn't change
-		di_copy_value(mem->type, mem->data, &val2);
-		if (cloned) {
-			di_free_value(mem->type, &val2);
-		}
+		mem->data = realloc(mem->data, di_sizeof_type(type));
+		di_copy_value(mem->type, mem->data, val);
 		return 0;
 	}
 
-	if (!mem) {
-		rc = -ENOENT;
-	} else {
-		rc = -EPERM;
-	}
-	return rc;
+	return di_add_member_clone(o, prop, type, val);
 }
 
 int di_rawgetx(struct di_object *o, const char *prop, di_type_t *type, union di_value *ret) {
