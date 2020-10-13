@@ -441,12 +441,12 @@ static void ioev_callback(void *conn, void *ptr, int event) {
 }
 
 static void
-_dbus_shutdown(struct di_weak_object *weak_di, void *root_handle_ptr, DBusConnection *conn) {
+_dbus_shutdown(struct di_weak_object *weak_roots, void *root_handle_ptr, DBusConnection *conn) {
 	// Stop the listen for "prepare"
 	auto root_handle = *(uint64_t *)root_handle_ptr;
-	auto di = di_upgrade_weak_ref(weak_di);
-	if (di != NULL) {
-		di_call(di, "__remove_anonymous", root_handle);
+	di_object_with_cleanup roots = di_upgrade_weak_ref(weak_roots);
+	if (roots != NULL) {
+		DI_CHECK_OK(di_call(roots, "__remove_anonymous", root_handle));
 	}
 	free(root_handle_ptr);
 
@@ -461,11 +461,14 @@ static void di_dbus_shutdown(_di_dbus_connection *conn) {
 	// this function might be called in dbus dispatch function,
 	// closing connection in that context is bad.
 	// so delay the shutdown until we return to mainloop
-	di_weak_object_with_cleanup weak_di =
-	    di_weakly_ref_object((struct di_object *)conn->di);
+	di_weak_object_with_cleanup weak_roots = NULL;
+	di_get(conn->di, "roots", weak_roots);
+
+	di_object_with_cleanup roots = di_upgrade_weak_ref(weak_roots);
+	DI_CHECK(roots);
 	uint64_t *root_handle_storage = tmalloc(uint64_t, 1);
 	di_closure_with_cleanup shutdown = di_closure(
-	    _dbus_shutdown, (weak_di, (void *)root_handle_storage, (void *)conn->conn));
+	    _dbus_shutdown, (weak_roots, (void *)root_handle_storage, (void *)conn->conn));
 
 	di_object_with_cleanup eventm = NULL;
 	if (di_get(conn->di, "event", eventm) != 0) {
@@ -477,11 +480,6 @@ static void di_dbus_shutdown(_di_dbus_connection *conn) {
 
 	// Keep the listen handle alive as a root. As this is the dtor for `conn`, we
 	// cannot keep the handle inside `conn`.
-	di_weak_object_with_cleanup weak_roots = NULL;
-	di_get(conn->di, "roots", weak_roots);
-
-	di_object_with_cleanup roots = di_upgrade_weak_ref(weak_roots);
-	DI_CHECK(roots);
 	di_callr(roots, "__add_anonymous", *root_handle_storage, listen_handle);
 
 	conn->conn = NULL;
