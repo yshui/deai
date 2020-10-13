@@ -391,7 +391,13 @@ static int dbus_serialize_with_signature(DBusMessageIter *i, struct di_variant v
 	int dtype = di_type_to_dbus_basic(var.type);
 	if (dbus_type_is_basic(dtype)) {
 		assert(dtype == *si.current);
-		dbus_message_iter_append_basic(i, dtype, var.value);
+		if (var.type == DI_TYPE_STRING) {
+			char *tmp = di_string_to_chars_alloc(var.value->string);
+			dbus_message_iter_append_basic(i, dtype, &tmp);
+			free(tmp);
+		} else {
+			dbus_message_iter_append_basic(i, dtype, var.value);
+		}
 		return 0;
 	}
 	struct di_array *arr = &var.value->array;

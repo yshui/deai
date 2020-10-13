@@ -143,7 +143,7 @@ static void di_dbus_update_name_from_msg(struct di_weak_object *weak,
 	dbus_message_unref(msg);
 }
 
-static void di_dbus_watch_name(di_dbus_connection *c, struct di_string busname) {
+static void di_dbus_watch_name(di_dbus_connection *c, const char *busname) {
 	// watch for name changes
 	if (!c->conn) {
 		return;
@@ -153,8 +153,8 @@ static void di_dbus_watch_name(di_dbus_connection *c, struct di_string busname) 
 	asprintf(&match,
 	         "type='signal',sender='" DBUS_SERVICE_DBUS "',path='" DBUS_PATH_DBUS
 	         "',interface='" DBUS_INTERFACE_DBUS "',member='NameOwnerChanged',arg0='"
-	         "%.*s'",
-	         (int)busname.length, busname.data);
+	         "%s'",
+	         busname);
 
 	dbus_bus_add_match(c->conn, match, NULL);
 	free(match);
@@ -167,19 +167,18 @@ static void di_dbus_watch_name(di_dbus_connection *c, struct di_string busname) 
 	dbus_message_unref(msg);
 
 	di_weak_object_with_cleanup weak = di_weakly_ref_object((struct di_object *)c);
-	di_closure_with_cleanup cl =
-	    di_closure(di_dbus_update_name_from_msg, (weak, busname), void *);
+	di_closure_with_cleanup cl = di_closure(di_dbus_update_name_from_msg,
+	                                        (weak, di_string_borrow(busname)), void *);
 	auto listen_handle =
 	    di_listen_to(ret, di_string_borrow("reply"), (struct di_object *)cl);
 
 	// Keep the listen handle and event source alive
 	char *buf;
-	asprintf(&buf, "__dbus_watch_%.*s_change_request", (int)busname.length, busname.data);
+	asprintf(&buf, "__dbus_watch_%s_change_request", busname);
 	di_member(c, buf, ret);
 	free(buf);
 
-	asprintf(&buf, "__dbus_watch_%.*s_change_request_listen_handle",
-	         (int)busname.length, busname.data);
+	asprintf(&buf, "__dbus_watch_%s_change_request_listen_handle", busname);
 	di_member(c, buf, listen_handle);
 	free(buf);
 }
@@ -383,22 +382,22 @@ call_dbus_method(struct di_object *m, di_type_t *rt, union di_value *ret, struct
 	return 0;
 }
 
-static struct di_object *di_dbus_object_getter(di_dbus_object *dobj, const char *method) {
-	const char *dot = strrchr(method, '.');
+static struct di_object *di_dbus_object_getter(di_dbus_object *dobj, struct di_string method) {
+	const char *dot = memrchr(method.data, '.', method.length);
 	char *ifc, *m;
 	if (dot) {
-		const char *dot2 = strchr(method, '.');
-		if (dot == method || !*(dot + 1)) {
+		const char *dot2 = memchr(method.data, '.', method.length);
+		if (dot == method.data || !*(dot + 1)) {
 			return di_new_error("Method name or interface name is empty");
 		}
 		if (dot2 == dot) {
 			return di_new_error("Invalid interface name");
 		}
-		ifc = strndup(method, dot - method);
-		m = strdup(dot + 1);
+		ifc = strndup(method.data, dot - method.data);
+		m = strndup(dot + 1, method.length - (dot + 1 - method.data));
 	} else {
 		ifc = NULL;
-		m = strdup(method);
+		m = di_string_to_chars_alloc(method);
 	}
 
 	auto ret = di_new_object_with_type(di_dbus_method);
@@ -412,11 +411,10 @@ static struct di_object *di_dbus_object_getter(di_dbus_object *dobj, const char 
 	return (void *)ret;
 }
 
-static void di_dbus_object_new_signal(di_dbus_object *dobj, const char *name) {
+static void di_dbus_object_new_signal(di_dbus_object *dobj, struct di_string name) {
 	char *srcsig;
-	asprintf(&srcsig, "%%%s%%%s%%%s", dobj->bus, dobj->obj, name);
-	di_proxy_signal((void *)dobj->c, di_string_borrow(srcsig), (void *)dobj,
-	                di_string_borrow(name));
+	asprintf(&srcsig, "%%%s%%%s%%%.*s", dobj->bus, dobj->obj, (int)name.length, name.data);
+	di_proxy_signal((void *)dobj->c, di_string_borrow(srcsig), (void *)dobj, name);
 	free(srcsig);
 }
 
@@ -428,12 +426,12 @@ di_dbus_get_object(struct di_object *o, struct di_string bus, struct di_string o
 
 	ret->c = oc;
 	di_ref_object((void *)oc);
-	di_dbus_watch_name(oc, bus);
 	ret->bus = di_string_to_chars_alloc(bus);
 	ret->obj = di_string_to_chars_alloc(obj);
+	di_dbus_watch_name(oc, ret->bus);
 	di_method(ret, "put", di_finalize_object);
-	di_method(ret, "__get", di_dbus_object_getter, const char *);
-	di_method(ret, "__new_signal", di_dbus_object_new_signal, const char *);
+	di_method(ret, "__get", di_dbus_object_getter, struct di_string);
+	di_method(ret, "__new_signal", di_dbus_object_new_signal, struct di_string);
 
 	di_set_object_dtor((void *)ret, di_free_dbus_object);
 	return (void *)ret;
