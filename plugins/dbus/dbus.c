@@ -60,7 +60,7 @@ static struct di_object *di_dbus_send(_di_dbus_connection *c, DBusMessage *msg) 
 	di_set_type((struct di_object *)ret, "deai.plugin.dbus:DBusPendingReplyRaw");
 
 	bool rc = dbus_connection_send_with_reply(c->conn, msg, &ret->p, -1);
-	if (!rc) {
+	if (!rc || !ret->p) {
 		di_unref_object((void *)ret);
 		return NULL;
 	}
@@ -157,11 +157,12 @@ static void di_dbus_watch_name(_di_dbus_connection *c, const char *busname) {
 	                                        DBUS_INTERFACE_DBUS, "GetNameOwner");
 	dbus_message_append_args(msg, DBUS_TYPE_STRING, &busname, DBUS_TYPE_INVALID);
 	auto ret = di_dbus_send(c, msg);
+	DI_CHECK(ret != NULL);
 	dbus_message_unref(msg);
 
 	di_weak_object_with_cleanup weak = di_weakly_ref_object((struct di_object *)c);
 	di_closure_with_cleanup cl =
-	    di_closure(di_dbus_update_name_from_msg, (weak, busname), void *);
+	    di_closure(di_dbus_update_name_from_msg, (weak, (char *)busname), void *);
 	auto listen_handle = di_listen_to(ret, "reply", (struct di_object *)cl);
 
 	// Keep the listen handle and event source alive
@@ -432,16 +433,15 @@ di_dbus_get_object(struct di_object *o, const char *bus, const char *obj) {
 static void ioev_callback(void *conn, void *ptr, int event) {
 	if (event & IOEV_READ) {
 		dbus_watch_handle(ptr, DBUS_WATCH_READABLE);
-		while (dbus_connection_dispatch(conn) != DBUS_DISPATCH_COMPLETE) {
-		}
+		while (dbus_connection_dispatch(conn) != DBUS_DISPATCH_COMPLETE) {}
 	}
 	if (event & IOEV_WRITE) {
 		dbus_watch_handle(ptr, DBUS_WATCH_WRITABLE);
 	}
 }
 
-static void
-_dbus_shutdown(struct di_weak_object *weak_roots, void *root_handle_ptr, DBusConnection *conn) {
+static void _dbus_shutdown(struct di_weak_object *weak_roots, void *root_handle_ptr,
+                           DBusConnection *conn) {
 	// Stop the listen for "prepare"
 	auto root_handle = *(uint64_t *)root_handle_ptr;
 	di_object_with_cleanup roots = di_upgrade_weak_ref(weak_roots);
@@ -493,10 +493,15 @@ static void di_dbus_shutdown(_di_dbus_connection *conn) {
 	}
 }
 
+define_trivial_cleanup_t(char);
 static unsigned int _dbus_add_watch(DBusWatch *w, void *ud) {
 	_di_dbus_connection *oc = ud;
 	unsigned int flags = dbus_watch_get_flags(w);
 	int fd = dbus_watch_get_unix_fd(w);
+	fprintf(stderr, "w %p, flags: %d, fd: %d\n", w, flags, fd);
+	with_cleanup_t(char) ioev_name;
+	asprintf(&ioev_name, "__dbus_ioev_for_watch_%p", w);
+
 	int dt = 0;
 	if (flags & DBUS_WATCH_READABLE) {
 		dt |= IOEV_READ;
@@ -505,7 +510,12 @@ static unsigned int _dbus_add_watch(DBusWatch *w, void *ud) {
 		dt |= IOEV_WRITE;
 	}
 
-	struct di_object *ioev;
+	di_object_with_cleanup ioev = NULL;
+	if (di_get(oc, ioev_name, ioev) == 0) {
+		// We are already watching this fd?
+		DI_PANIC("Same watch added multiple times by dbus");
+	}
+
 	di_object_with_cleanup eventm = NULL;
 	if (di_get(oc->di, "event", eventm) != 0) {
 		return false;
@@ -522,17 +532,36 @@ static unsigned int _dbus_add_watch(DBusWatch *w, void *ud) {
 	if (!dbus_watch_get_enabled(w)) {
 		di_call(ioev, "stop");
 	}
-	di_unref_object(ioev);
 
-	dbus_watch_set_data(w, l, (void *)di_unref_object);
+	// Keep the listen handle and the ioev
+	with_cleanup_t(char) listen_handle_name;
+	asprintf(&listen_handle_name, "__dbus_ioev_listen_handle_for_watch_%p", w);
+	DI_CHECK_OK(di_member(oc, listen_handle_name, l));
+	DI_CHECK_OK(di_member(oc, ioev_name, ioev));
 
+	dbus_watch_set_data(w, di_ref_object((struct di_object *)oc), (void *)di_unref_object);
 	return true;
 }
 
+static void _dbus_remove_watch(DBusWatch *w, void *ud) {
+	struct di_object *oc = ud;
+
+	with_cleanup_t(char) ioev_name;
+	asprintf(&ioev_name, "__dbus_ioev_for_watch_%p", w);
+	di_remove_member_raw(oc, ioev_name);
+	with_cleanup_t(char) listen_handle_name;
+	asprintf(&listen_handle_name, "__dbus_ioev_listen_handle_for_watch_%p", w);
+	di_remove_member_raw(oc, listen_handle_name);
+}
+
 static void _dbus_toggle_watch(DBusWatch *w, void *ud) {
-	struct di_object *l = dbus_watch_get_data(w);
-	struct di_object *ioev;
-	ABRT_IF_ERR(di_get(l, "owner", ioev));
+	struct di_object *oc = dbus_watch_get_data(w);
+
+	with_cleanup_t(char) ioev_name;
+	di_object_with_cleanup ioev = NULL;
+	asprintf(&ioev_name, "__dbus_ioev_for_watch_%p", w);
+
+	DI_CHECK_OK(di_get(oc, ioev_name, ioev));
 	di_call(ioev, "toggle");
 }
 
@@ -701,7 +730,7 @@ static struct di_object *di_dbus_get_session_bus(struct di_object *o) {
 	di_method(ret, "__new_signal", di_dbus_new_signal, const char *);
 	di_method(ret, "__del_signal", di_dbus_del_signal, const char *);
 
-	dbus_connection_set_watch_functions(conn, _dbus_add_watch, NULL,
+	dbus_connection_set_watch_functions(conn, _dbus_add_watch, _dbus_remove_watch,
 	                                    _dbus_toggle_watch, ret, NULL);
 
 	dbus_connection_add_filter(conn, _dbus_filter, ret, NULL);

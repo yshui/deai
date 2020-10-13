@@ -611,6 +611,10 @@ void di_free_tuple(struct di_tuple t) {
 }
 
 void di_free_array(struct di_array arr) {
+	if (arr.length == 0) {
+		DI_CHECK(arr.arr == NULL);
+		return;
+	}
 	size_t step = di_sizeof_type(arr.elem_type);
 	for (int i = 0; i < arr.length; i++) {
 		di_free_value(arr.elem_type, arr.arr + step * i);

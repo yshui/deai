@@ -414,8 +414,8 @@ static inline unused size_t di_sizeof_type(di_type_t t) {
 	uint64_t *: DI_TYPE_UINT, \
 	/* You need to return a `char *` if you returns an owned string,
 	   and you should cast to `char *` when capturing a string OR a string literal.
-	   this is because a borrow string literal could be long OR short lived. so you
-	   have to capture owned string to be safe
+	   this is because a borrowed string literal could be long OR short lived. so you
+	   have to capture owned string to be safe.
 	 */ \
 	char **: DI_TYPE_STRING, \
 	/* use a const to differentiate strings and string literals

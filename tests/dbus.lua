@@ -47,13 +47,14 @@ dbusl:on("exit", function()
         print(s)
     end)
 
+    di.event:timer(2):on('elapsed', function()
+        di:quit()
+    end)
+
     -- Use non-existent method to test message serialization
     call_with_error(o, "org.dummy.Dummy", {1,2,3})
     call_with_error(o, "org.dummy.Dummy", {"asdf","qwer"})
     call_with_error(o, "org.dummy.Dummy", 1)
     call_with_error(o, "org.dummy.Dummy", "asdf")
-end)
-
-di.event:timer(2):on('elapsed', function()
-    di:quit()
+    collectgarbage("collect")
 end)
