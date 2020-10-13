@@ -174,15 +174,16 @@ new_binding(struct xorg_key *k, struct di_array modifiers, char *key, bool repla
 		return di_new_error("Failed to setup key grab");
 	}
 
-	di_method(kb, "stop", di_destroy_object);
+	di_method(kb, "stop", di_finalize_object);
 	return (void *)kb;
 }
 
 static void free_key(struct xorg_key *k) {
 	xcb_key_symbols_free(k->keysyms);
 	struct keybinding *kb, *nkb;
-	list_for_each_entry_safe (kb, nkb, &k->bindings, siblings)
-		di_destroy_object((void *)kb);
+	list_for_each_entry_safe (kb, nkb, &k->bindings, siblings) {
+		di_finalize_object((void *)kb);
+	}
 }
 define_trivial_cleanup_t(xcb_get_modifier_mapping_reply_t);
 uint16_t mod_from_keycode(struct di_xorg_connection *dc, xcb_keycode_t kc) {
@@ -237,7 +238,7 @@ static int handle_key(struct di_xorg_ext *ext, xcb_generic_event_t *ev) {
 			list_for_each_entry (kb, &k->bindings, siblings) {
 				int ret = refresh_binding(kb);
 				if (ret != 0) {
-					di_destroy_object((void *)kb);
+					di_finalize_object((void *)kb);
 				}
 			}
 		}

@@ -158,7 +158,7 @@ static struct di_object *di_file_new_watch(struct di_module *f, struct di_array 
 	di_method(fw, "add", di_file_add_many_watch, struct di_array);
 	di_method(fw, "add_one", di_file_add_watch, const char *);
 	di_method(fw, "remove", di_file_rm_watch, const char *);
-	di_method(fw, "stop", di_destroy_object);
+	di_method(fw, "stop", di_finalize_object);
 	di_mgetm(f, event, di_new_error("Can't find event module"));
 
 	struct di_object *fdevent = NULL;

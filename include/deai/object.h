@@ -6,8 +6,8 @@
 
 #pragma once
 
-#include <deai/common.h>
-#include <deai/compiler.h>
+#include "common.h"
+#include "compiler.h"
 
 #include <assert.h>
 #include <errno.h>
@@ -324,10 +324,9 @@ PUBLIC_DEAI_API struct di_object *nullable di_listen_to(struct di_object *nonnul
 /// freeing `args`.
 PUBLIC_DEAI_API int
 di_emitn(struct di_object *nonnull, const char *nonnull name, struct di_tuple args);
-// Call object dtor, remove all listeners and members from the object. And free the
-// memory
-// if the ref count drop to 0 after this process
-PUBLIC_DEAI_API void di_destroy_object(struct di_object *nonnull);
+// Call object dtor, remove all members from the object. Listeners are not removed, they
+// can only be removed when the object's strong refcount drop to 0
+PUBLIC_DEAI_API void di_finalize_object(struct di_object *nonnull);
 
 PUBLIC_DEAI_API struct di_object *
     nonnull allocates(malloc) di_ref_object(struct di_object *nonnull);

@@ -328,10 +328,6 @@ define_object_cleanup(di_closure);
 #define di_closure_with_cleanup with_object_cleanup(di_closure)
 #define di_object_with_cleanup with_object_cleanup(di_object)
 
-static void unused nonnull_all trivial_destroyed_handler(struct di_object *nonnull o) {
-	di_destroy_object(o);
-}
-
 static inline unused const char *nonnull di_type_to_string(di_type_t type) {
 #define TYPE_CASE(name)                                                                  \
 	case DI_TYPE_##name:                                                             \

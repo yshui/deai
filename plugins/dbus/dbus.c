@@ -40,6 +40,10 @@ typedef struct {
 	DBusPendingCall *p;
 } _di_dbus_pending_reply;
 
+static void di_free_pending_reply(_di_dbus_pending_reply *p) {
+	di_unref_object((void *)p->c);
+}
+
 static void _dbus_pending_call_notify_fn(DBusPendingCall *dp, void *ud) {
 	_di_dbus_pending_reply *p = ud;
 	auto msg = dbus_pending_call_steal_reply(dp);
@@ -48,11 +52,7 @@ static void _dbus_pending_call_notify_fn(DBusPendingCall *dp, void *ud) {
 	di_emit(p, "reply", (void *)msg);
 
 	// free connection object since we are not going to need it
-	di_destroy_object((void *)p);
-}
-
-static void di_free_pending_reply(_di_dbus_pending_reply *p) {
-	di_unref_object((void *)p->c);
+	di_finalize_object((struct di_object *)p);
 }
 
 static struct di_object *di_dbus_send(_di_dbus_connection *c, DBusMessage *msg) {
@@ -421,7 +421,7 @@ di_dbus_get_object(struct di_object *o, const char *bus, const char *obj) {
 	di_dbus_watch_name(oc, bus);
 	ret->bus = strdup(bus);
 	ret->obj = strdup(obj);
-	di_method(ret, "put", di_destroy_object);
+	di_method(ret, "put", di_finalize_object);
 	di_method(ret, "__get", di_dbus_object_getter, const char *);
 	di_method(ret, "__new_signal", di_dbus_object_new_signal, const char *);
 

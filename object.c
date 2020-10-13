@@ -349,16 +349,8 @@ int di_remove_member(struct di_object *obj, const char *name) {
 	return di_remove_member_raw(obj, name);
 }
 
-// Try to never call destroy twice on something. Although it's fine to do so
-void di_destroy_object(struct di_object *_obj) {
+void di_finalize_object(struct di_object *_obj) {
 	auto obj = (struct di_object_internal *)_obj;
-
-	// Prevent destroy from being called while we are destroying
-	di_ref_object(_obj);
-	if (obj->destroyed) {
-		fprintf(stderr, "warning: destroy object multiple times\n");
-	}
-	obj->destroyed = 1;
 
 	// Call dtor before removing members and signals, so the dtor can still make use
 	// of whatever is stored in the object, and emit more signals.
@@ -368,15 +360,6 @@ void di_destroy_object(struct di_object *_obj) {
 		// Never call dtor more than once
 		obj->dtor = NULL;
 		tmp(_obj);
-	}
-
-	struct di_signal *sig, *tmpsig;
-	HASH_ITER (hh, obj->signals, sig, tmpsig) {
-		// Detach the signal structs from this object, don't free them.
-		// The signal structs are collectively owned by the listener structs,
-		// which in turn is owned by the listen handles, and will be freed when
-		// the listen handles are dropped.
-		HASH_DEL(obj->signals, sig);
 	}
 
 	struct di_member *m = (void *)obj->members;
@@ -393,6 +376,29 @@ void di_destroy_object(struct di_object *_obj) {
 #endif
 		_di_remove_member_raw(obj, m);
 		m = next_m;
+	}
+}
+
+// Try to never call destroy twice on something. Although it's fine to do so
+static void di_destroy_object(struct di_object *_obj) {
+	auto obj = (struct di_object_internal *)_obj;
+
+	// Prevent destroy from being called while we are destroying
+	di_ref_object(_obj);
+	if (obj->destroyed) {
+		fprintf(stderr, "warning: destroy object multiple times\n");
+	}
+	obj->destroyed = 1;
+
+	di_finalize_object(_obj);
+
+	struct di_signal *sig, *tmpsig;
+	HASH_ITER (hh, obj->signals, sig, tmpsig) {
+		// Detach the signal structs from this object, don't free them.
+		// The signal structs are collectively owned by the listener structs,
+		// which in turn is owned by the listen handles, and will be freed when
+		// the listen handles are dropped.
+		HASH_DEL(obj->signals, sig);
 	}
 
 	di_unref_object(_obj);

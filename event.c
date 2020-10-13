@@ -9,6 +9,7 @@
 #include <deai/helper.h>
 
 #include <ev.h>
+#include <unistd.h>
 
 #include "di_internal.h"
 #include "event.h"
@@ -111,6 +112,13 @@ static void di_stop_ioev(struct di_object *obj) {
 	di_object_downgrade_deai(obj);
 }
 
+static void di_close_ioev(struct di_object *obj) {
+	di_stop_ioev(obj);
+
+	auto ioev = (struct di_ioev *)obj;
+	close(ioev->evh.fd);
+}
+
 static void di_toggle_ioev(struct di_object *obj) {
 	struct di_ioev *ev = (void *)obj;
 	if (ev->running) {
@@ -152,9 +160,9 @@ static struct di_object *di_create_ioev(struct di_object *obj, int fd, int t) {
 	di_method(ret, "start", di_start_ioev);
 	di_method(ret, "stop", di_stop_ioev);
 	di_method(ret, "toggle", di_toggle_ioev);
-	di_method(ret, "close", di_destroy_object);
+	di_method(ret, "close", di_finalize_object);
 
-	ret->dtor = di_stop_ioev;
+	ret->dtor = di_close_ioev;
 	ret->running = true;
 	return (void *)ret;
 }

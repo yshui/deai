@@ -5,8 +5,8 @@
 /* Copyright (c) 2017, Yuxuan Shui <yshuiv7@gmail.com> */
 
 #pragma once
-#include <deai/object.h>
-#include <deai/common.h>
+#include "object.h"
+#include "common.h"
 
 #include <stdarg.h>
 

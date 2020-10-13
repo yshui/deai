@@ -9,10 +9,10 @@
 #include <stdint.h>
 #include <stdlib.h>
 
-#include <deai/callable.h>
-#include <deai/common.h>
-#include <deai/compiler.h>
-#include <deai/object.h>
+#include "callable.h"
+#include "common.h"
+#include "compiler.h"
+#include "object.h"
 
 struct deai;
 

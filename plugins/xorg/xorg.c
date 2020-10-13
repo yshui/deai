@@ -50,7 +50,7 @@ static void xorg_disconnect(struct di_xorg_connection *xc) {
 
 	// free_sub might need the connection, don't disconnect now
 	struct di_xorg_ext *ext, *text;
-	HASH_ITER (hh, xc->xext, ext, text) { di_destroy_object((void *)ext); }
+	HASH_ITER (hh, xc->xext, ext, text) { di_finalize_object((void *)ext); }
 	xcb_disconnect(xc->c);
 	xc->x = NULL;
 
@@ -470,7 +470,7 @@ static struct di_object *di_xorg_connect_to(struct di_xorg *x, const char *displ
 	di_method(dc, "__set_xrdb", di_xorg_set_resource, const char *);
 	di_method(dc, "__get_screen", get_screen);
 	di_method(dc, "__set_keymap", set_keymap, struct di_object *);
-	di_method(dc, "disconnect", di_destroy_object);
+	di_method(dc, "disconnect", di_finalize_object);
 
 	dc->x = x;
 	dc->xkb_ctx = xkb_context_new(XKB_CONTEXT_NO_FLAGS);
