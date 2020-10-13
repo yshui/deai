@@ -32,6 +32,6 @@ core_test_cases = [
 ]
 
 foreach t : core_test_cases
-  test_so = shared_library(t.underscorify(), t, c_args: base_c_args, cpp_args: base_cpp_args, name_prefix: '', include_directories: incs)
+  test_so = shared_library(t.underscorify(), t, c_args: base_c_args, cpp_args: base_cpp_args, name_prefix: '', include_directories: incs, link_with: [cpp_binding])
   test(t.underscorify()+'_test', deai_exe, args: ['load_plugin', 's:' + test_so.full_path()])
 endforeach

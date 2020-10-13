@@ -17,6 +17,8 @@ SpaceBeforeAssignmentOperators: true
 AllowShortIfStatementsOnASingleLine: false
 AllowShortCaseLabelsOnASingleLine: false
 AllowShortFunctionsOnASingleLine: false
+AllowShortBlocksOnASingleLine: Empty
+AllowShortLoopsOnASingleLine: false
 IndentCaseLabels: false
 PenaltyReturnTypeOnItsOwnLine: 0
 PenaltyBreakString: 5
