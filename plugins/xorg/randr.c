@@ -413,7 +413,9 @@ static int handle_randr_event(struct di_xorg_ext *ext, xcb_generic_event_t *ev) 
 }
 
 static inline void rr_select_input(struct di_xorg_randr *rr, uint16_t mask) {
-	assert(rr->dc);
+	if (rr->dc == NULL) {
+		return;
+	}
 	auto scrn = screen_of_display(rr->dc->c, rr->dc->dflt_scrn);
 	auto e = xcb_request_check(rr->dc->c,
 	                           xcb_randr_select_input(rr->dc->c, scrn->root, mask));

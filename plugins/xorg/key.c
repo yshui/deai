@@ -55,9 +55,11 @@ static int name_to_mod(const char *keyname) {
 }
 
 static void ungrab(struct keybinding *kb) {
-	auto s = screen_of_display(kb->k->dc->c, kb->k->dc->dflt_scrn);
-	for (int i = 0; kb->keycodes[i] != XCB_NO_SYMBOL; i++) {
-		xcb_ungrab_key(kb->k->dc->c, kb->keycodes[i], s->root, kb->modifiers);
+	if (kb->k->dc != NULL) {
+		auto s = screen_of_display(kb->k->dc->c, kb->k->dc->dflt_scrn);
+		for (int i = 0; kb->keycodes[i] != XCB_NO_SYMBOL; i++) {
+			xcb_ungrab_key(kb->k->dc->c, kb->keycodes[i], s->root, kb->modifiers);
+		}
 	}
 }
 

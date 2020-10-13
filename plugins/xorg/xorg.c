@@ -30,12 +30,15 @@ define_trivial_cleanup_t(xcb_generic_error_t);
 
 static void di_xorg_free_sub(struct di_xorg_ext *x) {
 	if (x->dc) {
-		if (x->free) {
-			x->free(x);
-		}
 		HASH_DEL(x->dc->xext, x);
 		di_unref_object((void *)x->dc);
 		x->dc = NULL;
+
+		if (x->free) {
+			// HACKY, x->free might free x.
+			// TODO(yshui) hold a weak reference to x
+			x->free(x);
+		}
 	}
 }
 
@@ -50,7 +53,10 @@ static void xorg_disconnect(struct di_xorg_connection *xc) {
 
 	// free_sub might need the connection, don't disconnect now
 	struct di_xorg_ext *ext, *text;
-	HASH_ITER (hh, xc->xext, ext, text) { di_finalize_object((void *)ext); }
+	HASH_ITER (hh, xc->xext, ext, text) {
+		// free the extension objects
+		di_finalize_object((void *)ext);
+	}
 	xcb_disconnect(xc->c);
 	xc->x = NULL;
 
