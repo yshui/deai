@@ -178,7 +178,8 @@ union di_value {
 	struct di_weak_object *nonnull weak_object;
 	// XXX di_typeof(di_value::string) is string literal, not string.
 	//     If you want to return a owned string, you cannot rely on
-	//     di_typeof(value->field)
+	//     di_typeof(value->field). Or if you want to capture a string,
+	//     you have to cast it to (char *)
 	const char *nonnull string;
 	const char *nonnull string_literal;
 	struct di_array array;
@@ -411,6 +412,11 @@ static inline unused size_t di_sizeof_type(di_type_t t) {
 	unsigned int *: DI_TYPE_NUINT, \
 	int64_t *: DI_TYPE_INT, \
 	uint64_t *: DI_TYPE_UINT, \
+	/* You need to return a `char *` if you returns an owned string,
+	   and you should cast to `char *` when capturing a string OR a string literal.
+	   this is because a borrow string literal could be long OR short lived. so you
+	   have to capture owned string to be safe
+	 */ \
 	char **: DI_TYPE_STRING, \
 	/* use a const to differentiate strings and string literals
 	 * doesn't mean strings are actually mutable.

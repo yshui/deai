@@ -289,8 +289,8 @@ PUBLIC_DEAI_API int di_proxy_signal(struct di_object *nonnull src, const char *n
 	unsigned int *: 0, \
 	int64_t *: 0, \
 	uint64_t *: 0, \
+	char **: NULL, \
 	const char **: NULL, \
-	const char * const*: NULL, \
 	struct di_object **: NULL, \
 	struct di_weak_object **: NULL, \
 	void **: NULL, \
