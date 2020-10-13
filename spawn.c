@@ -131,7 +131,7 @@ static void sigchld_handler(EV_P_ ev_child *w, int revents) {
 
 	child_cleanup(c);
 	// This object won't generate an further events, so drop the reference to di
-	di_remove_member_raw((struct di_object *)c, "__deai");
+	di_remove_member_raw((struct di_object *)c, DEAI_MEMBER_NAME);
 }
 
 static void child_destroy(struct di_object *obj) {
@@ -169,6 +169,55 @@ static void kill_child(struct child *c, int sig) {
 
 define_trivial_cleanup(char *, free_charpp);
 
+static struct di_object *di_setup_fds(bool ignore_output, int *opfds, int *epfds, int *ifd) {
+	opfds[0] = opfds[1] = -1;
+	epfds[0] = epfds[1] = -1;
+	*ifd = -1;
+
+	struct di_object *ret = NULL;
+	do {
+		if (!ignore_output) {
+			if (pipe(opfds) < 0 || pipe(epfds) < 0) {
+				ret = di_new_error("Failed to open pipe");
+				break;
+			}
+
+			if (fcntl(opfds[0], F_SETFD, FD_CLOEXEC) < 0 ||
+			    fcntl(epfds[0], F_SETFD, FD_CLOEXEC) < 0) {
+				ret = di_new_error("Can't set cloexec");
+				break;
+			}
+
+			if (fcntl(opfds[0], F_SETFL, O_NONBLOCK) < 0 ||
+			    fcntl(epfds[0], F_SETFL, O_NONBLOCK) < 0) {
+				ret = di_new_error("Can't set non block");
+				break;
+			}
+		} else {
+			opfds[1] = open("/dev/null", O_WRONLY);
+			epfds[1] = open("/dev/null", O_WRONLY);
+			if (opfds[1] < 0 || epfds[1] < 0) {
+				ret = di_new_error("Can't open /dev/null");
+				break;
+			}
+		}
+		*ifd = open("/dev/null", O_RDONLY);
+		if (*ifd < 0) {
+			ret = di_new_error("Can't open /dev/null");
+			break;
+		}
+	} while (0);
+
+	if (ret != NULL) {
+		close(opfds[0]);
+		close(opfds[1]);
+		close(epfds[0]);
+		close(epfds[1]);
+		close(*ifd);
+	}
+	return ret;
+}
+
 /// Start a child process, with arguments `argv`. If `ignore_output` is true, the output
 /// of the child process will be redirected to '/dev/null'
 ///
@@ -184,34 +233,16 @@ struct di_object *di_spawn_run(struct di_spawn *p, struct di_array argv, bool ig
 		return di_new_error("deai is shutting down...");
 	}
 
-	with_cleanup(free_charpp) char **nargv = tmalloc(char *, argv.length + 1);
-	memcpy(nargv, argv.arr, sizeof(void *) * argv.length);
-
 	int opfds[2], epfds[2], ifd;
-	if (!ignore_output) {
-		if (pipe(opfds) < 0 || pipe(epfds) < 0) {
-			return di_new_error("Failed to open pipe");
-		}
-
-		if (fcntl(opfds[0], F_SETFD, FD_CLOEXEC) < 0 ||
-		    fcntl(epfds[0], F_SETFD, FD_CLOEXEC) < 0) {
-			return di_new_error("Can't set cloexec");
-		}
-
-		if (fcntl(opfds[0], F_SETFL, O_NONBLOCK) < 0 ||
-		    fcntl(epfds[0], F_SETFL, O_NONBLOCK) < 0) {
-			return di_new_error("Can't set non block");
-		}
-	} else {
-		opfds[1] = open("/dev/null", O_WRONLY);
-		epfds[1] = open("/dev/null", O_WRONLY);
-		if (opfds[1] < 0 || epfds[1] < 0) {
-			return di_new_error("Can't open /dev/null");
-		}
+	auto ret = di_setup_fds(ignore_output, opfds, epfds, &ifd);
+	if (ret != NULL) {
+		return ret;
 	}
-	ifd = open("/dev/null", O_RDONLY);
-	if (ifd < 0) {
-		return di_new_error("Can't open /dev/null");
+
+	char **nargv = tmalloc(char *, argv.length + 1);
+	struct di_string *strings = argv.arr;
+	for (int i = 0; i < argv.length; i++) {
+		nargv[i] = di_string_to_chars_alloc(strings[i]);
 	}
 
 	auto pid = fork();
@@ -232,11 +263,18 @@ struct di_object *di_spawn_run(struct di_spawn *p, struct di_array argv, bool ig
 		_exit(1);
 	}
 
+	for (int i = 0; i < argv.length; i++) {
+		free(nargv[i]);
+	}
+	free(nargv);
+
 	close(ifd);
 	close(opfds[1]);
 	close(epfds[1]);
 
 	if (pid < 0) {
+		close(opfds[0]);
+		close(epfds[0]);
 		return di_new_error("Failed to fork");
 	}
 
@@ -263,7 +301,7 @@ struct di_object *di_spawn_run(struct di_spawn *p, struct di_array argv, bool ig
 	ev_child_start(di->loop, &cp->w);
 
 	// Keep a reference from the ChildProcess object to deai, to keep it alive
-	di_member(cp, "__deai", obj);
+	di_member(cp, DEAI_MEMBER_NAME_RAW, obj);
 	return (void *)cp;
 }
 
@@ -281,5 +319,5 @@ void di_init_spawn(struct deai *di) {
 	auto m = di_new_module_with_size(di, sizeof(struct di_spawn));
 	di_method(m, "run", di_spawn_run, struct di_array, bool);
 
-	di_register_module(di, "spawn", &m);
+	di_register_module(di, di_string_borrow("spawn"), &m);
 }

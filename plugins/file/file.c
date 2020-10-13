@@ -77,41 +77,61 @@ static int di_file_ioev(struct di_weak_object *weak) {
 	return 0;
 }
 
-static int di_file_add_watch(struct di_file_watch *fw, const char *path) {
-	if (!path) {
+static int di_file_add_watch(struct di_file_watch *fw, struct di_string path) {
+	if (!path.data) {
 		return -EINVAL;
 	}
 
-	int ret = inotify_add_watch(fw->fd, path, IN_ALL_EVENTS);
+	char *path_str = di_string_to_chars_alloc(path);
+
+	int ret = inotify_add_watch(fw->fd, path_str, IN_ALL_EVENTS);
 	if (ret >= 0) {
 		auto we = tmalloc(struct di_file_watch_entry, 1);
 		we->wd = ret;
-		we->fname = strdup(path);
+		we->fname = path_str;
 
 		HASH_ADD_INT(fw->bywd, wd, we);
-		HASH_ADD_KEYPTR(hh2, fw->byname, we->fname, strlen(we->fname), we);
+		HASH_ADD_KEYPTR(hh2, fw->byname, we->fname, path.length, we);
 		ret = 0;
 	}
 	return ret;
 }
 
-static void di_file_add_many_watch(struct di_file_watch *fw, struct di_array paths) {
-	if (paths.length > 0 && paths.elem_type != DI_TYPE_STRING) {
-		return;
+static int di_file_add_many_watch(struct di_file_watch *fw, struct di_array paths) {
+	if (paths.length == 0) {
+		return 0;
 	}
-	const char **arr = paths.arr;
-	for (int i = 0; i < paths.length; i++) {
-		di_file_add_watch(fw, arr[i]);
+	if (paths.elem_type != DI_TYPE_STRING && paths.elem_type != DI_TYPE_STRING_LITERAL) {
+		return -EINVAL;
 	}
+	int ret = 0;
+	if (paths.elem_type == DI_TYPE_STRING) {
+		struct di_string *arr = paths.arr;
+		for (int i = 0; i < paths.length; i++) {
+			ret = di_file_add_watch(fw, arr[i]);
+			if (ret != 0) {
+				break;
+			}
+		}
+	} else {
+		const char **arr = paths.arr;
+		for (int i = 0; i < paths.length; i++) {
+			ret = di_file_add_watch(fw, di_string_borrow(arr[i]));
+			if (ret != 0) {
+				break;
+			}
+		}
+	}
+	return ret;
 }
 
-static int di_file_rm_watch(struct di_file_watch *fw, const char *path) {
-	if (!path) {
+static int di_file_rm_watch(struct di_file_watch *fw, struct di_string path) {
+	if (!path.data) {
 		return -EINVAL;
 	}
 
 	struct di_file_watch_entry *we = NULL;
-	HASH_FIND(hh2, fw->byname, path, strlen(path), we);
+	HASH_FIND(hh2, fw->byname, path.data, path.length, we);
 	if (!we) {
 		return -ENOENT;
 	}
@@ -141,7 +161,8 @@ static void stop_file_watcher(struct di_file_watch *fw) {
 }
 
 static struct di_object *di_file_new_watch(struct di_module *f, struct di_array paths) {
-	if (paths.length > 0 && paths.elem_type != DI_TYPE_STRING) {
+	if (paths.length > 0 && paths.elem_type != DI_TYPE_STRING &&
+	    paths.elem_type != DI_TYPE_STRING_LITERAL) {
 		return di_new_error("Argument needs to be an array of strings");
 	}
 
@@ -156,8 +177,8 @@ static struct di_object *di_file_new_watch(struct di_module *f, struct di_array 
 	di_set_object_dtor((void *)fw, (void *)stop_file_watcher);
 
 	di_method(fw, "add", di_file_add_many_watch, struct di_array);
-	di_method(fw, "add_one", di_file_add_watch, const char *);
-	di_method(fw, "remove", di_file_rm_watch, const char *);
+	di_method(fw, "add_one", di_file_add_watch, struct di_string);
+	di_method(fw, "remove", di_file_rm_watch, struct di_string);
 	di_method(fw, "stop", di_finalize_object);
 	di_mgetm(f, event, di_new_error("Can't find event module"));
 
@@ -166,21 +187,20 @@ static struct di_object *di_file_new_watch(struct di_module *f, struct di_array 
 
 	auto tmpo = di_weakly_ref_object((struct di_object *)fw);
 	di_closure_with_cleanup cl = di_closure(di_file_ioev, (tmpo));
-	auto listen_handle = di_listen_to(fdevent, "read", (void *)cl);
+	auto listen_handle = di_listen_to(fdevent, di_string_borrow("read"), (void *)cl);
 
 	di_member(fw, "__inotify_fd_event", fdevent);
 	di_member(fw, "__inotify_fd_event_read_listen_handle", listen_handle);
 
-	const char **arr = paths.arr;
-	for (int i = 0; i < paths.length; i++) {
-		di_file_add_watch(fw, arr[i]);
+	if (di_file_add_many_watch(fw, paths) != 0) {
+		di_unref_object((struct di_object *)fw);
+		return di_new_error("Failed to add watches");
 	}
-
 	return (void *)fw;
 }
 DEAI_PLUGIN_ENTRY_POINT(di) {
 	auto fm = di_new_module(di);
 	di_method(fm, "watch", di_file_new_watch, struct di_array);
-	di_register_module(di, "file", &fm);
+	di_register_module(di, di_string_borrow("file"), &fm);
 	return 0;
 }

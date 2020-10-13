@@ -14,7 +14,10 @@
 #include <stdio.h>
 #include <xcb/xinput.h>
 
+#include "utils.h"
 #include "xorg.h"
+
+define_trivial_cleanup_t(char);
 
 #define XI_LASTEVENT XCB_INPUT_BARRIER_LEAVE
 struct di_xorg_xinput {
@@ -139,18 +142,18 @@ xcb_input_get_device_info(xcb_connection_t *c, xcb_input_device_id_t deviceid,
 	return ret;
 }
 
-static char *di_xorg_xinput_get_device_name(struct di_xorg_xinput_device *dev) {
+static struct di_string di_xorg_xinput_get_device_name(struct di_xorg_xinput_device *dev) {
 	if (!dev->xi->dc) {
-		return strdup("unknown");
+		return di_string_dup("unknown");
 	}
 
 	with_cleanup_t(xcb_input_xi_query_device_reply_t) rr;
 	auto info = xcb_input_get_device_info(dev->xi->dc->c, dev->deviceid, &rr);
 	if (!info) {
-		return strdup("unknown");
+		return di_string_dup("unknown");
 	}
-	return strndup(xcb_input_xi_device_info_name(info),
-	               xcb_input_xi_device_info_name_length(info));
+	return di_string_ndup(xcb_input_xi_device_info_name(info),
+	                      xcb_input_xi_device_info_name_length(info));
 }
 
 static const char *di_xorg_xinput_get_device_use(struct di_xorg_xinput_device *dev) {
@@ -189,9 +192,9 @@ const char *possible_types[] = {
 };
 #endif
 
-static char *di_xorg_xinput_get_device_type(struct di_xorg_xinput_device *dev) {
+static struct di_string di_xorg_xinput_get_device_type(struct di_xorg_xinput_device *dev) {
 	if (!dev->xi->dc) {
-		return strdup("unknown");
+		return di_string_dup("unknown");
 	}
 
 	struct di_xorg_connection *dc = dev->xi->dc;
@@ -206,17 +209,13 @@ static char *di_xorg_xinput_get_device_type(struct di_xorg_xinput_device *dev) {
 		}
 	}
 
-	const char *dname = di_xorg_get_atom_name(dc, di.data->device_type);
+	auto dname = di_xorg_get_atom_name(dc, di.data->device_type);
 	if (!dname) {
 		// fprintf(stderr, "%d\n", di.data->device_type);
-		return strdup("unknown");
+		return di_string_dup("unknown");
 	}
 
-	char *ret = strdup(dname);
-
-	for (int i = 0; ret[i]; i++) {
-		ret[i] = (char)tolower((int)ret[i]);
-	}
+	auto ret = di_string_tolower(*dname);
 	return ret;
 }
 
@@ -227,10 +226,11 @@ static int di_xorg_xinput_get_device_id(struct di_object *o) {
 
 define_trivial_cleanup_t(xcb_input_xi_get_property_reply_t);
 define_trivial_cleanup_t(xcb_input_xi_change_property_items_t);
-define_trivial_cleanup_t(char);
 
-static void di_xorg_xinput_set_prop(struct di_xorg_xinput_device *dev, const char *key,
-                                    struct di_array arr) {
+/// Arbitrary length limit for the property names
+#define XI_MAX_PROPERTY_NAME_LENGTH (256)
+static void di_xorg_xinput_set_prop(struct di_xorg_xinput_device *dev,
+                                    struct di_string key, struct di_array arr) {
 	if (!dev->xi->dc) {
 		return;
 	}
@@ -244,7 +244,7 @@ static void di_xorg_xinput_set_prop(struct di_xorg_xinput_device *dev, const cha
 		return;
 	}
 
-	auto float_atom = di_xorg_intern_atom(dc, "FLOAT", &e);
+	auto float_atom = di_xorg_intern_atom(dc, di_string_borrow("FLOAT"), &e);
 
 	with_cleanup_t(xcb_input_xi_get_property_reply_t) prop = xcb_input_xi_get_property_reply(
 	    dc->c,
@@ -254,7 +254,8 @@ static void di_xorg_xinput_set_prop(struct di_xorg_xinput_device *dev, const cha
 	if (prop->type == XCB_ATOM_NONE) {
 		// non-existent property should be silently ignored
 		if (logm) {
-			di_log_va(logm, DI_LOG_DEBUG, "setting non-existent property: %s\n", key);
+			di_log_va(logm, DI_LOG_DEBUG, "setting non-existent property: %.*s\n",
+			          (int)key.length, key.data);
 		}
 		return;
 	}
@@ -272,34 +273,39 @@ static void di_xorg_xinput_set_prop(struct di_xorg_xinput_device *dev, const cha
 	for (int i = 0; i < arr.length; i++) {
 		int64_t i64;
 		float f;
-		const char *str;
 		void *dst = data + step * i;
-		void *src = arr.arr + di_sizeof_type(arr.elem_type) * i;
+		union di_value *src = arr.arr + di_sizeof_type(arr.elem_type) * i;
 
 		switch (arr.elem_type) {
 		case DI_TYPE_INT:
+			f = i64 = src->int_;
+			break;
 		case DI_TYPE_UINT:
-			i64 = *(int64_t *)src;
-			f = i64;
+			f = i64 = src->uint;
 			break;
 		case DI_TYPE_NINT:
+			f = i64 = src->nint;
+			break;
 		case DI_TYPE_NUINT:
-			i64 = *(int *)src;
-			f = i64;
+			f = i64 = src->nuint;
 			break;
 		case DI_TYPE_FLOAT:
-			if (prop->type != float_atom) {
-				goto err;
-			}
-			f = (float)*(double *)src;
+			f = (float)src->float_;
 			break;
 		case DI_TYPE_STRING:
+			if (prop->type != XCB_ATOM_ATOM) {
+				goto err;
+			}
+			i64 = di_xorg_intern_atom(dc, src->string, &e);
+			if (e) {
+				return;
+			}
+			break;
 		case DI_TYPE_STRING_LITERAL:
 			if (prop->type != XCB_ATOM_ATOM) {
 				goto err;
 			}
-			str = *(const char **)src;
-			i64 = di_xorg_intern_atom(dc, str, &e);
+			i64 = di_xorg_intern_atom(dc, di_string_borrow(src->string_literal), &e);
 			if (e) {
 				return;
 			}
@@ -358,19 +364,20 @@ static void di_xorg_xinput_set_prop(struct di_xorg_xinput_device *dev, const cha
 	               prop_atom, prop->type, arr.length, item));
 
 	if (err) {
-		di_log_va(logm, DI_LOG_ERROR, "Failed to set property '%s'\n", key);
+		di_log_va(logm, DI_LOG_ERROR, "Failed to set property '%.*s'\n",
+		          (int)key.length, key.data);
 	}
 	(void)err;
 	return;
 err:
 	di_log_va(logm, DI_LOG_ERROR,
-	          "Try to set xinput property '%s' with wrong "
+	          "Try to set xinput property '%.*s' with wrong "
 	          "type of data %d\n",
-	          key, arr.elem_type);
+	          (int)key.length, key.data, arr.elem_type);
 }
 
 static struct di_array
-di_xorg_xinput_get_prop(struct di_xorg_xinput_device *dev, const char *name) {
+di_xorg_xinput_get_prop(struct di_xorg_xinput_device *dev, struct di_string name_) {
 	if (!dev->xi->dc) {
 		return DI_ARRAY_INIT;
 	}
@@ -380,13 +387,13 @@ di_xorg_xinput_get_prop(struct di_xorg_xinput_device *dev, const char *name) {
 	di_mgetmi(dc->x, log);
 	xcb_generic_error_t *e;
 	struct di_array ret = DI_ARRAY_INIT;
-	auto prop_atom = di_xorg_intern_atom(dc, name, &e);
+	auto prop_atom = di_xorg_intern_atom(dc, name_, &e);
 
 	if (e) {
 		return ret;
 	}
 
-	auto float_atom = di_xorg_intern_atom(dc, "FLOAT", &e);
+	auto float_atom = di_xorg_intern_atom(dc, di_string_borrow("FLOAT"), &e);
 
 	with_cleanup_t(xcb_input_xi_get_property_reply_t) prop = xcb_input_xi_get_property_reply(
 	    dc->c,
@@ -457,8 +464,13 @@ di_xorg_xinput_get_prop(struct di_xorg_xinput_device *dev, const char *name) {
 				unreachable();
 			}
 		} else if (ret.elem_type == DI_TYPE_STRING) {
-			const char **tmp = curr;
-			*tmp = strdup(di_xorg_get_atom_name(dc, read(32)));
+			struct di_string *tmp = curr;
+			auto atom = di_xorg_get_atom_name(dc, read(32));
+			if (atom == NULL) {
+				*tmp = DI_STRING_INIT;
+			} else {
+				*tmp = di_clone_string(*di_xorg_get_atom_name(dc, read(32)));
+			}
 		} else {
 			// float
 			double *tmp = curr;
@@ -477,8 +489,8 @@ static struct di_object *di_xorg_xinput_props(struct di_xorg_xinput_device *dev)
 	obj->deviceid = dev->deviceid;
 	obj->xi = dev->xi;
 
-	di_method(obj, "__get", di_xorg_xinput_get_prop, const char *);
-	di_method(obj, "__set", di_xorg_xinput_set_prop, const char *, struct di_array);
+	di_method(obj, "__get", di_xorg_xinput_get_prop, struct di_string);
+	di_method(obj, "__set", di_xorg_xinput_set_prop, struct di_string, struct di_array);
 	return (void *)obj;
 }
 

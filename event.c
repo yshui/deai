@@ -164,7 +164,7 @@ static struct di_object *di_create_ioev(struct di_object *obj, int fd, int t) {
 
 	// Started ioev has strong ref to ddi
 	// Stopped has weak ref
-	di_member(ret, __DEAI_MEMBER_NAME, di_obj);
+	di_member(ret, DEAI_MEMBER_NAME_RAW, di_obj);
 
 	di_method(ret, "start", di_start_ioev);
 	di_method(ret, "stop", di_stop_ioev);
@@ -232,7 +232,7 @@ static struct di_object *di_create_timer(struct di_object *obj, double timeout) 
 
 	// Started timers have strong references to di
 	// Stopped ones have weak ones
-	di_member(ret, __DEAI_MEMBER_NAME, di_obj);
+	di_member(ret, DEAI_MEMBER_NAME_RAW, di_obj);
 	return (struct di_object *)ret;
 }
 
@@ -264,7 +264,7 @@ di_create_periodic(struct di_module *evm, double interval, double offset) {
 	auto di = (struct deai *)di_obj;
 	ev_periodic_start(di->loop, &ret->pt);
 
-	di_member(ret, __DEAI_MEMBER_NAME, di_obj);
+	di_member(ret, DEAI_MEMBER_NAME_RAW, di_obj);
 	return (void *)ret;
 }
 
@@ -292,5 +292,5 @@ void di_init_event(struct deai *di) {
 	ev_prepare_init(dep, di_prepare);
 	ev_prepare_start(di->loop, (ev_prepare *)dep);
 
-	di_register_module(di, "event", &em);
+	di_register_module(di, di_string_borrow("event"), &em);
 }

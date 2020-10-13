@@ -19,6 +19,7 @@ table.insert(listen_handles, di.event:timer(0.2):on("elapsed", function()
     o.xrdb = "Xft.dpi:\t192"
     print(o.xrdb)
 
+    o.keymap = { layout = "us", options = "ctrl:nocaps" }
     xi = o.xinput
     table.insert(listen_handles, xi:on("new-device", function(dev)
         print(string.format("new device %s %s %s %d", dev.type, dev.use, dev.name, dev.id))

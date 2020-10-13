@@ -255,7 +255,7 @@ static int get_output_backlight(struct di_xorg_output *o) {
 	}
 
 	xcb_generic_error_t *e;
-	auto bklatom = di_xorg_intern_atom(o->rr->dc, "Backlight", &e);
+	auto bklatom = di_xorg_intern_atom(o->rr->dc, di_string_borrow("Backlight"), &e);
 	if (e) {
 		free(e);
 		return -1;
@@ -280,7 +280,7 @@ static void set_output_backlight(struct di_xorg_output *o, int bkl) {
 	}
 
 	xcb_generic_error_t *e;
-	auto bklatom = di_xorg_intern_atom(o->rr->dc, "Backlight", &e);
+	auto bklatom = di_xorg_intern_atom(o->rr->dc, di_string_borrow("Backlight"), &e);
 	if (e) {
 		free(e);
 		return;
@@ -302,7 +302,7 @@ static int get_output_max_backlight(struct di_xorg_output *o) {
 	}
 
 	xcb_generic_error_t *e;
-	auto bklatom = di_xorg_intern_atom(o->rr->dc, "Backlight", &e);
+	auto bklatom = di_xorg_intern_atom(o->rr->dc, di_string_borrow("Backlight"), &e);
 	if (e) {
 		free(e);
 		return -1;

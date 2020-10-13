@@ -33,10 +33,9 @@
 #include "uthash.h"
 #include "utils.h"
 
-static void load_plugin(struct deai *p, const char *sopath) {
-	if (!sopath) {
-		return;
-	}
+define_trivial_cleanup_t(char);
+
+static void load_plugin_impl(struct deai *p, char *sopath) {
 
 	void *handle = dlopen(sopath, RTLD_NOW);
 
@@ -54,10 +53,16 @@ static void load_plugin(struct deai *p, const char *sopath) {
 	init_fn(p);
 }
 
-static int load_plugin_dir(struct deai *di, const char *path) {
-	if (!path) {
-		return -1;
+static void load_plugin(struct deai *p, struct di_string sopath) {
+	if (!sopath.data) {
+		return;
 	}
+
+	with_cleanup_t(char) sopath_str = di_string_to_chars_alloc(sopath);
+	load_plugin_impl(p, sopath_str);
+}
+
+static int load_plugin_from_dir_impl(struct deai *di, const char *path) {
 
 	char rpath[PATH_MAX];
 	realpath(path, rpath);
@@ -95,7 +100,7 @@ static int load_plugin_dir(struct deai *di, const char *path) {
 		if (nlen >= 3 && strcmp(dent->d_name + nlen - 3, ".so") == 0) {
 			char *sopath;
 			asprintf(&sopath, "%s/%s", rpath, dent->d_name);
-			load_plugin(di, sopath);
+			load_plugin_impl(di, sopath);
 			free(sopath);
 		}
 	}
@@ -103,12 +108,25 @@ static int load_plugin_dir(struct deai *di, const char *path) {
 	return 0;
 }
 
-int di_chdir(struct di_object *p, const char *dir) {
-	if (!dir) {
-		return -EINVAL;
+static int load_plugin_from_dir(struct deai *p, struct di_string path) {
+	if (!path.data) {
+		return -1;
 	}
 
-	int ret = chdir(dir);
+	char path_str[PATH_MAX];
+	if (!di_string_to_chars(path, path_str, sizeof(path_str))) {
+		return -1;
+	}
+	return load_plugin_from_dir_impl(p, path_str);
+}
+
+int di_chdir(struct di_object *p, struct di_string dir) {
+	if (!dir.data) {
+		return -EINVAL;
+	}
+	with_cleanup_t(char) dir_str = di_string_to_chars_alloc(dir);
+
+	int ret = chdir(dir_str);
 	if (ret != 0) {
 		ret = -errno;
 	}
@@ -310,8 +328,7 @@ static void setproctitle_init(int argc, char **argv, struct deai *p) {
 	p->proctitle = argv[0];
 
 	size_t envsz = 0;
-	for (; environ[envsz]; envsz++) {
-	}
+	for (; environ[envsz]; envsz++) {}
 
 	char **old_env = environ;
 	environ = calloc(envsz + 1, sizeof(char *));
@@ -330,15 +347,15 @@ static void setproctitle_init(int argc, char **argv, struct deai *p) {
 	// fprintf(stderr, "%p, %lu\n", p->proctitle, p->proctitle_end -
 	// p->proctitle);
 }
-static void di_set_pr_name(struct deai *p, const char *name) {
-	if (name) {
+static void di_set_pr_name(struct deai *p, struct di_string name) {
+	if (name.data) {
 		memset((char *)p->proctitle, 0, p->proctitle_end - p->proctitle);
-		auto nlen = strlen(name);
+		auto nlen = name.length;
 
 		if (p->proctitle + nlen + 1 >= p->proctitle_end) {
 			nlen = p->proctitle_end - p->proctitle - 1;
 		}
-		strncpy((char *)p->proctitle, name, nlen);
+		strncpy((char *)p->proctitle, name.data, nlen);
 	}
 }
 #else
@@ -352,35 +369,34 @@ static void setproctitle_init(int argc, char **argv, struct deai *p) {
 static struct di_array di_get_argv(struct deai *p) {
 	struct di_array ret;
 	ret.length = p->argc;
-	ret.elem_type = DI_TYPE_STRING;
+	ret.elem_type = DI_TYPE_STRING_LITERAL;
 	ret.arr = calloc(p->argc, sizeof(void *));
 
 	const char **arr = ret.arr;
 	for (int i = 0; i < p->argc; i++) {
-		arr[i] = strdup(p->argv[i]);
+		arr[i] = p->argv[i];
 	}
 
 	return ret;
 }
 
-int di_register_module(struct deai *p, const char *name, struct di_module **m) {
+int di_register_module(struct deai *p, struct di_string name, struct di_module **m) {
 	int ret =
 	    di_add_member_move((void *)p, name, (di_type_t[]){DI_TYPE_OBJECT}, (void **)m);
 	return ret;
 }
 
 // Don't consumer the ref, because it breaks the usual method call sementics
-static int di_register_module_method(struct deai *p, const char *name, struct di_module *m) {
+static int
+di_register_module_method(struct deai *p, struct di_string name, struct di_module *m) {
 	return di_add_member_clonev((void *)p, name, DI_TYPE_OBJECT, m);
 }
 
-define_trivial_cleanup(char *, free_charpp);
-
 int di_exec(struct deai *p, struct di_array argv) {
-	with_cleanup(free_charpp) char **nargv = tmalloc(char *, argv.length + 1);
+	char **nargv = tmalloc(char *, argv.length + 1);
 	memcpy(nargv, argv.arr, sizeof(void *) * argv.length);
-
 	execvp(nargv[0], nargv);
+	free(nargv);
 	return -1;
 }
 
@@ -393,19 +409,19 @@ void di_terminate(struct deai *p) {
 }
 
 /// Add an named object as a root to keep it alive
-static bool di_add_root(struct di_object *di, const char *key, struct di_object *obj) {
+static bool di_add_root(struct di_object *di, struct di_string key, struct di_object *obj) {
 	char *buf;
-	asprintf(&buf, "__root_%s", key);
-	int rc = di_add_member_clonev(di, buf, DI_TYPE_OBJECT, obj);
+	asprintf(&buf, "__root_%.*s", (int)key.length, key.data);
+	int rc = di_add_member_clonev(di, di_string_borrow(buf), DI_TYPE_OBJECT, obj);
 	free(buf);
 	return rc == 0;
 }
 
 /// Remove an named root from roots
-static bool di_remove_root(struct di_object *di, const char *key) {
+static bool di_remove_root(struct di_object *di, struct di_string key) {
 	char *buf;
-	asprintf(&buf, "__root_%s", key);
-	int rc = di_remove_member_raw(di, buf);
+	asprintf(&buf, "__root_%.*s", (int)key.length, key.data);
+	int rc = di_remove_member_raw(di, di_string_borrow(buf));
 	free(buf);
 	return rc == 0;
 }
@@ -413,10 +429,14 @@ static bool di_remove_root(struct di_object *di, const char *key) {
 /// Remove all named roots
 static void di_clear_roots(struct di_object *di_) {
 	static const char *const root_prefix = "__root_";
+	const size_t root_prefix_len = strlen(root_prefix);
 	auto di = (struct di_object_internal *)di_;
 	struct di_member *i, *tmp;
 	HASH_ITER (hh, di->members, i, tmp) {
-		if (strncmp(i->name, root_prefix, strlen(root_prefix)) == 0) {
+		if (i->name.length < root_prefix_len) {
+			continue;
+		}
+		if (strncmp(i->name.data, root_prefix, root_prefix_len) == 0) {
 			di_remove_member_raw(di_, i->name);
 		}
 	}
@@ -482,8 +502,8 @@ int main(int argc, char *argv[]) {
 
 	auto roots = di_new_object_with_type(struct di_roots);
 	di_set_type((struct di_object *)roots, "deai:Roots");
-	DI_CHECK_OK(di_method(roots, "add", di_add_root, const char *, struct di_object *));
-	DI_CHECK_OK(di_method(roots, "remove", di_remove_root, const char *));
+	DI_CHECK_OK(di_method(roots, "add", di_add_root, struct di_string, struct di_object *));
+	DI_CHECK_OK(di_method(roots, "remove", di_remove_root, struct di_string));
 	DI_CHECK_OK(di_method(roots, "clear", di_clear_roots));
 	DI_CHECK_OK(di_method(roots, "__add_anonymous", di_add_anonymous_root,
 	                      struct di_object *));
@@ -517,18 +537,18 @@ int main(int argc, char *argv[]) {
 		exit(1);
 	}
 
-	DI_CHECK_OK(di_method(p, "load_plugin_from_dir", load_plugin_dir, const char *));
-	DI_CHECK_OK(di_method(p, "load_plugin", load_plugin, const char *));
+	DI_CHECK_OK(di_method(p, "load_plugin_from_dir", load_plugin_from_dir, struct di_string));
+	DI_CHECK_OK(di_method(p, "load_plugin", load_plugin, struct di_string));
 	DI_CHECK_OK(di_method(p, "register_module", di_register_module_method,
-	                      const char *, struct di_object *));
-	DI_CHECK_OK(di_method(p, "chdir", di_chdir, const char *));
+	                      struct di_string, struct di_object *));
+	DI_CHECK_OK(di_method(p, "chdir", di_chdir, struct di_string));
 	DI_CHECK_OK(di_method(p, "exec", di_exec, struct di_array));
 
 	DI_CHECK_OK(di_method(p, "quit", di_prepare_quit));
 	DI_CHECK_OK(di_method(p, "exit", di_prepare_exit, int));
 	DI_CHECK_OK(di_method(p, "terminate", di_terminate));
 #ifdef HAVE_SETPROCTITLE
-	DI_CHECK_OK(di_method(p, "__set_proctitle", di_set_pr_name, const char *));
+	DI_CHECK_OK(di_method(p, "__set_proctitle", di_set_pr_name, struct di_string));
 #endif
 #ifdef TRACK_OBJECTS
 	auto closure = (struct di_object *)di_closure(di_dump_objects, ());
@@ -600,7 +620,7 @@ int main(int argc, char *argv[]) {
 	setproctitle_init(argc, argv, p);
 
 	// (3) Load default plugins
-	int ret = load_plugin_dir(p, DI_PLUGIN_INSTALL_DIR);
+	int ret = load_plugin_from_dir_impl(p, DI_PLUGIN_INSTALL_DIR);
 	if (ret != 0) {
 		fprintf(stderr, "Failed to load plugins from \"%s\", which is fine.\n",
 		        DI_PLUGIN_INSTALL_DIR);
@@ -620,18 +640,19 @@ int main(int argc, char *argv[]) {
 	di_type_t rt;
 	union di_value retd;
 	bool called;
-	ret = di_rawcallxn(mod, method, &rt, &retd, (struct di_tuple){nargs, di_args}, &called);
+	ret = di_rawcallxn(mod, di_string_borrow(method), &rt, &retd,
+	                   (struct di_tuple){nargs, di_args}, &called);
 	if (ret != 0) {
 		fprintf(stderr, "Failed to call \"%s.%s\"\n", modname ? modname : "", method);
 		exit(EXIT_FAILURE);
 	}
 
 	if (rt == DI_TYPE_OBJECT) {
-		const char *errmsg = NULL;
+		struct di_string errmsg;
 		if (di_get(retd.object, "errmsg", errmsg) == 0) {
-			fprintf(stderr, "The function you called returned an error message: %s\n",
-			        errmsg);
-			free((char *)errmsg);
+			fprintf(stderr, "The function you called returned an error message: %.*s\n",
+			        (int)errmsg.length, errmsg.data);
+			di_free_string(errmsg);
 		}
 	}
 

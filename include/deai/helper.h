@@ -19,13 +19,9 @@
 #define CONCAT(a, b) CONCAT1(a, b)
 
 PUBLIC_DEAI_API struct di_object *ret_nonnull di_new_error(const char *nonnull fmt, ...);
-
-int di_gmethod(struct di_object *nonnull o, const char *nonnull name,
-               void (*nonnull fn)(void)) nonnull_args(1, 2, 3);
-
-PUBLIC_DEAI_API int di_proxy_signal(struct di_object *nonnull src, const char *nonnull srcsig,
+PUBLIC_DEAI_API int di_proxy_signal(struct di_object *nonnull src, struct di_string srcsig,
                                     struct di_object *nonnull proxy,
-                                    const char *nonnull proxysig) nonnull_args(1, 2, 3, 4);
+                                    struct di_string proxysig) nonnull_args(1, 3);
 
 #define DTOR(o) ((struct di_object *)(o))->dtor
 
@@ -49,16 +45,17 @@ PUBLIC_DEAI_API int di_proxy_signal(struct di_object *nonnull src, const char *n
 		di_setx(o, prop, di_typeof(__tmp), &__tmp);                              \
 	})
 
-#define di_get(o, prop, r)                                                                      \
-	({                                                                                      \
-		int rc;                                                                         \
-		do {                                                                            \
-			rc = di_getxt((void *)(o), prop, di_typeof(r), (union di_value *)&(r)); \
-			if (rc != 0) {                                                          \
-				break;                                                          \
-			}                                                                       \
-		} while (0);                                                                    \
-		rc;                                                                             \
+#define di_get(o, prop, r)                                                               \
+	({                                                                               \
+		int rc;                                                                  \
+		do {                                                                     \
+			rc = di_getxt((void *)(o), di_string_borrow(prop), di_typeof(r),   \
+			              (union di_value *)&(r));                           \
+			if (rc != 0) {                                                   \
+				break;                                                   \
+			}                                                                \
+		} while (0);                                                             \
+		rc;                                                                      \
 	})
 
 #define di_gets(o, prop, r)                                                              \
@@ -164,8 +161,8 @@ PUBLIC_DEAI_API int di_proxy_signal(struct di_object *nonnull src, const char *n
 			di_type_t rtype;                                                 \
 			union di_value ret;                                              \
 			bool called;                                                     \
-			rc = di_callx((struct di_object *)(o), (name), &rtype, &ret,     \
-			              di_tuple(__VA_ARGS__), &called);                   \
+			rc = di_callx((struct di_object *)(o), di_string_borrow(name),     \
+			              &rtype, &ret, di_tuple(__VA_ARGS__), &called);     \
 			if (rc != 0) {                                                   \
 				break;                                                   \
 			}                                                                \
@@ -174,27 +171,28 @@ PUBLIC_DEAI_API int di_proxy_signal(struct di_object *nonnull src, const char *n
 		rc;                                                                      \
 	})
 
-#define di_callr(o, name, r, ...)                                                          \
-	({                                                                                 \
-		int __deai_callr_rc = 0;                                                   \
-		do {                                                                       \
-			di_type_t __deai_callr_rtype;                                      \
-			union di_value __deai_callr_ret;                                   \
-			bool called;                                                       \
-			__deai_callr_rc =                                                  \
-			    di_callx((struct di_object *)(o), (name), &__deai_callr_rtype, \
-			             &__deai_callr_ret, di_tuple(__VA_ARGS__), &called);   \
-			if (__deai_callr_rc != 0) {                                        \
-				break;                                                     \
-			}                                                                  \
-			if (di_typeof(r) != __deai_callr_rtype) {                          \
-				di_free_value(__deai_callr_rtype, &__deai_callr_ret);      \
-				__deai_callr_rc = -EINVAL;                                 \
-				break;                                                     \
-			}                                                                  \
-			(r) = *(typeof(r) *)&__deai_callr_ret;                             \
-		} while (0);                                                               \
-		__deai_callr_rc;                                                           \
+#define di_callr(o, name, r, ...)                                                        \
+	({                                                                               \
+		int __deai_callr_rc = 0;                                                 \
+		do {                                                                     \
+			di_type_t __deai_callr_rtype;                                    \
+			union di_value __deai_callr_ret;                                 \
+			bool called;                                                     \
+			__deai_callr_rc =                                                \
+			    di_callx((struct di_object *)(o), di_string_borrow(name),      \
+			             &__deai_callr_rtype, &__deai_callr_ret,             \
+			             di_tuple(__VA_ARGS__), &called);                    \
+			if (__deai_callr_rc != 0) {                                      \
+				break;                                                   \
+			}                                                                \
+			if (di_typeof(r) != __deai_callr_rtype) {                        \
+				di_free_value(__deai_callr_rtype, &__deai_callr_ret);    \
+				__deai_callr_rc = -EINVAL;                               \
+				break;                                                   \
+			}                                                                \
+			(r) = *(typeof(r) *)&__deai_callr_ret;                           \
+		} while (0);                                                             \
+		__deai_callr_rc;                                                         \
 	})
 
 #define di_variant(x)                                                                    \
@@ -243,7 +241,8 @@ PUBLIC_DEAI_API int di_proxy_signal(struct di_object *nonnull src, const char *n
 		rc;                                                                      \
 	})
 
-#define di_has_member(o, name) (di_lookup((struct di_object *)(o), name) != NULL)
+#define di_has_member(o, name)                                                           \
+	(di_lookup((struct di_object *)(o), di_string_borrow(name)) != NULL)
 #define di_emit(o, name, ...) di_emitn((struct di_object *)o, name, di_tuple(__VA_ARGS__))
 
 /// Register a field of struct `o` as a read only member of the di_object, by using a
@@ -256,10 +255,11 @@ PUBLIC_DEAI_API int di_proxy_signal(struct di_object *nonnull src, const char *n
 	})
 
 #define di_member(o, name, v)                                                            \
-	di_add_member_move((struct di_object *)(o), name, (di_type_t[]){di_typeof(v)}, &(v))
+	di_add_member_move((struct di_object *)(o), di_string_borrow(name),                \
+	                   (di_type_t[]){di_typeof(v)}, &(v))
 
 #define di_member_clone(o, name, v)                                                      \
-	di_add_member_clonev((struct di_object *)(o), name, di_typeof(v), (v))
+	di_add_member_clonev((struct di_object *)(o), di_string_borrow(name), di_typeof(v), (v))
 
 #define di_getter(o, name, g) di_method(o, STRINGIFY(__get_##name), g)
 #define di_setter(o, name, s, type) di_method(o, STRINGIFY(__set_##name), s, type);
@@ -289,7 +289,7 @@ PUBLIC_DEAI_API int di_proxy_signal(struct di_object *nonnull src, const char *n
 	unsigned int *: 0, \
 	int64_t *: 0, \
 	uint64_t *: 0, \
-	char **: NULL, \
+	struct di_string *: DI_STRING_INIT, \
 	const char **: NULL, \
 	struct di_object **: NULL, \
 	struct di_weak_object **: NULL, \
@@ -304,8 +304,8 @@ PUBLIC_DEAI_API int di_proxy_signal(struct di_object *nonnull src, const char *n
 #define di_return_typeid(fn, ...) di_typeid(di_return_typeof(fn, ##__VA_ARGS__))
 
 #define di_register_typed_method(o, name, fn, rtype, ...)                                \
-	di_add_method((struct di_object *)(o), (name), (void *)(fn), (rtype),            \
-	              VA_ARGS_LENGTH(__VA_ARGS__), ##__VA_ARGS__)
+	di_add_method((struct di_object *)(o), di_string_borrow(name), (void *)(fn),       \
+	              (rtype), VA_ARGS_LENGTH(__VA_ARGS__), ##__VA_ARGS__)
 
 #define INDIRECT(fn, ...) fn(__VA_ARGS__)
 
@@ -316,17 +316,9 @@ PUBLIC_DEAI_API int di_proxy_signal(struct di_object *nonnull src, const char *n
 	         di_return_typeid(fn, struct di_object *, ##__VA_ARGS__)                 \
 	             LIST_APPLY_pre(di_typeid, SEP_COMMA, ##__VA_ARGS__))
 
-static inline void unused di_free_di_weak_objectp(struct di_weak_object *nullable *nonnull p) {
-	if (*p) {
-		di_drop_weak_ref(p);
-	}
-}
-
 define_object_cleanup(di_closure);
 
-#define di_weak_object_with_cleanup with_object_cleanup(di_weak_object)
 #define di_closure_with_cleanup with_object_cleanup(di_closure)
-#define di_object_with_cleanup with_object_cleanup(di_object)
 
 static inline unused const char *nonnull di_type_to_string(di_type_t type) {
 #define TYPE_CASE(name)                                                                  \
@@ -343,11 +335,13 @@ static inline unused const char *nonnull di_type_to_string(di_type_t type) {
 	unreachable();
 }
 
-#define __DEAI_MEMBER_NAME "__deai"
+#define DEAI_MEMBER_NAME_RAW "__deai"
+#define DEAI_MEMBER_NAME                                                                 \
+	((struct di_string){.data = DEAI_MEMBER_NAME_RAW, .length = strlen(DEAI_MEMBER_NAME_RAW)})
 
 static inline struct di_object *nullable unused di_object_get_deai_weak(struct di_object *nonnull o) {
 	di_weak_object_with_cleanup weak = NULL;
-	di_get(o, __DEAI_MEMBER_NAME, weak);
+	di_get(o, DEAI_MEMBER_NAME_RAW, weak);
 
 	if (weak == NULL) {
 		return NULL;
@@ -357,29 +351,29 @@ static inline struct di_object *nullable unused di_object_get_deai_weak(struct d
 
 static inline struct di_object *nullable unused di_object_get_deai_strong(struct di_object *nonnull o) {
 	struct di_object *strong = NULL;
-	di_get(o, __DEAI_MEMBER_NAME, strong);
+	di_get(o, DEAI_MEMBER_NAME_RAW, strong);
 	return strong;
 }
 
 /// Downgrade the __deai member from a strong reference to a weak reference
 static inline void unused di_object_downgrade_deai(struct di_object *nonnull o) {
 	di_object_with_cleanup di_obj = NULL;
-	di_get(o, __DEAI_MEMBER_NAME, di_obj);
+	di_get(o, DEAI_MEMBER_NAME_RAW, di_obj);
 	if (di_obj != NULL) {
 		__auto_type weak = di_weakly_ref_object(di_obj);
-		di_remove_member_raw(o, __DEAI_MEMBER_NAME);
-		di_member(o, __DEAI_MEMBER_NAME, weak);
+		di_remove_member_raw(o, DEAI_MEMBER_NAME);
+		di_member(o, DEAI_MEMBER_NAME_RAW, weak);
 	}
 }
 /// Upgrade the __deai member from a weak reference to a strong reference
 static inline void unused di_object_upgrade_deai(struct di_object *nonnull o) {
 	di_weak_object_with_cleanup di_obj = NULL;
-	di_get(o, __DEAI_MEMBER_NAME, di_obj);
+	di_get(o, DEAI_MEMBER_NAME_RAW, di_obj);
 	if (di_obj != NULL) {
 		__auto_type strong = di_upgrade_weak_ref(di_obj);
-		di_remove_member_raw(o, __DEAI_MEMBER_NAME);
+		di_remove_member_raw(o, DEAI_MEMBER_NAME);
 		if (strong != NULL) {
-			di_member(o, "__deai", strong);
+			di_member(o, DEAI_MEMBER_NAME_RAW, strong);
 		}
 	}
 }

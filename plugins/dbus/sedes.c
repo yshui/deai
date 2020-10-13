@@ -9,7 +9,7 @@
 #include "common.h"
 #include "list.h"
 #include "sedes.h"
-static di_type_t _dbus_type_to_di(int type) {
+static di_type_t dbus_type_to_di(int type) {
 	switch (type) {
 	case DBUS_TYPE_BOOLEAN:
 		return DI_TYPE_BOOL;
@@ -36,64 +36,47 @@ static di_type_t _dbus_type_to_di(int type) {
 	}
 }
 
-#define _DESERIAL(typeid, type, tgt, l)                                                  \
+#define DESERIAL(typeid, type, tgt)                                                      \
 	case typeid:                                                                     \
 		do {                                                                     \
 			type __o;                                                        \
 			dbus_message_iter_get_basic(i, &__o);                            \
-			(tgt) = __o;                                                     \
-			goto l;                                                          \
-		} while (0)
+			retp->tgt = __o;                                                 \
+			*otype = di_typeof(retp->tgt);                                   \
+		} while (0);                                                             \
+		break
 
-static void _dbus_deserialize_basic(DBusMessageIter *i, void *retp, di_type_t *otype, int type) {
-	int64_t i64;
-	uint64_t u64;
-	double d;
-	const char *str;
-	bool b;
+static void
+dbus_deserialize_basic(DBusMessageIter *i, union di_value *retp, di_type_t *otype, int type) {
 	switch (type) {
-		_DESERIAL(DBUS_TYPE_BOOLEAN, dbus_bool_t, b, dbool);
-		_DESERIAL(DBUS_TYPE_INT16, dbus_int16_t, i64, dint);
-		_DESERIAL(DBUS_TYPE_INT32, dbus_int32_t, i64, dint);
-		_DESERIAL(DBUS_TYPE_UNIX_FD, dbus_int32_t, i64, dint);
-		_DESERIAL(DBUS_TYPE_INT64, dbus_int64_t, i64, dint);
-		_DESERIAL(DBUS_TYPE_UINT16, dbus_uint16_t, u64, duint);
-		_DESERIAL(DBUS_TYPE_UINT32, dbus_uint32_t, u64, duint);
-		_DESERIAL(DBUS_TYPE_UINT64, dbus_uint64_t, u64, duint);
-		_DESERIAL(DBUS_TYPE_DOUBLE, double, d, dfloat);
-		_DESERIAL(DBUS_TYPE_STRING, const char *, str, dstr);
+		DESERIAL(DBUS_TYPE_BOOLEAN, dbus_bool_t, bool_);
+		DESERIAL(DBUS_TYPE_INT16, dbus_int16_t, int_);
+		DESERIAL(DBUS_TYPE_INT32, dbus_int32_t, int_);
+		DESERIAL(DBUS_TYPE_UNIX_FD, dbus_int32_t, int_);
+		DESERIAL(DBUS_TYPE_INT64, dbus_int64_t, int_);
+		DESERIAL(DBUS_TYPE_UINT16, dbus_uint16_t, uint);
+		DESERIAL(DBUS_TYPE_UINT32, dbus_uint32_t, uint);
+		DESERIAL(DBUS_TYPE_UINT64, dbus_uint64_t, uint);
+		DESERIAL(DBUS_TYPE_DOUBLE, double, float_);
+	case DBUS_TYPE_STRING:;
+		const char *dbus_string;
+		dbus_message_iter_get_basic(i, &dbus_string);
+		retp->string = di_string_dup(dbus_string);
+		*otype = DI_TYPE_STRING;
+		break;
 	default:
 		assert(false);
 	}
-dbool:
-	*(bool *)retp = b;
-	*otype = DI_TYPE_BOOL;
-	return;
-dint:
-	*(int64_t *)retp = i64;
-	*otype = DI_TYPE_INT;
-	return;
-duint:
-	*(uint64_t *)retp = u64;
-	*otype = DI_TYPE_UINT;
-	return;
-dfloat:
-	*(double *)retp = d;
-	*otype = DI_TYPE_FLOAT;
-	return;
-dstr:
-	*(char **)retp = strdup(str);
-	*otype = DI_TYPE_STRING;
 }
 
 #undef _DESERIAL
 
-static void _dbus_deserialize_one(DBusMessageIter *i, void *retp, di_type_t *otype, int type);
+static void dbus_deserialize_one(DBusMessageIter *i, void *retp, di_type_t *otype, int type);
 
 // Deserialize an array. `i' is the iterator, already recursed into the array
 // `type' is the array element type
 static void
-_dbus_deserialize_array(DBusMessageIter *i, struct di_array *retp, int type, int length) {
+dbus_deserialize_array(DBusMessageIter *i, struct di_array *retp, int type, int length) {
 	if (dbus_type_is_fixed(type)) {
 		struct di_array ret;
 		int length;
@@ -104,7 +87,7 @@ _dbus_deserialize_array(DBusMessageIter *i, struct di_array *retp, int type, int
 	}
 
 	struct di_array ret;
-	ret.elem_type = _dbus_type_to_di(type);
+	ret.elem_type = dbus_type_to_di(type);
 
 	size_t esize = di_sizeof_type(ret.elem_type);
 	ret.length = length;
@@ -115,7 +98,7 @@ _dbus_deserialize_array(DBusMessageIter *i, struct di_array *retp, int type, int
 	ret.arr = calloc(ret.length, esize);
 	for (int x = 0; x < ret.length; x++) {
 		di_type_t _;
-		_dbus_deserialize_one(i, ret.arr + esize * x, &_, type);
+		dbus_deserialize_one(i, ret.arr + esize * x, &_, type);
 		dbus_message_iter_next(i);
 	}
 	*retp = ret;
@@ -133,11 +116,11 @@ void _dbus_deserialize_struct(DBusMessageIter *i, void *retp) {
 	t.elements = tmalloc(struct di_variant, t.length);
 	for (int x = 0; x < t.length; x++) {
 		int type = dbus_message_iter_get_arg_type(i);
-		t.elements[x].type = _dbus_type_to_di(type);
+		t.elements[x].type = dbus_type_to_di(type);
 
 		t.elements[x].value = calloc(1, di_sizeof_type(t.elements[x].type));
 		di_type_t rtype;
-		_dbus_deserialize_one(i, t.elements[x].value, &rtype, type);
+		dbus_deserialize_one(i, t.elements[x].value, &rtype, type);
 
 		// Dict type can't be discerned from the outer type alone (which
 		// would be array).
@@ -152,7 +135,7 @@ void _dbus_deserialize_struct(DBusMessageIter *i, void *retp) {
 	*(struct di_tuple *)retp = t;
 }
 
-static void _dbus_deserialize_dict(DBusMessageIter *i, void *retp, int length) {
+static void dbus_deserialize_dict(DBusMessageIter *i, void *retp, int length) {
 	auto o = di_new_object_with_type(struct di_object);
 	for (int x = 0; x < length; x++) {
 		struct di_tuple t;
@@ -169,9 +152,9 @@ static void _dbus_deserialize_dict(DBusMessageIter *i, void *retp, int length) {
 	*(struct di_object **)retp = o;
 }
 
-static void _dbus_deserialize_one(DBusMessageIter *i, void *retp, di_type_t *otype, int type) {
+static void dbus_deserialize_one(DBusMessageIter *i, void *retp, di_type_t *otype, int type) {
 	if (dbus_type_is_basic(type)) {
-		return _dbus_deserialize_basic(i, retp, otype, type);
+		return dbus_deserialize_basic(i, retp, otype, type);
 	}
 
 	if (type == DBUS_TYPE_ARRAY) {
@@ -185,7 +168,7 @@ static void _dbus_deserialize_one(DBusMessageIter *i, void *retp, di_type_t *oty
 			int type3 = dbus_message_iter_get_arg_type(&i3);
 			if (type3 == DBUS_TYPE_STRING) {
 				*otype = DI_TYPE_OBJECT;
-				return _dbus_deserialize_dict(
+				return dbus_deserialize_dict(
 				    &i2, retp, dbus_message_iter_get_element_count(i));
 			}
 		}
@@ -197,8 +180,8 @@ static void _dbus_deserialize_one(DBusMessageIter *i, void *retp, di_type_t *oty
 			*(struct di_array *)retp = DI_ARRAY_INIT;
 			return;
 		}
-		return _dbus_deserialize_array(&i2, retp, type2,
-		                               dbus_message_iter_get_element_count(i));
+		return dbus_deserialize_array(&i2, retp, type2,
+		                              dbus_message_iter_get_element_count(i));
 	}
 
 	if (type == DBUS_TYPE_STRUCT || type == DBUS_TYPE_DICT_ENTRY) {
@@ -209,7 +192,7 @@ static void _dbus_deserialize_one(DBusMessageIter *i, void *retp, di_type_t *oty
 	}
 }
 
-static int _di_type_to_dbus_basic(di_type_t type) {
+static int di_type_to_dbus_basic(di_type_t type) {
 	static_assert(sizeof(int) == 4, "NINT is not INT32");
 	static_assert(sizeof(unsigned int) == 4, "NUINT is not UINT32");
 	switch (type) {
@@ -245,11 +228,11 @@ static int _di_type_to_dbus_basic(di_type_t type) {
 	}
 }
 
-struct _dbus_signature {
+struct dbus_signature {
 	char *current;
 	int length;
 	int nchild;
-	struct _dbus_signature *child;
+	struct dbus_signature *child;
 };
 
 // TODO(yshui) Serialization of arrays is ambiguous. It can be serialized as an array, a
@@ -257,18 +240,18 @@ struct _dbus_signature {
 // to figure out how to properly serialize the value.
 // Same for variants. They can be serialized as variant, or as their inner typep.
 // FIXME currently array of variants are always serialized as dbus struct.
-static int _type_signature_length_of_di_value(di_type_t type, void *d) {
-	int dtype = _di_type_to_dbus_basic(type);
+static int type_signature_length_of_di_value(di_type_t type, void *d) {
+	int dtype = di_type_to_dbus_basic(type);
 	if (dbus_type_is_basic(dtype)) {
 		return 1;
 	}
 	if (type == DI_TYPE_ARRAY) {
 		struct di_array *arr = d;
-		int v0 = _type_signature_length_of_di_value(arr->elem_type, arr->arr);
+		int v0 = type_signature_length_of_di_value(arr->elem_type, arr->arr);
 		int step = di_sizeof_type(arr->elem_type);
 		for (int i = 1; i < arr->elem_type; i++) {
-			int v = _type_signature_length_of_di_value(arr->elem_type,
-			                                           arr->arr + step * i);
+			int v = type_signature_length_of_di_value(arr->elem_type,
+			                                          arr->arr + step * i);
 			if (v != v0) {
 				return -1;
 			}
@@ -279,8 +262,8 @@ static int _type_signature_length_of_di_value(di_type_t type, void *d) {
 		struct di_tuple *t = d;
 		int ret = 0;
 		for (int i = 0; i < t->length; i++) {
-			int tmp = _type_signature_length_of_di_value(t->elements[i].type,
-			                                             t->elements[i].value);
+			int tmp = type_signature_length_of_di_value(t->elements[i].type,
+			                                            t->elements[i].value);
 			if (tmp < 0) {
 				return tmp;
 			}
@@ -291,8 +274,8 @@ static int _type_signature_length_of_di_value(di_type_t type, void *d) {
 	return -1;
 }
 
-static const char *_verify_type_signature(di_type_t type, void *d, const char *signature) {
-	int dtype = _di_type_to_dbus_basic(type);
+static const char *verify_type_signature(di_type_t type, void *d, const char *signature) {
+	int dtype = di_type_to_dbus_basic(type);
 	if (dbus_type_is_basic(dtype)) {
 		return dtype == *signature ? signature + 1 : NULL;
 	}
@@ -302,10 +285,10 @@ static const char *_verify_type_signature(di_type_t type, void *d, const char *s
 			return NULL;
 		}
 		int step = di_sizeof_type(arr->elem_type);
-		auto ret = _verify_type_signature(arr->elem_type, arr->arr, signature + 1);
+		auto ret = verify_type_signature(arr->elem_type, arr->arr, signature + 1);
 		for (int i = 1; i < arr->length; i++) {
-			if (!_verify_type_signature(arr->elem_type, arr->arr + step * i,
-			                            signature + 1)) {
+			if (!verify_type_signature(arr->elem_type, arr->arr + step * i,
+			                           signature + 1)) {
 				return NULL;
 			}
 		}
@@ -318,7 +301,7 @@ static const char *_verify_type_signature(di_type_t type, void *d, const char *s
 		}
 		auto curr = signature;
 		for (int i = 0; i < arr->length; i++) {
-			auto next = _verify_type_signature(vars[i].type, vars[i].value, curr);
+			auto next = verify_type_signature(vars[i].type, vars[i].value, curr);
 			if (!next) {
 				return NULL;
 			}
@@ -331,36 +314,36 @@ static const char *_verify_type_signature(di_type_t type, void *d, const char *s
 	return NULL;
 }
 
-static void free_dbus_signature(struct _dbus_signature sig) {
+static void free_dbus_signature(struct dbus_signature sig) {
 	for (int i = 0; i < sig.nchild; i++) {
 		free_dbus_signature(sig.child[i]);
 	}
 	free(sig.child);
 }
 
-static struct _dbus_signature
-_type_signature_of_di_value_to_buffer(di_type_t type, void *d, char *buffer) {
-	int dtype = _di_type_to_dbus_basic(type);
+static struct dbus_signature
+type_signature_of_di_value_to_buffer(di_type_t type, void *d, char *buffer) {
+	int dtype = di_type_to_dbus_basic(type);
 	if (dbus_type_is_basic(dtype)) {
 		*buffer = (char)dtype;
-		return (struct _dbus_signature){buffer, 1, 0, NULL};
+		return (struct dbus_signature){buffer, 1, 0, NULL};
 	}
 	if (type == DI_TYPE_ARRAY) {
 		*buffer = 'a';
 		struct di_array *arr = d;
-		auto res = _type_signature_of_di_value_to_buffer(arr->elem_type, arr->arr,
-		                                                 buffer + 1);
-		auto v = _verify_type_signature(type, d, buffer);
+		auto res = type_signature_of_di_value_to_buffer(arr->elem_type, arr->arr,
+		                                                buffer + 1);
+		auto v = verify_type_signature(type, d, buffer);
 		if (!v) {
 			free_dbus_signature(res);
-			return (struct _dbus_signature){NULL, -EINVAL, 0, NULL};
+			return (struct dbus_signature){NULL, -EINVAL, 0, NULL};
 		}
 
-		struct _dbus_signature ret;
+		struct dbus_signature ret;
 		ret.current = buffer;
 		ret.length = res.length + 1;
 		ret.nchild = 1;
-		ret.child = tmalloc(struct _dbus_signature, 1);
+		ret.child = tmalloc(struct dbus_signature, 1);
 		ret.child[0] = res;
 		return ret;
 	}
@@ -368,13 +351,13 @@ _type_signature_of_di_value_to_buffer(di_type_t type, void *d, char *buffer) {
 		char *curr = buffer;
 		*curr++ = '(';
 		struct di_tuple *t = d;
-		struct _dbus_signature ret;
+		struct dbus_signature ret;
 		ret.current = buffer;
 		ret.length = 2;
 		ret.nchild = t->length;
-		ret.child = tmalloc(struct _dbus_signature, t->length);
+		ret.child = tmalloc(struct dbus_signature, t->length);
 		for (int i = 0; i < t->length; i++) {
-			ret.child[i] = _type_signature_of_di_value_to_buffer(
+			ret.child[i] = type_signature_of_di_value_to_buffer(
 			    t->elements[i].type, t->elements[i].value, curr);
 			if (!ret.child[i].current) {
 				auto tmp = ret.child[i];
@@ -387,25 +370,25 @@ _type_signature_of_di_value_to_buffer(di_type_t type, void *d, char *buffer) {
 		*curr++ = ')';
 		return ret;
 	}
-	return (struct _dbus_signature){NULL, -EINVAL, 0, NULL};
+	return (struct dbus_signature){NULL, -EINVAL, 0, NULL};
 }
 
-static struct _dbus_signature _type_signature_of_di_value(di_type_t type, void *d) {
-	int len = _type_signature_length_of_di_value(type, d);
+static struct dbus_signature type_signature_of_di_value(di_type_t type, void *d) {
+	int len = type_signature_length_of_di_value(type, d);
 	if (len < 0) {
-		return (struct _dbus_signature){NULL, -EINVAL, 0, NULL};
+		return (struct dbus_signature){NULL, -EINVAL, 0, NULL};
 	}
 	char *ret = malloc(len + 1);
-	auto rc = _type_signature_of_di_value_to_buffer(type, d, ret);
+	auto rc = type_signature_of_di_value_to_buffer(type, d, ret);
 	if (rc.length < 0) {
 		free(ret);
 	}
 	return rc;
 }
 
-static int _dbus_serialize_with_signature(DBusMessageIter *i, struct di_variant var,
-                                          struct _dbus_signature si) {
-	int dtype = _di_type_to_dbus_basic(var.type);
+static int dbus_serialize_with_signature(DBusMessageIter *i, struct di_variant var,
+                                         struct dbus_signature si) {
+	int dtype = di_type_to_dbus_basic(var.type);
 	if (dbus_type_is_basic(dtype)) {
 		assert(dtype == *si.current);
 		dbus_message_iter_append_basic(i, dtype, var.value);
@@ -415,7 +398,7 @@ static int _dbus_serialize_with_signature(DBusMessageIter *i, struct di_variant 
 	if (var.type == DI_TYPE_ARRAY && arr->elem_type != DI_TYPE_VARIANT) {
 		assert(dtype == DBUS_TYPE_ARRAY);
 		assert(dtype == *si.current);
-		int atype = _di_type_to_dbus_basic(arr->elem_type);
+		int atype = di_type_to_dbus_basic(arr->elem_type);
 
 		assert(si.nchild == 1);
 		auto si2 = si.child[0];
@@ -445,7 +428,7 @@ static int _dbus_serialize_with_signature(DBusMessageIter *i, struct di_variant 
 			return -ENOMEM;
 		}
 		for (int i = 0; i < arr->length; i++) {
-			int ret = _dbus_serialize_with_signature(
+			int ret = dbus_serialize_with_signature(
 			    &i2, (struct di_variant){arr->arr + step * i, arr->elem_type}, si2);
 			if (ret < 0) {
 				return ret;
@@ -465,7 +448,7 @@ static int _dbus_serialize_with_signature(DBusMessageIter *i, struct di_variant 
 			return -ENOMEM;
 		}
 		for (int i = 0; i < arr->length; i++) {
-			int ret = _dbus_serialize_with_signature(&i2, vars[i], si.child[i]);
+			int ret = dbus_serialize_with_signature(&i2, vars[i], si.child[i]);
 			if (ret < 0) {
 				return ret;
 			}
@@ -475,12 +458,12 @@ static int _dbus_serialize_with_signature(DBusMessageIter *i, struct di_variant 
 }
 
 int _dbus_serialize_struct(DBusMessageIter *it, struct di_tuple t) {
-	auto sig = _type_signature_of_di_value(DI_TYPE_TUPLE, &t);
+	auto sig = type_signature_of_di_value(DI_TYPE_TUPLE, &t);
 	if (!sig.current) {
 		return sig.length;
 	}
 	for (int i = 0; i < t.length; i++) {
-		int ret = _dbus_serialize_with_signature(it, t.elements[i], sig.child[i]);
+		int ret = dbus_serialize_with_signature(it, t.elements[i], sig.child[i]);
 		if (ret < 0) {
 			return ret;
 		}

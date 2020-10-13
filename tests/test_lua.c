@@ -12,10 +12,10 @@ static struct di_object *create_di_object(struct di_object *unused _) {
 }
 
 DEAI_PLUGIN_ENTRY_POINT(di) {
-	di_remove_member_raw((struct di_object *)di, "lua");
-	di_remove_member_raw((struct di_object *)di, "xorg");
-	di_remove_member_raw((struct di_object *)di, "file");
-	di_remove_member_raw((struct di_object *)di, "dbus");
+	di_remove_member_raw((struct di_object *)di, di_string_borrow("lua"));
+	di_remove_member_raw((struct di_object *)di, di_string_borrow("xorg"));
+	di_remove_member_raw((struct di_object *)di, di_string_borrow("file"));
+	di_remove_member_raw((struct di_object *)di, di_string_borrow("dbus"));
 	di_call(di, "load_plugin", (const char *)"./plugins/lua/di_lua.so");
 	di_call(di, "load_plugin", (const char *)"./plugins/xorg/di_xorg.so");
 	di_call(di, "load_plugin", (const char *)"./plugins/file/di_file.so");
@@ -33,7 +33,15 @@ DEAI_PLUGIN_ENTRY_POINT(di) {
 	for (int i = 0; i < dargv.length; i++) {
 		if (strcmp(argv[i], "--") == 0) {
 			if (i + 1 < dargv.length) {
-				di_call(luam, "load_script", argv[i + 1]);
+				di_object_with_cleanup o = NULL;
+				DI_CHECK_OK(di_callr(luam, "load_script", o, di_string_borrow(argv[i + 1])));
+
+				struct di_string errmsg;
+				if (di_get(o, "errmsg", errmsg) == 0) {
+					fprintf(stderr, "Failed to load script %.*s\n",
+					        (int)errmsg.length, errmsg.data);
+					DI_PANIC();
+				}
 			}
 			break;
 		}

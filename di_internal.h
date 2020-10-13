@@ -18,7 +18,7 @@
 struct di_ev_prepare;
 
 struct di_member {
-	char *nonnull name;
+	struct di_string name;
 	void *nonnull data;
 	di_type_t type;
 	UT_hash_handle hh;
@@ -100,6 +100,13 @@ static ffi_type ffi_type_di_variant = {
     .elements = (ffi_type *[]){&ffi_type_pointer, &ffi_type_uint8, NULL},
 };
 
+static ffi_type ffi_type_di_string = {
+    .size = 0,
+    .alignment = 0,
+    .type = FFI_TYPE_STRUCT,
+    .elements = (ffi_type *[]){&ffi_type_pointer, &ffi_type_uint64, NULL},
+};
+
 static_assert(sizeof(bool) == sizeof(uint8_t), "bool is not uint8_t, unsupported "
                                                "platform");
 static_assert(__alignof__(bool) == __alignof__(uint8_t), "bool is not uint8_t, "
@@ -117,7 +124,7 @@ static inline ffi_type *nullable di_type_to_ffi(di_type_t in) {
 	    [DI_TYPE_POINTER] = &ffi_type_pointer,
 	    [DI_TYPE_OBJECT] = &ffi_type_pointer,
 	    [DI_TYPE_WEAK_OBJECT] = &ffi_type_pointer,
-	    [DI_TYPE_STRING] = &ffi_type_pointer,
+	    [DI_TYPE_STRING] = &ffi_type_di_string,
 	    [DI_TYPE_STRING_LITERAL] = &ffi_type_pointer,
 	    [DI_TYPE_ARRAY] = &ffi_type_di_array,
 	    [DI_TYPE_TUPLE] = &ffi_type_di_tuple,

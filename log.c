@@ -7,6 +7,7 @@
 #include <fcntl.h>
 #include <stdarg.h>
 #include <stdio.h>
+#include <strings.h>
 #include <unistd.h>
 
 #include <deai/builtin/log.h>
@@ -23,17 +24,17 @@ struct di_log {
 	int log_level;
 };
 
-static int level_lookup(const char *l) {
-	if (strcmp(l, "error") == 0) {
+static int level_lookup(struct di_string l) {
+	if (strncasecmp(l.data, "error", l.length) == 0) {
 		return DI_LOG_ERROR;
 	}
-	if (strcmp(l, "warn") == 0) {
+	if (strncasecmp(l.data, "warn", l.length) == 0) {
 		return DI_LOG_WARN;
 	}
-	if (strcmp(l, "info") == 0) {
+	if (strncasecmp(l.data, "info", l.length) == 0) {
 		return DI_LOG_INFO;
 	}
-	if (strcmp(l, "debug") == 0) {
+	if (strncasecmp(l.data, "debug", l.length) == 0) {
 		return DI_LOG_DEBUG;
 	}
 
@@ -65,8 +66,17 @@ static int di_log(struct di_object *o, di_type_t *rt, union di_value *ret, struc
 		return -EINVAL;
 	}
 
-	const char *nonnull log_level = t.elements[1].value->string_literal;
-	const char *nonnull str = t.elements[2].value->string_literal;
+	struct di_string log_level, str;
+	if (t.elements[1].type == DI_TYPE_STRING) {
+		log_level = t.elements[1].value->string;
+	} else {
+		log_level = di_string_borrow(t.elements[1].value->string_literal);
+	}
+	if (t.elements[2].type == DI_TYPE_STRING) {
+		str = t.elements[2].value->string;
+	} else {
+		str = di_string_borrow(t.elements[2].value->string_literal);
+	}
 	*rt = DI_TYPE_NINT;
 
 	struct di_log *l = (void *)o;
@@ -95,10 +105,9 @@ struct log_file {
 	FILE *f;
 };
 
-static int file_target_write(struct log_file *lf, char *log) {
-	auto rc = fputs(log, lf->f);
-	auto len = strlen(log);
-	if (log[len - 1] != '\n') {
+static int file_target_write(struct log_file *lf, struct di_string log) {
+	auto rc = fwrite(log.data, 1, log.length, lf->f);
+	if (log.data[log.length - 1] != '\n') {
 		fputs("\n", lf->f);
 	}
 	fflush(lf->f);
@@ -109,8 +118,13 @@ static void file_target_dtor(struct log_file *lf) {
 	fclose(lf->f);
 }
 
-static struct di_object *file_target(struct di_log *l, const char *filename, bool overwrite) {
-	FILE *f = fopen(filename, overwrite ? "w" : "a");
+static struct di_object *file_target(struct di_log *l, struct di_string filename, bool overwrite) {
+	char filename_str[PATH_MAX];
+	if (!di_string_to_chars(filename, filename_str, sizeof(filename_str))) {
+		return di_new_error("Filename too long for file target");
+	}
+
+	FILE *f = fopen(filename_str, overwrite ? "w" : "a");
 	if (!f) {
 		return di_new_error("Can't open %s for writing", filename);
 	}
@@ -129,7 +143,7 @@ static struct di_object *file_target(struct di_log *l, const char *filename, boo
 	di_set_type((struct di_object *)lf, "deai.builtin.log:FileTarget");
 	lf->f = f;
 	lf->dtor = (void *)file_target_dtor;
-	di_method(lf, "write", file_target_write, const char *);
+	di_method(lf, "write", file_target_write, struct di_string);
 	return (void *)lf;
 }
 
@@ -138,7 +152,7 @@ static struct di_object *stderr_target(struct di_log *unused l) {
 	di_set_type((struct di_object *)ls, "deai.builtin.log:StderrTarget");
 	ls->f = stderr;
 	ls->dtor = NULL;
-	di_method(ls, "write", file_target_write, const char *);
+	di_method(ls, "write", file_target_write, struct di_string);
 	return (void *)ls;
 }
 
@@ -160,7 +174,7 @@ static const char *get_log_level(struct di_log *l) {
 	return strdup(level_tostring(l->log_level));
 }
 
-static int set_log_level(struct di_log *l, char *ll) {
+static int set_log_level(struct di_log *l, struct di_string ll) {
 	int nll = level_lookup(ll);
 	if (nll <= DI_LOG_DEBUG) {
 		l->log_level = nll;
@@ -190,11 +204,12 @@ void di_init_log(struct deai *di) {
 
 	auto dtgt = stderr_target(l);
 
-	di_add_member_move((struct di_object *)l, "log_target",
+	di_add_member_move((struct di_object *)l, di_string_borrow("log_target"),
 	                   (di_type_t[]){DI_TYPE_OBJECT}, &dtgt);
 	((struct di_object_internal *)l)->call = di_log;
-	di_method(l, "file_target", file_target, const char *, bool);
+	di_method(l, "file_target", file_target, struct di_string, bool);
 	di_method(l, "stderr_target", stderr_target);
-	di_getter_setter(l, log_level, get_log_level, set_log_level);
-	di_register_module(di, "log", &lm);
+	di_getter(l, log_level, get_log_level);
+	di_setter(l, log_level, set_log_level, struct di_string);
+	di_register_module(di, di_string_borrow("log"), &lm);
 }

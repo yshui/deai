@@ -133,21 +133,19 @@ static inline int unused di_type_conversion(di_type_t inty, const union di_value
 		return 0;
 	}
 
-	if (inty == DI_TYPE_STRING && outty == DI_TYPE_STRING_LITERAL && borrowing) {
-		// If we own the inp string, we can't do this, because we are responsible
-		// of freeing it. But if we free it, the returned string literal can't be
-		// used. If we don't, nobody will, because string literals aren't freed.
-		outp->string_literal = inp->string;
-		return 0;
-	}
-
 	if (inty == DI_TYPE_STRING_LITERAL && outty == DI_TYPE_STRING) {
 		if (borrowing) {
-			outp->string = inp->string_literal;
+			outp->string = (struct di_string){
+			    .data = inp->string_literal,
+			    .length = strlen(inp->string_literal),
+			};
 		} else {
 			// If downstream expect an owned string, they will try to free it,
 			// so we have to cloned the string literal
-			outp->string = strdup(inp->string_literal);
+			outp->string = (struct di_string){
+			    .data = strdup(inp->string_literal),
+			    .length = strlen(inp->string_literal),
+			};
 			*cloned = true;
 		}
 		return 0;

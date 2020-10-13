@@ -17,7 +17,7 @@
 #include "utils.h"
 
 struct di_signal {
-	char *name;
+	struct di_string name;
 	int nlisteners;
 	struct di_weak_object *owner;
 	struct list_head listeners;
@@ -72,7 +72,7 @@ static int di_call_internal(struct di_object *self, struct di_object *method_, d
 }
 
 #define gen_callx(fnname, getter)                                                        \
-	int fnname(struct di_object *self, const char *name, di_type_t *rt,              \
+	int fnname(struct di_object *self, struct di_string name, di_type_t *rt,         \
 	           union di_value *ret, struct di_tuple args, bool *called) {            \
 		struct di_object *val;                                                   \
 		*called = false;                                                         \
@@ -90,17 +90,17 @@ gen_callx(di_rawcallxn, di_rawgetxt);
 ///
 /// @param[out] found whether a handler is found
 static int call_handler_with_fallback(struct di_object *nonnull o,
-                                      const char *nonnull prefix, const char *nonnull name,
+                                      const char *nonnull prefix, struct di_string name,
                                       struct di_variant arg, di_type_t *nullable rtype,
                                       union di_value *nullable ret, bool *found) {
 	*found = false;
 	// Internal names doesn't go through handler
-	if (strncmp(name, "__", 2) == 0) {
+	if (name.length >= 2 && strncmp(name.data, "__", 2) == 0) {
 		return -ENOENT;
 	}
 
 	char *buf;
-	asprintf(&buf, "%s_%s", prefix, name);
+	asprintf(&buf, "%s_%.*s", prefix, (int)name.length, name.data);
 	di_type_t rtype2;
 	union di_value ret2;
 
@@ -114,7 +114,7 @@ static int call_handler_with_fallback(struct di_object *nonnull o,
 	    .length = arg.type != DI_LAST_TYPE ? 1 : 0,
 	    .elements = args,
 	};
-	int rc = di_rawcallxn(o, buf, &rtype2, &ret2, tmp, found);
+	int rc = di_rawcallxn(o, di_string_borrow(buf), &rtype2, &ret2, tmp, found);
 	free(buf);
 
 	if (*found) {
@@ -126,11 +126,11 @@ static int call_handler_with_fallback(struct di_object *nonnull o,
 		args[1] = args[0];
 	}
 	args[0] = (struct di_variant){
-	    .type = DI_TYPE_STRING_LITERAL,
-	    .value = &(union di_value){.string_literal = name},
+	    .type = DI_TYPE_STRING,
+	    .value = &(union di_value){.string = name},
 	};
 
-	rc = di_rawcallxn(o, prefix, &rtype2, &ret2, tmp, found);
+	rc = di_rawcallxn(o, di_string_borrow(prefix), &rtype2, &ret2, tmp, found);
 ret:
 	if (rc == 0) {
 		if (ret && rtype) {
@@ -143,7 +143,7 @@ ret:
 	return rc;
 }
 
-int di_setx(struct di_object *o, const char *prop, di_type_t type, const void *val) {
+int di_setx(struct di_object *o, struct di_string prop, di_type_t type, const void *val) {
 	bool handler_found;
 	int rc2 = call_handler_with_fallback(
 	    o, "__set", prop, (struct di_variant){(union di_value *)val, type}, NULL,
@@ -162,7 +162,7 @@ int di_setx(struct di_object *o, const char *prop, di_type_t type, const void *v
 	return di_add_member_clone(o, prop, type, val);
 }
 
-int di_rawgetx(struct di_object *o, const char *prop, di_type_t *type, union di_value *ret) {
+int di_rawgetx(struct di_object *o, struct di_string prop, di_type_t *type, union di_value *ret) {
 	auto m = di_lookup(o, prop);
 
 	// nil type is treated as non-existent
@@ -191,7 +191,7 @@ static void di_flatten_variant(struct di_variant *var) {
 	}
 }
 
-int di_getx(struct di_object *o, const char *prop, di_type_t *type, union di_value *ret) {
+int di_getx(struct di_object *o, struct di_string prop, di_type_t *type, union di_value *ret) {
 	int rc = di_rawgetx(o, prop, type, ret);
 	if (rc == 0) {
 		return 0;
@@ -222,33 +222,35 @@ int di_getx(struct di_object *o, const char *prop, di_type_t *type, union di_val
 	return 0;
 }
 
-#define gen_tfunc(name, getter)                                                                 \
-	int name(struct di_object *o, const char *prop, di_type_t rtype, union di_value *ret) { \
-		union di_value ret2;                                                            \
-		di_type_t rt;                                                                   \
-		int rc = getter(o, prop, &rt, &ret2);                                           \
-		if (rc != 0) {                                                                  \
-			return rc;                                                              \
-		}                                                                               \
-		bool cloned = false;                                                            \
-		rc = di_type_conversion(rt, &ret2, rtype, ret, false, &cloned);                 \
-		if (cloned) {                                                                   \
-			di_free_value(rt, &ret2);                                               \
-		}                                                                               \
-		return rc;                                                                      \
+#define gen_tfunc(name, getter)                                                          \
+	int name(struct di_object *o, struct di_string prop, di_type_t rtype,            \
+	         union di_value *ret) {                                                  \
+		union di_value ret2;                                                     \
+		di_type_t rt;                                                            \
+		int rc = getter(o, prop, &rt, &ret2);                                    \
+		if (rc != 0) {                                                           \
+			return rc;                                                       \
+		}                                                                        \
+		bool cloned = false;                                                     \
+		rc = di_type_conversion(rt, &ret2, rtype, ret, false, &cloned);          \
+		if (cloned) {                                                            \
+			di_free_value(rt, &ret2);                                        \
+		}                                                                        \
+		return rc;                                                               \
 	}
 
 gen_tfunc(di_getxt, di_getx);
 gen_tfunc(di_rawgetxt, di_rawgetx);
 
 int di_set_type(struct di_object *o, const char *type) {
-	di_remove_member_raw(o, "__type");
-	return di_add_member_clonev(o, "__type", DI_TYPE_STRING_LITERAL, type);
+	di_remove_member_raw(o, di_string_borrow("__type"));
+	return di_add_member_clonev(o, di_string_borrow("__type"), DI_TYPE_STRING_LITERAL, type);
 }
 
 const char *di_get_type(struct di_object *o) {
 	const char *ret;
-	int rc = di_rawgetxt(o, "__type", DI_TYPE_STRING_LITERAL, (union di_value *)&ret);
+	int rc = di_rawgetxt(o, di_string_borrow("__type"), DI_TYPE_STRING_LITERAL,
+	                     (union di_value *)&ret);
 	if (rc != 0) {
 		if (rc == -ENOENT) {
 			return "deai:object";
@@ -318,26 +320,26 @@ struct di_module *di_new_module(struct deai *di) {
 	return di_new_module_with_size(di, sizeof(struct di_module));
 }
 
-static void _di_remove_member_raw(struct di_object_internal *obj, struct di_member *m) {
+static void di_remove_member_raw_impl(struct di_object_internal *obj, struct di_member *m) {
 	HASH_DEL(*(struct di_member **)&obj->members, m);
 
 	di_free_value(m->type, m->data);
 	free(m->data);
-	free(m->name);
+	di_free_string(m->name);
 	free(m);
 }
 
-int di_remove_member_raw(struct di_object *obj, const char *name) {
+int di_remove_member_raw(struct di_object *obj, struct di_string name) {
 	auto m = di_lookup(obj, name);
 	if (!m) {
 		return -ENOENT;
 	}
 
-	_di_remove_member_raw((struct di_object_internal *)obj, (void *)m);
+	di_remove_member_raw_impl((struct di_object_internal *)obj, (void *)m);
 	return 0;
 }
 
-int di_remove_member(struct di_object *obj, const char *name) {
+int di_remove_member(struct di_object *obj, struct di_string name) {
 	bool handler_found;
 	int rc2 = call_handler_with_fallback(obj, "__delete", name,
 	                                     (struct di_variant){NULL, DI_LAST_TYPE},
@@ -372,7 +374,7 @@ static void _di_finalize_object(struct di_object_internal *obj) {
 			            ? (*(struct di_object **)m->data)->ref_count
 			            : -1);
 #endif
-		_di_remove_member_raw(obj, m);
+		di_remove_member_raw_impl(obj, m);
 		m = next_m;
 	}
 }
@@ -477,11 +479,11 @@ static int check_new_member(struct di_object_internal *obj, struct di_member *m)
 
 	struct di_member *om = NULL;
 
-	if (!m->name) {
+	if (!m->name.data) {
 		return -EINVAL;
 	}
 
-	HASH_FIND_STR(obj->members, m->name, om);
+	HASH_FIND(hh, obj->members, m->name.data, m->name.length, om);
 	if (om) {
 		return -EEXIST;
 	}
@@ -493,16 +495,23 @@ static int check_new_member(struct di_object_internal *obj, struct di_member *m)
 	static const char *const deleter_prefix = "__delete_";
 	const size_t deleter_prefix_len = strlen(setter_prefix);
 
-	char *real_name = NULL;
-	if (strncmp(m->name, getter_prefix, getter_prefix_len) == 0) {
-		real_name = m->name + getter_prefix_len;
-	} else if (strncmp(m->name, setter_prefix, setter_prefix_len) == 0) {
-		real_name = m->name + setter_prefix_len;
-	} else if (strncmp(m->name, deleter_prefix, deleter_prefix_len) == 0) {
-		real_name = m->name + deleter_prefix_len;
+	const char *real_name = NULL;
+	size_t real_name_len = 0;
+	if (m->name.length >= getter_prefix_len &&
+	    strncmp(m->name.data, getter_prefix, getter_prefix_len) == 0) {
+		real_name = m->name.data + getter_prefix_len;
+		real_name_len = m->name.length - getter_prefix_len;
+	} else if (m->name.length >= setter_prefix_len &&
+	           strncmp(m->name.data, setter_prefix, setter_prefix_len) == 0) {
+		real_name = m->name.data + setter_prefix_len;
+		real_name_len = m->name.length - setter_prefix_len;
+	} else if (m->name.length >= deleter_prefix_len &&
+	           strncmp(m->name.data, deleter_prefix, deleter_prefix_len) == 0) {
+		real_name = m->name.data + deleter_prefix_len;
+		real_name_len = m->name.length - deleter_prefix_len;
 	}
 
-	if (real_name && strncmp(real_name, "__", 2) == 0) {
+	if (real_name_len >= 2 && strncmp(real_name, "__", 2) == 0) {
 		return -EINVAL;
 	}
 	return 0;
@@ -514,32 +523,34 @@ static int di_insert_member(struct di_object_internal *obj, struct di_member *m)
 		return ret;
 	}
 
-	HASH_ADD_KEYPTR(hh, obj->members, m->name, strlen(m->name), m);
+	HASH_ADD_KEYPTR(hh, obj->members, m->name.data, m->name.length, m);
 	return 0;
 }
 
-static int di_add_member(struct di_object_internal *o, const char *name, di_type_t t, void *v) {
-	if (!name) {
+static int
+di_add_member(struct di_object_internal *o, struct di_string name, di_type_t t, void *v) {
+	if (!name.data) {
 		return -EINVAL;
 	}
 
 	auto m = tmalloc(struct di_member, 1);
 	m->type = t;
 	m->data = v;
-	m->name = strdup(name);
+	m->name = di_clone_string(name);
 
 	int ret = di_insert_member(o, m);
 	if (ret != 0) {
 		di_free_value(t, v);
 		free(v);
 
-		free(m->name);
+		di_free_string(m->name);
 		free(m);
 	}
 	return ret;
 }
 
-int di_add_member_clone(struct di_object *o, const char *name, di_type_t t, const void *value) {
+int di_add_member_clone(struct di_object *o, struct di_string name, di_type_t t,
+                        const void *value) {
 	if (di_sizeof_type(t) == 0) {
 		return -EINVAL;
 	}
@@ -550,7 +561,7 @@ int di_add_member_clone(struct di_object *o, const char *name, di_type_t t, cons
 	return di_add_member((struct di_object_internal *)o, name, t, copy);
 }
 
-int di_add_member_clonev(struct di_object *o, const char *name, di_type_t t, ...) {
+int di_add_member_clonev(struct di_object *o, struct di_string name, di_type_t t, ...) {
 	if (di_sizeof_type(t) == 0) {
 		return -EINVAL;
 	}
@@ -565,7 +576,7 @@ int di_add_member_clonev(struct di_object *o, const char *name, di_type_t t, ...
 	return di_add_member_clone(o, name, t, &nv);
 }
 
-int di_add_member_move(struct di_object *o, const char *name, di_type_t *t, void *addr) {
+int di_add_member_move(struct di_object *o, struct di_string name, di_type_t *t, void *addr) {
 	auto sz = di_sizeof_type(*t);
 	if (sz == 0) {
 		return -EINVAL;
@@ -581,10 +592,14 @@ int di_add_member_move(struct di_object *o, const char *name, di_type_t *t, void
 	return di_add_member((struct di_object_internal *)o, name, tt, taddr);
 }
 
-struct di_member *di_lookup(struct di_object *_obj, const char *name) {
+struct di_member *di_lookup(struct di_object *_obj, struct di_string name) {
+	if (name.data == NULL) {
+		return NULL;
+	}
+
 	auto obj = (struct di_object_internal *)_obj;
 	struct di_member *ret = NULL;
-	HASH_FIND_STR(obj->members, name, ret);
+	HASH_FIND(hh, obj->members, name.data, name.length, ret);
 	return (void *)ret;
 }
 
@@ -630,7 +645,6 @@ void di_free_value(di_type_t t, union di_value *value_ptr) {
 	// If t != DI_TYPE_UINT, then `ptr_` cannot be NULL
 	union di_value *nonnull val = value_ptr;
 	struct di_object *nonnull obj;
-	char *nonnull string;
 	switch (t) {
 	case DI_TYPE_ARRAY:
 		di_free_array(val->array);
@@ -639,8 +653,7 @@ void di_free_value(di_type_t t, union di_value *value_ptr) {
 		di_free_tuple(val->tuple);
 		break;
 	case DI_TYPE_STRING:
-		string = (char *)val->string;
-		free(string);
+		di_free_string(val->string);
 		break;
 	case DI_TYPE_OBJECT:
 		obj = val->object;
@@ -711,7 +724,7 @@ void di_copy_value(di_type_t t, void *dst, const void *src) {
 		di_copy_value(srcval->variant.type, dstval->variant.value, srcval->variant.value);
 		break;
 	case DI_TYPE_STRING:
-		dstval->string = strdup(srcval->string);
+		dstval->string = di_clone_string(srcval->string);
 		break;
 	case DI_TYPE_OBJECT:
 		di_ref_object(srcval->object);
@@ -765,7 +778,8 @@ static void di_listen_handle_dtor(struct di_object *nonnull obj) {
 			HASH_DEL(owner_internal->signals, lh->signal);
 
 			// Don't call deleter for internal signal names
-			if (strncmp(lh->signal->name, "__", 2) != 0) {
+			if (lh->signal->name.length >= 2 &&
+			    strncmp(lh->signal->name.data, "__", 2) != 0) {
 				bool handler_found;
 				call_handler_with_fallback(
 				    owner, "__del_signal", lh->signal->name,
@@ -774,7 +788,7 @@ static void di_listen_handle_dtor(struct di_object *nonnull obj) {
 			}
 		}
 		di_drop_weak_ref(&lh->signal->owner);
-		free(lh->signal->name);
+		di_free_string(lh->signal->name);
 		free(lh->signal);
 	}
 
@@ -784,20 +798,21 @@ static void di_listen_handle_dtor(struct di_object *nonnull obj) {
 	lh->listen_entry = PTR_POISON;
 }
 
-struct di_object *di_listen_to(struct di_object *_obj, const char *name, struct di_object *h) {
+struct di_object *
+di_listen_to(struct di_object *_obj, struct di_string name, struct di_object *h) {
 	auto obj = (struct di_object_internal *)_obj;
 	assert(!obj->destroyed);
 
 	struct di_signal *sig = NULL;
-	HASH_FIND_STR(obj->signals, name, sig);
+	HASH_FIND(hh, obj->signals, name.data, name.length, sig);
 	if (!sig) {
 		sig = tmalloc(struct di_signal, 1);
-		sig->name = strdup(name);
+		sig->name = di_clone_string(name);
 		sig->owner = di_weakly_ref_object(_obj);
 
 		INIT_LIST_HEAD(&sig->listeners);
-		HASH_ADD_KEYPTR(hh, obj->signals, sig->name, strlen(sig->name), sig);
-		if (strncmp(name, "__", 2) != 0) {
+		HASH_ADD_KEYPTR(hh, obj->signals, sig->name.data, sig->name.length, sig);
+		if (name.length >= 2 && strncmp(name.data, "__", 2) != 0) {
 			bool handler_found;
 			call_handler_with_fallback(_obj, "__new_signal", sig->name,
 			                           (struct di_variant){NULL, DI_LAST_TYPE},
@@ -905,11 +920,12 @@ void di_dump_objects(void) {
 		fprintf(stderr, "%p, ref count: %lu strong %lu weak, type: %s\n", i,
 		        i->ref_count, i->weak_ref_count, di_get_type((void *)i));
 		for (struct di_member *m = i->members; m != NULL; m = m->hh.next) {
-			fprintf(stderr, "\tmember: %s, type: %s\n", m->name,
-			        di_type_to_string(m->type));
+			fprintf(stderr, "\tmember: %.*s, type: %s\n", (int)m->name.length,
+			        m->name.data, di_type_to_string(m->type));
 		}
 		for (struct di_signal *s = i->signals; s != NULL; s = s->hh.next) {
-			fprintf(stderr, "\tsignal: %s, nlisteners: %d\n", s->name, s->nlisteners);
+			fprintf(stderr, "\tsignal: %.*s, nlisteners: %d\n",
+			        (int)s->name.length, s->name.data, s->nlisteners);
 		}
 	}
 }

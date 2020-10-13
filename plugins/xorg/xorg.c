@@ -19,8 +19,10 @@
 
 #include "xorg.h"
 
+define_trivial_cleanup_t(char);
+
 struct di_atom_entry {
-	char *name;
+	struct di_string name;
 	xcb_atom_t atom;
 
 	UT_hash_handle hh, hh2;
@@ -64,7 +66,7 @@ static void xorg_disconnect(struct di_xorg_connection *xc) {
 	HASH_ITER (hh, xc->a_byatom, ae, tae) {
 		HASH_DEL(xc->a_byatom, ae);
 		HASH_DELETE(hh2, xc->a_byname, ae);
-		free(ae->name);
+		di_free_string(ae->name);
 		free(ae);
 	}
 }
@@ -96,11 +98,11 @@ static void di_xorg_ioev(struct di_weak_object *weak) {
 	}
 }
 
-const char *di_xorg_get_atom_name(struct di_xorg_connection *xc, xcb_atom_t atom) {
+const struct di_string *di_xorg_get_atom_name(struct di_xorg_connection *xc, xcb_atom_t atom) {
 	struct di_atom_entry *ae = NULL;
 	HASH_FIND(hh, xc->a_byatom, &atom, sizeof(atom), ae);
 	if (ae) {
-		return ae->name;
+		return &ae->name;
 	}
 
 	auto r = xcb_get_atom_name_reply(xc->c, xcb_get_atom_name(xc->c, atom), NULL);
@@ -109,28 +111,29 @@ const char *di_xorg_get_atom_name(struct di_xorg_connection *xc, xcb_atom_t atom
 	}
 
 	ae = tmalloc(struct di_atom_entry, 1);
-	ae->name = strndup(xcb_get_atom_name_name(r), xcb_get_atom_name_name_length(r));
+	ae->name = di_string_ndup(xcb_get_atom_name_name(r), xcb_get_atom_name_name_length(r));
 	ae->atom = atom;
 	free(r);
 
 	HASH_ADD(hh, xc->a_byatom, atom, sizeof(xcb_atom_t), ae);
-	HASH_ADD_KEYPTR(hh2, xc->a_byname, ae->name, strlen(ae->name), ae);
+	HASH_ADD_KEYPTR(hh2, xc->a_byname, ae->name.data, ae->name.length, ae);
 
-	return ae->name;
+	return &ae->name;
 }
 
-xcb_atom_t di_xorg_intern_atom(struct di_xorg_connection *xc, const char *name,
+xcb_atom_t di_xorg_intern_atom(struct di_xorg_connection *xc, struct di_string name,
                                xcb_generic_error_t **e) {
 	di_mgetm(xc->x, log, 0);
 	struct di_atom_entry *ae = NULL;
 	*e = NULL;
 
-	HASH_FIND(hh2, xc->a_byname, name, strlen(name), ae);
+	HASH_FIND(hh2, xc->a_byname, name.data, name.length, ae);
 	if (ae) {
 		return ae->atom;
 	}
 
-	auto r = xcb_intern_atom_reply(xc->c, xcb_intern_atom(xc->c, 0, strlen(name), name), e);
+	auto r = xcb_intern_atom_reply(
+	    xc->c, xcb_intern_atom(xc->c, 0, name.length, name.data), e);
 	if (!r) {
 		di_log_va(logm, DI_LOG_ERROR, "Cannot intern atom");
 		return 0;
@@ -138,23 +141,23 @@ xcb_atom_t di_xorg_intern_atom(struct di_xorg_connection *xc, const char *name,
 
 	ae = tmalloc(struct di_atom_entry, 1);
 	ae->atom = r->atom;
-	ae->name = strdup(name);
+	ae->name = di_clone_string(name);
 	free(r);
 
 	HASH_ADD(hh, xc->a_byatom, atom, sizeof(xcb_atom_t), ae);
-	HASH_ADD_KEYPTR(hh2, xc->a_byname, ae->name, strlen(ae->name), ae);
+	HASH_ADD_KEYPTR(hh2, xc->a_byname, ae->name.data, ae->name.length, ae);
 
 	return ae->atom;
 }
 
-static char *di_xorg_get_resource(struct di_xorg_connection *xc) {
+static struct di_string di_xorg_get_resource(struct di_xorg_connection *xc) {
 	auto scrn = screen_of_display(xc->c, xc->dflt_scrn);
 	auto r = xcb_get_property_reply(
 	    xc->c,
 	    xcb_get_property(xc->c, 0, scrn->root, XCB_ATOM_RESOURCE_MANAGER, XCB_ATOM_ANY, 0, 0),
 	    NULL);
 	if (!r) {
-		return strdup("");
+		return DI_STRING_INIT;
 	}
 
 	auto real_size = r->bytes_after;
@@ -165,20 +168,21 @@ static char *di_xorg_get_resource(struct di_xorg_connection *xc) {
 	                                            XCB_ATOM_ANY, 0, real_size),
 	                           NULL);
 	if (!r) {
-		return strdup("");
+		return DI_STRING_INIT;
 	}
 
-	char *ret = strndup(xcb_get_property_value(r), xcb_get_property_value_length(r));
+	auto ret = di_string_ndup(xcb_get_property_value(r), xcb_get_property_value_length(r));
 	free(r);
+
 	return ret;
 }
 
-static void di_xorg_set_resource(struct di_xorg_connection *xc, const char *rdb) {
+static void di_xorg_set_resource(struct di_xorg_connection *xc, struct di_string rdb) {
 	auto scrn = screen_of_display(xc->c, xc->dflt_scrn);
 	with_cleanup_t(xcb_generic_error_t) e = xcb_request_check(
 	    xc->c, xcb_change_property(xc->c, XCB_PROP_MODE_REPLACE, scrn->root,
 	                               XCB_ATOM_RESOURCE_MANAGER, XCB_ATOM_STRING, 8,
-	                               strlen(rdb), rdb));
+	                               rdb.length, rdb.data));
 	(void)e;
 }
 
@@ -192,9 +196,9 @@ struct _xext {
     {NULL, NULL},
 };
 
-static struct di_variant di_xorg_get_ext(struct di_xorg_connection *xc, const char *name) {
+static struct di_variant di_xorg_get_ext(struct di_xorg_connection *xc, struct di_string name) {
 	struct di_xorg_ext *ext;
-	HASH_FIND_STR(xc->xext, name, ext);
+	HASH_FIND(hh, xc->xext, name.data, name.length, ext);
 	if (ext) {
 		auto ret = tmalloc(union di_value, 1);
 		di_ref_object((void *)ext);
@@ -202,7 +206,10 @@ static struct di_variant di_xorg_get_ext(struct di_xorg_connection *xc, const ch
 		return (struct di_variant){.type = DI_TYPE_OBJECT, .value = ret};
 	}
 	for (int i = 0; xext_reg[i].name; i++) {
-		if (strcmp(xext_reg[i].name, name) == 0) {
+		if (strlen(xext_reg[i].name) != name.length) {
+			continue;
+		}
+		if (memcmp(xext_reg[i].name, name.data, name.length) == 0) {
 			auto ext = xext_reg[i].new(xc);
 			if (ext == NULL) {
 				break;
@@ -255,9 +262,10 @@ static struct {
 	// forms 8 linked lists. next_keycode_indices are the "next pointers".
 	// modifier_keycode_head are the heads of the lists. keycodes are the data
 	// stored in the list nodes.
+	const int MAX_KEYCODE = 256;
 	int modifier_keycode_count[8] = {0};
-	int next_keycode_indices[256];
-	int keycodes[256];
+	int next_keycode_indices[MAX_KEYCODE];
+	int keycodes[MAX_KEYCODE];
 	int total_keycodes = 0;
 	int modifier_keycode_head[8] = {
 	    [0 ... 7] = -1,
@@ -333,23 +341,30 @@ static struct {
 }
 
 static void set_keymap(struct di_xorg_connection *xc, struct di_object *o) {
-	const char *layout = NULL, *model = NULL, *variant = NULL, *options = NULL;
+	di_string_with_cleanup layout = DI_STRING_INIT, model = DI_STRING_INIT,
+	                       variant = DI_STRING_INIT, options = DI_STRING_INIT;
 
 	di_mgetmi(xc->x, log);
 	if (!o || di_get(o, "layout", layout)) {
 		di_log_va(logm, DI_LOG_ERROR, "Invalid keymap object, key \"layout\" is not set");
 		return;
 	}
-	di_get(o, "model", model);
-	di_get(o, "variant", variant);
-	di_get(o, "options", options);
 
 	struct xkb_rule_names names = {
-	    .layout = layout,
-	    .model = model,
-	    .variant = variant,
-	    .options = options,
+	    .layout = di_string_to_chars_alloc(layout),
+	    .model = NULL,
+	    .variant = NULL,
+	    .options = NULL,
 	};
+	if (di_get(o, "model", model) == 0) {
+		names.model = di_string_to_chars_alloc(model);
+	}
+	if (di_get(o, "variant", variant) == 0) {
+		names.variant = di_string_to_chars_alloc(variant);
+	}
+	if (di_get(o, "options", options) == 0) {
+		names.options = di_string_to_chars_alloc(options);
+	}
 
 	auto xsetup = xcb_get_setup(xc->c);
 
@@ -435,16 +450,20 @@ static void set_keymap(struct di_xorg_connection *xc, struct di_object *o) {
 	free(modifiers.keycodes);
 
 out:
-	free((char *)layout);
-	free((char *)model);
-	free((char *)variant);
-	free((char *)options);
+	free((char *)names.layout);
+	free((char *)names.model);
+	free((char *)names.variant);
+	free((char *)names.options);
 	free(keysyms);
 	xkb_keymap_unref(map);
 }
 
-static struct di_object *di_xorg_connect_to(struct di_xorg *x, const char *displayname) {
+static struct di_object *di_xorg_connect_to(struct di_xorg *x, struct di_string displayname_) {
 	int scrn;
+	with_cleanup_t(char) displayname = NULL;
+	if (displayname_.length > 0) {
+		displayname = di_string_to_chars_alloc(displayname_);
+	}
 	auto c = xcb_connect(displayname, &scrn);
 	if (xcb_connection_has_error(c)) {
 		xcb_disconnect(c);
@@ -464,16 +483,16 @@ static struct di_object *di_xorg_connect_to(struct di_xorg *x, const char *displ
 
 	auto odc = di_weakly_ref_object((struct di_object *)dc);
 	di_closure_with_cleanup cl = di_closure(di_xorg_ioev, (odc));
-	auto lh = di_listen_to(xcb_fd_event, "read", (void *)cl);
+	auto lh = di_listen_to(xcb_fd_event, di_string_borrow("read"), (void *)cl);
 
 	di_member(dc, "__xcb_fd_event", xcb_fd_event);
 	di_member(dc, "__xcb_fd_event_read_listen_handle", lh);
 
 	di_set_object_dtor((void *)dc, (void *)xorg_disconnect);
 
-	di_method(dc, "__get", di_xorg_get_ext, const char *);
+	di_method(dc, "__get", di_xorg_get_ext, struct di_string);
 	di_method(dc, "__get_xrdb", di_xorg_get_resource);
-	di_method(dc, "__set_xrdb", di_xorg_set_resource, const char *);
+	di_method(dc, "__set_xrdb", di_xorg_set_resource, struct di_string);
 	di_method(dc, "__get_screen", get_screen);
 	di_method(dc, "__set_keymap", set_keymap, struct di_object *);
 	di_method(dc, "disconnect", di_finalize_object);
@@ -485,15 +504,15 @@ static struct di_object *di_xorg_connect_to(struct di_xorg *x, const char *displ
 }
 
 static struct di_object *di_xorg_connect(struct di_xorg *x) {
-	return di_xorg_connect_to(x, NULL);
+	return di_xorg_connect_to(x, DI_STRING_INIT);
 }
 
 DEAI_PLUGIN_ENTRY_POINT(di) {
 	auto x = di_new_module(di);
 
 	di_method(x, "connect", di_xorg_connect);
-	di_method(x, "connect_to", di_xorg_connect_to, const char *);
+	di_method(x, "connect_to", di_xorg_connect_to, struct di_string);
 
-	di_register_module(di, "xorg", &x);
+	di_register_module(di, di_string_borrow("xorg"), &x);
 	return 0;
 }

@@ -215,7 +215,7 @@ di_create_closure(void (*fn)(void), di_type_t rtype, int ncaptures,
 	return cl;
 }
 
-int di_add_method(struct di_object *o, const char *name, void (*fn)(void),
+int di_add_method(struct di_object *o, struct di_string name, void (*fn)(void),
                   di_type_t rtype, int nargs, ...) {
 	if (nargs < 0 || nargs + 1 > MAX_NARGS) {
 		return -EINVAL;

@@ -27,7 +27,7 @@ struct di_closure *nullable di_create_closure(void (*nonnull fn)(void), di_type_
                                               const di_type_t *nullable capture_types,
                                               const union di_value *nullable const *nullable captures,
                                               int nargs, const di_type_t *nullable arg_types);
-PUBLIC_DEAI_API int di_add_method(struct di_object *nonnull object, const char *nonnull name,
+PUBLIC_DEAI_API int di_add_method(struct di_object *nonnull object, struct di_string name,
                          void (*nonnull fn)(void), di_type_t rtype, int nargs, ...);
 
 /// Create a field getter. This field getter can be used as a specialized getter on an

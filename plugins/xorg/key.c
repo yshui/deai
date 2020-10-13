@@ -14,6 +14,7 @@
 #include "string_buf.h"
 #include "xorg.h"
 
+define_trivial_cleanup_t(char);
 struct xorg_key {
 	struct di_xorg_ext;
 
@@ -37,17 +38,17 @@ static const char *const modifier_names[] = {
     "shift", "lock", "control", "mod1", "mod2", "mod3", "mod4", "mod5",
 };
 
-static int name_to_mod(const char *keyname) {
+static int name_to_mod(struct di_string keyname) {
 	for (int i = 0, mask = 1; i < ARRAY_SIZE(modifier_names); i++, mask *= 2) {
-		if (strcasecmp(keyname, modifier_names[i]) == 0) {
+		if (strncasecmp(keyname.data, modifier_names[i], keyname.length) == 0) {
 			return mask;
 		}
 	}
-	if (strcasecmp(keyname, "ctrl") == 0) {
+	if (strncasecmp(keyname.data, "ctrl", keyname.length) == 0) {
 		// Alternative name for control
 		return XCB_MOD_MASK_CONTROL;
 	}
-	if (strcasecmp(keyname, "any") == 0) {
+	if (strncasecmp(keyname.data, "any", keyname.length) == 0) {
 		/* this is misnamed but correct */
 		return XCB_BUTTON_MASK_ANY;
 	}
@@ -137,12 +138,13 @@ static int refresh_binding(struct keybinding *kb) {
 }
 
 struct di_object *
-new_binding(struct xorg_key *k, struct di_array modifiers, char *key, bool replay) {
+new_binding(struct xorg_key *k, struct di_array modifiers, struct di_string key, bool replay) {
 	if (!k->dc) {
 		return di_new_error("Connection died");
 	}
 
-	xkb_keysym_t ks = xkb_keysym_from_name(key, XKB_KEYSYM_CASE_INSENSITIVE);
+	with_cleanup_t(char) key_str = di_string_to_chars_alloc(key);
+	xkb_keysym_t ks = xkb_keysym_from_name(key_str, XKB_KEYSYM_CASE_INSENSITIVE);
 	if (ks == XKB_KEY_NoSymbol) {
 		return di_new_error("Invalid key name");
 	}
@@ -152,7 +154,7 @@ new_binding(struct xorg_key *k, struct di_array modifiers, char *key, bool repla
 	}
 
 	int mod = 0;
-	const char **arr = modifiers.arr;
+	struct di_string *arr = modifiers.arr;
 	for (int i = 0; i < modifiers.length; i++) {
 		int tmp = name_to_mod(arr[i]);
 		if (tmp == XCB_NO_SYMBOL) {
@@ -293,6 +295,6 @@ struct di_xorg_ext *new_key(struct di_xorg_connection *dc) {
 
 	INIT_LIST_HEAD(&k->bindings);
 
-	di_method(k, "new", new_binding, struct di_array, const char *, bool);
+	di_method(k, "new", new_binding, struct di_array, struct di_string, bool);
 	return (void *)k;
 }
