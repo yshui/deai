@@ -121,6 +121,23 @@ static void di_toggle_ioev(struct di_object *obj) {
 	}
 }
 
+static void di_modify_ioev(struct di_object *obj, int events) {
+	auto ioev = (struct di_ioev *)obj;
+	if (events == 0) {
+		return di_stop_ioev(obj);
+	}
+
+	unsigned int flags = 0;
+	if (events & IOEV_READ) {
+		flags |= EV_READ;
+	}
+	if (events & IOEV_WRITE) {
+		flags |= EV_WRITE;
+	}
+
+	ev_io_modify(&ioev->evh, flags);
+}
+
 static struct di_object *di_create_ioev(struct di_object *obj, int fd, int t) {
 	struct di_module *em = (void *)obj;
 	auto ret = di_new_object_with_type(struct di_ioev);
@@ -130,7 +147,6 @@ static struct di_object *di_create_ioev(struct di_object *obj, int fd, int t) {
 	if (di_obj == NULL) {
 		return di_new_error("deai is shutting down...");
 	}
-
 
 	unsigned int flags = 0;
 	if (t & IOEV_READ) {
@@ -153,6 +169,7 @@ static struct di_object *di_create_ioev(struct di_object *obj, int fd, int t) {
 	di_method(ret, "start", di_start_ioev);
 	di_method(ret, "stop", di_stop_ioev);
 	di_method(ret, "toggle", di_toggle_ioev);
+	di_method(ret, "modify", di_modify_ioev, int);
 	di_method(ret, "close", di_finalize_object);
 
 	ret->dtor = di_stop_ioev;
