@@ -962,8 +962,7 @@ static int di_lua_stop_listener(lua_State *L) {
 }
 
 static int di_lua_gc_for_listen_handle(lua_State *L) {
-	di_lua_stop_listener(L);
-
+	// When listen handles are dropped, the listeners will be left running forever
 	struct di_lua_listen_handle_proxy *proxy = di_lua_checkproxy(L, 1);
 	di_drop_weak_ref(&proxy->roots);
 
