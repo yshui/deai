@@ -349,9 +349,7 @@ int di_remove_member(struct di_object *obj, const char *name) {
 	return di_remove_member_raw(obj, name);
 }
 
-void di_finalize_object(struct di_object *_obj) {
-	auto obj = (struct di_object_internal *)_obj;
-
+static void _di_finalize_object(struct di_object_internal *obj) {
 	// Call dtor before removing members and signals, so the dtor can still make use
 	// of whatever is stored in the object, and emit more signals.
 	// But this also means signal and member deleters won't be called for them.
@@ -359,7 +357,7 @@ void di_finalize_object(struct di_object *_obj) {
 		auto tmp = obj->dtor;
 		// Never call dtor more than once
 		obj->dtor = NULL;
-		tmp(_obj);
+		tmp((struct di_object *)obj);
 	}
 
 	struct di_member *m = (void *)obj->members;
@@ -379,18 +377,28 @@ void di_finalize_object(struct di_object *_obj) {
 	}
 }
 
+void di_finalize_object(struct di_object *_obj) {
+	// Prevent object from being freed while we are finalizing
+	// XXX Hacky: if things are referenced properly, this shouldn't be necessary
+	di_ref_object(_obj);
+	_di_finalize_object((struct di_object_internal *)_obj);
+
+	di_unref_object(_obj);
+}
+
 // Try to never call destroy twice on something. Although it's fine to do so
 static void di_destroy_object(struct di_object *_obj) {
 	auto obj = (struct di_object_internal *)_obj;
 
 	// Prevent destroy from being called while we are destroying
+	// XXX Hacky: if things are referenced properly, this shouldn't be necessary
 	di_ref_object(_obj);
 	if (obj->destroyed) {
 		fprintf(stderr, "warning: destroy object multiple times\n");
 	}
 	obj->destroyed = 1;
 
-	di_finalize_object(_obj);
+	_di_finalize_object(obj);
 
 	struct di_signal *sig, *tmpsig;
 	HASH_ITER (hh, obj->signals, sig, tmpsig) {
