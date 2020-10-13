@@ -3,8 +3,8 @@ di.spawn:run({"Xvfb", ":1", "-screen", "0", "1600x1200x24+32"}, true)
 di.spawn:run({"Xvfb", ":2", "-screen", "0", "1600x1200x24+32"}, true)
 di.os.env.DISPLAY=":1"
 
-timer_handle = di.event:timer(0.2):on("elapsed", function()
-    timer_handle:stop()
+local listen_handles = {}
+table.insert(listen_handles, di.event:timer(0.2):on("elapsed", function()
     collectgarbage("collect")
 
     -- wait a awhile for Xvfb to start
@@ -20,7 +20,7 @@ timer_handle = di.event:timer(0.2):on("elapsed", function()
     print(o.xrdb)
 
     xi = o.xinput
-    xi:on("new-device", function(dev)
+    table.insert(listen_handles, xi:on("new-device", function(dev)
         print(string.format("new device %s %s %s %d", dev.type, dev.use, dev.name, dev.id))
         print("enabled:", dev.props["Device Enabled"][1])
         dev.props["Coordinate Transformation Matrix"] = {2, 0, 0, 0, 2, 0, 0, 0, 2}
@@ -29,23 +29,23 @@ timer_handle = di.event:timer(0.2):on("elapsed", function()
         else
             print("matrix:", unpack(dev.props["Coordinate Transformation Matrix"]))
         end
-    end)
+    end))
 
-    o.key:new({"mod4"}, "d", false):on("pressed", function()
+    table.insert(listen_handles, o.key:new({"mod4"}, "d", false):on("pressed", function()
         print("pressed")
-    end)
+    end))
 
     -- test the new-device event
     di.spawn:run({"xinput", "create-master", "b"}, true)
     -- test key events
     di.spawn:run({"xdotool", "key", "super+d"}, true)
 
-    o.randr:on("view-change", function()
+    table.insert(listen_handles, o.randr:on("view-change", function()
         print("view-change")
-    end)
-    o.randr:on("output-change", function()
+    end))
+    table.insert(listen_handles, o.randr:on("output-change", function()
         print("output-change")
-    end)
+    end))
 
     print("Modes:")
     modes = o.randr.modes
@@ -67,9 +67,7 @@ timer_handle = di.event:timer(0.2):on("elapsed", function()
 
     di.spawn:run({"xrandr", "--output", "screen", "--off"}, true)
 
-    local handle2
-    handle2 = di.event:timer(1):on("elapsed", function()
-        handle2:stop()
+    table.insert(listen_handles, di.event:timer(1):on("elapsed", function()
         collectgarbage("collect")
         devs = xi.devices
         for _, d in pairs(devs) do
@@ -80,8 +78,10 @@ timer_handle = di.event:timer(0.2):on("elapsed", function()
         o = di.xorg:connect_to(":2")
         if o.errmsg then
             print(o.errmsg)
-            di:exit(1)
-            return
         end
-    end)
-end)
+        o:disconnect()
+        for _, lh in pairs(listen_handles) do
+            lh:stop()
+        end
+    end))
+end))
