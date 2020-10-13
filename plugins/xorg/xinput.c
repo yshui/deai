@@ -139,7 +139,7 @@ xcb_input_get_device_info(xcb_connection_t *c, xcb_input_device_id_t deviceid,
 	return ret;
 }
 
-static const char *di_xorg_xinput_get_device_name(struct di_xorg_xinput_device *dev) {
+static char *di_xorg_xinput_get_device_name(struct di_xorg_xinput_device *dev) {
 	if (!dev->xi->dc) {
 		return strdup("unknown");
 	}
@@ -155,26 +155,26 @@ static const char *di_xorg_xinput_get_device_name(struct di_xorg_xinput_device *
 
 static const char *di_xorg_xinput_get_device_use(struct di_xorg_xinput_device *dev) {
 	if (!dev->xi->dc) {
-		return strdup("unknown");
+		return "unknown";
 	}
 
 	with_cleanup_t(xcb_input_xi_query_device_reply_t) rr;
 	auto info = xcb_input_get_device_info(dev->xi->dc->c, dev->deviceid, &rr);
 	if (!info) {
-		return strdup("unknown");
+		return "unknown";
 	}
 
 	switch (info->type) {
 	case XCB_INPUT_DEVICE_TYPE_MASTER_KEYBOARD:
-		return strdup("master keyboard");
+		return "master keyboard";
 	case XCB_INPUT_DEVICE_TYPE_SLAVE_KEYBOARD:
-		return strdup("keyboard");
+		return "keyboard";
 	case XCB_INPUT_DEVICE_TYPE_MASTER_POINTER:
-		return strdup("master pointer");
+		return "master pointer";
 	case XCB_INPUT_DEVICE_TYPE_SLAVE_POINTER:
-		return strdup("pointer");
+		return "pointer";
 	default:
-		return strdup("unknown");
+		return "unknown";
 	}
 }
 
@@ -189,7 +189,7 @@ const char *possible_types[] = {
 };
 #endif
 
-static const char *di_xorg_xinput_get_device_type(struct di_xorg_xinput_device *dev) {
+static char *di_xorg_xinput_get_device_type(struct di_xorg_xinput_device *dev) {
 	if (!dev->xi->dc) {
 		return strdup("unknown");
 	}

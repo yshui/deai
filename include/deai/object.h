@@ -176,6 +176,9 @@ union di_value {
 	void *nullable pointer;
 	struct di_object *nonnull object;
 	struct di_weak_object *nonnull weak_object;
+	// XXX di_typeof(di_value::string) is string literal, not string.
+	//     If you want to return a owned string, you cannot rely on
+	//     di_typeof(value->field)
 	const char *nonnull string;
 	const char *nonnull string_literal;
 	struct di_array array;
@@ -408,11 +411,11 @@ static inline unused size_t di_sizeof_type(di_type_t t) {
 	unsigned int *: DI_TYPE_NUINT, \
 	int64_t *: DI_TYPE_INT, \
 	uint64_t *: DI_TYPE_UINT, \
-	const char **: DI_TYPE_STRING, \
+	char **: DI_TYPE_STRING, \
 	/* use a const to differentiate strings and string literals
-	 * doesn't mean string literals really must be const char *const
+	 * doesn't mean strings are actually mutable.
 	 */ \
-	const char * const*: DI_TYPE_STRING_LITERAL, \
+	const char **: DI_TYPE_STRING_LITERAL, \
 	struct di_object **: DI_TYPE_OBJECT, \
 	struct di_weak_object **: DI_TYPE_WEAK_OBJECT, \
 	void **: DI_TYPE_POINTER, \

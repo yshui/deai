@@ -23,7 +23,7 @@ DEAI_CPP_PLUGIN_ENTRY_POINT(di) {
 
 	di->chdir("/tmp");
 
-	char path[PATH_MAX];
+	char path[PATH_MAX]; // NOLINT
 	assert(strcmp(getcwd(path, sizeof(path)), "/tmp") == 0);
 	return 0;
 }

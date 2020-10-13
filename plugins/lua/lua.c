@@ -667,8 +667,12 @@ static int di_lua_type_to_di(lua_State *L, int i, di_type_t *t, union di_value *
 		} else {
 			ret_arg(i, float_, lua_tonumber);
 		}
-	case LUA_TSTRING:
-		ret_arg(i, string, tostringdup);
+	case LUA_TSTRING:;
+		if (ret) {
+			ret->string = strdup(lua_tostring(L, i));
+		}
+		*t = DI_TYPE_STRING;
+		return 0;
 	case LUA_TUSERDATA:
 		if (!di_lua_isproxy(L, i)) {
 			goto type_error;

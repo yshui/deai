@@ -2,7 +2,7 @@ di:load_plugin("./plugins/file/di_file.so")
 
 md = di.spawn:run({"mkdir", "testdir"}, true)
 
-md:on("exit", true, function()
+md:on("exit", function()
 w = di.file:watch({"testdir"})
 
 function sigh(ev)
@@ -35,12 +35,15 @@ cmds = {
 
 function run_one(i)
     return function()
+        print("running ", unpack(cmds[i]))
         c = di.spawn:run(cmds[i], true)
         if i < #cmds then
-            c:on("exit", true, run_one(i+1))
+            c:on("exit", run_one(i+1))
         else
             w:remove("testdir")
             w:stop()
+            w = nil
+            collectgarbage()
         end
     end
 end

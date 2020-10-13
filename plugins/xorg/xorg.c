@@ -141,7 +141,7 @@ xcb_atom_t di_xorg_intern_atom(struct di_xorg_connection *xc, const char *name,
 	return ae->atom;
 }
 
-static const char *di_xorg_get_resource(struct di_xorg_connection *xc) {
+static char *di_xorg_get_resource(struct di_xorg_connection *xc) {
 	auto scrn = screen_of_display(xc->c, xc->dflt_scrn);
 	auto r = xcb_get_property_reply(
 	    xc->c,

@@ -8,13 +8,13 @@
 static void takes_string(const char *str unused) {
 }
 
-static const char *takes_string_and_return(const char *str) {
+static char *takes_string_and_return(const char *str) {
 	// We only borrows str, so to return an owned value, we need to copy it
 	return strdup(str);
 }
 
 DEAI_PLUGIN_ENTRY_POINT(di) {
-	di_closure_with_cleanup test1 = di_closure(takes_string, (), const char *const);
+	di_closure_with_cleanup test1 = di_closure(takes_string, (), const char *);
 	di_closure_with_cleanup test2 = di_closure(takes_string_and_return, (), const char *);
 
 	di_type_t retty;
