@@ -4,7 +4,7 @@
 
 /* Copyright (c) 2017, Yuxuan Shui <yshuiv7@gmail.com> */
 
-#include <deai/builtin/event.h>
+#include <deai/builtins/event.h>
 #include <deai/deai.h>
 #include <deai/helper.h>
 

@@ -1,7 +1,7 @@
 #include <assert.h>
 #include <stdio.h>
 
-#include <deai/builtin/event.h>
+#include <deai/builtins/event.h>
 #include <deai/deai.h>
 #include <deai/helper.h>
 #include <dbus/dbus.h>

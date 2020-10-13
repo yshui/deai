@@ -8,7 +8,7 @@
 #include <sys/inotify.h>
 #include <unistd.h>
 
-#include <deai/builtin/event.h>
+#include <deai/builtins/event.h>
 #include <deai/deai.h>
 #include <deai/helper.h>
 

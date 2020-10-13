@@ -105,10 +105,10 @@ base_headers = [
   'include/deai/object.h',
 ]
 builtin_module_headers = [
-  'include/deai/builtin/event.h',
-  'include/deai/builtin/log.h',
-  'include/deai/builtin/spawn.h'
+  'include/deai/builtins/event.h',
+  'include/deai/builtins/log.h',
+  'include/deai/builtins/spawn.h'
 ]
 install_data('desktop/deai.desktop', install_dir:'share/xsessions', install_mode: 'rw-r--r--')
 install_headers(base_headers, subdir: 'deai')
-install_headers(builtin_module_headers, subdir: 'deai/builtin')
+install_headers(builtin_module_headers, subdir: 'deai/builtins')
