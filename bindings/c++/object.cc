@@ -6,7 +6,7 @@ auto OtherError::what() const noexcept -> const char * {
 	return message.c_str();
 }
 
-OtherError::OtherError(int errno__) : errno_{errno__} {
+OtherError::OtherError(int err) : errno_{err} {
 	std::stringstream ss;
 	ss << "deai error " << errno_;
 	message = ss.str();
@@ -53,7 +53,7 @@ Variant::operator Ref<Object>() {
 auto Variant::object_ref() && -> std::optional<Ref<Object>> {
 	if (type_ == c_api::DI_TYPE_OBJECT) {
 		// NOLINTNEXTLINE(performance-move-const-arg)
-		auto ret = Ref<Object>{std::move(value.object)};
+		auto ret = *Ref<Object>::take(value.object);
 		type_ = c_api::DI_TYPE_NIL;
 		return {ret};
 	}
@@ -70,16 +70,13 @@ auto Object::create() -> Ref<Object> {
 	    c_api::di_new_object(sizeof(c_api::di_object), alignof(c_api::di_object))}};
 }
 
-Variant::Variant(c_api::di_type &&type_, c_api::di_value &&value_)
+Variant::Variant(c_api::di_type type_, const c_api::di_value &value_)
     : type_{type_}, value{value_} {
 	type_ = c_api::DI_TYPE_NIL;
-	value_ = {};
 }
-Variant::Variant(c_api::di_variant &var) : type_{var.type} {
+Variant::Variant(const c_api::di_variant &var) : type_{var.type} {
 	memcpy(&value, var.value, c_api::di_sizeof_type(type_));
-	var.type = c_api::DI_TYPE_NIL;
 	std::free(var.value);
-	var.value = nullptr;
 }
 auto Variant::operator=(const Variant &other) {
 	type_ = other.type_;
@@ -111,7 +108,7 @@ auto Variant::nil() -> Variant {
 	return {c_api::DI_TYPE_NIL, {}};
 }
 
-auto ObjectMembersRawGetter::operator[](const std::string &key) -> ObjectMemberProxy<true> {
+auto ObjectMembersRawGetter::operator[](const std::string_view &key) -> ObjectMemberProxy<true> {
 	return {target, key};
 }
 ObjectMembersRawGetter::ObjectMembersRawGetter(c_api::di_object *target_)
