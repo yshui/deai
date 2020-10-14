@@ -506,7 +506,7 @@ static unsigned int dbus_add_watch(DBusWatch *w, void *ud) {
 	di_dbus_connection *oc = ud;
 	unsigned int flags = dbus_watch_get_flags(w);
 	int fd = dbus_watch_get_unix_fd(w);
-	fprintf(stderr, "w %p, flags: %d, fd: %d\n", w, flags, fd);
+	/*fprintf(stderr, "w %p, flags: %d, fd: %d\n", w, flags, fd);*/
 	with_cleanup_t(char) ioev_name;
 	asprintf(&ioev_name, "__dbus_ioev_for_watch_%p", w);
 
