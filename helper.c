@@ -40,7 +40,7 @@ static int emit_proxied_signal(struct di_object *o, di_type_t *rt, union di_valu
 
 	di_object_with_cleanup proxy = di_upgrade_weak_ref(weak);
 	if (proxy) {
-		di_emitn(proxy, signal, t);
+		di_emitn(proxy, di_string_borrow(signal), t);
 	}
 
 	free((char *)signal);

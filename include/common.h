@@ -10,7 +10,11 @@
 #include <stdio.h>
 
 #define tmalloc(type, nmem) (type *)calloc(nmem, sizeof(type))
+#ifndef __cplusplus
 #define auto __auto_type
+#else
+#define __auto_type auto
+#endif
 
 /**
  * container_of - cast a member of a structure out to the containing structure

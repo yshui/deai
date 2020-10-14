@@ -837,7 +837,7 @@ di_listen_to(struct di_object *_obj, struct di_string name, struct di_object *h)
 	return (struct di_object *)listen_handle;
 }
 
-int di_emitn(struct di_object *o, const char *name, struct di_tuple args) {
+int di_emitn(struct di_object *o, struct di_string name, struct di_tuple args) {
 	if (args.length > MAX_NARGS) {
 		return -E2BIG;
 	}
@@ -845,7 +845,7 @@ int di_emitn(struct di_object *o, const char *name, struct di_tuple args) {
 	assert(args.length == 0 || (args.elements != NULL));
 
 	struct di_signal *sig;
-	HASH_FIND_STR(((struct di_object_internal *)o)->signals, name, sig);
+	HASH_FIND(hh, ((struct di_object_internal *)o)->signals, name.data, name.length, sig);
 	if (!sig) {
 		return 0;
 	}

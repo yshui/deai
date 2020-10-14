@@ -299,9 +299,9 @@ static void dbus_call_method_reply_cb(struct di_weak_object *weak, void *msg) {
 	_dbus_deserialize_struct(&i, &t);
 
 	if (dbus_message_get_type(msg) == DBUS_MESSAGE_TYPE_METHOD_RETURN) {
-		di_emitn(sig, "reply", t);
+		di_emitn(sig, di_string_borrow("reply"), t);
 	} else if (dbus_message_get_type(msg) == DBUS_MESSAGE_TYPE_ERROR) {
-		di_emitn(sig, "error", t);
+		di_emitn(sig, di_string_borrow("error"), t);
 	}
 
 	di_free_tuple(t);
@@ -690,11 +690,11 @@ static DBusHandlerResult dbus_filter(DBusConnection *conn, DBusMessage *msg, voi
 	if (*bus_name != ':') {
 		// We got a well known name
 		asprintf(&sig, "%%%s%%%s%%%s.%s", bus_name, path, ifc, mbr);
-		di_emitn(ud, sig, t);
+		di_emitn(ud, di_string_borrow(sig), t);
 		free(sig);
 		// Emit the interface-less version of the signal
 		asprintf(&sig, "%%%s%%%s%%%s", bus_name, path, mbr);
-		di_emitn(ud, sig, t);
+		di_emitn(ud, di_string_borrow(sig), t);
 		free(sig);
 	} else {
 		dbus_bus_name *ni;
@@ -703,11 +703,11 @@ static DBusHandlerResult dbus_filter(DBusConnection *conn, DBusMessage *msg, voi
 				continue;
 			}
 			asprintf(&sig, "%%%s%%%s%%%s.%s", ni->well_known, path, ifc, mbr);
-			di_emitn(ud, sig, t);
+			di_emitn(ud, di_string_borrow(sig), t);
 			free(sig);
 			// Emit the interface-less version of the signal
 			asprintf(&sig, "%%%s%%%s%%%s", ni->well_known, path, mbr);
-			di_emitn(ud, sig, t);
+			di_emitn(ud, di_string_borrow(sig), t);
 			free(sig);
 		}
 	}

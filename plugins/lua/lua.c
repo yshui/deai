@@ -909,7 +909,7 @@ int di_lua_emit_signal(lua_State *L) {
 	}
 
 	di_ref_object(o);
-	rc = di_emitn(o, signame, t);
+	rc = di_emitn(o, di_string_borrow(signame), t);
 	di_unref_object(o);
 
 err:

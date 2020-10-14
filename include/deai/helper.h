@@ -49,7 +49,7 @@ PUBLIC_DEAI_API int di_proxy_signal(struct di_object *nonnull src, struct di_str
 	({                                                                               \
 		int rc;                                                                  \
 		do {                                                                     \
-			rc = di_getxt((void *)(o), di_string_borrow(prop), di_typeof(r),   \
+			rc = di_getxt((void *)(o), di_string_borrow(prop), di_typeof(r), \
 			              (union di_value *)&(r));                           \
 			if (rc != 0) {                                                   \
 				break;                                                   \
@@ -161,7 +161,7 @@ PUBLIC_DEAI_API int di_proxy_signal(struct di_object *nonnull src, struct di_str
 			di_type_t rtype;                                                 \
 			union di_value ret;                                              \
 			bool called;                                                     \
-			rc = di_callx((struct di_object *)(o), di_string_borrow(name),     \
+			rc = di_callx((struct di_object *)(o), di_string_borrow(name),   \
 			              &rtype, &ret, di_tuple(__VA_ARGS__), &called);     \
 			if (rc != 0) {                                                   \
 				break;                                                   \
@@ -179,7 +179,7 @@ PUBLIC_DEAI_API int di_proxy_signal(struct di_object *nonnull src, struct di_str
 			union di_value __deai_callr_ret;                                 \
 			bool called;                                                     \
 			__deai_callr_rc =                                                \
-			    di_callx((struct di_object *)(o), di_string_borrow(name),      \
+			    di_callx((struct di_object *)(o), di_string_borrow(name),    \
 			             &__deai_callr_rtype, &__deai_callr_ret,             \
 			             di_tuple(__VA_ARGS__), &called);                    \
 			if (__deai_callr_rc != 0) {                                      \
@@ -243,7 +243,8 @@ PUBLIC_DEAI_API int di_proxy_signal(struct di_object *nonnull src, struct di_str
 
 #define di_has_member(o, name)                                                           \
 	(di_lookup((struct di_object *)(o), di_string_borrow(name)) != NULL)
-#define di_emit(o, name, ...) di_emitn((struct di_object *)o, name, di_tuple(__VA_ARGS__))
+#define di_emit(o, name, ...)                                                            \
+	di_emitn((struct di_object *)o, di_string_borrow(name), di_tuple(__VA_ARGS__))
 
 /// Register a field of struct `o` as a read only member of the di_object, by using a
 /// field getter
@@ -255,11 +256,12 @@ PUBLIC_DEAI_API int di_proxy_signal(struct di_object *nonnull src, struct di_str
 	})
 
 #define di_member(o, name, v)                                                            \
-	di_add_member_move((struct di_object *)(o), di_string_borrow(name),                \
+	di_add_member_move((struct di_object *)(o), di_string_borrow(name),              \
 	                   (di_type_t[]){di_typeof(v)}, &(v))
 
 #define di_member_clone(o, name, v)                                                      \
-	di_add_member_clonev((struct di_object *)(o), di_string_borrow(name), di_typeof(v), (v))
+	di_add_member_clonev((struct di_object *)(o), di_string_borrow(name),            \
+	                     di_typeof(v), (v))
 
 #define di_getter(o, name, g) di_method(o, STRINGIFY(__get_##name), g)
 #define di_setter(o, name, s, type) di_method(o, STRINGIFY(__set_##name), s, type);
@@ -304,7 +306,7 @@ PUBLIC_DEAI_API int di_proxy_signal(struct di_object *nonnull src, struct di_str
 #define di_return_typeid(fn, ...) di_typeid(di_return_typeof(fn, ##__VA_ARGS__))
 
 #define di_register_typed_method(o, name, fn, rtype, ...)                                \
-	di_add_method((struct di_object *)(o), di_string_borrow(name), (void *)(fn),       \
+	di_add_method((struct di_object *)(o), di_string_borrow(name), (void *)(fn),     \
 	              (rtype), VA_ARGS_LENGTH(__VA_ARGS__), ##__VA_ARGS__)
 
 #define INDIRECT(fn, ...) fn(__VA_ARGS__)
