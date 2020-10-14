@@ -4,20 +4,14 @@
 namespace deai {
 
 struct Core : type::Object {
-	inline static const std::string type = "deai:Core";
-	void load_plugin(const std::string &plugin_name) const {
-		util::call_deai_method_raw<void>(inner.get(), "load_plugin", plugin_name);
-	}
-	void chdir(const std::string &new_dir) const {
-		util::call_deai_method_raw<void>(inner.get(), "chdir", new_dir);
-	}
-
-	void exit(int exit_code) const {
-		util::call_deai_method_raw<void>(inner.get(), "exit", exit_code);
-	}
-
-	void load_plugin_from_dir(const std::string &plugin) const {
-
-	}
+	static constexpr const char *type = "deai:Core";
+	void load_plugin(std::string_view plugin_name) const;
+	void chdir(std::string_view new_dir) const;
+	void exit(int exit_code) const;
+	void quit() const;
+	void terminate() const;
+	[[nodiscard]] auto load_plugin_from_dir(std::string_view plugin) const -> int;
+	[[nodiscard]] auto
+	register_module(std::string_view module_name, const Ref<Object> &module) const -> int;
 };
 }        // namespace deai

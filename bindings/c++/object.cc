@@ -110,17 +110,23 @@ auto Variant::raw_value() -> c_api::di_value & {
 auto Variant::nil() -> Variant {
 	return {c_api::DI_TYPE_NIL, {}};
 }
-auto Variant::is_object_ref() const -> bool {
-	return type_ == c_api::DI_TYPE_OBJECT;
-}
-auto Variant::is_nil() const -> bool {
-	return type_ == c_api::DI_TYPE_NIL;
-}
+
 auto ObjectMembersRawGetter::operator[](const std::string &key) -> ObjectMemberProxy<true> {
 	return {target, key};
 }
 ObjectMembersRawGetter::ObjectMembersRawGetter(c_api::di_object *target_)
     : target{target_} {
+}
+WeakRefBase::WeakRefBase(c_api::di_weak_object *ptr) : inner{ptr} {
+}
+WeakRefBase::WeakRefBase(const WeakRefBase &other) : inner{nullptr} {
+	*this = other;
+}
+auto WeakRefBase::operator=(const WeakRefBase &other) -> WeakRefBase & {
+	c_api::di_weak_object *weak, *weak_other = other.inner.get();
+	c_api::di_copy_value(c_api::DI_TYPE_WEAK_OBJECT, &weak, &weak_other);
+	inner.reset(weak);
+	return *this;
 }
 }        // namespace type
 }        // namespace deai

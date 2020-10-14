@@ -7,6 +7,7 @@
 #include <sstream>
 #include <stdexcept>
 #include <string>
+#include <string_view>
 #include <variant>
 #include <vector>
 namespace deai {
@@ -47,14 +48,97 @@ inline auto string_to_borrowed_deai_value(const std::string_view &str) {
 }        // namespace util
 
 namespace type {
+
+template <typename T, typename = void>
+struct Ref;
+struct Object;
+template <typename T, typename = void>
+struct deai_typeof {};
+
+constexpr auto is_basic_deai_type(c_api::di_type_t type) -> bool {
+	return (type != c_api::DI_TYPE_ARRAY) && (type != c_api::DI_TYPE_TUPLE) &&
+	       (type != c_api::DI_TYPE_VARIANT);
+}
+
+template <>
+struct deai_typeof<void> {
+	static constexpr auto value = c_api::DI_TYPE_NIL;
+};
+template <>
+struct deai_typeof<std::monostate> {
+	static constexpr auto value = c_api::DI_TYPE_NIL;
+};
+template <>
+struct deai_typeof<int> {
+	static constexpr auto value = c_api::DI_TYPE_NINT;
+};
+template <>
+struct deai_typeof<unsigned int> {
+	static constexpr auto value = c_api::DI_TYPE_NUINT;
+};
+template <>
+struct deai_typeof<int64_t> {
+	static constexpr auto value = c_api::DI_TYPE_INT;
+};
+template <>
+struct deai_typeof<uint64_t> {
+	static constexpr auto value = c_api::DI_TYPE_UINT;
+};
+template <>
+struct deai_typeof<double> {
+	static constexpr auto value = c_api::DI_TYPE_FLOAT;
+};
+template <>
+struct deai_typeof<bool> {
+	static constexpr auto value = c_api::DI_TYPE_BOOL;
+};
+template <>
+struct deai_typeof<void *> {
+	static constexpr auto value = c_api::DI_TYPE_BOOL;
+};
+template <typename T>
+struct deai_typeof<Ref<T>, std::enable_if_t<std::is_base_of_v<Object, T>, void>> {
+	static constexpr auto value = c_api::DI_TYPE_OBJECT;
+};
+template <>
+struct deai_typeof<std::string> {
+	static constexpr auto value = c_api::DI_TYPE_STRING;
+};
+template <>
+struct deai_typeof<const char *> {
+	// const char * can be strings too, we are just hijacking this type to mean
+	// string literal.
+	static constexpr auto value = c_api::DI_TYPE_STRING_LITERAL;
+};
+template <>
+struct deai_typeof<std::string_view> {
+	static constexpr auto value = c_api::DI_TYPE_STRING;
+};
+template <>
+struct deai_typeof<c_api::di_array> {
+	static constexpr auto value = c_api::DI_TYPE_ARRAY;
+};
+template <typename T, size_t length>
+struct deai_typeof<std::array<T, length>, std::enable_if_t<is_basic_deai_type(deai_typeof<T>::value), void>> {
+	static constexpr auto value = c_api::DI_TYPE_ARRAY;
+};
+template <typename T>
+struct deai_typeof<std::vector<T>, std::enable_if_t<is_basic_deai_type(deai_typeof<T>::value), void>> {
+	static constexpr auto value = c_api::DI_TYPE_ARRAY;
+};
+template <>
+struct deai_typeof<c_api::di_tuple> {
+	static constexpr auto value = c_api::DI_TYPE_TUPLE;
+};
+template <>
+struct deai_typeof<c_api::di_variant> {
+	static constexpr auto value = c_api::DI_TYPE_VARIANT;
+};
 struct Variant;
 
 struct ObjectRefDeleter {
 	void operator()(c_api::di_object *obj);
 };
-
-template <typename T, typename = void>
-struct Ref;
 struct Object {
 protected:
 	std::unique_ptr<c_api::di_object, ObjectRefDeleter> inner;
@@ -67,7 +151,7 @@ private:
 	friend struct Ref;
 
 public:
-	inline static const std::string type = "deai:object";
+	static constexpr const char *type = "deai:object";
 	static auto create() -> Ref<Object>;
 	auto operator=(const Object &other) -> Object &;
 	Object(const Object &other);
@@ -84,7 +168,7 @@ inline auto raw_check_type(c_api::di_object *obj, const Object * /*tag*/) -> boo
 template <typename T>
 auto raw_check_type(c_api::di_object *obj, const T * /*tag*/)
     -> std::enable_if_t<std::is_base_of_v<Object, T>, bool> {
-	return c_api::di_check_type(obj, T::type.c_str());
+	return c_api::di_check_type(obj, T::type);
 }
 
 struct Variant {
@@ -121,17 +205,60 @@ public:
 
 	operator Ref<Object>();
 
+	// Conversion for all the by-value types
+	template <typename T, c_api::di_type_t type = deai_typeof<T>::value>
+	auto to() const
+	    -> std::enable_if_t<is_basic_deai_type(type) && type != c_api::DI_TYPE_OBJECT &&
+	                            type != c_api::DI_TYPE_NIL && type != c_api::DI_TYPE_ANY &&
+	                            type != c_api::DI_LAST_TYPE && type != c_api::DI_TYPE_STRING,
+	                        std::optional<T>> {
+		if (type != type_) {
+			return std::nullopt;
+		}
+		if constexpr (type == c_api::DI_TYPE_BOOL) {
+			return value.bool_;
+		}
+		if constexpr (type == c_api::DI_TYPE_INT) {
+			return value.int_;
+		}
+		if constexpr (type == c_api::DI_TYPE_UINT) {
+			return value.uint;
+		}
+		if constexpr (type == c_api::DI_TYPE_NINT) {
+			return value.nint;
+		}
+		if constexpr (type == c_api::DI_TYPE_NUINT) {
+			return value.nuint;
+		}
+		if constexpr (type == c_api::DI_TYPE_FLOAT) {
+			return value.float_;
+		}
+		if constexpr (type == c_api::DI_TYPE_STRING_LITERAL) {
+			return std::string_view(value.string_literal,
+			                        strlen(value.string_literal));
+		}
+		if constexpr (type == c_api::DI_TYPE_POINTER) {
+			return value.pointer;
+		}
+		unreachable();
+	}
+
+	template <typename T, c_api::di_type_t type = deai_typeof<T>::value>
+	operator T() {
+		return to<T>().value();
+	}
+
 	/// Extract an object ref out of this variant. If the variant contains
 	/// an object ref, it would be moved out and returned. Otherwise nothing happens
 	/// and nullopt is returned.
 	auto object_ref() && -> std::optional<Ref<Object>>;
-
 	/// Get an object ref out of this variant. The value is copied.
 	auto object_ref() & -> std::optional<Ref<Object>>;
 
-	[[nodiscard]] auto is_object_ref() const -> bool;
-
-	[[nodiscard]] auto is_nil() const -> bool;
+	template <typename T, c_api::di_type_t type = deai_typeof<T>::value>
+	[[nodiscard]] auto is() const -> bool {
+		return type_ == type;
+	}
 };
 struct ObjectMembersRawGetter;
 
@@ -233,6 +360,34 @@ public:
 };
 
 struct ListenHandle;
+
+struct WeakRefDeleter {
+	void operator()(c_api::di_weak_object *ptr) {
+		c_api::di_drop_weak_ref(&ptr);
+	}
+};
+
+struct WeakRefBase {
+protected:
+	std::unique_ptr<c_api::di_weak_object, WeakRefDeleter> inner;
+
+	WeakRefBase(c_api::di_weak_object *ptr);
+	template <typename, typename>
+	friend struct Ref;
+
+public:
+	WeakRefBase(const WeakRefBase &other);
+	auto operator=(const WeakRefBase &other) -> WeakRefBase &;
+};
+
+template <typename T>
+struct WeakRef : public WeakRefBase {
+	auto upgrade() const -> std::optional<Ref<T>> {
+		c_api::di_object *obj = c_api::di_upgrade_weak_ref(inner.get());
+		return Ref<T>{{obj}};
+	}
+};
+
 /// A reference to the generic di_object. Inherit this class to define references to more
 /// specific objects. You should define a `type` for the type name in the derived class.
 /// Optionally you can also define "create", if your object can be created directly.
@@ -240,6 +395,7 @@ template <typename T>
 struct Ref<T, std::enable_if_t<std::is_base_of_v<Object, T>, void>> {
 protected:
 	T inner;
+	friend struct WeakRef<T>;
 
 public:
 	Ref(const Ref &other) = default;
@@ -271,7 +427,7 @@ public:
 
 	template <typename Other, std::enable_if_t<std::is_base_of_v<T, Other>, int> = 0>
 	auto downcast() && -> std::optional<Ref<Other>> {
-		if (c_api::di_check_type(raw(), Other::type.c_str())) {
+		if (c_api::di_check_type(raw(), Other::type)) {
 			return Ref<Other>{inner.inner.release()};
 		}
 		return std::nullopt;
@@ -290,6 +446,14 @@ public:
 
 	auto operator->() const -> const T * {
 		return &inner;
+	}
+
+	auto set_raw_dtor(void (*dtor)(c_api::di_object *)) {
+		c_api::di_set_object_dtor(raw(), dtor);
+	}
+
+	[[nodiscard]] auto downgrade() const -> WeakRef<T> {
+		return WeakRef<T>{{inner.get()}};
 	}
 
 	/// Listen to signal on this object
@@ -322,89 +486,6 @@ constexpr auto array_cat(std::array<Element, length1> a, std::array<Element, len
 	std::copy(b.begin(), b.end(), output.begin() + length1);
 	return output;
 }
-
-constexpr auto is_basic_deai_type(c_api::di_type_t type) -> bool {
-	return (type != c_api::DI_TYPE_ARRAY) && (type != c_api::DI_TYPE_TUPLE) &&
-	       (type != c_api::DI_TYPE_VARIANT);
-}
-
-template <typename T, typename = void>
-struct deai_typeof {};
-
-template <>
-struct deai_typeof<void> {
-	static constexpr auto value = c_api::DI_TYPE_NIL;
-};
-template <>
-struct deai_typeof<std::monostate> {
-	static constexpr auto value = c_api::DI_TYPE_NIL;
-};
-template <>
-struct deai_typeof<int> {
-	static constexpr auto value = c_api::DI_TYPE_NINT;
-};
-template <>
-struct deai_typeof<unsigned int> {
-	static constexpr auto value = c_api::DI_TYPE_NUINT;
-};
-template <>
-struct deai_typeof<int64_t> {
-	static constexpr auto value = c_api::DI_TYPE_INT;
-};
-template <>
-struct deai_typeof<uint64_t> {
-	static constexpr auto value = c_api::DI_TYPE_UINT;
-};
-template <>
-struct deai_typeof<double> {
-	static constexpr auto value = c_api::DI_TYPE_FLOAT;
-};
-template <>
-struct deai_typeof<bool> {
-	static constexpr auto value = c_api::DI_TYPE_BOOL;
-};
-template <>
-struct deai_typeof<void *> {
-	static constexpr auto value = c_api::DI_TYPE_BOOL;
-};
-template <typename T>
-struct deai_typeof<Ref<T>, std::enable_if_t<std::is_base_of_v<Object, T>, void>> {
-	static constexpr auto value = c_api::DI_TYPE_OBJECT;
-};
-// As arguments, string and string literal are equivalent, so it doesn't matter.
-// As return value, string has to be an owned string, so std::string is appropriate.
-template <>
-struct deai_typeof<std::string> {
-	static constexpr auto value = c_api::DI_TYPE_STRING;
-};
-template <>
-struct deai_typeof<const char *> {
-	static constexpr auto value = c_api::DI_TYPE_STRING_LITERAL;
-};
-template <>
-struct deai_typeof<std::string_view> {
-	static constexpr auto value = c_api::DI_TYPE_STRING_LITERAL;
-};
-template <>
-struct deai_typeof<c_api::di_array> {
-	static constexpr auto value = c_api::DI_TYPE_ARRAY;
-};
-template <typename T, size_t length>
-struct deai_typeof<std::array<T, length>, std::enable_if_t<is_basic_deai_type(deai_typeof<T>::value), void>> {
-	static constexpr auto value = c_api::DI_TYPE_ARRAY;
-};
-template <typename T>
-struct deai_typeof<std::vector<T>, std::enable_if_t<is_basic_deai_type(deai_typeof<T>::value), void>> {
-	static constexpr auto value = c_api::DI_TYPE_ARRAY;
-};
-template <>
-struct deai_typeof<c_api::di_tuple> {
-	static constexpr auto value = c_api::DI_TYPE_TUPLE;
-};
-template <>
-struct deai_typeof<c_api::di_variant> {
-	static constexpr auto value = c_api::DI_TYPE_VARIANT;
-};
 
 template <typename... Args>
 constexpr auto get_deai_types() {
@@ -472,8 +553,9 @@ auto call_deai_method_raw(c_api::di_object *raw_ref, const std::string_view &met
 	c_api::di_type_t return_type;
 	c_api::di_value return_value;
 	bool called;
-	exception::throw_deai_error(c_api::di_rawcallxn(
-	    raw_ref, util::string_to_borrowed_deai_value(method_name), &return_type, &return_value, di_args, &called));
+	exception::throw_deai_error(
+	    c_api::di_rawcallxn(raw_ref, util::string_to_borrowed_deai_value(method_name),
+	                        &return_type, &return_value, di_args, &called));
 	if (!called) {
 		throw std::out_of_range("method doesn't exist");
 	}
@@ -483,21 +565,54 @@ auto call_deai_method_raw(c_api::di_object *raw_ref, const std::string_view &met
 }
 
 template <typename Return, typename T, typename... Args>
-auto call_deai_method(const Ref<T> &object_ref, const std::string_view &method_name, const Args &...args)
+auto call_deai_method(const Ref<T> &object_ref, const std::string_view &method_name,
+                      const Args &...args)
     -> std::enable_if_t<(deai_typeof<Return>::value, true), Return> {
 	return call_deai_method_raw<Return>(object_ref.raw(), method_name, args...);
+}
+
+template <typename T>
+struct object_allocation_info {
+	static constexpr auto alignment = std::max(alignof(c_api::di_object), alignof(T));
+	// Round up the sizeof di_object to multiple of alignment
+	static constexpr auto offset =
+	    (sizeof(c_api::di_object) + (alignment - 1)) & (-alignment);
+};
+
+template <typename T>
+auto call_cpp_dtor_for_object(c_api::di_object *obj) {
+	auto *data = reinterpret_cast<std::byte *>(obj);
+	reinterpret_cast<T *>(data + object_allocation_info<T>::offset)->~T();
+}
+
+/// Create a deai object from a C++ class. The constructor and destructor of this class
+/// will be called accordingly.
+template <typename T, typename... Args>
+auto new_object(Args &&...args) -> Ref<Object> {
+	// Allocate the object with a di_object attached to its front
+	auto obj = Ref<Object>{c_api::di_new_object_with_type_name(
+	    object_allocation_info<T>::offset + sizeof(T),
+	    object_allocation_info<T>::alignment, T::type)};
+
+	// Call C++ destructor on object destruction
+	obj.set_raw_dtor(call_cpp_dtor_for_object<T>);
+
+	// Call constructor
+	new (reinterpret_cast<std::byte *>(obj.raw()) + object_allocation_info<T>::offset)
+	    T(std::forward<Args>(args)...);
+	return obj;
 }
 
 }        // namespace util
 
 }        // namespace deai
 
-#define DEAI_CPP_PLUGIN_ENTRY_POINT(arg)                                                     \
-	/* NOLINTNEXTLINE(bugprone-macro-parentheses) */                                     \
-	static auto di_cpp_plugin_init(deai::Ref<deai::Core> &&arg)->int;                    \
-	extern "C" visibility_default auto di_plugin_init(deai::c_api::di_object *di)->int { \
-		return di_cpp_plugin_init(                                                   \
-		    deai::Ref<deai::Core>{deai::c_api::di_ref_object(di)});                  \
-	}                                                                                    \
-	/* NOLINTNEXTLINE(bugprone-macro-parentheses) */                                     \
-	static auto di_cpp_plugin_init(deai::Ref<deai::Core> &&arg)->int
+#define DEAI_CPP_PLUGIN_ENTRY_POINT(arg)                                                       \
+	/* NOLINTNEXTLINE(bugprone-macro-parentheses) */                                       \
+	static auto di_cpp_plugin_init(::deai::Ref<::deai::Core> &&arg)->int;                  \
+	extern "C" visibility_default auto di_plugin_init(::deai::c_api::di_object *di)->int { \
+		return di_cpp_plugin_init(                                                     \
+		    ::deai::Ref<::deai::Core>{::deai::c_api::di_ref_object(di)});              \
+	}                                                                                      \
+	/* NOLINTNEXTLINE(bugprone-macro-parentheses) */                                       \
+	static auto di_cpp_plugin_init(::deai::Ref<::deai::Core> &&arg)->int
