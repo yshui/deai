@@ -53,9 +53,8 @@ Variant::operator Ref<Object>() {
 auto Variant::object_ref() && -> std::optional<Ref<Object>> {
 	if (type_ == c_api::DI_TYPE_OBJECT) {
 		// NOLINTNEXTLINE(performance-move-const-arg)
-		auto ret = *Ref<Object>::take(value.object);
 		type_ = c_api::DI_TYPE_NIL;
-		return {ret};
+		return {*Ref<Object>::take(value.object)};
 	}
 	return std::nullopt;
 }

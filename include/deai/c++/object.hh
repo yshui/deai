@@ -689,7 +689,7 @@ public:
 	template <typename Other, std::enable_if_t<std::is_base_of_v<T, Other>, int> = 0>
 	auto downcast() && -> std::optional<Ref<Other>> {
 		if (c_api::di_check_type(raw(), Other::type)) {
-			return Ref<Other>{inner.inner.release()};
+			return Ref<Other>::take(inner.inner.release());
 		}
 		return std::nullopt;
 	}
