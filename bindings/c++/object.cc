@@ -43,6 +43,17 @@ auto Object::unsafe_ref(c_api::di_object *obj) -> Object {
 	return Object{obj};
 }
 
+auto Object::create() -> Ref<Object> {
+	return Ref<Object>{Object{
+	    c_api::di_new_object(sizeof(c_api::di_object), alignof(c_api::di_object))}};
+}
+
+Variant::~Variant() {
+	if (type != c_api::di_type::NIL && type != c_api::di_type::DI_LAST_TYPE) {
+		c_api::di_free_value(type, &value);
+	}
+}
+
 Variant::operator Ref<Object>() {
 	return this->object_ref().value();
 }
@@ -62,11 +73,6 @@ auto Variant::object_ref() && -> std::optional<Ref<Object>> {
 /// Get an object ref out of this variant. The value is copied.
 auto Variant::object_ref() & -> std::optional<Ref<Object>> {
 	return Variant{*this}.object_ref();
-}
-
-auto Object::create() -> Ref<Object> {
-	return Ref<Object>{Object{
-	    c_api::di_new_object(sizeof(c_api::di_object), alignof(c_api::di_object))}};
 }
 
 Variant::Variant(c_api::di_type type_, const c_api::di_value &value_)

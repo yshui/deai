@@ -433,11 +433,7 @@ public:
 	c_api::di_type type;
 	c_api::di_value value;
 
-	~Variant() {
-		if (type != c_api::DI_TYPE_NIL) {
-			c_api::di_free_value(type, &value);
-		}
-	}
+	~Variant();
 
 	/// Takes ownership of `value_`. `value_` should be discarded without being freed
 	/// after this
