@@ -51,9 +51,9 @@ Variant::operator Ref<Object>() {
 /// an object ref, it would be moved out and returned. Otherwise nothing happens
 /// and nullopt is returned.
 auto Variant::object_ref() && -> std::optional<Ref<Object>> {
-	if (type_ == c_api::DI_TYPE_OBJECT) {
+	if (type == c_api::DI_TYPE_OBJECT) {
 		// NOLINTNEXTLINE(performance-move-const-arg)
-		type_ = c_api::DI_TYPE_NIL;
+		type = c_api::DI_TYPE_NIL;
 		return {*Ref<Object>::take(value.object)};
 	}
 	return std::nullopt;
@@ -70,38 +70,29 @@ auto Object::create() -> Ref<Object> {
 }
 
 Variant::Variant(c_api::di_type type_, const c_api::di_value &value_)
-    : type_{type_}, value{value_} {
+    : type{type_}, value{value_} {
 	type_ = c_api::DI_TYPE_NIL;
 }
-Variant::Variant(const c_api::di_variant &var) : type_{var.type} {
-	memcpy(&value, var.value, c_api::di_sizeof_type(type_));
+Variant::Variant(const c_api::di_variant &var) : type{var.type} {
+	memcpy(&value, var.value, c_api::di_sizeof_type(type));
 	std::free(var.value);
 }
 auto Variant::operator=(const Variant &other) {
-	type_ = other.type_;
-	c_api::di_copy_value(type_, &value, &other.value);
+	type = other.type;
+	c_api::di_copy_value(type, &value, &other.value);
 }
 Variant::Variant(const Variant &other) {
 	*this = other;
 }
 auto Variant::operator=(Variant &&other) noexcept {
-	type_ = other.type_;
+	type = other.type;
 	value = other.value;
 
-	other.type_ = c_api::DI_TYPE_NIL;
+	other.type = c_api::DI_TYPE_NIL;
 	other.value = {};
 }
 Variant::Variant(Variant &&other) noexcept {
 	*this = std::move(other);
-}
-auto Variant::type() const -> c_api::di_type_t {
-	return type_;
-}
-auto Variant::raw_value() const -> const c_api::di_value & {
-	return value;
-}
-auto Variant::raw_value() -> c_api::di_value & {
-	return value;
 }
 auto Variant::nil() -> Variant {
 	return {c_api::DI_TYPE_NIL, {}};

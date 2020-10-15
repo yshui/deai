@@ -413,13 +413,13 @@ auto raw_check_type(c_api::di_object *obj, const T * /*tag*/)
 }
 
 struct Variant {
-private:
-	c_api::di_type type_;
+	c_api::di_type type;
 	c_api::di_value value;
 
-public:
 	~Variant() {
-		c_api::di_free_value(type_, &value);
+		if (type != c_api::DI_TYPE_NIL) {
+			c_api::di_free_value(type, &value);
+		}
 	}
 
 	/// Takes ownership of `value_`. `value_` should be discarded without being freed
@@ -429,8 +429,8 @@ public:
 	/// Takes ownership of a plain deai value
 	template <typename T, c_api::di_type_t Type = util::deai_typeof<typename std::remove_reference<T>::type>::value,
 	          std::enable_if_t<util::is_verbatim_v<T>, int> = 0>
-	Variant(T value_) : type_{Type} {
-		std::memcpy(&value, &value_, c_api::di_sizeof_type(type_));
+	Variant(T value_) : type{Type} {
+		std::memcpy(&value, &value_, c_api::di_sizeof_type(type));
 	}
 
 	/// Takes ownership of `var`, `var` should be discarded without being freed after
@@ -445,12 +445,6 @@ public:
 
 	Variant(Variant &&other) noexcept;
 
-	[[nodiscard]] auto type() const -> c_api::di_type_t;
-
-	[[nodiscard]] auto raw_value() const -> const c_api::di_value &;
-
-	[[nodiscard]] auto raw_value() -> c_api::di_value &;
-
 	static auto nil() -> Variant;
 
 	operator Ref<Object>();
@@ -462,7 +456,7 @@ public:
 	                            Type != c_api::DI_TYPE_NIL && Type != c_api::DI_TYPE_ANY &&
 	                            Type != c_api::DI_LAST_TYPE && Type != c_api::DI_TYPE_STRING,
 	                        std::optional<T>> {
-		if (Type != type_) {
+		if (Type != type) {
 			return std::nullopt;
 		}
 		if constexpr (Type == c_api::DI_TYPE_BOOL) {
@@ -515,9 +509,9 @@ public:
 	/// Get an object ref out of this variant. The value is copied.
 	auto object_ref() & -> std::optional<Ref<Object>>;
 
-	template <typename T, c_api::di_type_t type = util::deai_typeof<T>::value>
+	template <typename T, c_api::di_type_t Type = util::deai_typeof<T>::value>
 	[[nodiscard]] auto is() const -> bool {
-		return type_ == type;
+		return type == Type;
 	}
 };
 struct ObjectMembersRawGetter;
@@ -589,7 +583,7 @@ public:
 			if (new_value.has_value()) {
 				int unused rc = c_api::di_add_member_clone(
 				    target, util::string_to_borrowed_deai_value(key),
-				    new_value->type(), &new_value->raw_value());
+				    new_value->type, &new_value->value);
 				assert(rc == 0);
 			}
 		} else {
@@ -599,7 +593,7 @@ public:
 				// the setter should handle the deletion
 				exception::throw_deai_error(c_api::di_setx(
 				    target, util::string_to_borrowed_deai_value(key),
-				    new_value->type(), &new_value->raw_value()));
+				    new_value->type, &new_value->value));
 			}
 		}
 		return new_value;
@@ -613,10 +607,9 @@ public:
 
 		auto moved = std::move(new_value);
 		if (moved.has_value()) {
-			auto type = moved->type();
 			exception::throw_deai_error(c_api::di_add_member_move(
-			    target, util::string_to_borrowed_deai_value(key), &type,
-			    &moved->raw_value()));
+			    target, util::string_to_borrowed_deai_value(key), &moved->type,
+			    &moved->value));
 		}
 	}
 };
@@ -824,10 +817,10 @@ struct ListenHandle : Object {
 
 template <typename T, c_api::di_type_t Type>
 auto Variant::to() && -> std::enable_if_t<Type == c_api::DI_TYPE_WEAK_OBJECT, std::optional<WeakRef<Object>>> {
-	if (type_ != Type) {
+	if (type != Type) {
 		return std::nullopt;
 	}
-	type_ = c_api::DI_TYPE_NIL;
+	type = c_api::DI_TYPE_NIL;
 	return {WeakRef<Object>{value.weak_object}};
 }
 
@@ -1005,7 +998,7 @@ public:
 	};
 };
 
-template <typename T, auto func>
+template <auto func, typename T>
 auto add_method(T &obj_impl, std::string_view name) -> void {
 	constexpr auto wrapped_func = member_function_wrapper<T>::template inner<func>::wrapper;
 	auto closure = to_di_closure<wrapped_func>().release();
