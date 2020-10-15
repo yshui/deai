@@ -651,15 +651,18 @@ int main(int argc, char *argv[]) {
 	                   (struct di_tuple){nargs, di_args}, &called);
 	if (ret != 0) {
 		fprintf(stderr, "Failed to call \"%s.%s\"\n", modname ? modname : "", method);
-		exit(EXIT_FAILURE);
+		exit_code = EXIT_FAILURE;
+		quit = true;
 	}
 
-	if (rt == DI_TYPE_OBJECT) {
+	if (exit_code != 0 || rt == DI_TYPE_OBJECT) {
 		struct di_string errmsg;
 		if (di_get(retd.object, "errmsg", errmsg) == 0) {
 			fprintf(stderr, "The function you called returned an error message: %.*s\n",
 			        (int)errmsg.length, errmsg.data);
 			di_free_string(errmsg);
+			exit_code = EXIT_FAILURE;
+			quit = true;
 		}
 	}
 
