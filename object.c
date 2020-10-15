@@ -144,14 +144,24 @@ ret:
 }
 
 int di_setx(struct di_object *o, struct di_string prop, di_type_t type, const void *val) {
+	// If a setter is present, we just call that and we are done.
 	bool handler_found;
-	int rc2 = call_handler_with_fallback(
-	    o, "__set", prop, (struct di_variant){(union di_value *)val, type}, NULL,
-	    NULL, &handler_found);
+	int rc = call_handler_with_fallback(o, "__set", prop,
+	                                    (struct di_variant){(union di_value *)val, type},
+	                                    NULL, NULL, &handler_found);
 	if (handler_found) {
-		return rc2;
+		return rc;
 	}
 
+	// Call the deleter if present
+	rc = call_handler_with_fallback(o, "__delete", prop,
+	                                (struct di_variant){NULL, DI_LAST_TYPE}, NULL,
+	                                NULL, &handler_found);
+	if (handler_found && rc != 0) {
+		return rc;
+	}
+
+	// Finally, replace the value
 	auto mem = di_lookup(o, prop);
 	if (mem) {
 		mem->data = realloc(mem->data, di_sizeof_type(type));
