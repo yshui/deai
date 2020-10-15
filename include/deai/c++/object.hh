@@ -1043,6 +1043,30 @@ auto add_method(T &obj_impl, std::string_view name) -> void {
 
 }        // namespace type::util
 
+namespace _compile_time_checks {
+using namespace type;
+using namespace util;
+
+/// Assign this to a variable you want to know the type of, to have the compiler reveal it
+/// to you.
+struct incompatible {};
+
+template <typename... Types>
+inline constexpr bool check_borrowed_type_transformations_v =
+    support::all_of_v<is_verbatim_v<to_borrowed_deai_type<Types>>...>;
+
+/// Make sure to_borrowed_deai_type does indeed produce di_* types
+static_assert(check_borrowed_type_transformations_v<std::string_view, std::string, c_api::di_object *>);
+
+template <typename... Types>
+inline constexpr bool check_owned_type_transformations_v =
+    support::all_of_v<is_verbatim_v<to_owned_deai_type<Types>>...>;
+
+/// Make sure to_owned_deai_type does indeed produce di_* types
+static_assert(check_owned_type_transformations_v<std::string, c_api::di_object *, Variant>);
+
+}        // namespace _compile_time_checks
+
 }        // namespace deai
 
 #define DEAI_CPP_PLUGIN_ENTRY_POINT(arg)                                                       \
