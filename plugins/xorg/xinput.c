@@ -231,9 +231,16 @@ define_trivial_cleanup_t(xcb_input_xi_change_property_items_t);
 /// Arbitrary length limit for the property names
 #define XI_MAX_PROPERTY_NAME_LENGTH (256)
 static void di_xorg_xinput_set_prop(struct di_xorg_xinput_device *dev,
-                                    struct di_string key, struct di_array arr) {
+                                    struct di_string key, struct di_variant var) {
 	if (!dev->xi->dc) {
 		return;
+	}
+
+	struct di_array arr;
+	if (var.type != DI_TYPE_ARRAY) {
+		arr.elem_type = var.type;
+		arr.arr = var.value;
+		arr.length = 1;
 	}
 
 	struct di_xorg_connection *dc = dev->xi->dc;
@@ -377,10 +384,10 @@ err:
 	          (int)key.length, key.data, arr.elem_type);
 }
 
-static struct di_array
+static struct di_variant
 di_xorg_xinput_get_prop(struct di_xorg_xinput_device *dev, struct di_string name_) {
 	if (!dev->xi->dc) {
-		return DI_ARRAY_INIT;
+		return di_variant_of(di_new_error("Lost X connection"));
 	}
 
 	struct di_xorg_connection *dc = dev->xi->dc;
@@ -391,7 +398,7 @@ di_xorg_xinput_get_prop(struct di_xorg_xinput_device *dev, struct di_string name
 	auto prop_atom = di_xorg_intern_atom(dc, name_, &e);
 
 	if (e) {
-		return ret;
+		return di_variant_of(di_new_error("Failed to intern atom"));
 	}
 
 	auto float_atom = di_xorg_intern_atom(dc, di_string_borrow("FLOAT"), &e);
@@ -402,7 +409,7 @@ di_xorg_xinput_get_prop(struct di_xorg_xinput_device *dev, struct di_string name
 	    NULL);
 
 	if (prop->type == XCB_ATOM_NONE) {
-		return ret;
+		return DI_BOTTOM_VARIANT;
 	}
 
 	size_t plen = prop->bytes_after;
@@ -414,12 +421,12 @@ di_xorg_xinput_get_prop(struct di_xorg_xinput_device *dev, struct di_string name
 	    NULL);
 
 	if (prop->type == XCB_ATOM_NONE) {
-		return ret;
+		return DI_BOTTOM_VARIANT;
 	}
 
 	if (prop->type == XCB_ATOM_INTEGER || prop->type == XCB_ATOM_CARDINAL) {
 		ret.elem_type = DI_TYPE_INT;
-	} else if (prop->type == XCB_ATOM_ATOM) {
+	} else if (prop->type == XCB_ATOM_ATOM || prop->type == XCB_ATOM_STRING) {
 		ret.elem_type = DI_TYPE_STRING;
 	} else if (prop->type == float_atom) {
 		ret.elem_type = DI_TYPE_FLOAT;
@@ -427,7 +434,7 @@ di_xorg_xinput_get_prop(struct di_xorg_xinput_device *dev, struct di_string name
 		if (logm) {
 			di_log_va(logm, DI_LOG_WARN, "Unknown property type %d\n", prop->type);
 		}
-		return ret;
+		return di_variant_of(di_new_error("Property has unknown type: %d", prop->type));
 	}
 
 	if (prop->format != 8 && prop->format != 16 && prop->format != 32) {
@@ -435,15 +442,22 @@ di_xorg_xinput_get_prop(struct di_xorg_xinput_device *dev, struct di_string name
 			di_log_va(logm, DI_LOG_WARN, "Xorg returns invalid format %d\n",
 			          prop->format);
 		}
-		return ret;
+		return di_variant_of(di_new_error("Property has invalid format", prop->format));
 	}
 	if ((prop->type == float_atom || prop->type == XCB_ATOM_ATOM) && prop->format != 32) {
 		di_log_va(logm, DI_LOG_WARN,
 		          "Xorg return invalid format for float/atom %d\n", prop->format);
-		return ret;
+		return di_variant_of(di_new_error("X server is misbehaving"));
 	}
 
 	void *buf = xcb_input_xi_get_property_items(prop);
+	if (prop->type == XCB_ATOM_STRING) {
+		// Deal with zero delimited types here
+		// prop->num_items indicates the number of bytes in the string
+		DI_ASSERT(prop->format == 8);
+		return di_variant_of(di_string_dup(buf));
+	}
+	// Handle fixed-sized types
 	ret.length = prop->num_items;
 	ret.arr = calloc(ret.length, di_sizeof_type(ret.elem_type));
 	void *curr = ret.arr;
@@ -466,6 +480,7 @@ di_xorg_xinput_get_prop(struct di_xorg_xinput_device *dev, struct di_string name
 			}
 		} else if (ret.elem_type == DI_TYPE_STRING) {
 			struct di_string *tmp = curr;
+			DI_ASSERT(prop->type == XCB_ATOM_ATOM);
 			auto atom = di_xorg_get_atom_name(dc, read(32));
 			if (atom == NULL) {
 				*tmp = DI_STRING_INIT;
@@ -480,7 +495,13 @@ di_xorg_xinput_get_prop(struct di_xorg_xinput_device *dev, struct di_string name
 		curr += di_sizeof_type(ret.elem_type);
 	}
 #undef read
-	return ret;
+	if (ret.length == 1) {
+		// If there is only 1 element, unpack the array
+		auto var = di_variant_of_impl(ret.elem_type, ret.arr);
+		free(ret.arr);
+		return var;
+	}
+	return di_variant_of(ret);
 }
 
 static struct di_object *di_xorg_xinput_props(struct di_xorg_xinput_device *dev) {
@@ -491,7 +512,7 @@ static struct di_object *di_xorg_xinput_props(struct di_xorg_xinput_device *dev)
 	obj->xi = dev->xi;
 
 	di_method(obj, "__get", di_xorg_xinput_get_prop, struct di_string);
-	di_method(obj, "__set", di_xorg_xinput_set_prop, struct di_string, struct di_array);
+	di_method(obj, "__set", di_xorg_xinput_set_prop, struct di_string, struct di_variant);
 	return (void *)obj;
 }
 

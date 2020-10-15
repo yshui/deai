@@ -383,3 +383,30 @@ static inline void unused di_object_upgrade_deai(struct di_object *nonnull o) {
 static inline struct di_object *nullable unused di_module_get_deai(struct di_module *nonnull o) {
 	return di_object_get_deai_weak((struct di_object *)o);
 }
+
+/// Consumes a di_value and create a di_variant containing that di_value
+static inline struct di_variant unused di_variant_of_impl(di_type_t type,
+                                                          union di_value *nullable val) {
+	struct di_variant ret = {
+	    .type = type,
+	    .value = NULL,
+	};
+	if (type == DI_TYPE_NIL || type == DI_LAST_TYPE) {
+		return ret;
+	}
+
+	ret.value = malloc(di_sizeof_type(type));
+	memcpy(ret.value, val, di_sizeof_type(type));
+	return ret;
+}
+
+#define di_variant_of(v)                                                                 \
+	({                                                                               \
+		auto __deai_variant_tmp = (v);                                           \
+		di_variant_of_impl(di_typeof(__deai_variant_tmp),                        \
+		                   (union di_value *)&__deai_variant_tmp);               \
+	})
+
+/// Variant of the bottom type. Meaning this variant "doesn't exist", used to indicate
+/// a property doesn't exist by generic getters.
+static const struct di_variant DI_BOTTOM_VARIANT = (struct di_variant){NULL, DI_LAST_TYPE};
