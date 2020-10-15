@@ -104,6 +104,39 @@ auto Variant::nil() -> Variant {
 	return {c_api::di_type::NIL, {}};
 }
 
+auto Variant::bottom() -> Variant {
+	return {c_api::di_type::DI_LAST_TYPE, {}};
+}
+
+Variant::operator di_variant() && {
+	if (type == c_api::di_type::NIL || type == c_api::di_type::DI_LAST_TYPE) {
+		return {nullptr, type};
+	}
+
+	c_api::di_variant ret{
+	    static_cast<c_api::di_value *>(std::malloc(c_api::di_sizeof_type(type))), type};
+	std::memcpy(ret.value, &value, c_api::di_sizeof_type(type));
+	type = c_api::di_type::NIL;
+	return ret;
+}
+
+Variant::operator di_variant() & {
+	c_api::di_variant copy = std::move(*this);
+	return copy;
+}
+
+template <typename T, c_api::di_type Type>
+auto Variant::to() && -> std::enable_if_t<std::is_same_v<T, WeakRef<Object>>, std::optional<WeakRef<Object>>> {
+	if (type != Type) {
+		return std::nullopt;
+	}
+	type = c_api::di_type::NIL;
+	return {WeakRef<Object>{value.weak_object}};
+}
+
+template auto
+Variant::to<WeakRef<Object>, c_api::di_type::WEAK_OBJECT>() && -> std::optional<WeakRef<Object>>;
+
 auto ObjectMembersRawGetter::operator[](const std::string_view &key) -> ObjectMemberProxy<true> {
 	return {target, key};
 }

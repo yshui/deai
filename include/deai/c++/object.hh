@@ -288,6 +288,8 @@ template <typename T, c_api::di_type type = deai_typeof<support::remove_cvref_t<
 auto to_owned_deai_value(T &&input) {
 	if constexpr (is_verbatim_v<support::remove_cvref_t<T>>) {
 		return input;
+	} else if constexpr (type == c_api::di_type::VARIANT) {
+		return static_cast<c_api::di_variant>(std::forward<T>(input));
 	} else if constexpr (type == c_api::di_type::OBJECT || type == c_api::di_type::WEAK_OBJECT) {
 		return std::forward<T>(input).release();
 	} else if constexpr (type == c_api::di_type::STRING) {
@@ -427,7 +429,8 @@ private:
 	                               (Type != c_api::di_type::NIL) &&
 	                               (Type != c_api::di_type::ANY) &&
 	                               (Type != c_api::di_type::DI_LAST_TYPE) &&
-	                               (Type != c_api::di_type::STRING);
+	                               (Type != c_api::di_type::STRING) &&
+	                               (Type != c_api::di_type::WEAK_OBJECT);
 
 public:
 	c_api::di_type type;
@@ -498,9 +501,20 @@ public:
 		unreachable();
 	}
 
+	operator c_api::di_variant() &&;
+	operator c_api::di_variant() &;
+
 	template <typename T, c_api::di_type Type = util::deai_typeof<T>::value>
 	auto
 	to() && -> std::enable_if_t<std::is_same_v<T, WeakRef<Object>>, std::optional<WeakRef<Object>>>;
+
+	template <typename T, c_api::di_type Type = util::deai_typeof<T>::value>
+	auto
+	to() & -> std::enable_if_t<!Variant::is_trivially_convertible<T>, std::optional<T>> {
+		// Try to use the move conversion
+		auto copy = *this;
+		return std::move(copy).to<T>();
+	}
 
 	template <typename T, c_api::di_type type = util::deai_typeof<T>::value>
 	operator T() {
@@ -827,14 +841,8 @@ struct ListenHandle : Object {
 	static constexpr const char *type = "deai:ListenHandle";
 };
 
-template <typename T, c_api::di_type_t Type>
-auto Variant::to() && -> std::enable_if_t<Type == c_api::DI_TYPE_WEAK_OBJECT, std::optional<WeakRef<Object>>> {
-	if (type != Type) {
-		return std::nullopt;
-	}
-	type = c_api::DI_TYPE_NIL;
-	return {WeakRef<Object>{value.weak_object}};
-}
+extern template auto
+Variant::to<WeakRef<Object>, c_api::di_type::WEAK_OBJECT>() && -> std::optional<WeakRef<Object>>;
 
 }        // namespace type
 
