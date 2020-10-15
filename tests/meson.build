@@ -14,6 +14,7 @@ test_cases = [
   'log.lua',
   'weak.lua',
   'roots.lua',
+  'exec.lua',
 ]
 foreach t : test_cases
   test(t, deai_exe, args:
