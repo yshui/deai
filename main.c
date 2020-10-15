@@ -394,8 +394,15 @@ di_register_module_method(struct deai *p, struct di_string name, struct di_modul
 
 int di_exec(struct deai *p, struct di_array argv) {
 	char **nargv = tmalloc(char *, argv.length + 1);
-	memcpy(nargv, argv.arr, sizeof(void *) * argv.length);
+	struct di_string *strings = argv.arr;
+	for (int i = 0; i < argv.length; i++) {
+		nargv[i] = di_string_to_chars_alloc(strings[i]);
+	}
 	execvp(nargv[0], nargv);
+
+	for (int i = 0; i < argv.length; i++) {
+		free(nargv[i]);
+	}
 	free(nargv);
 	return -1;
 }
