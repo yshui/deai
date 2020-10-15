@@ -14,6 +14,7 @@
 #include <stdio.h>
 #include <xcb/xinput.h>
 
+#include "deai/object.h"
 #include "utils.h"
 #include "xorg.h"
 

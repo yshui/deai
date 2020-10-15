@@ -19,6 +19,12 @@
 #include <stdlib.h>
 #include <string.h>
 
+#ifndef __cplusplus
+#define DI_TYPE_NAME(x) DI_TYPE_##x
+#else
+#define DI_TYPE_NAME(x) x
+#endif
+
 /// deai type ids. Use negative numbers for invalid types.
 ///
 /// # Passing by reference:
@@ -71,62 +77,77 @@
 /// If you want to have a property that may or may not exist, you should write a generic
 /// getter, and return a variant whose type is DI_LAST_TYPE to indicate the property
 /// doesn't exist.
+#ifdef __cplusplus
+enum class di_type : int {
+#else
 typedef enum di_type {
-	DI_TYPE_NIL = 0,
+#endif
+	DI_TYPE_NAME(NIL) = 0,
 	// unresolved, only used for element type of empty arrays.
-	DI_TYPE_ANY,
-	// boolean, no implicit conversion to number types
+	DI_TYPE_NAME(ANY),
+	// boolean), no implicit conversion to number types
 	// C type: _Bool
-	DI_TYPE_BOOL,
+	DI_TYPE_NAME(BOOL),
 	// native integer
 	// C type: int
-	DI_TYPE_NINT,
+	DI_TYPE_NAME(NINT),
 	// native unsigned integer
 	// C type: unsigned int
-	DI_TYPE_NUINT,
-	// 64bit signed integer, int64_t
+	DI_TYPE_NAME(NUINT),
+	// 64bit signed integer), int64_t
 	// C type: int64_t
-	DI_TYPE_INT,
+	DI_TYPE_NAME(INT),
 	// 64bit unsigned integer
 	// C type: uint64_t
-	DI_TYPE_UINT,
+	DI_TYPE_NAME(UINT),
 	// implementation defined floating point number type
 	// C type: double
-	DI_TYPE_FLOAT,
-	// generic pointer, whose memory is not managed by deai
+	DI_TYPE_NAME(FLOAT),
+	// generic pointer), whose memory is not managed by deai
 	// C type: void *
-	DI_TYPE_POINTER,
+	DI_TYPE_NAME(POINTER),
 	// a deai object reference
 	// C type: struct di_object *
-	DI_TYPE_OBJECT,
+	DI_TYPE_NAME(OBJECT),
 	// a weak deai object reference
 	// C type: struct di_weak_object
-	DI_TYPE_WEAK_OBJECT,
+	DI_TYPE_NAME(WEAK_OBJECT),
 	// immutable utf-8 string
 	// C type: char *
-	DI_TYPE_STRING,
-	// immutable utf-8 string, which is not allocated on stack
+	DI_TYPE_NAME(STRING),
+	// immutable utf-8 string), which is not allocated on stack
 	// C type: const char *
-	DI_TYPE_STRING_LITERAL,
+	DI_TYPE_NAME(STRING_LITERAL),
 	// an array. all elements in the array have the same type. see `struct di_array`
 	// for more info.
 	// C type: struct di_array
-	DI_TYPE_ARRAY,
-	// a tuple. a collection of variable number of elements, each with its own type.
+	DI_TYPE_NAME(ARRAY),
+	// a tuple. a collection of variable number of elements), each with its own type.
 	// C type: struct di_tuple
-	DI_TYPE_TUPLE,
+	DI_TYPE_NAME(TUPLE),
 	// sum type of all deai types. note: variants always hold a reference to their
 	// inner values. passing a variant is equivalent to passing a reference to the
 	// value.
 	// C type: struct di_variant
-	DI_TYPE_VARIANT,
+	DI_TYPE_NAME(VARIANT),
 	// the bottom type
 	// this type has no value. it shouldn't be used as type for parameters or
 	// arguments. and shouldn't be used as return type, except for a getter.
 	// the getters are allowed to return a variant of LAST_TYPE, to indicate the
 	// property is not found.
 	DI_LAST_TYPE,
+#ifdef __cplusplus
+};
+using di_type_t = di_type;
+#undef DI_TYPE_NAME
+#define DI_TYPE_NAME(x) di_type::x
+#define DI_LAST_TYPE di_type::DI_LAST_TYPE
+#else
 } di_type_t;
+// Make sure C and C++ agrees on the type of di_type_t
+static_assert(sizeof(di_type_t) == sizeof(int), "di_type_t has wrong type");
+
+#endif
 
 struct di_object;
 struct di_tuple;
@@ -170,11 +191,11 @@ struct di_string {
 };
 
 /// A constant to create an empty array
-static const struct di_array unused DI_ARRAY_INIT = {0, NULL, DI_TYPE_ANY};
+static const struct di_array unused DI_ARRAY_INIT = {0, NULL, DI_TYPE_NAME(ANY)};
 /// A constant to create an empty tuple
 static const struct di_tuple unused DI_TUPLE_INIT = {0, NULL};
 /// A constant to create an nil variant
-static const struct di_variant unused DI_VARIANT_INIT = {NULL, DI_TYPE_NIL};
+static const struct di_variant unused DI_VARIANT_INIT = {NULL, DI_TYPE_NAME(NIL)};
 
 static const struct di_string unused DI_STRING_INIT = {NULL, 0};
 
@@ -459,35 +480,35 @@ static inline void unused di_free_stringp(struct di_string *nonnull str) {
 
 static inline unused size_t di_sizeof_type(di_type_t t) {
 	switch (t) {
-	case DI_TYPE_NIL:
+	case DI_TYPE_NAME(NIL):
 		return 0;
-	case DI_TYPE_ANY:
+	case DI_TYPE_NAME(ANY):
 	case DI_LAST_TYPE:
 		abort();
-	case DI_TYPE_FLOAT:
+	case DI_TYPE_NAME(FLOAT):
 		return sizeof(double);
-	case DI_TYPE_ARRAY:
+	case DI_TYPE_NAME(ARRAY):
 		return sizeof(struct di_array);
-	case DI_TYPE_TUPLE:
+	case DI_TYPE_NAME(TUPLE):
 		return sizeof(struct di_tuple);
-	case DI_TYPE_VARIANT:
+	case DI_TYPE_NAME(VARIANT):
 		return sizeof(struct di_variant);
-	case DI_TYPE_UINT:
-	case DI_TYPE_INT:
+	case DI_TYPE_NAME(UINT):
+	case DI_TYPE_NAME(INT):
 		return sizeof(int64_t);
-	case DI_TYPE_NUINT:
+	case DI_TYPE_NAME(NUINT):
 		return sizeof(unsigned int);
-	case DI_TYPE_NINT:
+	case DI_TYPE_NAME(NINT):
 		return sizeof(int);
-	case DI_TYPE_STRING:
+	case DI_TYPE_NAME(STRING):
 		return sizeof(struct di_string);
-	case DI_TYPE_STRING_LITERAL:
-	case DI_TYPE_OBJECT:
-	case DI_TYPE_POINTER:
+	case DI_TYPE_NAME(STRING_LITERAL):
+	case DI_TYPE_NAME(OBJECT):
+	case DI_TYPE_NAME(POINTER):
 		return sizeof(void *);
-	case DI_TYPE_WEAK_OBJECT:
+	case DI_TYPE_NAME(WEAK_OBJECT):
 		return sizeof(struct di_weak_object *);
-	case DI_TYPE_BOOL:
+	case DI_TYPE_NAME(BOOL):
 		return sizeof(bool);
 	}
 	abort();
@@ -558,3 +579,6 @@ static inline void unused di_free_di_weak_objectp(struct di_weak_object *nullabl
 
 /// A valid but non-upgradeable weak reference
 PUBLIC_DEAI_API extern const struct di_weak_object *const nonnull dead_weak_ref;
+
+#undef DI_LAST_TYPE
+#undef DI_TYPE_NAME

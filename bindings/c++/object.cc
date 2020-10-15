@@ -51,9 +51,9 @@ Variant::operator Ref<Object>() {
 /// an object ref, it would be moved out and returned. Otherwise nothing happens
 /// and nullopt is returned.
 auto Variant::object_ref() && -> std::optional<Ref<Object>> {
-	if (type == c_api::DI_TYPE_OBJECT) {
+	if (type == c_api::di_type::OBJECT) {
 		// NOLINTNEXTLINE(performance-move-const-arg)
-		type = c_api::DI_TYPE_NIL;
+		type = c_api::di_type::NIL;
 		return {*Ref<Object>::take(value.object)};
 	}
 	return std::nullopt;
@@ -71,7 +71,7 @@ auto Object::create() -> Ref<Object> {
 
 Variant::Variant(c_api::di_type type_, const c_api::di_value &value_)
     : type{type_}, value{value_} {
-	type_ = c_api::DI_TYPE_NIL;
+	type_ = c_api::di_type::NIL;
 }
 Variant::Variant(const c_api::di_variant &var) : type{var.type} {
 	memcpy(&value, var.value, c_api::di_sizeof_type(type));
@@ -88,14 +88,14 @@ auto Variant::operator=(Variant &&other) noexcept {
 	type = other.type;
 	value = other.value;
 
-	other.type = c_api::DI_TYPE_NIL;
+	other.type = c_api::di_type::NIL;
 	other.value = {};
 }
 Variant::Variant(Variant &&other) noexcept {
 	*this = std::move(other);
 }
 auto Variant::nil() -> Variant {
-	return {c_api::DI_TYPE_NIL, {}};
+	return {c_api::di_type::NIL, {}};
 }
 
 auto ObjectMembersRawGetter::operator[](const std::string_view &key) -> ObjectMemberProxy<true> {
@@ -111,7 +111,7 @@ WeakRefBase::WeakRefBase(const WeakRefBase &other) : inner{nullptr} {
 }
 auto WeakRefBase::operator=(const WeakRefBase &other) -> WeakRefBase & {
 	c_api::di_weak_object *weak, *weak_other = other.inner.get();
-	c_api::di_copy_value(c_api::DI_TYPE_WEAK_OBJECT, &weak, &weak_other);
+	c_api::di_copy_value(c_api::di_type::WEAK_OBJECT, &weak, &weak_other);
 	inner.reset(weak);
 	return *this;
 }
