@@ -19,11 +19,15 @@ public:
 		udev_unref(context);
 	}
 };
+
 struct Device {
 	static constexpr const char *type [[maybe_unused]] = "deai.plugin.udev:Device";
 	udev_device *device;
+
+	auto get_properties() -> Ref<Object>;
+
 	Device(Ref<Object> &&ctx_, const char *syspath) {
-		auto ctx = std::move(ctx_); // Move the context object
+		auto ctx = std::move(ctx_);        // Move the context object
 		auto object_ref = util::unsafe_to_object_ref(*this);
 		auto &ctx_inner = util::unsafe_to_inner<Context>(ctx);
 		device = udev_device_new_from_syspath(ctx_inner.context, syspath);
@@ -31,11 +35,39 @@ struct Device {
 		// libudev keeps a ref to `udev` inside udev_device, so we do the same to
 		// keep track of the udev context
 		object_ref.raw_members()["__udev_context"] = Variant::from(std::move(ctx));
+
+		util::add_method<&Device::get_properties>(*this, "__get_properties");
 	}
 	~Device() {
 		udev_device_unref(device);
 	}
 };
+struct DeviceProperties {
+	static constexpr const char *type [[maybe_unused]] = "deai.plugin.udev:"
+	                                                     "DeviceProperties";
+	auto property_getter(std::string_view name) -> Variant {
+		auto object_ref = util::unsafe_to_object_ref(*this);
+		auto device_object_ref =
+		    *object_ref.raw_members()["__udev_device"]->object_ref();
+		auto &device = util::unsafe_to_inner<Device>(device_object_ref);
+		const auto *property_value =
+		    udev_device_get_property_value(device.device, std::string{name}.c_str());
+		if (property_value == nullptr) {
+			return Variant::bottom();
+		}
+		return Variant::from(std::string{property_value});
+	}
+	DeviceProperties(Ref<Object> &&device) {
+		auto object_ref = util::unsafe_to_object_ref(*this);
+		object_ref.raw_members()["__udev_device"] = Variant::from(std::move(device));
+
+		util::add_method<&DeviceProperties::property_getter>(*this, "__get");
+	}
+};
+
+auto Device::get_properties() -> Ref<Object> {
+	return util::new_object<DeviceProperties>(util::unsafe_to_object_ref(*this));
+}
 
 struct Module {
 private:
