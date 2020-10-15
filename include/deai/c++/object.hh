@@ -892,7 +892,7 @@ auto new_object(Args &&...args) -> Ref<Object> {
 /// Can be used in member function of T to get a `Ref<Object>` from `*this`, this is
 /// usable in the constructor of the object too.
 template <typename T>
-auto unsafe_to_object_ref(const T &obj) -> Ref<Object> {
+auto unsafe_to_object_ref(T &obj) -> Ref<Object> {
 	return {reinterpret_cast<c_api::di_object *>(reinterpret_cast<std::byte *>(&obj) -
 	                                             object_allocation_info<T>::offset)};
 }
@@ -987,7 +987,7 @@ private:
 		template <auto func>
 		struct wrapper {
 			static auto call(c_api::di_object *obj, Args &&...args) {
-				auto this_ = unsafe_to_inner<T>(obj);
+				auto &this_ = unsafe_to_inner<T>(obj);
 				return (this_.*func)(std::forward<Args>(args)...);
 			}
 		};
