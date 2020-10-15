@@ -282,6 +282,11 @@ auto to_borrowed_deai_value(const T &input) {
 	unreachable();
 }
 
+inline auto string_to_owned_deai_value(std::string &&input) -> c_api::di_string {
+	auto moved = std::move(input);
+	return c_api::di_string_ndup(moved.c_str(), moved.size());
+}
+
 /// Convert an owned C++ value to an owned deai value. Mostly the same as the borrowed
 /// case, except for strings and arrays
 template <typename T, c_api::di_type type = deai_typeof<support::remove_cvref_t<T>>::value>
