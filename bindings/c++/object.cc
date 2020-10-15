@@ -124,5 +124,8 @@ auto WeakRefBase::operator=(const WeakRefBase &other) -> WeakRefBase & {
 	inner.reset(weak);
 	return *this;
 }
+auto WeakRefBase::release() && -> c_api::di_weak_object * {
+	return inner.release();
+}
 }        // namespace type
 }        // namespace deai

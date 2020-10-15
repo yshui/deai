@@ -70,6 +70,8 @@ namespace type {
 template <typename T, typename = void>
 struct Ref;
 struct Object;
+template <typename T>
+struct WeakRef;
 
 namespace util {
 template <typename T, typename = void>
@@ -123,6 +125,14 @@ struct deai_typeof<type::Ref<T>, std::enable_if_t<std::is_base_of_v<type::Object
 template <>
 struct deai_typeof<c_api::di_object *> {
 	static constexpr auto value = c_api::DI_TYPE_OBJECT;
+};
+template <typename T>
+struct deai_typeof<WeakRef<T>> {
+	static constexpr auto value = c_api::DI_TYPE_WEAK_OBJECT;
+};
+template <>
+struct deai_typeof<c_api::di_weak_object *> {
+	static constexpr auto value = c_api::DI_TYPE_WEAK_OBJECT;
 };
 template <>
 struct deai_typeof<std::string> {
@@ -270,8 +280,8 @@ template <typename T, int type = deai_typeof<typename std::remove_reference<T>::
 auto to_owned_deai_value(T &&input) {
 	if constexpr (is_verbatim_v<typename std::remove_reference<T>::type>) {
 		return input;
-	} else if constexpr (type == c_api::DI_TYPE_OBJECT) {
-		return input.release();
+	} else if constexpr (type == c_api::DI_TYPE_OBJECT || type == c_api::DI_TYPE_WEAK_OBJECT) {
+		return std::forward<T>(input).release();
 	} else if constexpr (type == c_api::DI_TYPE_STRING) {
 		return string_to_owned_deai_value(input);
 	} else if constexpr (type == c_api::DI_TYPE_ARRAY) {
@@ -439,42 +449,46 @@ public:
 	operator Ref<Object>();
 
 	// Conversion for all the by-value types
-	template <typename T, c_api::di_type_t type = util::deai_typeof<T>::value>
+	template <typename T, c_api::di_type_t Type = util::deai_typeof<T>::value>
 	auto to() const
-	    -> std::enable_if_t<util::is_basic_deai_type(type) && type != c_api::DI_TYPE_OBJECT &&
-	                            type != c_api::DI_TYPE_NIL && type != c_api::DI_TYPE_ANY &&
-	                            type != c_api::DI_LAST_TYPE && type != c_api::DI_TYPE_STRING,
+	    -> std::enable_if_t<util::is_basic_deai_type(Type) && Type != c_api::DI_TYPE_OBJECT &&
+	                            Type != c_api::DI_TYPE_NIL && Type != c_api::DI_TYPE_ANY &&
+	                            Type != c_api::DI_LAST_TYPE && Type != c_api::DI_TYPE_STRING,
 	                        std::optional<T>> {
-		if (type != type_) {
+		if (Type != type_) {
 			return std::nullopt;
 		}
-		if constexpr (type == c_api::DI_TYPE_BOOL) {
+		if constexpr (Type == c_api::DI_TYPE_BOOL) {
 			return value.bool_;
 		}
-		if constexpr (type == c_api::DI_TYPE_INT) {
+		if constexpr (Type == c_api::DI_TYPE_INT) {
 			return value.int_;
 		}
-		if constexpr (type == c_api::DI_TYPE_UINT) {
+		if constexpr (Type == c_api::DI_TYPE_UINT) {
 			return value.uint;
 		}
-		if constexpr (type == c_api::DI_TYPE_NINT) {
+		if constexpr (Type == c_api::DI_TYPE_NINT) {
 			return value.nint;
 		}
-		if constexpr (type == c_api::DI_TYPE_NUINT) {
+		if constexpr (Type == c_api::DI_TYPE_NUINT) {
 			return value.nuint;
 		}
-		if constexpr (type == c_api::DI_TYPE_FLOAT) {
+		if constexpr (Type == c_api::DI_TYPE_FLOAT) {
 			return value.float_;
 		}
-		if constexpr (type == c_api::DI_TYPE_STRING_LITERAL) {
+		if constexpr (Type == c_api::DI_TYPE_STRING_LITERAL) {
 			return std::string_view(value.string_literal,
 			                        strlen(value.string_literal));
 		}
-		if constexpr (type == c_api::DI_TYPE_POINTER) {
+		if constexpr (Type == c_api::DI_TYPE_POINTER) {
 			return value.pointer;
 		}
 		unreachable();
 	}
+
+	template <typename T, c_api::di_type_t Type = util::deai_typeof<T>::value>
+	auto
+	to() && -> std::enable_if_t<Type == c_api::DI_TYPE_WEAK_OBJECT, std::optional<WeakRef<Object>>>;
 
 	template <typename T, c_api::di_type_t type = util::deai_typeof<T>::value>
 	operator T() {
@@ -634,11 +648,16 @@ protected:
 public:
 	WeakRefBase(const WeakRefBase &other);
 	auto operator=(const WeakRefBase &other) -> WeakRefBase &;
+
+	auto release() && -> c_api::di_weak_object *;
 };
 
 template <typename T>
 struct WeakRef : public WeakRefBase {
-	auto upgrade() const -> std::optional<Ref<T>> {
+	template <std::enable_if_t<std::is_same_v<T, Object>, int> = 0>
+	WeakRef(c_api::di_weak_object *weak) : WeakRefBase{weak} {
+	}
+	[[nodiscard]] auto upgrade() const -> std::optional<Ref<T>> {
 		c_api::di_object *obj = c_api::di_upgrade_weak_ref(inner.get());
 		return Ref<T>{{obj}};
 	}
@@ -750,14 +769,14 @@ public:
 	}
 
 	/// Give up ownership of the object and return a raw di_object pointer. You will
-	/// only be able to call `raw`, the destructor, or assigning to this Ref after this
-	/// function. Result of calling other functions is undefined.
-	auto release() noexcept -> c_api::di_object * {
+	/// only be able to call `raw`, the destructor, or assigning to this Ref after
+	/// this function. Result of calling other functions is undefined.
+	auto release() &&noexcept -> c_api::di_object * {
 		return inner.inner.release();
 	}
 
 	[[nodiscard]] auto downgrade() const -> WeakRef<T> {
-		return WeakRef<T>{{inner.get()}};
+		return WeakRef<T>{{c_api::di_weakly_ref_object(raw())}};
 	}
 
 	/// Listen to signal on this object
@@ -777,6 +796,15 @@ public:
 struct ListenHandle : Object {
 	static constexpr const char *type = "deai:ListenHandle";
 };
+
+template <typename T, c_api::di_type_t Type>
+auto Variant::to() && -> std::enable_if_t<Type == c_api::DI_TYPE_WEAK_OBJECT, std::optional<WeakRef<Object>>> {
+	if (type_ != Type) {
+		return std::nullopt;
+	}
+	type_ = c_api::DI_TYPE_NIL;
+	return {WeakRef<Object>{value.weak_object}};
+}
 
 }        // namespace type
 
