@@ -47,6 +47,8 @@ struct Module {
 		auto entry = udev_enumerate_get_list_entry(e);
 		fprintf(stderr, "%s = %s\n", udev_list_entry_get_name(entry), udev_list_entry_get_value(entry));
 
+		udev_enumerate_unref(e);
+
 		return Object::create();
 	}
 };

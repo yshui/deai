@@ -427,10 +427,10 @@ public:
 	Variant(c_api::di_type type_, const c_api::di_value &value_);
 
 	/// Takes ownership of a plain deai value
-	template <typename T, c_api::di_type_t type = util::deai_typeof<typename std::remove_reference<T>::type>::value,
+	template <typename T, c_api::di_type_t Type = util::deai_typeof<typename std::remove_reference<T>::type>::value,
 	          std::enable_if_t<util::is_verbatim_v<T>, int> = 0>
-	Variant(T value_) : type_{type} {
-		c_api::di_copy_value(type, &value, &value_);
+	Variant(T value_) : type_{Type} {
+		std::memcpy(&value, &value_, c_api::di_sizeof_type(type_));
 	}
 
 	/// Takes ownership of `var`, `var` should be discarded without being freed after
