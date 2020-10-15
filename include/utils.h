@@ -127,7 +127,7 @@ static inline int unused di_type_conversion(di_type_t inty, const union di_value
 
 	if (outty == DI_TYPE_VARIANT) {
 		outp->variant.type = inty;
-		outp->variant.value = malloc(sizeof(di_sizeof_type(inty)));
+		outp->variant.value = malloc(di_sizeof_type(inty));
 		di_copy_value(inty, outp->variant.value, inp);
 		*cloned = true;
 		return 0;

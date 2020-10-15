@@ -39,12 +39,6 @@ PUBLIC_DEAI_API int di_proxy_signal(struct di_object *nonnull src, struct di_str
 			abort();                                                         \
 	} while (0)
 
-#define di_set(o, prop, v)                                                               \
-	({                                                                               \
-		__auto_type __tmp = (v);                                                 \
-		di_setx(o, prop, di_typeof(__tmp), &__tmp);                              \
-	})
-
 #define di_get(o, prop, r)                                                               \
 	({                                                                               \
 		int rc;                                                                  \
