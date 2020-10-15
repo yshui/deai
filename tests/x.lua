@@ -23,7 +23,7 @@ table.insert(listen_handles, di.event:timer(0.2):on("elapsed", function()
     xi = o.xinput
     table.insert(listen_handles, xi:on("new-device", function(dev)
         print(string.format("new device %s %s %s %d", dev.type, dev.use, dev.name, dev.id))
-        print("enabled:", dev.props["Device Enabled"][1])
+        print("enabled:", dev.props["Device Enabled"])
         dev.props["Coordinate Transformation Matrix"] = {2, 0, 0, 0, 2, 0, 0, 0, 2}
         if table.unpack then
             print("matrix:", table.unpack(dev.props["Coordinate Transformation Matrix"]))
