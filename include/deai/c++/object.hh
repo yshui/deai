@@ -296,7 +296,8 @@ auto to_owned_deai_value(T &&input) {
 	} else if constexpr (type == c_api::di_type::VARIANT) {
 		return static_cast<c_api::di_variant>(std::forward<T>(input));
 	} else if constexpr (type == c_api::di_type::OBJECT || type == c_api::di_type::WEAK_OBJECT) {
-		return std::forward<T>(input).release();
+		auto tmp_object = std::forward<T>(input);        // Copy or move the object
+		return std::move(tmp_object).release();
 	} else if constexpr (type == c_api::di_type::STRING) {
 		return string_to_owned_deai_value(std::forward<T>(input));
 	} else if constexpr (type == c_api::di_type::ARRAY) {
