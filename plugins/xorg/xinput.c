@@ -241,6 +241,8 @@ static void di_xorg_xinput_set_prop(struct di_xorg_xinput_device *dev,
 		arr.elem_type = var.type;
 		arr.arr = var.value;
 		arr.length = 1;
+	} else {
+		arr = var.value->array;
 	}
 
 	struct di_xorg_connection *dc = dev->xi->dc;
