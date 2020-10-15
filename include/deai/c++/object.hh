@@ -426,6 +426,13 @@ public:
 	/// after this
 	Variant(c_api::di_type type_, const c_api::di_value &value_);
 
+	/// Takes ownership of a plain deai value
+	template <typename T, c_api::di_type_t type = util::deai_typeof<typename std::remove_reference<T>::type>::value,
+	          std::enable_if_t<util::is_verbatim_v<T>, int> = 0>
+	Variant(T value_) : type_{type} {
+		c_api::di_copy_value(type, &value, &value_);
+	}
+
 	/// Takes ownership of `var`, `var` should be discarded without being freed after
 	/// this
 	Variant(const c_api::di_variant &var);
@@ -495,6 +502,12 @@ public:
 		return to<T>().value();
 	}
 
+	template <typename T, c_api::di_type_t type = util::deai_typeof<typename std::remove_reference<T>::type>::value>
+	static auto from(T &&other) -> Variant {
+		auto v = util::to_owned_deai_value(std::forward<T>(other));
+		return Variant{v};
+	}
+
 	/// Extract an object ref out of this variant. If the variant contains
 	/// an object ref, it would be moved out and returned. Otherwise nothing happens
 	/// and nullopt is returned.
@@ -534,6 +547,14 @@ public:
 		}
 	}
 
+	[[nodiscard]] auto has_value() const -> bool {
+		return static_cast<std::optional<Variant>>(*this).has_value();
+	}
+
+	[[nodiscard]] auto value() const -> Variant {
+		return static_cast<std::optional<Variant>>(*this).value();
+	}
+
 	operator std::optional<Variant>() const {
 		c_api::di_type_t type;
 		c_api::di_value ret;
@@ -561,7 +582,8 @@ public:
 		return *static_cast<std::optional<Variant>>(*this);
 	}
 
-	auto operator=(const std::optional<Variant> &new_value) const -> void {
+	auto operator=(const std::optional<Variant> &new_value) const
+	    -> const std::optional<Variant> & {
 		if constexpr (raw) {
 			erase();
 			if (new_value.has_value()) {
@@ -572,12 +594,15 @@ public:
 			}
 		} else {
 			if (!new_value.has_value()) {
-				return erase();
+				erase();
+			} else {
+				// the setter should handle the deletion
+				exception::throw_deai_error(c_api::di_setx(
+				    target, util::string_to_borrowed_deai_value(key),
+				    new_value->type(), &new_value->raw_value()));
 			}
-			exception::throw_deai_error(c_api::di_setx(
-			    target, util::string_to_borrowed_deai_value(key),
-			    new_value->type(), &new_value->raw_value()));
 		}
+		return new_value;
 	}
 
 	// Move set only available to raw proxy
