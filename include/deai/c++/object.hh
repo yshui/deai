@@ -709,7 +709,10 @@ struct WeakRef : public WeakRefBase {
 	}
 	[[nodiscard]] auto upgrade() const -> std::optional<Ref<T>> {
 		c_api::di_object *obj = c_api::di_upgrade_weak_ref(inner.get());
-		return Ref<T>::take(obj);
+		if (obj != nullptr) {
+			return Ref<T>::take(obj);
+		}
+		return std::nullopt;
 	}
 };
 
