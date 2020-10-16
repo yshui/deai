@@ -21,10 +21,13 @@ AllowShortBlocksOnASingleLine: Empty
 AllowShortLoopsOnASingleLine: false
 IndentCaseLabels: false
 PenaltyReturnTypeOnItsOwnLine: 0
-PenaltyBreakString: 5
+PenaltyBreakFirstLessLess: 0
+PenaltyBreakAssignment: 0
+PenaltyBreakTemplateDeclaration: 0
+PenaltyBreakBeforeFirstCallParameter: 1
 PenaltyExcessCharacter: 2
+PenaltyBreakString: 50
 BreakBeforeBinaryOperators: None
-PenaltyBreakBeforeFirstCallParameter: 3
 IncludeCategories:
   - Regex:           '<deai/.*\.h>'
     Priority:        1
