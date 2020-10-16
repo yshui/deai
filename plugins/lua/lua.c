@@ -113,16 +113,36 @@ static int di_lua_errfunc(lua_State *L) {
 	struct di_lua_script *o = lua_touserdata(L, -1);
 	di_mgetm(o->L->m, log, rc);
 
-	if (!luaL_dostring(L, "return debug.traceback(\"error while running "
-	                      "function!\", 3)")) {
-		auto trace = lua_tostring(L, -1);
-		di_log_va(logm, DI_LOG_ERROR, "Failed to run lua script %s: %s\n%s\n",
-		          o->path, err, trace);
-	} else {
+	char *error_prompt = NULL;
+	int error_prompt_len;
+	error_prompt_len =
+	    asprintf(&error_prompt, "Failed to run lua script %s: %s", o->path, err);
+
+	// Get debug.traceback
+	lua_getglobal(L, "debug");
+	lua_pushstring(L, "traceback");
+	lua_gettable(L, -2);
+
+	// Push arguments
+	lua_pushlstring(L, error_prompt, error_prompt_len);
+	lua_pushinteger(L, 3);
+	free(error_prompt);
+
+	// Call debug.traceback(error_prompt, 3), this should leave the error message we
+	// want on the top of the stack.
+	if (lua_pcall(L, 2, 1, 0) != 0) {
+		// If we failed to get a stack trace, we have to generate a generic error
+		// message
 		auto err2 = luaL_tolstring(L, -1, NULL);
-		di_log_va(logm, DI_LOG_ERROR, "Failed to run lua script %s: %s\n", o->path, err);
-		di_log_va(logm, DI_LOG_ERROR, "Failed to generate stack trace %s\n", err2);
+		error_prompt_len = asprintf(&error_prompt,
+		                            "Failed to run lua script %s: %s\nstack "
+		                            "traceback:\n\t(Failed to generate stack "
+		                            "trace: %s)",
+		                            o->path, err, err2);
+		lua_pushlstring(L, error_prompt, error_prompt_len);
+		free(error_prompt);
 	}
+
 	return 1;
 }
 
@@ -248,7 +268,8 @@ static struct di_lua_ref *lua_type_to_di_object(lua_State *L, int i, void *call)
 
 	auto getter = di_new_object_with_type(struct di_object);
 	di_set_object_call((void *)getter, di_lua_di_getter);
-	di_add_member_move((void *)o, di_string_borrow("__get"), (di_type_t[]){DI_TYPE_OBJECT}, (void **)&getter);
+	di_add_member_move((void *)o, di_string_borrow("__get"),
+	                   (di_type_t[]){DI_TYPE_OBJECT}, (void **)&getter);
 	di_set_object_dtor((void *)o, (void *)lua_ref_dtor);
 	di_set_object_call((void *)o, call);
 
@@ -509,8 +530,9 @@ static struct di_object *di_lua_load_script(struct di_object *obj, struct di_str
 		// we can do here except unref and return an error object
 
 		// Pop error handling function
+		auto err = luaL_tolstring(L->L, -1, NULL);
 		lua_pop(s->L->L, 1);
-		return di_new_error("Failed to run the lua script");
+		return di_new_error("%s", err);
 	}
 	return di_ref_object((struct di_object *)s);
 }

@@ -23,6 +23,7 @@
 #define DI_TYPE_NAME(x) DI_TYPE_##x
 #else
 #define DI_TYPE_NAME(x) x
+#define __auto_type auto
 #endif
 
 /// deai type ids. Use negative numbers for invalid types.

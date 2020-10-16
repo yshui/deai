@@ -658,7 +658,7 @@ int main(int argc, char *argv[]) {
 	if (exit_code != 0 || rt == DI_TYPE_OBJECT) {
 		struct di_string errmsg;
 		if (di_get(retd.object, "errmsg", errmsg) == 0) {
-			fprintf(stderr, "The function you called returned an error message: %.*s\n",
+			fprintf(stderr, "The function you called returned an error message:\n%.*s\n",
 			        (int)errmsg.length, errmsg.data);
 			di_free_string(errmsg);
 			exit_code = EXIT_FAILURE;
