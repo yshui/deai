@@ -135,7 +135,11 @@ static void di_modify_ioev(struct di_object *obj, int events) {
 		flags |= EV_WRITE;
 	}
 
+#ifdef ev_io_modify
 	ev_io_modify(&ioev->evh, flags);
+#else
+	ev_io_set(&ioev->evh, ioev->evh.fd, flags);
+#endif
 }
 
 static struct di_object *di_create_ioev(struct di_object *obj, int fd, int t) {
