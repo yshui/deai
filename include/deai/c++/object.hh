@@ -369,7 +369,7 @@ struct is_borrow_inversible {
 template <typename T>
 struct is_borrow_inversible<support::span<T>, std::enable_if_t<is_verbatim_v<T>, void>> {
 	// support::span -> di_array
-	// but di_array -> deai::ArrayView
+	// but di_array -> deai::ArrayView (TODO)
 	//
 	// However, deai::Array can be implicitly converted to span, if the element type
 	// is a verbatim deai c_api type.
