@@ -15,7 +15,7 @@
 #include <sys/prctl.h>
 #endif
 
-#include <deai/builtin/spawn.h>
+#include <deai/builtins/spawn.h>
 #include <deai/helper.h>
 
 #include "di_internal.h"

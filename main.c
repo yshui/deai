@@ -19,7 +19,7 @@
 #endif
 #include <unistd.h>
 
-#include <deai/builtin/log.h>
+#include <deai/builtins/log.h>
 #include <deai/deai.h>
 #include <deai/helper.h>
 

@@ -4,7 +4,7 @@
 
 /* Copyright (c) 2017, Yuxuan Shui <yshuiv7@gmail.com> */
 
-#include <deai/builtin/log.h>
+#include <deai/builtins/log.h>
 #include <deai/helper.h>
 #include <xcb/xcb.h>
 #include <xcb/xcb_keysyms.h>
