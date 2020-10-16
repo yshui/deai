@@ -13,6 +13,7 @@
 #include "common.h"
 #include "compiler.h"
 #include "object.h"
+#include "error.h"
 
 struct deai;
 

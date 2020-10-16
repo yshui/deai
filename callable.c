@@ -34,6 +34,18 @@ struct di_closure {
 
 static_assert(sizeof(union di_value) >= sizeof(ffi_arg), "ffi_arg is too big");
 
+struct ffi_call_args {
+	ffi_cif *cif;
+	void (*fn)(void);
+	void *ret;
+	void *xargs;
+};
+
+static void di_call_ffi_call(void *args_) {
+	struct ffi_call_args *args = args_;
+	ffi_call(args->cif, args->fn, args->ret, args->xargs);
+}
+
 static int
 _di_typed_trampoline(ffi_cif *cif, void (*fn)(void), void *ret, const di_type_t *fnats,
                      int nargs0, const union di_value *const nonnull *nullable args0,
@@ -115,7 +127,23 @@ _di_typed_trampoline(ffi_cif *cif, void (*fn)(void), void *ret, const di_type_t 
 	}
 
 	last_arg_processed = nargs0 + args.length;
-	ffi_call(cif, fn, ret, (void *)xargs);
+	struct ffi_call_args ffi_args = {
+	    .cif = cif,
+	    .fn = fn,
+	    .ret = ret,
+	    .xargs = (void *)xargs,
+	};
+
+	struct di_object *errobj = di_try(di_call_ffi_call, &ffi_args);
+	if (errobj != NULL) {
+		fprintf(stderr, "Caught error from di closure, it says:\n");
+		struct di_string err;
+		di_getxt(errobj, di_string_borrow("errmsg"), DI_TYPE_STRING,
+		         (union di_value *)&err);
+		fprintf(stderr, "%.*s\n", (int)err.length, err.data);
+		di_free_string(err);
+		di_unref_object(errobj);
+	}
 
 out:
 	for (int i = nargs0; i < last_arg_processed; i++) {

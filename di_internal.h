@@ -157,6 +157,8 @@ static inline ffi_status unused di_ffi_prep_cif(ffi_cif *nonnull cif, unsigned i
 
 struct di_module *nullable di_new_module_with_size(struct deai *nonnull di, size_t size);
 
+struct di_object *nullable di_try(void (*nonnull func)(void *nullable), void *nullable args);
+
 #ifdef TRACK_OBJECTS
 void di_dump_objects(void);
 #endif

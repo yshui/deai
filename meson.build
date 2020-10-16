@@ -1,15 +1,22 @@
 project('deai', ['c', 'cpp'], default_options: ['b_lundef=false', 'cpp_std=c++17'])
 cc = meson.get_compiler('c')
+cpp = meson.get_compiler('cpp')
 if not cc.has_argument('-fvisibility=hidden') or not cc.has_argument('-fms-extensions')
   error('Unsupported compiler')
 endif
 if not cc.has_header('ev.h')
   error('libev header not found')
 endif
+
+required_common_args = [ '-fno-strict-aliasing' ]
+
+foreach arg: required_common_args
+  if not cc.has_argument(arg) or not cpp.has_argument(arg)
+    error('Required option ' + arg + ' not supported by the compiler')
+  endif
+endforeach
+
 test_common_args = [
-    '-fno-strict-aliasing',
-    '-fplan9-extensions',
-    '-fms-extensions',
     '-Wno-microsoft-anon-tag',
     '-Wnullability-completeness',
     '-Werror=switch-enum',
@@ -17,6 +24,17 @@ test_common_args = [
     '-Werror=implicit-fallthrough',
     '-Wall'
 ]
+
+required_c_args = [
+  '-fexceptions',
+  '-fms-extensions',
+]
+
+foreach arg: required_c_args
+  if not cc.has_argument(arg)
+    error('Required option ' + arg + ' not supported by the C compiler')
+  endif
+endforeach
 
 test_c_args = [
     '-Werror=incompatible-pointer-types',
@@ -35,7 +53,7 @@ if get_option('b_sanitize').contains('undefined')
   test_c_args += ubsan_args
 endif
 
-base_c_args = []
+base_c_args = required_common_args + required_c_args
 base_ld_args = [ '-rdynamic' ]
 foreach arg: test_common_args + test_c_args
   if cc.has_argument(arg)
@@ -43,8 +61,7 @@ foreach arg: test_common_args + test_c_args
   endif
 endforeach
 
-base_cpp_args = []
-cpp = meson.get_compiler('cpp')
+base_cpp_args = required_common_args
 foreach arg: test_common_args
   if cpp.has_argument(arg)
     base_cpp_args = base_cpp_args + [ arg ]
@@ -89,7 +106,9 @@ deai_exe = executable('deai', [
   'os.c',
   'spawn.c',
   'string_buf.c',
+  'exception.cc',
 ], c_args: base_c_args
+, cpp_args: base_cpp_args
 , dependencies: [libev, libffi, dl]
 , link_with: [ cpp_dummy ]
 , include_directories: incs

@@ -18,7 +18,6 @@
 #define CONCAT1(a, b) CONCAT2(a, b)
 #define CONCAT(a, b) CONCAT1(a, b)
 
-PUBLIC_DEAI_API struct di_object *ret_nonnull di_new_error(const char *nonnull fmt, ...);
 PUBLIC_DEAI_API int di_proxy_signal(struct di_object *nonnull src, struct di_string srcsig,
                                     struct di_object *nonnull proxy,
                                     struct di_string proxysig) nonnull_args(1, 3);

@@ -495,7 +495,8 @@ static struct di_object *di_lua_load_script(struct di_object *obj, struct di_str
 
 		if (s->L == NULL) {
 			// __lua_state not found, or lua_state has been dropped
-			di_remove_member_raw((struct di_object *)m, di_string_borrow("__lua_state"));
+			di_remove_member_raw((struct di_object *)m,
+			                     di_string_borrow("__lua_state"));
 			s->L = lua_new_state(m);
 		}
 		DI_CHECK(s->L != NULL);

@@ -51,3 +51,4 @@
 #define visibility_default __attribute__((visibility("default")))
 #define with_cleanup_t(type) __attribute__((cleanup(free_##type##pp))) type *
 #define with_cleanup(func) __attribute__((cleanup(func)))
+#define noret __attribute__((noreturn))
