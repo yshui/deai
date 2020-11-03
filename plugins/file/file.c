@@ -28,8 +28,9 @@ struct di_file_watch {
 	struct di_file_watch_entry *byname, *bywd;
 };
 
+define_object_cleanup(di_file_watch);
 static int di_file_ioev(struct di_weak_object *weak) {
-	auto fw = (struct di_file_watch *)di_upgrade_weak_ref(weak);
+	with_object_cleanup(di_file_watch) fw = (void *)di_upgrade_weak_ref(weak);
 	DI_CHECK(fw != NULL, "got ioev events but the listener has died");
 
 	char evbuf[sizeof(struct inotify_event) + NAME_MAX + 1];
