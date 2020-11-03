@@ -45,7 +45,8 @@ static void di_dbus_free_pending_reply(struct di_object *_p) {
 }
 
 static void dbus_pending_call_notify_fn(DBusPendingCall *dp, void *ud) {
-	auto p = (di_dbus_pending_reply *)di_upgrade_weak_ref(ud);
+	di_object_with_cleanup p_obj = di_upgrade_weak_ref(ud);
+	auto p = (di_dbus_pending_reply *)p_obj;
 	// We made sure this callback won't be called if the pending reply object is not
 	// alive.
 	DI_CHECK(p != NULL);
@@ -55,7 +56,7 @@ static void dbus_pending_call_notify_fn(DBusPendingCall *dp, void *ud) {
 	di_emit(p, "reply", (void *)msg);
 
 	// finalize the object since nothing can happen with it any more
-	di_finalize_object((struct di_object *)p);
+	di_finalize_object(p_obj);
 }
 
 static struct di_object *di_dbus_send(di_dbus_connection *c, DBusMessage *msg) {
