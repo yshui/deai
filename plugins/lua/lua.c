@@ -45,12 +45,22 @@
 
 #include "compat.h"
 #include "list.h"
+#include "uthash.h"
 #include "utils.h"
 
 #define tmalloc(type, nmem) (type *)calloc(nmem, sizeof(type))
 #define auto __auto_type
 
 #define DI_LUA_REGISTRY_SCRIPT_OBJECT_KEY "__deai.di_lua.script_object"
+#define DI_LUA_REGISTRY_STATE_OBJECT_KEY "__deai.di_lua.state_object"
+
+#define di_lua_get_state(L, s)                                                           \
+	do {                                                                             \
+		lua_pushliteral((L), DI_LUA_REGISTRY_STATE_OBJECT_KEY);                  \
+		lua_rawget((L), LUA_REGISTRYINDEX);                                      \
+		(s) = lua_touserdata((L), -1);                                           \
+		lua_pop(L, 1);                                                           \
+	} while (0)
 
 #define di_lua_get_env(L, s)                                                             \
 	do {                                                                             \
@@ -70,6 +80,13 @@
 		s = tmp;                                                                 \
 	} while (0)
 
+struct di_lua_object_map_entry {
+	int ref;
+	struct di_object *object;
+	UT_hash_handle hh;
+};
+
+/// A singleton for lua_State
 struct di_lua_state {
 	// Beware of cycles, could happen if one lua object is registered as module
 	// and access in lua again as module.
@@ -77,6 +94,23 @@ struct di_lua_state {
 	// lua_state -> di_module/di_lua_ref -> lua_script -> lua_state
 	struct di_object;
 	lua_State *L;
+
+	// Object tracking in di_lua:
+	//
+	// We track all objects that lives in a lua state, in order to make mark-and-sweep
+	// work, as well as deduplicate the object proxies.
+	//
+	// Object tracking is done in 3 parts:
+	//    1) Weak references to the proxies in the lua registry. This is used so when
+	//       the same object are pushed multiple times, we can use a reference to the
+	//       same proxy. Also because we cannot do 2) multiple times on the same
+	//       object, so the proxy of an object must be a singleton.
+	//    2) The object_to_lua_ref map. This maps the object to its index in the table
+	//       of objects in 1).
+	//    3) The ___di_object_<number> member of the di_lua_state object, where the
+	//       number is the index of the object in the table. This stores a reference
+	//       to the object in di_lua_script, so mark-and-sweep will see the object
+	struct di_lua_object_map_entry *object_to_lua_ref;
 };
 
 struct di_lua_ref {
@@ -87,11 +121,6 @@ struct di_lua_ref {
 struct di_lua_script {
 	struct di_object;
 	char *path;
-	/*
-	 * Keep track of all listeners and objects so we can free them when script is
-	 * freed
-	 */
-	struct list_head sibling;
 };
 
 static int di_lua_pushvariant(lua_State *L, const char *name, struct di_variant var);
@@ -327,8 +356,23 @@ static int di_lua_method_handler(lua_State *L) {
 
 static int di_lua_gc(lua_State *L) {
 	struct di_object *o = di_lua_checkproxy(L, 1);
-	// fprintf(stderr, "lua gc %p\n", lo);
-	di_unref_object(o);
+	struct di_lua_state *s;
+
+	di_lua_get_state(L, s);
+	DI_CHECK(s != NULL);
+
+	char *buf;
+
+	// Forget about this object
+	struct di_lua_object_map_entry *e = NULL;
+	HASH_FIND_PTR(s->object_to_lua_ref, &o, e);
+	DI_CHECK(e != NULL);
+	HASH_DEL(s->object_to_lua_ref, e);
+	asprintf(&buf, "___di_object_%d", e->ref);
+	DI_CHECK_OK(di_remove_member_raw((struct di_object *)s, di_string_borrow(buf)));
+	luaL_unref(L, LUA_REGISTRYINDEX, e->ref);
+	free(buf);
+	free(e);
 	return 0;
 }
 
@@ -393,8 +437,7 @@ di_lua_create_metatable_for_object(lua_State *L, const luaL_Reg *reg, bool calla
 	lua_setmetatable(L, -2);
 }
 
-// Push an object `o` to lua stack. Note this function doesn't increment the reference
-// count of `o`.
+// Push a proxy for `o` to lua stack. `o` can be a pointer to anything
 static void
 di_lua_pushproxy(lua_State *L, const char *name, void *o, const luaL_Reg *reg, bool callable) {
 	// struct di_lua_script *s;
@@ -411,6 +454,82 @@ di_lua_pushproxy(lua_State *L, const char *name, void *o, const luaL_Reg *reg, b
 		}
 	}
 	di_lua_create_metatable_for_object(L, reg, callable);
+}
+
+/// Store a weak reference to the object on the top of the stack in the table at `index`,
+/// pops the value.
+///
+/// This creates an extra weak table indirection, and stores the object in the table. We
+/// cannot just use 1 weak table to store all the objects, because the luaL_ref machinary
+/// doesn't work with weak tables.
+static int luaL_weakref(lua_State *L, int index) {
+	lua_newtable(L);        // new_table={}
+	lua_newtable(L);        // metatable={}
+	lua_pushliteral(L, "__mode");
+	lua_pushliteral(L, "v");
+	lua_rawset(L, -3);              // metatable._mode='v'
+	lua_setmetatable(L, -2);        // setmetatable(new_table,metatable)
+	lua_pushvalue(L, -2);           // push the previous top of stack
+	lua_rawseti(L, -2, 1);          // new_table[1]=value, pops the value
+
+	lua_remove(L, -2);        // removes the original top of stack
+
+	// Now new_table is on top of the stack, replacing the original top of stack
+	return luaL_ref(L, index);
+}
+
+/// Get the weak reference `r` from the table at `index`. Leaves the value at the top of
+/// the stack. Value `nil` will be at the top of the stack if the weak ref is dead.
+///
+/// Returns whether the weak reference is still alive
+static bool luaL_weakref_get(lua_State *L, int index, int r) {
+	// Get the weak table indirection
+	lua_rawgeti(L, index, r);
+	if (lua_isnil(L, -1)) {
+		return false;
+	}
+
+	DI_CHECK(lua_type(L, -1) == LUA_TTABLE);
+	lua_rawgeti(L, -1, 1);
+
+	// Remove the weak table indirection from the stack
+	lua_remove(L, -2);
+
+	return !lua_isnil(L, -1);
+}
+
+/// Push an object to lua stack. A wrapper of di_lua_pushproxy, which also handles
+/// deduplication of objects, and keeping track of object references.
+///
+/// This function consume the reference to `obj`
+static void di_lua_pushobject(lua_State *L, const char *name, struct di_object *obj) {
+	struct di_lua_state *s;
+	di_lua_get_state(L, s);
+	struct di_lua_object_map_entry *e = NULL;
+	HASH_FIND_PTR(s->object_to_lua_ref, &obj, e);
+
+	if (e != NULL) {
+		// We have already pushed this object before, return the same proxy
+		DI_CHECK(luaL_weakref_get(L, LUA_REGISTRYINDEX, e->ref));
+		di_unref_object(obj);
+		return;
+	}
+
+	// Push the proxy, and weakly reference it from the lua registry
+	di_lua_pushproxy(L, name, obj, di_lua_object_methods, true);
+
+	e = tmalloc(struct di_lua_object_map_entry, 1);
+	e->object = obj;
+	e->ref = luaL_weakref(L, LUA_REGISTRYINDEX);
+
+	// Store the object as a member of di_lua_state, so mark and sweep will see it
+	char *buf;
+	asprintf(&buf, "___di_object_%d", e->ref);
+	DI_CHECK_OK(di_member(s, buf, obj));
+	free(buf);
+	HASH_ADD_PTR(s->object_to_lua_ref, object, e);
+
+	DI_CHECK(luaL_weakref_get(L, LUA_REGISTRYINDEX, e->ref));
 }
 
 const char *allowed_os[] = {"time", "difftime", "clock", "tmpname", "date", NULL};
@@ -457,11 +576,17 @@ static struct di_lua_state *lua_new_state(struct di_module *m) {
 	auto Lo = di_weakly_ref_object((struct di_object *)L);
 	di_member(m, "__lua_state", Lo);
 
+	// Store the state object in the lua registry
+	lua_pushliteral(L->L, DI_LUA_REGISTRY_STATE_OBJECT_KEY);
+	lua_pushlightuserdata(L->L, L);
+	lua_rawset(L->L, LUA_REGISTRYINDEX);
+
 	return L;
 }
 
 define_object_cleanup(di_lua_script);
 define_object_cleanup(di_lua_state);
+
 static struct di_object *di_lua_load_script(struct di_object *obj, struct di_string path_) {
 	/**
 	 * Reference count scheme for di_lua_script:
@@ -865,7 +990,7 @@ static int di_lua_pushvariant(lua_State *L, const char *name, struct di_variant 
 		return 1;
 	case DI_TYPE_OBJECT:
 		di_ref_object(var.value->object);
-		di_lua_pushproxy(L, name, var.value->object, di_lua_object_methods, true);
+		di_lua_pushobject(L, name, var.value->object);
 		return 1;
 	case DI_TYPE_WEAK_OBJECT:
 		di_copy_value(DI_TYPE_WEAK_OBJECT, &weak, &var.value->weak_object);
@@ -955,7 +1080,8 @@ static int di_lua_upgrade_weak_ref(lua_State *L) {
 	if (strong == NULL) {
 		return 0;
 	}
-	di_lua_pushproxy(L, NULL, strong, di_lua_object_methods, true);
+
+	di_lua_pushobject(L, NULL, strong);
 	return 1;
 }
 
