@@ -930,6 +930,9 @@ int di_emitn(struct di_object *o, struct di_string name, struct di_tuple args) {
 void di_dump_objects(void) {
 	struct di_object_internal *i;
 	list_for_each_entry (i, &all_objects, siblings) {
+		i->excess_ref_count = i->ref_count;
+	}
+	list_for_each_entry (i, &all_objects, siblings) {
 		fprintf(stderr, "%p, ref count: %lu strong %lu weak (live: %d), type: %s\n",
 		        i, i->ref_count, i->weak_ref_count, i->mark, di_get_type((void *)i));
 		for (struct di_member *m = i->members; m != NULL; m = m->hh.next) {
@@ -938,6 +941,8 @@ void di_dump_objects(void) {
 			if (m->type == DI_TYPE_OBJECT) {
 				union di_value *val = m->data;
 				fprintf(stderr, " (%s)", di_get_type(val->object));
+				auto obj_internal = (struct di_object_internal *)val->object;
+				obj_internal->excess_ref_count--;
 			}
 			fprintf(stderr, "\n");
 		}
@@ -945,6 +950,11 @@ void di_dump_objects(void) {
 			fprintf(stderr, "\tsignal: %.*s, nlisteners: %d\n",
 			        (int)s->name.length, s->name.data, s->nlisteners);
 		}
+	}
+	list_for_each_entry (i, &all_objects, siblings) {
+		// Excess ref count doesn't count references in roots. Object added as
+		// roots will have 1 excess_ref_count per root.
+		fprintf(stderr, "%p, excess_ref_count: %lu\n", i, i->excess_ref_count);
 	}
 }
 

@@ -36,8 +36,9 @@ struct di_object_internal {
 	uint8_t destroyed;
 
 #ifdef TRACK_OBJECTS
-	char padding[62];
+	char padding[54];
 	uint8_t mark;
+	uint64_t excess_ref_count;
 	struct list_head siblings;
 #else
 	// Reserved for future use
