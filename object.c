@@ -247,7 +247,9 @@ int di_getx(struct di_object *o, struct di_string prop, di_type_t *type, union d
 		}                                                                        \
 		bool cloned = false;                                                     \
 		rc = di_type_conversion(rt, &ret2, rtype, ret, false, &cloned);          \
-		if (cloned) {                                                            \
+		/* Free the original if it is cloned while being converted, or     */    \
+		/* conversion failed in which case we don't need the value anymore */    \
+		if (cloned || rc != 0) {                                                 \
 			di_free_value(rt, &ret2);                                        \
 		}                                                                        \
 		return rc;                                                               \
@@ -954,7 +956,8 @@ void di_dump_objects(void) {
 	list_for_each_entry (i, &all_objects, siblings) {
 		// Excess ref count doesn't count references in roots. Object added as
 		// roots will have 1 excess_ref_count per root.
-		fprintf(stderr, "%p, excess_ref_count: %lu\n", i, i->excess_ref_count);
+		fprintf(stderr, "%p, excess_ref_count: %lu/%lu\n", i, i->excess_ref_count,
+		        i->ref_count);
 	}
 }
 
