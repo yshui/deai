@@ -185,7 +185,9 @@ static void di_timer_stop(struct di_object *obj) {
 	struct di_timer *ev = (void *)obj;
 	di_object_with_cleanup di_obj = di_object_get_deai_strong(obj);
 	if (di_obj == NULL) {
-		// deai is shutting down
+		// this means the timer was already stopped, so it doesn't hold a strong
+		// deai object reference
+		DI_ASSERT(!ev_is_active(&ev->evt));
 		return;
 	}
 

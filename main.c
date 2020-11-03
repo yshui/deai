@@ -692,5 +692,8 @@ int main(int argc, char *argv[]) {
 	// Set to NULL so the leak checker can catch leaks
 	roots = NULL;
 
+#ifdef TRACK_OBJECTS
+	di_dump_objects();
+#endif
 	return exit_code;
 }
