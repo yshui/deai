@@ -364,8 +364,8 @@ PUBLIC_DEAI_API struct di_object *nullable di_listen_to(struct di_object *nonnul
 /// freeing `args`.
 PUBLIC_DEAI_API int
 di_emitn(struct di_object *nonnull, struct di_string name, struct di_tuple args);
-// Call object dtor, remove all members from the object. Listeners are not removed, they
-// can only be removed when the object's strong refcount drop to 0
+/// Call object dtor, remove all public members from the object. Listeners are not removed,
+/// they can only be removed when the object's strong refcount drop to 0
 PUBLIC_DEAI_API void di_finalize_object(struct di_object *nonnull);
 
 PUBLIC_DEAI_API struct di_object *

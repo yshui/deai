@@ -46,6 +46,10 @@ static_assert(alignof(struct di_object) == alignof(struct di_object_internal),
               "di_object alignment mismatch");
 // clang-format on
 
+static bool di_is_internal(struct di_string s) {
+	return s.length >= 2 && strncmp(s.data, "__", 2) == 0;
+}
+
 static int di_call_internal(struct di_object *self, struct di_object *method_, di_type_t *rt,
                             union di_value *ret, struct di_tuple args, bool *called) {
 	auto method = (struct di_object_internal *)method_;
@@ -95,7 +99,7 @@ static int call_handler_with_fallback(struct di_object *nonnull o,
                                       union di_value *nullable ret, bool *found) {
 	*found = false;
 	// Internal names doesn't go through handler
-	if (name.length >= 2 && strncmp(name.data, "__", 2) == 0) {
+	if (di_is_internal(name)) {
 		return -ENOENT;
 	}
 
@@ -788,8 +792,7 @@ static void di_listen_handle_dtor(struct di_object *nonnull obj) {
 			HASH_DEL(owner_internal->signals, lh->signal);
 
 			// Don't call deleter for internal signal names
-			if (lh->signal->name.length >= 2 &&
-			    strncmp(lh->signal->name.data, "__", 2) != 0) {
+			if (di_is_internal(lh->signal->name)) {
 				bool handler_found;
 				call_handler_with_fallback(
 				    owner, "__del_signal", lh->signal->name,
@@ -822,7 +825,7 @@ di_listen_to(struct di_object *_obj, struct di_string name, struct di_object *h)
 
 		INIT_LIST_HEAD(&sig->listeners);
 		HASH_ADD_KEYPTR(hh, obj->signals, sig->name.data, sig->name.length, sig);
-		if (name.length >= 2 && strncmp(name.data, "__", 2) != 0) {
+		if (di_is_internal(name)) {
 			bool handler_found;
 			call_handler_with_fallback(_obj, "__new_signal", sig->name,
 			                           (struct di_variant){NULL, DI_LAST_TYPE},
