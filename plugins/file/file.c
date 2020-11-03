@@ -145,9 +145,7 @@ static int di_file_rm_watch(struct di_file_watch *fw, struct di_string path) {
 }
 
 static void stop_file_watcher(struct di_file_watch *fw) {
-	if (!di_has_member(fw, "__inotify_fd_event")) {
-		return;
-	}
+	DI_CHECK(di_has_member(fw, "__inotify_fd_event"));
 
 	close(fw->fd);
 
@@ -179,7 +177,6 @@ static struct di_object *di_file_new_watch(struct di_module *f, struct di_array 
 	di_method(fw, "add", di_file_add_many_watch, struct di_array);
 	di_method(fw, "add_one", di_file_add_watch, struct di_string);
 	di_method(fw, "remove", di_file_rm_watch, struct di_string);
-	di_method(fw, "stop", di_finalize_object);
 	di_mgetm(f, event, di_new_error("Can't find event module"));
 
 	struct di_object *fdevent = NULL;

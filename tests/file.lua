@@ -42,7 +42,6 @@ function run_one(i)
             table.insert(listen_handles, c:on("exit", run_one(i+1)))
         else
             w:remove("testdir")
-            w:stop()
             w = nil
             for _, lh in pairs(listen_handles) do
                 -- Stop all listeners, so the callback functions can be freed,

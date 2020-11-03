@@ -178,7 +178,6 @@ new_binding(struct xorg_key *k, struct di_array modifiers, struct di_string key,
 		return di_new_error("Failed to setup key grab");
 	}
 
-	di_method(kb, "stop", di_finalize_object);
 	return (void *)kb;
 }
 
