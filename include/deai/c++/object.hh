@@ -836,10 +836,7 @@ public:
 
 	template <typename Other>
 	auto on(const std::string_view &signal, const Ref<Other> &handler)
-	    -> std::enable_if_t<std::is_base_of_v<Object, Other>, Ref<ListenHandle>> {
-		return {c_api::di_listen_to(
-		    raw(), util::string_to_borrowed_deai_value(signal), handler.raw())};
-	}
+	    -> std::enable_if_t<std::is_base_of_v<Object, Other>, Ref<ListenHandle>>;
 
 	auto operator[](const std::string_view &key) const -> ObjectMemberProxy<false> {
 		return {raw(), key};
@@ -849,6 +846,16 @@ public:
 struct ListenHandle : Object {
 	static constexpr const char *type = "deai:ListenHandle";
 };
+template <typename T>
+template <typename Other>
+auto Ref<T, std::enable_if_t<std::is_base_of_v<Object, T>, void>>::on(const std::string_view &signal,
+                                                                      const Ref<Other> &handler)
+    -> std::enable_if_t<std::is_base_of_v<Object, Other>, Ref<ListenHandle>> {
+	return Ref<ListenHandle>::take(
+	           c_api::di_listen_to(raw(), util::string_to_borrowed_deai_value(signal),
+	                               handler.raw()))
+	    .value();
+}
 
 extern template auto
 Variant::to<WeakRef<Object>, c_api::di_type::WEAK_OBJECT>() && -> std::optional<WeakRef<Object>>;
