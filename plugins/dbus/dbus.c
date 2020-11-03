@@ -491,6 +491,9 @@ static void di_dbus_shutdown(di_dbus_connection *conn) {
 	// closing connection in that context is bad.
 	// so delay the shutdown until we return to mainloop
 	di_object_with_cleanup di = di_object_get_deai_strong((struct di_object *)conn);
+	di_object_with_cleanup eventm = NULL;
+	DI_CHECK_OK(di_get(di, "event", eventm));
+
 	di_weak_object_with_cleanup weak_roots = NULL;
 	di_get(di, "roots", weak_roots);
 
@@ -501,11 +504,6 @@ static void di_dbus_shutdown(di_dbus_connection *conn) {
 	    di_closure(di_dbus_shutdown_part2,
 	               (weak_roots, (void *)root_handle_storage, (void *)conn->conn));
 
-	di_object_with_cleanup eventm = NULL;
-	if (di_get(di, "event", eventm) != 0) {
-		return;
-	}
-
 	di_object_with_cleanup listen_handle =
 	    di_listen_to(eventm, di_string_borrow("prepare"), (struct di_object *)shutdown);
 
@@ -513,6 +511,10 @@ static void di_dbus_shutdown(di_dbus_connection *conn) {
 	// cannot keep the handle inside `conn`.
 	di_callr(roots, "__add_anonymous", *root_handle_storage, listen_handle);
 
+	// Clear the watch functions so they won't get called. They need the connection
+	// object which we are freeing now. And we don't need to be notified about watch
+	// removal, as we will destroy the ioev objects with the connection objects.
+	dbus_connection_set_watch_functions(conn->conn, NULL, NULL, NULL, NULL, NULL);
 	conn->conn = NULL;
 
 	dbus_bus_name *i, *ni;
@@ -569,19 +571,24 @@ static unsigned int dbus_add_watch(DBusWatch *w, void *ud) {
 	DI_CHECK_OK(di_member(oc, listen_handle_name, l));
 	DI_CHECK_OK(di_member(oc, ioev_name, ioev));
 
-	dbus_watch_set_data(w, di_ref_object((struct di_object *)oc), (void *)di_unref_object);
+	// Watch cannot hold strong references to the connection object. Otherwise the
+	// watches will keep the connection object alive; while the connection object also
+	// keeps the watches alive.
+	dbus_watch_set_data(w, di_weakly_ref_object((struct di_object *)oc),
+	                    (void *)di_drop_weak_ref_rvalue);
 	return true;
 }
 
 static void dbus_remove_watch(DBusWatch *w, void *ud) {
-	struct di_object *oc = ud;
+	di_object_with_cleanup conn = di_upgrade_weak_ref(ud);
+	DI_CHECK(conn != NULL);
 
 	with_cleanup_t(char) ioev_name;
 	asprintf(&ioev_name, "__dbus_ioev_for_watch_%p", w);
-	di_remove_member_raw(oc, di_string_borrow(ioev_name));
+	di_remove_member_raw(conn, di_string_borrow(ioev_name));
 	with_cleanup_t(char) listen_handle_name;
 	asprintf(&listen_handle_name, "__dbus_ioev_listen_handle_for_watch_%p", w);
-	di_remove_member_raw(oc, di_string_borrow(listen_handle_name));
+	di_remove_member_raw(conn, di_string_borrow(listen_handle_name));
 }
 
 static void dbus_toggle_watch(DBusWatch *w, void *ud) {
