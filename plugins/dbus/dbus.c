@@ -21,8 +21,6 @@ typedef struct {
 
 typedef struct {
 	struct di_object;
-	struct deai *di;
-	struct di_listener *l;
 	DBusConnection *conn;
 	struct list_head known_names;
 } di_dbus_connection;
@@ -31,27 +29,32 @@ typedef struct {
 	struct di_object;
 	char *bus;
 	char *obj;
-	di_dbus_connection *c;
 } di_dbus_object;
 
 typedef struct {
 	struct di_object;
-	di_dbus_connection *c;
 	DBusPendingCall *p;
 } di_dbus_pending_reply;
 
-static void di_free_pending_reply(di_dbus_pending_reply *p) {
-	di_unref_object((void *)p->c);
+static void di_dbus_free_pending_reply(struct di_object *_p) {
+	auto p = (di_dbus_pending_reply *)_p;
+	// Cancel the reply so the callback won't be called, as the callback would need
+	// the pending reply object which we are freeing now.
+	dbus_pending_call_cancel(p->p);
+	dbus_pending_call_unref(p->p);
 }
 
 static void dbus_pending_call_notify_fn(DBusPendingCall *dp, void *ud) {
-	di_dbus_pending_reply *p = ud;
+	auto p = (di_dbus_pending_reply *)di_upgrade_weak_ref(ud);
+	// We made sure this callback won't be called if the pending reply object is not
+	// alive.
+	DI_CHECK(p != NULL);
+
 	auto msg = dbus_pending_call_steal_reply(dp);
-	dbus_pending_call_unref(dp);
 
 	di_emit(p, "reply", (void *)msg);
 
-	// free connection object since we are not going to need it
+	// finalize the object since nothing can happen with it any more
 	di_finalize_object((struct di_object *)p);
 }
 
@@ -64,12 +67,12 @@ static struct di_object *di_dbus_send(di_dbus_connection *c, DBusMessage *msg) {
 		di_unref_object((void *)ret);
 		return NULL;
 	}
-	di_set_object_dtor((void *)ret, (void *)di_free_pending_reply);
-	ret->c = c;
-	di_ref_object((void *)c);
-	di_ref_object((void *)ret);
-	dbus_pending_call_set_notify(ret->p, dbus_pending_call_notify_fn, ret,
-	                             (void *)di_unref_object);
+
+	di_set_object_dtor((struct di_object *)ret, di_dbus_free_pending_reply);
+
+	auto weak_pending_reply = di_weakly_ref_object((struct di_object *)ret);
+	dbus_pending_call_set_notify(ret->p, dbus_pending_call_notify_fn,
+	                             weak_pending_reply, (void *)di_drop_weak_ref_rvalue);
 	return (void *)ret;
 }
 
@@ -167,8 +170,8 @@ static void di_dbus_watch_name(di_dbus_connection *c, const char *busname) {
 	dbus_message_unref(msg);
 
 	di_weak_object_with_cleanup weak = di_weakly_ref_object((struct di_object *)c);
-	di_closure_with_cleanup cl = di_closure(di_dbus_update_name_from_msg,
-	                                        (weak, di_string_borrow(busname)), void *);
+	di_closure_with_cleanup cl = di_closure(
+	    di_dbus_update_name_from_msg, (weak, di_string_borrow(busname)), void *);
 	auto listen_handle =
 	    di_listen_to(ret, di_string_borrow("reply"), (struct di_object *)cl);
 
@@ -322,13 +325,18 @@ dbus_call_method(const char *iface, const char *method, struct di_tuple t) {
 
 	auto dobj = (di_dbus_object *)t.elements[0].value->object;
 
+	di_weak_object_with_cleanup weak_conn = NULL;
+	DI_CHECK_OK(di_get(dobj, "___deai_dbus_connection", weak_conn));
+
+	di_object_with_cleanup conn = di_upgrade_weak_ref(weak_conn);
+
 	struct di_tuple shifted_args = {
 	    .length = t.length - 1,
 	    .elements = t.elements + 1,
 	};
 
 	// XXX: probably better to destroy all objects when disconnect from bus
-	if (!dobj->c->conn) {
+	if (conn == NULL) {
 		return NULL;
 	}
 
@@ -343,7 +351,7 @@ dbus_call_method(const char *iface, const char *method, struct di_tuple t) {
 	auto ret = di_new_object_with_type(struct di_object);
 	di_set_type(ret, "deai.plugin.dbus:DBusPendingReply");
 
-	auto p = di_dbus_send(dobj->c, msg);
+	auto p = di_dbus_send((di_dbus_connection *)conn, msg);
 	di_weak_object_with_cleanup weak = di_weakly_ref_object(ret);
 	di_closure_with_cleanup cl = di_closure(dbus_call_method_reply_cb, (weak), void *);
 	auto listen_handle = di_listen_to(p, di_string_borrow("reply"), (void *)cl);
@@ -356,10 +364,16 @@ dbus_call_method(const char *iface, const char *method, struct di_tuple t) {
 
 static void di_free_dbus_object(struct di_object *o) {
 	di_dbus_object *od = (void *)o;
-	di_dbus_unwatch_name(od->c, od->bus);
+
+	di_weak_object_with_cleanup weak_conn = NULL;
+	DI_CHECK_OK(di_get(o, "___deai_dbus_connection", weak_conn));
+
+	di_object_with_cleanup conn = di_upgrade_weak_ref(weak_conn);
+	if (conn != NULL) {
+		di_dbus_unwatch_name((di_dbus_connection *)conn, od->bus);
+	}
 	free(od->bus);
 	free(od->obj);
-	di_unref_object((void *)od->c);
 }
 
 typedef struct {
@@ -414,7 +428,14 @@ static struct di_object *di_dbus_object_getter(di_dbus_object *dobj, struct di_s
 static void di_dbus_object_new_signal(di_dbus_object *dobj, struct di_string name) {
 	char *srcsig;
 	asprintf(&srcsig, "%%%s%%%s%%%.*s", dobj->bus, dobj->obj, (int)name.length, name.data);
-	di_proxy_signal((void *)dobj->c, di_string_borrow(srcsig), (void *)dobj, name);
+
+	di_weak_object_with_cleanup weak_conn = NULL;
+	DI_CHECK_OK(di_get(dobj, "___deai_dbus_connection", weak_conn));
+
+	di_object_with_cleanup conn = di_upgrade_weak_ref(weak_conn);
+	if (conn != NULL) {
+		di_proxy_signal(conn, di_string_borrow(srcsig), (void *)dobj, name);
+	}
 	free(srcsig);
 }
 
@@ -424,8 +445,9 @@ di_dbus_get_object(struct di_object *o, struct di_string bus, struct di_string o
 	auto ret = di_new_object_with_type(di_dbus_object);
 	di_set_type((struct di_object *)ret, "deai.plugin.dbus:DBusObject");
 
-	ret->c = oc;
-	di_ref_object((void *)oc);
+	auto weak_conn = di_weakly_ref_object((struct di_object *)oc);
+	di_member(ret, "___deai_dbus_connection", weak_conn);
+
 	ret->bus = di_string_to_chars_alloc(bus);
 	ret->obj = di_string_to_chars_alloc(obj);
 	di_dbus_watch_name(oc, ret->bus);
@@ -468,8 +490,9 @@ static void di_dbus_shutdown(di_dbus_connection *conn) {
 	// this function might be called in dbus dispatch function,
 	// closing connection in that context is bad.
 	// so delay the shutdown until we return to mainloop
+	di_object_with_cleanup di = di_object_get_deai_strong((struct di_object *)conn);
 	di_weak_object_with_cleanup weak_roots = NULL;
-	di_get(conn->di, "roots", weak_roots);
+	di_get(di, "roots", weak_roots);
 
 	di_object_with_cleanup roots = di_upgrade_weak_ref(weak_roots);
 	DI_CHECK(roots);
@@ -479,7 +502,7 @@ static void di_dbus_shutdown(di_dbus_connection *conn) {
 	               (weak_roots, (void *)root_handle_storage, (void *)conn->conn));
 
 	di_object_with_cleanup eventm = NULL;
-	if (di_get(conn->di, "event", eventm) != 0) {
+	if (di_get(di, "event", eventm) != 0) {
 		return;
 	}
 
@@ -491,8 +514,6 @@ static void di_dbus_shutdown(di_dbus_connection *conn) {
 	di_callr(roots, "__add_anonymous", *root_handle_storage, listen_handle);
 
 	conn->conn = NULL;
-	di_unref_object((void *)conn->di);
-	conn->di = NULL;
 
 	dbus_bus_name *i, *ni;
 	list_for_each_entry_safe (i, ni, &conn->known_names, sibling) {
@@ -525,7 +546,8 @@ static unsigned int dbus_add_watch(DBusWatch *w, void *ud) {
 	}
 
 	di_object_with_cleanup eventm = NULL;
-	if (di_get(oc->di, "event", eventm) != 0) {
+	di_object_with_cleanup di = di_object_get_deai_strong((struct di_object *)oc);
+	if (di_get(di, "event", eventm) != 0) {
 		return false;
 	}
 	int rc = di_callr(eventm, "fdevent", ioev, fd, dt);
@@ -728,7 +750,7 @@ static struct di_object *di_dbus_get_session_bus(struct di_object *o) {
 		return ret;
 	}
 
-	auto di = (struct deai *)di_module_get_deai(m);
+	auto di = di_module_get_deai(m);
 	if (di == NULL) {
 		return di_new_error("deai is shutting down...");
 	}
@@ -738,9 +760,8 @@ static struct di_object *di_dbus_get_session_bus(struct di_object *o) {
 	di_set_type((struct di_object *)ret, "deai.plugin.dbus:DBusConnection");
 
 	ret->conn = conn;
-	ret->di = di;
+	di_member(ret, DEAI_MEMBER_NAME_RAW, di);
 	INIT_LIST_HEAD(&ret->known_names);
-	di_ref_object((void *)ret->di);
 	di_method(ret, "get", di_dbus_get_object, struct di_string, struct di_string);
 	di_method(ret, "__new_signal", di_dbus_new_signal, struct di_string);
 	di_method(ret, "__del_signal", di_dbus_del_signal, struct di_string);

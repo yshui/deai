@@ -384,6 +384,10 @@ PUBLIC_DEAI_API struct di_object *
 /// Drop a weak object reference. After this function returns, the passed pointer will
 /// become invalid
 PUBLIC_DEAI_API void di_drop_weak_ref(struct di_weak_object *nonnull *nonnull);
+static inline void di_drop_weak_ref_rvalue(struct di_weak_object *nonnull weak) {
+	di_drop_weak_ref(&weak);
+}
+
 PUBLIC_DEAI_API void frees(malloc, 1) di_unref_object(struct di_object *nonnull);
 
 PUBLIC_DEAI_API void di_set_object_dtor(struct di_object *nonnull, di_dtor_fn_t nullable);

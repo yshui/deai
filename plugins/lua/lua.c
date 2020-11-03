@@ -77,20 +77,16 @@ struct di_lua_state {
 	// lua_state -> di_module/di_lua_ref -> lua_script -> lua_state
 	struct di_object;
 	lua_State *L;
-	struct di_module *m;
 };
 
 struct di_lua_ref {
 	struct di_object;
 	int tref;
-	struct di_lua_script *s;
 };
 
 struct di_lua_script {
 	struct di_object;
 	char *path;
-	// NULL means the lua module has been freed
-	struct di_lua_state *L;
 	/*
 	 * Keep track of all listeners and objects so we can free them when script is
 	 * freed
@@ -111,7 +107,6 @@ static int di_lua_errfunc(lua_State *L) {
 	lua_pushliteral(L, DI_LUA_REGISTRY_SCRIPT_OBJECT_KEY);
 	lua_rawget(L, LUA_REGISTRYINDEX);
 	struct di_lua_script *o = lua_touserdata(L, -1);
-	di_mgetm(o->L->m, log, rc);
 
 	char *error_prompt = NULL;
 	int error_prompt_len;
@@ -148,8 +143,6 @@ static int di_lua_errfunc(lua_State *L) {
 
 static void di_lua_free_script(struct di_lua_script *s) {
 	free(s->path);
-	di_unref_object((void *)s->L);
-	s->L = NULL;
 }
 
 static bool di_lua_isproxy(lua_State *L, int index) {
@@ -184,9 +177,13 @@ static void *di_lua_checkproxy(lua_State *L, int index) {
 }
 
 static void lua_ref_dtor(struct di_lua_ref *t) {
-	luaL_unref(t->s->L->L, LUA_REGISTRYINDEX, t->tref);
-	di_unref_object((void *)t->s);
-	t->s = NULL;
+	di_object_with_cleanup script_obj = NULL;
+	di_object_with_cleanup state_obj = NULL;
+	DI_CHECK_OK(di_get(t, "___di_lua_script", script_obj));
+	DI_CHECK_OK(di_get(script_obj, "___di_lua_state", state_obj));
+
+	auto state = (struct di_lua_state *)state_obj;
+	luaL_unref(state->L, LUA_REGISTRYINDEX, t->tref);
 }
 
 static int di_lua_type_to_di(lua_State *L, int i, di_type_t *t, union di_value *ret);
@@ -219,9 +216,15 @@ di_lua_di_getter(struct di_object *m, di_type_t *rt, union di_value *ret, struct
 		return -EINVAL;
 	}
 
-	struct di_lua_script *s = t->s;
-	lua_State *L = t->s->L->L;
-	di_lua_xchg_env(L, s);
+	di_object_with_cleanup script_obj = NULL;
+	di_object_with_cleanup state_obj = NULL;
+	DI_CHECK_OK(di_get(t, "___di_lua_script", script_obj));
+	DI_CHECK_OK(di_get(script_obj, "___di_lua_state", state_obj));
+
+	auto script = (struct di_lua_script *)script_obj;
+	auto state = (struct di_lua_state *)state_obj;
+	lua_State *L = state->L;
+	di_lua_xchg_env(L, script);
 
 	lua_rawgeti(L, LUA_REGISTRYINDEX, t->tref);
 
@@ -240,7 +243,7 @@ di_lua_di_getter(struct di_object *m, di_type_t *rt, union di_value *ret, struct
 		*rt = DI_LAST_TYPE;
 	}
 
-	di_lua_xchg_env(L, s);
+	di_lua_xchg_env(L, script);
 	return 0;
 }
 
@@ -259,8 +262,7 @@ static struct di_lua_ref *lua_type_to_di_object(lua_State *L, int i, void *call)
 	di_set_type((struct di_object *)o, "deai.plugin.lua:LuaRef");
 	o->tref = luaL_ref(L, LUA_REGISTRYINDEX);        // this pops the table from
 	                                                 // stack, we need to put it back
-	o->s = s;
-	di_ref_object((void *)s);
+	di_member_clone(o, "___di_lua_script", (struct di_object *)s);
 
 	// Restore the value onto the stack
 	lua_pushinteger(L, o->tref);
@@ -427,7 +429,6 @@ static void lua_state_dtor(struct di_lua_state *obj) {
 static struct di_lua_state *lua_new_state(struct di_module *m) {
 	auto L = di_new_object_with_type(struct di_lua_state);
 	di_set_type((struct di_object *)L, "deai.plugin.lua:LuaState");
-	L->m = m;
 	L->L = luaL_newstate();
 	di_set_object_dtor((void *)L, (void *)lua_state_dtor);
 	luaL_openlibs(L->L);
@@ -439,7 +440,7 @@ static struct di_lua_state *lua_new_state(struct di_module *m) {
 	// The reference from di_lua_state to di is actually kept by the lua_State,
 	// as "di" is a global in the lua_State. However, we keep di as a member of
 	// di_lua_state to take advantage of the automatic memory management.
-	di_member((struct di_object *)L, DEAI_MEMBER_NAME_RAW, di);
+	di_member(L, DEAI_MEMBER_NAME_RAW, di);
 
 	// Prevent the script from using os
 	lua_getglobal(L->L, "os");
@@ -460,6 +461,7 @@ static struct di_lua_state *lua_new_state(struct di_module *m) {
 }
 
 define_object_cleanup(di_lua_script);
+define_object_cleanup(di_lua_state);
 static struct di_object *di_lua_load_script(struct di_object *obj, struct di_string path_) {
 	/**
 	 * Reference count scheme for di_lua_script:
@@ -482,41 +484,42 @@ static struct di_object *di_lua_load_script(struct di_object *obj, struct di_str
 	di_set_object_dtor((void *)s, (void *)di_lua_free_script);
 
 	struct di_module *m = (void *)obj;
+	with_object_cleanup(di_lua_state) L = NULL;
 	{
 		di_weak_object_with_cleanup weak_lua_state = NULL;
-		s->L = NULL;
 
 		int rc = di_get(m, "__lua_state", weak_lua_state);
 		if (rc == 0) {
-			s->L = (struct di_lua_state *)di_upgrade_weak_ref(weak_lua_state);
+			L = (struct di_lua_state *)di_upgrade_weak_ref(weak_lua_state);
 		} else {
 			DI_CHECK(rc == -ENOENT);
 		}
 
-		if (s->L == NULL) {
+		if (L == NULL) {
 			// __lua_state not found, or lua_state has been dropped
 			di_remove_member_raw((struct di_object *)m,
 			                     di_string_borrow("__lua_state"));
-			s->L = lua_new_state(m);
+			L = lua_new_state(m);
 		}
-		DI_CHECK(s->L != NULL);
+		DI_CHECK(L != NULL);
 	}
 
-	struct di_lua_state *L = s->L;
 	di_mgetm(m, log, di_new_error("Can't find log module"));
-	lua_pushcfunction(s->L->L, di_lua_errfunc);
+	lua_pushcfunction(L->L, di_lua_errfunc);
 
-	if (luaL_loadfile(s->L->L, path)) {
-		const char *err = lua_tostring(s->L->L, -1);
+	if (luaL_loadfile(L->L, path)) {
+		const char *err = lua_tostring(L->L, -1);
 		di_log_va(logm, DI_LOG_ERROR, "Failed to load lua script %s: %s\n", path, err);
-		lua_pop(s->L->L, 2);
+		lua_pop(L->L, 2);
 		// Create the error object before freeing the script object. Because after
 		// that the error string might be freed.
 		auto errobj = di_new_error("Failed to load lua script %s: %s\n", path, err);
+		free(path);
 		return errobj;
 	}
 
 	s->path = path;
+	di_member_clone(s, "___di_lua_state", (struct di_object *)L);
 
 	int ret;
 	// load_script might be called by lua script,
@@ -532,7 +535,7 @@ static struct di_object *di_lua_load_script(struct di_object *obj, struct di_str
 
 		// Pop error handling function
 		auto err = luaL_tolstring(L->L, -1, NULL);
-		lua_pop(s->L->L, 1);
+		lua_pop(L->L, 1);
 		return di_new_error("%s", err);
 	}
 	return di_ref_object((struct di_object *)s);
@@ -637,20 +640,21 @@ static bool di_lua_checkarray(lua_State *L, int index, int *nelem, di_type_t *el
 
 static int call_lua_function(struct di_lua_ref *ref, di_type_t *rt, union di_value *ret,
                              struct di_tuple t) {
-	if (!ref->s) {
-		return -EBADF;
-	}
+	di_object_with_cleanup script_obj = NULL;
+	DI_CHECK_OK(di_get(ref, "___di_lua_script", script_obj));
 
 	struct di_variant *vars = t.elements;
 
-	lua_State *L = ref->s->L->L;
-	struct di_lua_script *s = ref->s;
-	// Prevent script object from being freed during pcall
-	di_ref_object((void *)s);
+	auto script = (struct di_lua_script *)script_obj;
+	di_object_with_cleanup state_obj = NULL;
+	DI_CHECK_OK(di_get(script, "___di_lua_state", state_obj));
+
+	auto state = (struct di_lua_state *)state_obj;
+	lua_State *L = state->L;
 
 	lua_pushcfunction(L, di_lua_errfunc);
 
-	di_lua_xchg_env(L, s);
+	di_lua_xchg_env(L, script);
 
 	// Get the function
 	lua_rawgeti(L, LUA_REGISTRYINDEX, ref->tref);
@@ -661,9 +665,7 @@ static int call_lua_function(struct di_lua_ref *ref, di_type_t *rt, union di_val
 
 	lua_pcall(L, t.length, 1, -(int)t.length - 2);
 
-	di_lua_xchg_env(L, s);
-
-	di_unref_object((void *)s);
+	di_lua_xchg_env(L, script);
 
 	di_lua_type_to_di(L, -1, rt, ret);
 	return 0;
@@ -792,9 +794,12 @@ static int di_lua_add_listener(lua_State *L) {
 	struct di_lua_script *s;
 	di_lua_get_env(L, s);
 
+	di_object_with_cleanup state_obj = NULL;
+	DI_CHECK_OK(di_get(s, "___di_lua_state", state_obj));
+
 	di_weak_object_with_cleanup weak_roots = NULL;
-	di_object_with_cleanup di = di_module_get_deai(s->L->m);
-	di_get(di, "roots", weak_roots);
+	di_object_with_cleanup di = di_object_get_deai_strong(state_obj);
+	DI_CHECK_OK(di_get(di, "roots", weak_roots));
 
 	di_object_with_cleanup roots = di_upgrade_weak_ref(weak_roots);
 	DI_CHECK(roots);
