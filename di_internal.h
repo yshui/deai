@@ -36,7 +36,8 @@ struct di_object_internal {
 	uint8_t destroyed;
 
 #ifdef TRACK_OBJECTS
-	char padding[63];
+	char padding[62];
+	uint8_t mark;
 	struct list_head siblings;
 #else
 	// Reserved for future use
@@ -161,4 +162,5 @@ struct di_object *nullable di_try(void (*nonnull func)(void *nullable), void *nu
 
 #ifdef TRACK_OBJECTS
 void di_dump_objects(void);
+void di_mark_and_sweep(struct di_roots *);
 #endif

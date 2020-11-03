@@ -681,6 +681,7 @@ int main(int argc, char *argv[]) {
 	di_unref_object((void *)p);
 
 #ifdef TRACK_OBJECTS
+	di_mark_and_sweep(roots);
 	di_dump_objects();
 #endif
 	if (!quit) {

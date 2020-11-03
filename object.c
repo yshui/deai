@@ -927,8 +927,8 @@ int di_emitn(struct di_object *o, struct di_string name, struct di_tuple args) {
 void di_dump_objects(void) {
 	struct di_object_internal *i;
 	list_for_each_entry (i, &all_objects, siblings) {
-		fprintf(stderr, "%p, ref count: %lu strong %lu weak, type: %s\n", i,
-		        i->ref_count, i->weak_ref_count, di_get_type((void *)i));
+		fprintf(stderr, "%p, ref count: %lu strong %lu weak (live: %d), type: %s\n",
+		        i, i->ref_count, i->weak_ref_count, i->mark, di_get_type((void *)i));
 		for (struct di_member *m = i->members; m != NULL; m = m->hh.next) {
 			fprintf(stderr, "\tmember: %.*s, type: %s\n", (int)m->name.length,
 			        m->name.data, di_type_to_string(m->type));
@@ -939,4 +939,34 @@ void di_dump_objects(void) {
 		}
 	}
 }
+
+static void di_mark_and_sweep_dfs(struct di_object_internal *o) {
+	if (o->mark != 0) {
+		if (o->mark == 1) {
+			fprintf(stderr, "Reference cycle detected\n");
+		}
+		return;
+	}
+
+	o->mark = 1;
+	for (auto i = o->members; i != NULL; i = i->hh.next) {
+		if (i->type != DI_TYPE_OBJECT) {
+			continue;
+		}
+		union di_value *val = i->data;
+		di_mark_and_sweep_dfs((struct di_object_internal *)val->object);
+	}
+
+	o->mark = 2;
+}
+
+void di_mark_and_sweep(struct di_roots *roots) {
+	struct di_object_internal *i;
+	list_for_each_entry (i, &all_objects, siblings) { i->mark = 0; }
+	di_mark_and_sweep_dfs((struct di_object_internal *)roots);
+	for (auto root = roots->anonymous_roots; root != NULL; root = root->hh.next) {
+		di_mark_and_sweep_dfs((struct di_object_internal *)root->obj);
+	}
+}
+
 #endif
