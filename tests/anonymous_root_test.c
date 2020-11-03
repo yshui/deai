@@ -6,10 +6,10 @@
 
 DEAI_PLUGIN_ENTRY_POINT(di) {
 	auto object = di_new_object_with_type(struct di_object);
-	struct di_weak_object *weak_roots;
+	di_weak_object_with_cleanup weak_roots = NULL;
 	di_get(di, "roots", weak_roots);
 
-	auto roots = di_upgrade_weak_ref(weak_roots);
+	di_object_with_cleanup roots = di_upgrade_weak_ref(weak_roots);
 	DI_CHECK(roots);
 
 	uint64_t root_handle;
