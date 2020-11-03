@@ -930,8 +930,13 @@ void di_dump_objects(void) {
 		fprintf(stderr, "%p, ref count: %lu strong %lu weak (live: %d), type: %s\n",
 		        i, i->ref_count, i->weak_ref_count, i->mark, di_get_type((void *)i));
 		for (struct di_member *m = i->members; m != NULL; m = m->hh.next) {
-			fprintf(stderr, "\tmember: %.*s, type: %s\n", (int)m->name.length,
+			fprintf(stderr, "\tmember: %.*s, type: %s", (int)m->name.length,
 			        m->name.data, di_type_to_string(m->type));
+			if (m->type == DI_TYPE_OBJECT) {
+				union di_value *val = m->data;
+				fprintf(stderr, " (%s)", di_get_type(val->object));
+			}
+			fprintf(stderr, "\n");
 		}
 		for (struct di_signal *s = i->signals; s != NULL; s = s->hh.next) {
 			fprintf(stderr, "\tsignal: %.*s, nlisteners: %d\n",
