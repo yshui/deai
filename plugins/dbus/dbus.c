@@ -419,7 +419,6 @@ static struct di_object *di_dbus_object_getter(di_dbus_object *dobj, struct di_s
 	di_set_type((struct di_object *)ret, "deai.plugin.dbus:DBusMethod");
 	ret->method = m;
 	ret->interface = ifc;
-	di_ref_object((void *)dobj);
 
 	di_set_object_dtor((void *)ret, di_dbus_free_method);
 	di_set_object_call((void *)ret, call_dbus_method);
