@@ -803,6 +803,17 @@ public:
 		return static_cast<Return>(Variant{return_type, return_value});
 	}
 
+	/// Call the method `method_name` of this object
+	template <typename Return, typename... Args>
+	auto method_call(std::string_view method_name, const Args &...args)
+	    -> std::enable_if_t<(util::deai_typeof<Return>::value, true), Return> {
+		    std::optional<Variant> method = (*this)[method_name];
+		    if (!method.has_value()) {
+			    throw std::out_of_range("method not found in object");
+		    }
+		    return method->object_ref().value().call<Return>(raw(), args...);
+	}
+
 	/// Returns a getter with which you can get members of the object without going
 	/// through the deai getters
 	auto raw_members() -> ObjectMembersRawGetter {
@@ -867,23 +878,11 @@ using namespace type;
 
 namespace type::util {
 
-template <typename Return, typename T, typename... Args>
-auto call_deai_method(const Ref<T> &object_ref, const std::string_view &method_name,
-                      const Args &...args)
-    -> std::enable_if_t<(deai_typeof<Return>::value, true), Return> {
-	std::optional<Variant> method = object_ref[method_name];
-	if (!method.has_value()) {
-		throw std::out_of_range("method not found in object");
-	}
-	return method->object_ref().value().call<Return>(object_ref.raw(), args...);
-}
-
 template <typename Return, typename... Args>
-auto call_deai_method_raw(c_api::di_object *raw_ref, const std::string_view &method_name,
-                          const Args &...args)
+auto call_raw(c_api::di_object *raw_ref, const std::string_view &method_name, const Args &...args)
     -> std::enable_if_t<(deai_typeof<Return>::value, true), Return> {
 	auto ref = Ref<Object>{raw_ref};
-	return call_deai_method<Return>(ref, method_name, args...);
+	return ref.method_call<Return>(method_name, args...);
 }
 
 template <typename T>
