@@ -212,7 +212,7 @@ void di_init_log(struct deai *di) {
 	di_method(l, "stderr_target", stderr_target);
 	di_getter(l, log_level, get_log_level);
 	di_setter(l, log_level, set_log_level, struct di_string);
-	di_register_module(di, di_string_borrow("log"), &lm);
 
 	log_module = (struct di_object *)lm;
+	di_register_module(di, di_string_borrow("log"), &lm);
 }

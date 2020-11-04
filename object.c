@@ -4,6 +4,7 @@
 
 /* Copyright (c) 2017, Yuxuan Shui <yshuiv7@gmail.com> */
 
+#include <deai/builtins/log.h>
 #include <deai/callable.h>
 #include <deai/helper.h>
 #include <deai/object.h>
@@ -419,7 +420,7 @@ static void di_destroy_object(struct di_object *_obj) {
 	// XXX Hacky: if things are referenced properly, this shouldn't be necessary
 	di_ref_object(_obj);
 	if (obj->destroyed) {
-		fprintf(stderr, "warning: destroy object multiple times\n");
+		di_log_va(log_module, DI_LOG_WARN, "warning: destroy object multiple times\n");
 	}
 	obj->destroyed = 1;
 
@@ -926,15 +927,17 @@ int di_emitn(struct di_object *o, struct di_string name, struct di_tuple args) {
 			if (rtype == DI_TYPE_OBJECT) {
 				struct di_string errmsg;
 				if (di_get(ret.object, "errmsg", errmsg) == 0) {
-					fprintf(stderr, "Error arose when calling signal handler: %.*s\n",
-					        (int)errmsg.length, errmsg.data);
+					di_log_va(log_module, DI_LOG_ERROR,
+					          "Error arose when calling signal "
+					          "handler: %.*s\n",
+					          (int)errmsg.length, errmsg.data);
 					di_free_string(errmsg);
 				}
 			}
 			di_free_value(rtype, &ret);
 		} else {
-			fprintf(stderr, "Failed to call a listener callback: %s\n",
-			        strerror(-rc));
+			di_log_va(log_module, DI_LOG_ERROR,
+			          "Failed to call a listener callback: %s\n", strerror(-rc));
 		}
 	}
 	free(all_handle);

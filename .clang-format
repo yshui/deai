@@ -26,7 +26,7 @@ PenaltyBreakAssignment: 0
 PenaltyBreakTemplateDeclaration: 0
 PenaltyBreakBeforeFirstCallParameter: 1
 PenaltyExcessCharacter: 2
-PenaltyBreakString: 100
+PenaltyBreakString: 60
 BreakBeforeBinaryOperators: None
 IncludeCategories:
   - Regex:           '<deai/.*\.h>'
