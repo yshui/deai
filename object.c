@@ -168,6 +168,9 @@ int di_setx(struct di_object *o, struct di_string prop, di_type_t type, const vo
 	// Finally, replace the value
 	auto mem = di_lookup(o, prop);
 	if (mem) {
+		// the old member still exists, we need to drop the old value
+		di_free_value(mem->type, mem->data);
+
 		mem->data = realloc(mem->data, di_sizeof_type(type));
 		di_copy_value(mem->type, mem->data, val);
 		return 0;
