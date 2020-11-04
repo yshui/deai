@@ -788,11 +788,17 @@ static int call_lua_function(struct di_lua_ref *ref, di_type_t *rt, union di_val
 		di_lua_pushvariant(L, NULL, vars[i]);
 	}
 
-	lua_pcall(L, t.length, 1, -(int)t.length - 2);
+	if (lua_pcall(L, t.length, 1, -(int)t.length - 2) != 0) {
+		auto err = luaL_tolstring(L, -1, NULL);
+		lua_pop(L, 1);
+		ret->object = di_new_error("%s", err);
+		*rt = DI_TYPE_OBJECT;
+	} else {
+		di_lua_type_to_di(L, -1, rt, ret);
+	}
 
 	di_lua_xchg_env(L, script);
 
-	di_lua_type_to_di(L, -1, rt, ret);
 	return 0;
 }
 

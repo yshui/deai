@@ -923,6 +923,14 @@ int di_emitn(struct di_object *o, struct di_string name, struct di_tuple args) {
 		di_drop_weak_ref(&all_handle[i]);
 
 		if (rc == 0) {
+			if (rtype == DI_TYPE_OBJECT) {
+				struct di_string errmsg;
+				if (di_get(ret.object, "errmsg", errmsg) == 0) {
+					fprintf(stderr, "Error arose when calling signal handler: %.*s\n",
+					        (int)errmsg.length, errmsg.data);
+					di_free_string(errmsg);
+				}
+			}
 			di_free_value(rtype, &ret);
 		} else {
 			fprintf(stderr, "Failed to call a listener callback: %s\n",
