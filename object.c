@@ -222,6 +222,10 @@ int di_getx(struct di_object *o, struct di_string prop, di_type_t *type, union d
 		return rc;
 	}
 
+	if (*type == DI_LAST_TYPE) {
+		return -ENOENT;
+	}
+
 	if (*type == DI_TYPE_VARIANT) {
 		struct di_variant *var = &ret->variant;
 		di_flatten_variant(var);
