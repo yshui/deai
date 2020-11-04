@@ -7,7 +7,7 @@ jobs:
       - checkout
       - run:
           name: install dependencies
-          command: yum install -y libev-devel libffi-devel meson lua-devel ninja-build libxcb-devel libxkbcommon-devel pkg-config gcc g++ xcb-util-keysyms-devel dbus-devel findutils dbus xorg-x11-server-utils xdotool xorg-x11-server-Xvfb libasan systemd-devel luajit-devel
+          command: yum install -y libev-devel libffi-devel meson lua-devel ninja-build libxcb-devel libxkbcommon-devel pkg-config gcc g++ xcb-util-keysyms-devel dbus-devel findutils dbus xorg-x11-server-utils xdotool xorg-x11-server-Xvfb libasan systemd-devel luajit-devel dbus-daemon
       - run:
           name: Build
           command: meson -Db_coverage=true -Db_sanitize=address builddir && ninja -C builddir
