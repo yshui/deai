@@ -75,7 +75,9 @@ static void di_xorg_ioev(struct di_weak_object *weak) {
 	// di_get_log(dc->x->di);
 	// di_log_va((void *)log, DI_LOG_DEBUG, "xcb ioev\n");
 
-	auto dc = (struct di_xorg_connection *)di_upgrade_weak_ref(weak);
+	di_object_with_cleanup dc_obj = di_upgrade_weak_ref(weak);
+	auto dc = (struct di_xorg_connection *)dc_obj;
+
 	DI_CHECK(dc != NULL, "got ioev events but the listener has died");
 	xcb_generic_event_t *ev;
 
@@ -481,7 +483,7 @@ static struct di_object *di_xorg_connect_to(struct di_xorg *x, struct di_string 
 	struct di_object *xcb_fd_event = NULL;
 	di_callr(eventm, "fdevent", xcb_fd_event, xcb_get_file_descriptor(dc->c), IOEV_READ);
 
-	auto odc = di_weakly_ref_object((struct di_object *)dc);
+	di_weak_object_with_cleanup odc = di_weakly_ref_object((struct di_object *)dc);
 	di_closure_with_cleanup cl = di_closure(di_xorg_ioev, (odc));
 	auto lh = di_listen_to(xcb_fd_event, di_string_borrow("read"), (void *)cl);
 
