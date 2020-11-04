@@ -72,6 +72,10 @@ struct deai {
 	char *nonnull proctitle;
 	char *nonnull proctitle_end;
 
+	// An array of size proctitle_end - proctitle, copy of the origin proctitle
+	// memory.
+	char *nonnull orig_proctitle;
+
 	int *nonnull exit_code;
 	bool *nonnull quit;
 };

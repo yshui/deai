@@ -272,10 +272,24 @@ void di_dtor(struct deai *di) {
 	*di->quit = true;
 
 #ifdef HAVE_SETPROCTITLE
-	for (int i = 0; i < di->argc; i++) {
-		free(di->argv[i]);
+	// Recover the original proctitle memory
+	ptrdiff_t proctitle_offset = di->proctitle - di->orig_proctitle;
+	size_t proctitle_size = di->proctitle_end - di->proctitle;
+	memcpy(di->proctitle, di->orig_proctitle, di->proctitle_end - di->proctitle);
+
+	// Revert the changes we did to argv and environ
+	for (int i = 0; environ[i]; i++) {
+		if (environ[i] >= di->orig_proctitle &&
+		    environ[i] < di->orig_proctitle + proctitle_size) {
+			environ[i] += proctitle_offset;
+		}
 	}
-	free(di->argv);
+	for (int i = 0; i < di->argc; i++) {
+		di->argv[i] += proctitle_offset;
+	}
+	di->argv = NULL;
+	di->argc = 0;
+	free(di->orig_proctitle);
 #endif
 
 	// fprintf(stderr, "%d\n", p->ref_count);
@@ -317,35 +331,30 @@ static void di_sighandler(struct ev_loop *l, ev_signal *w, int revents) {
 
 #ifdef HAVE_SETPROCTITLE
 static void setproctitle_init(int argc, char **argv, struct deai *p) {
-	// Copy argv and environ
-	p->argc = argc;
-	p->argv = calloc(argc, sizeof(void *));
-	for (int i = 0; i < argc; i++) {
-		// fprintf(stderr, "%p\n", argv[i]);
-		p->argv[i] = strdup(argv[i]);
-	}
-
 	p->proctitle = argv[0];
-
-	size_t envsz = 0;
-	for (; environ[envsz]; envsz++) {}
-
-	char **old_env = environ;
-	environ = calloc(envsz + 1, sizeof(char *));
-	for (int i = 0; i < envsz; i++) {
-		// fprintf(stderr, "%p %s %p\n", old_env[i], old_env[i],
-		//        old_env[i] + strlen(old_env[i]));
-		environ[i] = strdup(old_env[i]);
-	}
-	environ[envsz] = NULL;
 
 	// Available space extends until the end of the page
 	uintptr_t end = (uintptr_t)p->proctitle;
 	auto pgsz = getpagesize();
 	end = (end / pgsz + 1) * pgsz;
 	p->proctitle_end = (void *)end;
-	// fprintf(stderr, "%p, %lu\n", p->proctitle, p->proctitle_end -
-	// p->proctitle);
+
+	p->orig_proctitle = malloc(p->proctitle_end - p->proctitle);
+	memcpy(p->orig_proctitle, p->proctitle, p->proctitle_end - p->proctitle);
+
+	ptrdiff_t proctitle_offset = p->orig_proctitle - p->proctitle;
+
+	// Point argv and environ to the copy of the proctitle
+	p->argc = argc;
+	p->argv = argv;
+	for (int i = 0; i < argc; i++) {
+		// fprintf(stderr, "%p\n", argv[i]);
+		argv[i] += proctitle_offset;
+	}
+
+	for (int i = 0; environ[i]; i++) {
+		environ[i] += proctitle_offset;
+	}
 }
 static void di_set_pr_name(struct deai *p, struct di_string name) {
 	if (name.data) {
