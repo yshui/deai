@@ -183,7 +183,7 @@ static struct di_object *di_file_new_watch(struct di_module *f, struct di_array 
 	struct di_object *fdevent = NULL;
 	DI_CHECK_OK(di_callr(eventm, "fdevent", fdevent, fw->fd, IOEV_READ));
 
-	auto tmpo = di_weakly_ref_object((struct di_object *)fw);
+	di_weak_object_with_cleanup tmpo = di_weakly_ref_object((struct di_object *)fw);
 	di_closure_with_cleanup cl = di_closure(di_file_ioev, (tmpo));
 	auto listen_handle = di_listen_to(fdevent, di_string_borrow("read"), (void *)cl);
 
