@@ -144,8 +144,6 @@ struct deai_typeof<std::string> {
 };
 template <>
 struct deai_typeof<const char *> {
-	// const char * can be strings too, we are just hijacking this type to mean
-	// string literal.
 	static constexpr auto value = c_api::di_type::STRING_LITERAL;
 };
 template <>
@@ -435,7 +433,6 @@ private:
 	                               (Type != c_api::di_type::NIL) &&
 	                               (Type != c_api::di_type::ANY) &&
 	                               (Type != c_api::di_type::DI_LAST_TYPE) &&
-	                               (Type != c_api::di_type::STRING) &&
 	                               (Type != c_api::di_type::WEAK_OBJECT);
 
 public:
@@ -498,8 +495,10 @@ public:
 			return value.float_;
 		}
 		if constexpr (Type == c_api::di_type::STRING_LITERAL) {
-			return std::string_view(value.string_literal,
-			                        strlen(value.string_literal));
+			return value.string_literal;
+		}
+		if constexpr (Type == c_api::di_type::STRING) {
+			return std::string{value.string.data, value.string.length};
 		}
 		if constexpr (Type == c_api::di_type::POINTER) {
 			return value.pointer;
