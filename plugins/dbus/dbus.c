@@ -120,19 +120,20 @@ static void di_dbus_update_name_from_msg(struct di_weak_object *weak,
 		return;
 	}
 
-	auto c = (di_dbus_connection *)di_upgrade_weak_ref(weak);
+	di_object_with_cleanup conn_obj = di_upgrade_weak_ref(weak);
+	auto conn = (di_dbus_connection *)conn_obj;
 	// the fact we received message must mean the connection is still alive
-	DI_CHECK(c != NULL);
+	DI_CHECK(conn != NULL);
 
 	// Stop listening for GetNameOwner reply
 	char *buf;
 	asprintf(&buf, "__dbus_watch_%.*s_change_request", (int)busname.length, busname.data);
-	DI_CHECK_OK(di_remove_member_raw((struct di_object *)c, di_string_borrow(buf)));
+	DI_CHECK_OK(di_remove_member_raw((struct di_object *)conn, di_string_borrow(buf)));
 	free(buf);
 
 	asprintf(&buf, "__dbus_watch_%.*s_change_request_listen_handle",
 	         (int)busname.length, busname.data);
-	DI_CHECK_OK(di_remove_member_raw((struct di_object *)c, di_string_borrow(buf)));
+	DI_CHECK_OK(di_remove_member_raw((struct di_object *)conn, di_string_borrow(buf)));
 	free(buf);
 
 	// Update busname
@@ -143,7 +144,7 @@ static void di_dbus_update_name_from_msg(struct di_weak_object *weak,
 	if (!ret) {
 		return;
 	}
-	di_dbus_update_name(c, busname, DI_STRING_INIT, di_string_borrow(unique), true);
+	di_dbus_update_name(conn, busname, DI_STRING_INIT, di_string_borrow(unique), true);
 	dbus_message_unref(msg);
 }
 
@@ -720,6 +721,7 @@ static DBusHandlerResult dbus_filter(DBusConnection *conn, DBusMessage *msg, voi
 	auto mbr = dbus_message_get_member(msg);
 
 	if (!bus_name) {
+		di_unref_object(ud);
 		return DBUS_HANDLER_RESULT_NOT_YET_HANDLED;
 	}
 
