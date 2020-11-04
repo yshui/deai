@@ -354,6 +354,17 @@ static int di_lua_method_handler(lua_State *L) {
 	return di_lua_method_handler_impl(L, name, m);
 }
 
+static void di_lua_forget_object(struct di_lua_state *s, struct di_lua_object_map_entry *e) {
+	char *buf;
+	HASH_DEL(s->object_to_lua_ref, e);
+	/*fprintf(stderr, "forgetting %d\n", e->ref);*/
+	asprintf(&buf, "___di_object_%d", e->ref);
+	DI_CHECK_OK(di_remove_member_raw((struct di_object *)s, di_string_borrow(buf)));
+	luaL_unref(s->L, LUA_REGISTRYINDEX, e->ref);
+	free(buf);
+	free(e);
+}
+
 static int di_lua_gc(lua_State *L) {
 	struct di_object *o = di_lua_checkproxy(L, 1);
 	struct di_lua_state *s;
@@ -361,18 +372,20 @@ static int di_lua_gc(lua_State *L) {
 	di_lua_get_state(L, s);
 	DI_CHECK(s != NULL);
 
-	char *buf;
 
 	// Forget about this object
 	struct di_lua_object_map_entry *e = NULL;
 	HASH_FIND_PTR(s->object_to_lua_ref, &o, e);
-	DI_CHECK(e != NULL);
-	HASH_DEL(s->object_to_lua_ref, e);
-	asprintf(&buf, "___di_object_%d", e->ref);
-	DI_CHECK_OK(di_remove_member_raw((struct di_object *)s, di_string_borrow(buf)));
-	luaL_unref(L, LUA_REGISTRYINDEX, e->ref);
-	free(buf);
-	free(e);
+
+	// This object might have already been forgotten, if:
+	//   1) the proxy has been GC'd, but __gc hasn't been called, and
+	//   2) di_lua_pushobject is called for the corresponding object in this state
+	//
+	// In that case, di_lua_pushobject will forget the GC'd entry and create a new
+	// weakref for the object.
+	if (e != NULL) {
+		di_lua_forget_object(s, e);
+	}
 	return 0;
 }
 
@@ -485,9 +498,6 @@ static int luaL_weakref(lua_State *L, int index) {
 static bool luaL_weakref_get(lua_State *L, int index, int r) {
 	// Get the weak table indirection
 	lua_rawgeti(L, index, r);
-	if (lua_isnil(L, -1)) {
-		return false;
-	}
 
 	DI_CHECK(lua_type(L, -1) == LUA_TTABLE);
 	lua_rawgeti(L, -1, 1);
@@ -509,14 +519,22 @@ static void di_lua_pushobject(lua_State *L, const char *name, struct di_object *
 	HASH_FIND_PTR(s->object_to_lua_ref, &obj, e);
 
 	if (e != NULL) {
-		// We have already pushed this object before, return the same proxy
-		DI_CHECK(luaL_weakref_get(L, LUA_REGISTRYINDEX, e->ref));
-		di_unref_object(obj);
-		return;
+		/*fprintf(stderr, "found %d\n", e->ref);*/
+		if (luaL_weakref_get(L, LUA_REGISTRYINDEX, e->ref)) {
+			// We have already pushed this object before, return the same proxy
+			di_unref_object(obj);
+			return;
+		}
+
+		// The weak reference died before __gc is called for this object.
+		// Clear the stale record
+		di_lua_forget_object(s, e);
 	}
 
 	// Push the proxy, and weakly reference it from the lua registry
 	di_lua_pushproxy(L, name, obj, di_lua_object_methods, true);
+	// Copy the proxy, as we are going to consume it when we put it into the registry
+	lua_pushvalue(L, -1);
 
 	e = tmalloc(struct di_lua_object_map_entry, 1);
 	e->object = obj;
@@ -528,8 +546,7 @@ static void di_lua_pushobject(lua_State *L, const char *name, struct di_object *
 	DI_CHECK_OK(di_member(s, buf, obj));
 	free(buf);
 	HASH_ADD_PTR(s->object_to_lua_ref, object, e);
-
-	DI_CHECK(luaL_weakref_get(L, LUA_REGISTRYINDEX, e->ref));
+	/*fprintf(stderr, "added %d\n", e->ref);*/
 }
 
 const char *allowed_os[] = {"time", "difftime", "clock", "tmpname", "date", NULL};
