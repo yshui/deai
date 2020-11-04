@@ -59,8 +59,10 @@ static void xorg_disconnect(struct di_xorg_connection *xc) {
 		// free the extension objects
 		di_finalize_object((void *)ext);
 	}
+	DI_CHECK(xc->c != NULL);
 	xcb_disconnect(xc->c);
 	xc->x = NULL;
+	xc->c = NULL;
 
 	struct di_atom_entry *ae, *tae;
 	HASH_ITER (hh, xc->a_byatom, ae, tae) {
@@ -96,7 +98,7 @@ static void di_xorg_ioev(struct di_weak_object *weak) {
 
 	if (xcb_connection_has_error(dc->c)) {
 		di_emit(dc, "connection-error");
-		xorg_disconnect(dc);
+		di_finalize_object((struct di_object *)dc);
 	}
 }
 
