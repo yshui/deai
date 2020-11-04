@@ -292,7 +292,7 @@ static void _dbus_lookup_member(_di_dbus_object *o, const char *method,
 #endif
 
 static void dbus_call_method_reply_cb(struct di_weak_object *weak, void *msg) {
-	auto sig = di_upgrade_weak_ref(weak);
+	di_object_with_cleanup sig = di_upgrade_weak_ref(weak);
 	if (sig == NULL) {
 		return;
 	}
