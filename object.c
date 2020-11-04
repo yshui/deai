@@ -200,9 +200,9 @@ static void di_flatten_variant(struct di_variant *var) {
 		assert(&var->value->variant != var);
 		di_flatten_variant(&var->value->variant);
 		union di_value *inner = var->value;
-		var->type = var->value->variant.type;
-		var->value = var->value->variant.value;
 		if (inner) {
+			var->type = inner->variant.type;
+			var->value = inner->variant.value;
 			free(inner);
 		}
 	}
