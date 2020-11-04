@@ -1,5 +1,5 @@
-l = di.event:timer(1):on("elapsed", function()
+di.event:timer(1):once("elapsed", function()
     print("elapsed")
-    l:stop()
     collectgarbage("collect")
 end)
+collectgarbage("collect")
