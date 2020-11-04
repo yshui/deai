@@ -314,6 +314,9 @@ static void dbus_call_method_reply_cb(struct di_weak_object *weak, void *msg) {
 	// Stop the listener
 	di_remove_member_raw(sig, di_string_borrow("___original_object"));
 	di_remove_member_raw(sig, di_string_borrow("___original_object_listen_handle"));
+
+	// Drop the dbus connection
+	di_remove_member_raw(sig, di_string_borrow("___deai_dbus_connection"));
 }
 
 static struct di_object *
@@ -360,6 +363,10 @@ dbus_call_method(const char *iface, const char *method, struct di_tuple t) {
 
 	di_member(ret, "___original_object", p);
 	di_member(ret, "___original_object_listen_handle", listen_handle);
+
+	// Keep the dbus connection alive, otherwise we won't get a reply even if the
+	// pending reply object is kept alive
+	di_member_clone(ret, "___deai_dbus_connection", conn);
 	return ret;
 }
 
