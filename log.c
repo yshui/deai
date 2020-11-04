@@ -192,6 +192,7 @@ int di_set_log_level(struct di_object *o, int log_level) {
 	return 0;
 }
 
+struct di_object *log_module;
 void di_init_log(struct deai *di) {
 	auto lm = di_new_module_with_size(di, sizeof(struct di_log));
 	if (!lm) {
@@ -212,4 +213,6 @@ void di_init_log(struct deai *di) {
 	di_getter(l, log_level, get_log_level);
 	di_setter(l, log_level, set_log_level, struct di_string);
 	di_register_module(di, di_string_borrow("log"), &lm);
+
+	log_module = (struct di_object *)lm;
 }
