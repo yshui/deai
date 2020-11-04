@@ -792,10 +792,10 @@ static void di_listen_handle_dtor(struct di_object *nonnull obj) {
 	lh->signal->nlisteners--;
 	list_del(&lh->listen_entry->siblings);
 	if (list_empty(&lh->signal->listeners)) {
-		// Owner might have already died. In that case we just detach the listener
-		// struct from the signal struct, and potentially frees the signal struct.
-		// If the owner is still alive, we also call its signal deleter if this is
-		// the last listener of signal.
+		// Owner might have already died. In that case we just free the signal
+		// struct. If the owner is still alive, we also call its signal deleter
+		// if this is the last listener of signal, and detach the signal struct
+		// from the owner's signals.
 		di_object_with_cleanup owner = di_upgrade_weak_ref(lh->signal->owner);
 		auto owner_internal = (struct di_object_internal *)owner;
 		if (owner_internal) {

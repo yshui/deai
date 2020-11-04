@@ -286,12 +286,25 @@ static void di_prepare(EV_P_ ev_prepare *w, int revents) {
 	di_emit(dep->evm, "prepare");
 }
 
+static void di_new_signal_prepare(struct di_object *eventm) {
+	// If someone is listening on "prepare", we need to keep the mainloop alive
+	auto di = di_object_get_deai_weak(eventm);
+	di_member(eventm, "___prepare_event_source", di);
+}
+
+static void di_del_signal_prepare(struct di_object *eventm) {
+	// Drop the reference to the mainloop if no one cares about prepare anymore
+	di_remove_member_raw(eventm, di_string_borrow("___prepare_event_source"));
+}
+
 void di_init_event(struct deai *di) {
 	auto em = di_new_module(di);
 
 	di_method(em, "fdevent", di_create_ioev, int, int);
 	di_method(em, "timer", di_create_timer, double);
 	di_method(em, "periodic", di_create_periodic, double, double);
+	di_method(em, "__new_signal_prepare", di_new_signal_prepare);
+	di_method(em, "__del_signal_prepare", di_del_signal_prepare);
 
 	auto dep = tmalloc(struct di_prepare, 1);
 	dep->evm = em;
