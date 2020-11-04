@@ -31,6 +31,7 @@ core_test_cases = [
   'anonymous_root_test.c',
   'drop_event_source_when_listener_is_attached.c',
   'c++_test.cc',
+  'lua_fail_test.cc',
 ]
 
 foreach t : core_test_cases
