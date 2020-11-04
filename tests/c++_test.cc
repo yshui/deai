@@ -1,4 +1,5 @@
 #include <cassert>
+#include <string>
 #include <deai/c++/builtins.hh>
 #include <deai/c++/deai.hh>
 
@@ -6,6 +7,7 @@
 #include <climits>
 
 using namespace deai::type;
+using namespace std::literals;
 thread_local static int result = 0;
 auto test_function(int a) -> int {
 	result = a;
@@ -32,6 +34,11 @@ DEAI_CPP_PLUGIN_ENTRY_POINT(di) {
 	std::array<char, PATH_MAX> path;
 	assert(strcmp(getcwd(path.data(), path.size()), "/tmp") == 0);
 	auto object = deai::Object::create();
+
+	// Test move assignment
+	object["test_member"] = std::optional{Variant::from("test_member_value"s)};
+	assert(object["test_member"]->to<std::string>() == "test_member_value"s);
+
 	Ref<ListenHandle> lh = ([&]() {
 		// Drop closure after `.on`, to make sure it's indeed kept alive
 		auto closure = util::to_di_closure<test_function>();

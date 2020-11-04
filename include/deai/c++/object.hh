@@ -608,7 +608,7 @@ public:
 	}
 
 	auto operator=(const std::optional<Variant> &new_value) const
-	    -> const std::optional<Variant> & {
+	    -> const ObjectMemberProxy & {
 		if constexpr (raw) {
 			erase();
 			if (new_value.has_value()) {
@@ -621,26 +621,28 @@ public:
 			if (!new_value.has_value()) {
 				erase();
 			} else {
-				// the setter should handle the deletion
+				// the setter/deleter should handle the deletion
 				exception::throw_deai_error(c_api::di_setx(
 				    target, util::string_to_borrowed_deai_value(key),
 				    new_value->type, &new_value->value));
 			}
 		}
-		return new_value;
+		return *this;
 	}
 
-	// Move set only available to raw proxy
-	template <bool raw2 = raw_>
-	auto operator=(std::optional<Variant> &&new_value) const
-	    -> std::enable_if_t<raw2 && raw2 == raw_, void> {
+	auto operator=(std::optional<Variant> &&new_value) const -> const ObjectMemberProxy & {
 		erase();
 
 		auto moved = std::move(new_value);
-		if (moved.has_value()) {
-			exception::throw_deai_error(c_api::di_add_member_move(
-			    target, util::string_to_borrowed_deai_value(key),
-			    &moved->type, &moved->value));
+		if constexpr (raw) {
+			if (moved.has_value()) {
+				exception::throw_deai_error(c_api::di_add_member_move(
+				    target, util::string_to_borrowed_deai_value(key),
+				    &moved->type, &moved->value));
+			}
+			return *this;
+		} else {
+			return *this = moved;
 		}
 	}
 };
