@@ -17,17 +17,18 @@ struct di_object *di_new_error(const char *fmt, ...) {
 	va_list ap;
 	va_start(ap, fmt);
 
-	char *errmsg;
-	int ret = vasprintf(&errmsg, fmt, ap);
+	struct di_string errmsg;
+	int ret = vasprintf((char **)&errmsg.data, fmt, ap);
 	if (ret < 0) {
-		errmsg = strdup(fmt);
+		errmsg = di_string_dup(fmt);
+	} else {
+		errmsg.length = strlen(errmsg.data);
 	}
 
 	auto err = di_new_object_with_type(struct di_object);
 	di_set_type(err, "deai:Error");
 
-	const char *tmp = errmsg;
-	di_member(err, "errmsg", tmp);
+	di_member(err, "errmsg", errmsg);
 	return err;
 }
 
