@@ -802,7 +802,7 @@ static void di_listen_handle_dtor(struct di_object *nonnull obj) {
 			HASH_DEL(owner_internal->signals, lh->signal);
 
 			// Don't call deleter for internal signal names
-			if (di_is_internal(lh->signal->name)) {
+			if (!di_is_internal(lh->signal->name)) {
 				bool handler_found;
 				call_handler_with_fallback(
 				    owner, "__del_signal", lh->signal->name,
@@ -835,7 +835,7 @@ di_listen_to(struct di_object *_obj, struct di_string name, struct di_object *h)
 
 		INIT_LIST_HEAD(&sig->listeners);
 		HASH_ADD_KEYPTR(hh, obj->signals, sig->name.data, sig->name.length, sig);
-		if (di_is_internal(name)) {
+		if (!di_is_internal(name)) {
 			bool handler_found;
 			call_handler_with_fallback(_obj, "__new_signal", sig->name,
 			                           (struct di_variant){NULL, DI_LAST_TYPE},

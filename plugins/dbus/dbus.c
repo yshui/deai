@@ -71,9 +71,9 @@ static struct di_object *di_dbus_send(di_dbus_connection *c, DBusMessage *msg) {
 
 	di_set_object_dtor((struct di_object *)ret, di_dbus_free_pending_reply);
 
-	auto weak_pending_reply = di_weakly_ref_object((struct di_object *)ret);
 	dbus_pending_call_set_notify(ret->p, dbus_pending_call_notify_fn,
-	                             weak_pending_reply, (void *)di_drop_weak_ref_rvalue);
+	                             di_weakly_ref_object((struct di_object *)ret),
+	                             (void *)di_drop_weak_ref_rvalue);
 	return (void *)ret;
 }
 
@@ -329,7 +329,6 @@ dbus_call_method(const char *iface, const char *method, struct di_tuple t) {
 	}
 
 	auto dobj = (di_dbus_object *)t.elements[0].value->object;
-
 
 	di_object_with_cleanup conn = NULL;
 	DI_CHECK_OK(di_get(dobj, "___deai_dbus_connection", conn));
