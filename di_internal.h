@@ -67,7 +67,7 @@ struct deai {
 	struct ev_loop *nonnull loop;
 
 	int argc;
-	char *nullable *nonnull argv;
+	char *nullable *nullable argv;
 
 	char *nonnull proctitle;
 	char *nonnull proctitle_end;
