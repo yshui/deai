@@ -307,7 +307,7 @@ struct di_object *di_new_object(size_t sz, size_t alignment) {
 	}
 
 	struct di_object_internal *obj;
-	posix_memalign((void **)&obj, alignment, sz);
+	DI_CHECK_OK(posix_memalign((void **)&obj, alignment, sz));
 	memset(obj, 0, sz);
 	obj->ref_count = 1;
 

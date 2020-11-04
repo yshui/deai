@@ -315,37 +315,27 @@ static int di_lua_method_handler_impl(lua_State *L, const char *name, struct di_
 
 	int nargs = lua_gettop(L);
 
-	struct di_tuple t;
+	with_cleanup(di_free_tuplep) struct di_tuple t;
 	t.elements = tmalloc(struct di_variant, nargs - 1);
 	t.length = nargs - 1;
-	int error_argi = 0;
 	// Translate lua arguments
 	for (int i = 2; i <= nargs; i++) {
 		if (di_lua_type_to_di_variant(L, i, &t.elements[i - 2]) != 0) {
-			error_argi = i;
-			goto err;
+			return luaL_argerror(L, i, "Unhandled lua type");
 		}
 	}
 
 	union di_value ret;
 	di_type_t rtype;
 	int rc = di_call_objectt(m, &rtype, &ret, t);
-	int nret;
 
 	if (rc == 0) {
-		nret = di_lua_pushvariant(L, NULL, (struct di_variant){&ret, rtype});
+		int nret = di_lua_pushvariant(L, NULL, (struct di_variant){&ret, rtype});
 		di_free_value(rtype, &ret);
+		return nret;
 	}
 
-err:
-	di_free_tuple(t);
-	if (error_argi > 0) {
-		return luaL_argerror(L, error_argi, "Unhandled lua type");
-	}
-	if (rc != 0) {
-		return luaL_error(L, "Failed to call function \"%s\": %s", name, strerror(-rc));
-	}
-	return nret;
+	return luaL_error(L, "Failed to call function \"%s\": %s", name, strerror(-rc));
 }
 
 static int di_lua_method_handler(lua_State *L) {
@@ -1104,6 +1094,7 @@ static int di_lua_pushvariant(lua_State *L, const char *name, struct di_variant 
 		DI_ASSERT(false, "Value with invalid type");
 		return 0;
 	}
+	DI_CHECK(false);
 
 pushint:
 	lua_pushinteger(L, i);

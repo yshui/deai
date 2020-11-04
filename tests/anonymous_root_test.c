@@ -12,7 +12,7 @@ DEAI_PLUGIN_ENTRY_POINT(di) {
 	di_object_with_cleanup roots = di_upgrade_weak_ref(weak_roots);
 	DI_CHECK(roots);
 
-	uint64_t root_handle;
+	uint64_t root_handle = 0;
 	di_callr(roots, "__add_anonymous", root_handle, object);
 	auto weak = di_weakly_ref_object(object);
 	di_unref_object(object);

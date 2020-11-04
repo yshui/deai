@@ -483,6 +483,12 @@ static inline void unused di_free_stringp(struct di_string *nonnull str) {
 	}
 }
 
+static inline void unused di_free_tuplep(struct di_tuple *nonnull t) {
+	di_free_tuple(*t);
+	t->elements = NULL;
+	t->length = 0;
+}
+
 static inline unused size_t di_sizeof_type(di_type_t t) {
 	switch (t) {
 	case DI_TYPE_NAME(NIL):
