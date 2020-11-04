@@ -330,10 +330,9 @@ dbus_call_method(const char *iface, const char *method, struct di_tuple t) {
 
 	auto dobj = (di_dbus_object *)t.elements[0].value->object;
 
-	di_weak_object_with_cleanup weak_conn = NULL;
-	DI_CHECK_OK(di_get(dobj, "___deai_dbus_connection", weak_conn));
 
-	di_object_with_cleanup conn = di_upgrade_weak_ref(weak_conn);
+	di_object_with_cleanup conn = NULL;
+	DI_CHECK_OK(di_get(dobj, "___deai_dbus_connection", conn));
 
 	struct di_tuple shifted_args = {
 	    .length = t.length - 1,
@@ -374,13 +373,10 @@ dbus_call_method(const char *iface, const char *method, struct di_tuple t) {
 static void di_free_dbus_object(struct di_object *o) {
 	di_dbus_object *od = (void *)o;
 
-	di_weak_object_with_cleanup weak_conn = NULL;
-	DI_CHECK_OK(di_get(o, "___deai_dbus_connection", weak_conn));
+	di_object_with_cleanup conn = NULL;
+	DI_CHECK_OK(di_get(o, "___deai_dbus_connection", conn));
 
-	di_object_with_cleanup conn = di_upgrade_weak_ref(weak_conn);
-	if (conn != NULL) {
-		di_dbus_unwatch_name((di_dbus_connection *)conn, od->bus);
-	}
+	di_dbus_unwatch_name((di_dbus_connection *)conn, od->bus);
 	free(od->bus);
 	free(od->obj);
 }
@@ -437,13 +433,10 @@ static void di_dbus_object_new_signal(di_dbus_object *dobj, struct di_string nam
 	char *srcsig;
 	asprintf(&srcsig, "%%%s%%%s%%%.*s", dobj->bus, dobj->obj, (int)name.length, name.data);
 
-	di_weak_object_with_cleanup weak_conn = NULL;
-	DI_CHECK_OK(di_get(dobj, "___deai_dbus_connection", weak_conn));
+	di_object_with_cleanup conn = NULL;
+	DI_CHECK_OK(di_get(dobj, "___deai_dbus_connection", conn));
 
-	di_object_with_cleanup conn = di_upgrade_weak_ref(weak_conn);
-	if (conn != NULL) {
-		di_proxy_signal(conn, di_string_borrow(srcsig), (void *)dobj, name);
-	}
+	di_proxy_signal(conn, di_string_borrow(srcsig), (void *)dobj, name);
 	free(srcsig);
 }
 
@@ -453,8 +446,7 @@ di_dbus_get_object(struct di_object *o, struct di_string bus, struct di_string o
 	auto ret = di_new_object_with_type(di_dbus_object);
 	di_set_type((struct di_object *)ret, "deai.plugin.dbus:DBusObject");
 
-	auto weak_conn = di_weakly_ref_object((struct di_object *)oc);
-	di_member(ret, "___deai_dbus_connection", weak_conn);
+	di_member_clone(ret, "___deai_dbus_connection", (struct di_object *)oc);
 
 	ret->bus = di_string_to_chars_alloc(bus);
 	ret->obj = di_string_to_chars_alloc(obj);
