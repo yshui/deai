@@ -280,6 +280,8 @@ struct di_prepare {
 };
 
 static void di_prepare(EV_P_ ev_prepare *w, int revents) {
+	di_mark_and_sweep();
+
 	struct di_prepare *dep = (void *)w;
 	// Keep event module alive during emission
 	di_object_with_cleanup unused obj = di_ref_object((struct di_object *)dep->evm);

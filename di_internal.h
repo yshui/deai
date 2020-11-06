@@ -14,6 +14,7 @@
 
 #include "list.h"
 #include "uthash.h"
+#include "config.h"
 
 struct di_ev_prepare;
 
