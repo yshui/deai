@@ -952,30 +952,42 @@ struct di_object *di_get_roots(void) {
 }
 
 #ifdef TRACK_OBJECTS
+static void di_dump_object(struct di_object_internal *obj) {
+	fprintf(stderr, "%p, ref count: %lu strong %lu weak (live: %d), type: %s\n", obj,
+	        obj->ref_count, obj->weak_ref_count, obj->mark, di_get_type((void *)obj));
+	for (struct di_member *m = obj->members; m != NULL; m = m->hh.next) {
+		fprintf(stderr, "\tmember: %.*s, type: %s", (int)m->name.length,
+		        m->name.data, di_type_to_string(m->type));
+		if (m->type == DI_TYPE_OBJECT) {
+			union di_value *val = m->data;
+			fprintf(stderr, " (%s)", di_get_type(val->object));
+			auto obj_internal = (struct di_object_internal *)val->object;
+			obj_internal->excess_ref_count--;
+		}
+		fprintf(stderr, "\n");
+	}
+	for (struct di_signal *s = obj->signals; s != NULL; s = s->hh.next) {
+		fprintf(stderr, "\tsignal: %.*s, nlisteners: %d\n", (int)s->name.length,
+		        s->name.data, s->nlisteners);
+	}
+}
 void di_dump_objects(void) {
 	struct di_object_internal *i;
 	list_for_each_entry (i, &all_objects, siblings) {
 		i->excess_ref_count = i->ref_count;
 	}
-	list_for_each_entry (i, &all_objects, siblings) {
-		fprintf(stderr, "%p, ref count: %lu strong %lu weak (live: %d), type: %s\n",
-		        i, i->ref_count, i->weak_ref_count, i->mark, di_get_type((void *)i));
-		for (struct di_member *m = i->members; m != NULL; m = m->hh.next) {
-			fprintf(stderr, "\tmember: %.*s, type: %s", (int)m->name.length,
-			        m->name.data, di_type_to_string(m->type));
-			if (m->type == DI_TYPE_OBJECT) {
-				union di_value *val = m->data;
-				fprintf(stderr, " (%s)", di_get_type(val->object));
-				auto obj_internal = (struct di_object_internal *)val->object;
-				obj_internal->excess_ref_count--;
-			}
-			fprintf(stderr, "\n");
-		}
-		for (struct di_signal *s = i->signals; s != NULL; s = s->hh.next) {
-			fprintf(stderr, "\tsignal: %.*s, nlisteners: %d\n",
-			        (int)s->name.length, s->name.data, s->nlisteners);
+
+	list_for_each_entry (i, &all_objects, siblings) { di_dump_object(i); }
+
+	// Account for references from the roots
+	if (roots != NULL) {
+		roots->excess_ref_count--;
+		for (auto root = roots->anonymous_roots; root; root = root->hh.next) {
+			auto obj_internal = (struct di_object_internal *)root->obj;
+			obj_internal->excess_ref_count--;
 		}
 	}
+
 	list_for_each_entry (i, &all_objects, siblings) {
 		// Excess ref count doesn't count references in roots. Object added as
 		// roots will have 1 excess_ref_count per root.
@@ -987,7 +999,7 @@ void di_dump_objects(void) {
 static void di_mark_and_sweep_dfs(struct di_object_internal *o) {
 	if (o->mark != 0) {
 		if (o->mark == 1) {
-			fprintf(stderr, "Reference cycle detected\n");
+			di_log_va(log_module, DI_LOG_WARN, "Reference cycle detected\n");
 		}
 		return;
 	}
@@ -1004,13 +1016,19 @@ static void di_mark_and_sweep_dfs(struct di_object_internal *o) {
 	o->mark = 2;
 }
 
-void di_mark_and_sweep(void) {
+bool di_mark_and_sweep(void) {
 	struct di_object_internal *i;
 	list_for_each_entry (i, &all_objects, siblings) { i->mark = 0; }
 	di_mark_and_sweep_dfs((struct di_object_internal *)roots);
 	for (auto root = roots->anonymous_roots; root != NULL; root = root->hh.next) {
 		di_mark_and_sweep_dfs((struct di_object_internal *)root->obj);
 	}
+	list_for_each_entry (i, &all_objects, siblings) {
+		if (i->mark == 0) {
+			return true;
+		}
+	}
+	return false;
 }
 
 #endif

@@ -5,6 +5,7 @@
 /* Copyright (c) 2017, Yuxuan Shui <yshuiv7@gmail.com> */
 
 #include <deai/builtins/event.h>
+#include <deai/builtins/log.h>
 #include <deai/deai.h>
 #include <deai/helper.h>
 
@@ -280,7 +281,10 @@ struct di_prepare {
 };
 
 static void di_prepare(EV_P_ ev_prepare *w, int revents) {
-	di_mark_and_sweep();
+	if (di_mark_and_sweep()) {
+		di_log_va(log_module, DI_LOG_WARN, "Leak detected\n");
+		di_dump_objects();
+	}
 
 	struct di_prepare *dep = (void *)w;
 	// Keep event module alive during emission

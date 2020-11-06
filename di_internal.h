@@ -170,8 +170,9 @@ struct di_object *nullable di_try(void (*nonnull func)(void *nullable), void *nu
 
 #ifdef TRACK_OBJECTS
 void di_dump_objects(void);
-void di_mark_and_sweep(void);
+/// Returns true if leaks are found
+bool di_mark_and_sweep(void);
 #else
 static inline void di_dump_objects(void) {}
-static inline void di_mark_and_sweep(void) {}
+static inline bool di_mark_and_sweep(void) { return false; }
 #endif
