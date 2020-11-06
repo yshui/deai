@@ -468,14 +468,13 @@ static void ioev_callback(void *conn, void *ptr, int event) {
 	}
 }
 
-static void di_dbus_shutdown_part2(struct di_weak_object *weak_roots,
+static void di_dbus_shutdown_part2(
                                    void *root_handle_ptr, DBusConnection *conn) {
 	// Stop the listen for "prepare"
 	auto root_handle = *(uint64_t *)root_handle_ptr;
-	di_object_with_cleanup roots = di_upgrade_weak_ref(weak_roots);
-	if (roots != NULL) {
-		DI_CHECK_OK(di_call(roots, "__remove_anonymous", root_handle));
-	}
+	auto roots = di_get_roots();
+	DI_CHECK(roots != NULL);
+	DI_CHECK_OK(di_call(roots, "__remove_anonymous", root_handle));
 	free(root_handle_ptr);
 
 	dbus_connection_close(conn);
@@ -493,15 +492,12 @@ static void di_dbus_shutdown(di_dbus_connection *conn) {
 	di_object_with_cleanup eventm = NULL;
 	DI_CHECK_OK(di_get(di, "event", eventm));
 
-	di_weak_object_with_cleanup weak_roots = NULL;
-	di_get(di, "roots", weak_roots);
-
-	di_object_with_cleanup roots = di_upgrade_weak_ref(weak_roots);
+	auto roots = di_get_roots();
 	DI_CHECK(roots);
 	uint64_t *root_handle_storage = tmalloc(uint64_t, 1);
 	di_closure_with_cleanup shutdown =
 	    di_closure(di_dbus_shutdown_part2,
-	               (weak_roots, (void *)root_handle_storage, (void *)conn->conn));
+	               ((void *)root_handle_storage, (void *)conn->conn));
 
 	di_object_with_cleanup listen_handle =
 	    di_listen_to(eventm, di_string_borrow("prepare"), (struct di_object *)shutdown);

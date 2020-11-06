@@ -302,17 +302,10 @@ struct di_ev_prepare {
 	struct deai *di;
 };
 
-static void di_roots_dtor(struct di_object *obj);
 void di_prepare_exit(struct deai *di, int ec) {
 	*di->exit_code = ec;
 	// Drop all the roots, this should stop the program
-
-	di_weak_object_with_cleanup weak = NULL;
-	di_get(di, "roots", weak);
-
-	di_object_with_cleanup roots = di_upgrade_weak_ref(weak);
-	di_call(roots, "clear");
-	di_roots_dtor(roots);
+	di_finalize_object((struct di_object *)roots);
 }
 
 void di_prepare_quit(struct deai *di) {
@@ -509,6 +502,13 @@ static void di_roots_dtor(struct di_object *obj) {
 	free(objects_to_free);
 }
 
+static struct di_object *di_roots_getter(struct di_object *unused di) {
+	// If roots is gotten via a deai getter, we need to respect the getter semantics
+	// and increment the refcount, even though normally this is not needed.
+	di_ref_object((struct di_object *)roots);
+	return (struct di_object *)roots;
+}
+
 int main(int argc, char *argv[]) {
 #ifdef TRACK_OBJECTS
 	INIT_LIST_HEAD(&all_objects);
@@ -516,7 +516,7 @@ int main(int argc, char *argv[]) {
 	auto p = di_new_object_with_type(struct deai);
 	di_set_type((struct di_object *)p, "deai:Core");
 
-	auto roots = di_new_object_with_type(struct di_roots);
+	roots = di_new_object_with_type(struct di_roots);
 	di_set_type((struct di_object *)roots, "deai:Roots");
 	DI_CHECK_OK(di_method(roots, "add", di_add_root, struct di_string, struct di_object *));
 	DI_CHECK_OK(di_method(roots, "remove", di_remove_root, struct di_string));
@@ -526,9 +526,6 @@ int main(int argc, char *argv[]) {
 	DI_CHECK_OK(di_method(roots, "__remove_anonymous", di_remove_anonymous_root, uint64_t));
 	di_set_object_dtor((struct di_object *)roots, di_roots_dtor);
 	roots->next_anonymous_root_id = 1;
-
-	auto weak_roots = di_weakly_ref_object((struct di_object *)roots);
-	DI_CHECK_OK(di_member(p, "roots", weak_roots));
 
 	// exit_code and quit cannot be owned by struct deai, because they are read
 	// after struct deai is freed.
@@ -566,10 +563,10 @@ int main(int argc, char *argv[]) {
 #ifdef HAVE_SETPROCTITLE
 	DI_CHECK_OK(di_method(p, "__set_proctitle", di_set_pr_name, struct di_string));
 #endif
-#ifdef TRACK_OBJECTS
 	auto closure = (struct di_object *)di_closure(di_dump_objects, ());
 	di_member(p, "dump_objects", closure);
-#endif
+
+	DI_CHECK_OK(di_method(p, "__get_roots", di_roots_getter));
 	DI_CHECK_OK(di_method(p, "__get_argv", di_get_argv));
 
 	// proctitle is a string literal, as its memory is not deai managed
@@ -689,10 +686,8 @@ int main(int argc, char *argv[]) {
 	// (4) Start mainloop
 	di_unref_object((void *)p);
 
-#ifdef TRACK_OBJECTS
-	di_mark_and_sweep(roots);
+	di_mark_and_sweep();
 	di_dump_objects();
-#endif
 	if (!quit) {
 		ev_run(p->loop, 0);
 	}
@@ -701,8 +696,6 @@ int main(int argc, char *argv[]) {
 	// Set to NULL so the leak checker can catch leaks
 	roots = NULL;
 
-#ifdef TRACK_OBJECTS
 	di_dump_objects();
-#endif
 	return exit_code;
 }

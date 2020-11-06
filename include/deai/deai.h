@@ -16,7 +16,7 @@
 #include "error.h"
 
 struct deai;
-extern struct di_object *log_module;
+PUBLIC_DEAI_API extern struct di_object *log_module;
 
 #define MAX_ERRNO 4095
 

@@ -898,7 +898,6 @@ static int di_lua_type_to_di(lua_State *L, int i, di_type_t *t, union di_value *
 
 struct di_lua_listen_handle_proxy {
 	/// The source of the event
-	struct di_weak_object *roots;
 	uint64_t root_handle_for_listen_handle;
 	uint64_t root_handle_for_source;
 	// Whether a once signal wrapper is using this proxy struct
@@ -919,8 +918,6 @@ static void di_lua_free_listen_handle(struct di_lua_listen_handle_proxy *proxy) 
 	if (proxy->lua_object_alive || proxy->once_wrapper_alive) {
 		return;
 	}
-
-	di_drop_weak_ref(&proxy->roots);
 
 	// `proxy` is not a di_object
 	free(proxy);
@@ -982,15 +979,8 @@ static int di_lua_add_listener(lua_State *L) {
 	di_object_with_cleanup state_obj = NULL;
 	DI_CHECK_OK(di_get(s, "___di_lua_state", state_obj));
 
-	di_weak_object_with_cleanup weak_roots = NULL;
-	di_object_with_cleanup di = di_object_get_deai_strong(state_obj);
-	DI_CHECK_OK(di_get(di, "roots", weak_roots));
-
-	di_object_with_cleanup roots = di_upgrade_weak_ref(weak_roots);
+	auto roots = di_get_roots();
 	DI_CHECK(roots);
-
-	proxy->roots = di_weakly_ref_object(roots);
-
 	di_callr(roots, "__add_anonymous", proxy->root_handle_for_listen_handle, listen_handle);
 	di_callr(roots, "__add_anonymous", proxy->root_handle_for_source, o);
 	proxy->lua_object_alive = true;
@@ -1182,9 +1172,8 @@ static void di_lua_stop_listener_impl(struct di_lua_listen_handle_proxy *proxy) 
 	}
 	DI_CHECK(proxy->root_handle_for_source != 0);
 
-	di_object_with_cleanup roots = di_upgrade_weak_ref(proxy->roots);
+	auto roots = di_get_roots();
 	DI_CHECK(roots != NULL);
-
 	di_call(roots, "__remove_anonymous", proxy->root_handle_for_listen_handle);
 	di_call(roots, "__remove_anonymous", proxy->root_handle_for_source);
 	proxy->root_handle_for_listen_handle = 0;

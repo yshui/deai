@@ -225,6 +225,9 @@ union di_value {
 	// ! last_type
 };
 
+/// Return the roots registry. ref/unref-ing the roots are not needed
+PUBLIC_DEAI_API struct di_object *di_get_roots(void);
+
 /// Fetch member object `name` from object `o`, then call the member object with `args`.
 ///
 /// # Errors

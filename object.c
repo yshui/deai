@@ -946,6 +946,11 @@ int di_emitn(struct di_object *o, struct di_string name, struct di_tuple args) {
 
 #undef is_destroy
 
+struct di_roots *roots;
+struct di_object *di_get_roots(void) {
+	return (struct di_object *)roots;
+}
+
 #ifdef TRACK_OBJECTS
 void di_dump_objects(void) {
 	struct di_object_internal *i;
@@ -999,7 +1004,7 @@ static void di_mark_and_sweep_dfs(struct di_object_internal *o) {
 	o->mark = 2;
 }
 
-void di_mark_and_sweep(struct di_roots *roots) {
+void di_mark_and_sweep(void) {
 	struct di_object_internal *i;
 	list_for_each_entry (i, &all_objects, siblings) { i->mark = 0; }
 	di_mark_and_sweep_dfs((struct di_object_internal *)roots);

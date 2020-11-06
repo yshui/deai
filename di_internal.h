@@ -85,6 +85,8 @@ struct di_module {
 	UT_hash_handle hh;
 };
 
+extern struct di_roots *roots;
+
 static ffi_type ffi_type_di_array = {
     .size = 0,
     .alignment = 0,
@@ -167,5 +169,8 @@ struct di_object *nullable di_try(void (*nonnull func)(void *nullable), void *nu
 
 #ifdef TRACK_OBJECTS
 void di_dump_objects(void);
-void di_mark_and_sweep(struct di_roots *);
+void di_mark_and_sweep(void);
+#else
+static inline void di_dump_objects(void) {}
+static inline void di_mark_and_sweep(void) {}
 #endif
