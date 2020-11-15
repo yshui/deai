@@ -1003,6 +1003,8 @@ private:
 
 	template <typename R, typename... Args>
 	static constexpr auto inspect(R (T::*func)(Args...)) -> factory<R, Args...>;
+	template <typename R, typename... Args>
+	static constexpr auto inspect(R (T::*func)(Args...) const) -> factory<R, Args...>;
 
 public:
 	template <auto func>
