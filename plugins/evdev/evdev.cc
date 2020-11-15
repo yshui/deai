@@ -17,11 +17,17 @@ struct Device {
 	int fd;
 
 	[[nodiscard]] auto id() const -> Ref<Object>;
-	[[nodiscard]] auto name() const -> std::string;
+	[[nodiscard]] auto name() const -> Variant;
 
 	Device(const std::string &dev_node) : fd(::open(dev_node.c_str(), O_RDONLY)) {
-		util::add_method<&Device::id>(*this, "__get_id");
-		util::add_method<&Device::name>(*this, "__get_name");
+		auto object_ref = util::unsafe_to_object_ref(*this);
+		if (fd < 0) {
+			object_ref["errmsg"] =
+			    Variant::from(std::string{"Failed to open device"});
+		} else {
+			util::add_method<&Device::id>(*this, "__get_id");
+			util::add_method<&Device::name>(*this, "__get_name");
+		}
 	}
 	~Device() {
 		close(fd);
@@ -59,19 +65,25 @@ public:
 		util::add_method<&InputId::bustype>(*this, "__get_bustype");
 		util::add_method<&InputId::version>(*this, "__get_version");
 	}
-	InputId(::input_id id) : InputId{id.vendor, id.product, id.bustype, id.version} {}
+	InputId(::input_id id) : InputId{id.vendor, id.product, id.bustype, id.version} {
+	}
 };
 
 auto Device::id() const -> Ref<Object> {
 	::input_id id;
-	::ioctl(fd, EVIOCGID, &id);
+	if (::ioctl(fd, EVIOCGID, &id) < 0) {
+		return di_new_error("Failed to get device id information");
+	}
 	return util::new_object<InputId>(id);
 }
 
-auto Device::name() const -> std::string {
-	std::vector<char> buf(80, 0); // NOLINT
-	while(true) {
+auto Device::name() const -> Variant {
+	std::vector<char> buf(80, 0);        // NOLINT
+	while (true) {
 		auto copied = ::ioctl(fd, EVIOCGNAME(buf.size()), buf.data());
+		if (copied < 0) {
+			return Variant::from(di_new_error("Failed to get device name"));
+		}
 		// Expand the buffer until the name fits
 		if (static_cast<size_t>(copied) == buf.size()) {
 			buf.resize(buf.size() * 2);
@@ -82,7 +94,7 @@ auto Device::name() const -> std::string {
 			break;
 		}
 	}
-	return {buf.data(), buf.size()};
+	return Variant::from(std::string{buf.data(), buf.size()});
 }
 
 struct Module {
@@ -90,7 +102,7 @@ private:
 public:
 	static constexpr const char *type [[maybe_unused]] = "deai.plugin.evdev:Module";
 	auto device_from_dev_node(const std::string &dev_node) -> Ref<Object> {
-		static_cast<void>(this); // slient "this functino could be static" warning
+		static_cast<void>(this);        // slient "this functino could be static" warning
 		return util::new_object<Device>(dev_node);
 	}
 };
