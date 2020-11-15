@@ -231,6 +231,7 @@ constexpr auto array_cat(std::array<Element, length1> a, std::array<Element, len
 	std::copy(b.begin(), b.end(), output.begin() + length1);
 	return output;
 }
+
 inline auto string_to_borrowed_deai_value(const std::string &str) {
 	return c_api::di_string{str.c_str(), str.size()};
 }
@@ -340,52 +341,25 @@ auto to_borrowed_deai_values(const Args &...args)
 /// owns its object.
 ///
 /// Also, the deai value might be cloned nonetheless. For example, a di_array has to be
-/// cloned into a
+/// cloned into a vector.
 template <typename T>
 auto to_borrowed_cpp_value(T &&arg)
     -> std::enable_if_t<is_verbatim_v<typename std::remove_reference<T>::type>, T> {
 	return std::forward<T>(arg);
 }
 
-inline auto to_borrowed_cpp_value(c_api::di_string arg) -> std::string_view {
-	return {arg.data, arg.length};
+inline auto to_borrowed_cpp_value(c_api::di_string arg) {
+	struct DeaiStringConvert {
+		c_api::di_string arg;
+		operator std::string_view() const {
+			return {arg.data, arg.length};
+		}
+		operator std::string() const {
+			return {arg.data, arg.length};
+		}
+	};
+	return DeaiStringConvert{arg};
 }
-
-template <typename T>
-using to_borrowed_cpp_type = decltype(to_borrowed_cpp_value(std::declval<T>()));
-
-/// Whether a C++ type `T` can be converted to a deai type and back as the same type
-template <typename T, typename = void>
-struct is_borrow_inversible {
-	// Examples of non-inversible types:
-	//   * std::string -> di_string -> std::string_view. One cannot create a "borrowed"
-	//     string, and std::string_view isn't implicitly convertible to strings.
-	static constexpr bool value =
-	    std::is_same_v<T, to_borrowed_cpp_type<to_borrowed_deai_type<T>>>;
-};
-
-template <typename T>
-struct is_borrow_inversible<support::span<T>, std::enable_if_t<is_verbatim_v<T>, void>> {
-	// support::span -> di_array
-	// but di_array -> deai::ArrayView (TODO)
-	//
-	// However, deai::Array can be implicitly converted to span, if the element type
-	// is a verbatim deai c_api type.
-	static constexpr bool value = true;
-};
-
-template <typename T>
-struct is_borrow_inversible<std::vector<T>, std::enable_if_t<sizeof(deai_typeof<T>::value) != 0U, void>> {
-	// vector -> di_array
-	// but di_array -> deai::ArrayView
-	//
-	// However, deai::Array can be implicitly converted to vectors. A clone will be
-	// made in that case
-	static constexpr bool value = true;
-};
-
-template <typename T>
-inline constexpr bool is_borrow_inversible_v = is_borrow_inversible<T>::value;
 
 }        // namespace util
 
@@ -946,11 +920,10 @@ auto unsafe_to_inner(const Ref<Object> &obj) -> T & {
 
 /// Wrap a function that takes C++ values into a function that takes deai values. Because
 /// args will go through a to_borrowed_cpp_type<to_borrowed_deai_type<T>> transformation,
-// and have to remain passable to the original function, they have to be borrow inversible.
+/// and have to remain passable to the original function, they have to be borrow inversible.
 template <typename R, auto func, typename... Args>
 auto wrap_cpp_function(to_borrowed_deai_type<Args>... args)
-    -> std::enable_if_t<support::all_of_v<is_borrow_inversible_v<typename std::remove_reference<Args>::type>...>,
-                        to_owned_deai_type<R>> {
+    -> to_owned_deai_type<R> {
 	if constexpr (deai_typeof<R>::value == c_api::di_type::NIL) {
 		// Special treatment for void
 		func(to_borrowed_cpp_value(args)...);
