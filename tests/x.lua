@@ -34,8 +34,10 @@ table.insert(listen_handles, di.event:timer(0.2):on("elapsed", function()
         end
     end))
 
+    local key_pressed = false
     table.insert(listen_handles, o.key:new({"mod4"}, "d", false):on("pressed", function()
         print("pressed")
+        key_pressed = true
     end))
 
     -- test the new-device event
@@ -78,6 +80,7 @@ table.insert(listen_handles, di.event:timer(0.2):on("elapsed", function()
         end
 
         o:disconnect()
+        assert(key_pressed)
         o = di.xorg:connect_to(":2")
         if o.errmsg then
             print(o.errmsg)
