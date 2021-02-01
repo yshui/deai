@@ -95,7 +95,6 @@ static void di_dbus_update_name(di_dbus_connection *c, struct di_string wk,
 
 			// fprintf(stderr, "remove old %s -> %s\n", wk, i->unique);
 			list_del(&i->sibling);
-			free(i->buf);
 			free(i);
 		}
 	}
