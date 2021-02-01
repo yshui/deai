@@ -110,7 +110,7 @@ public:
 DEAI_CPP_PLUGIN_ENTRY_POINT(di) {
 	auto obj = util::new_object<Module>();
 	auto &module = util::unsafe_to_inner<Module>(obj);
-	util::add_method<&Module::device_from_dev_node>(module, "device_from_dev_node");
+	util::add_method<&Module::device_from_dev_node>(module, "open");
 	static_cast<void>(di->register_module("evdev", obj));
 	return 0;
 }
