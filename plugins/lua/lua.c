@@ -660,14 +660,17 @@ static struct di_object *di_lua_load_script(struct di_object *obj, struct di_str
 	ret = lua_pcall(L->L, 0, 0, -2);
 	di_lua_xchg_env(L->L, s);
 
+	// Remove the errfunc
+	lua_remove(L->L, 1);
+
 	if (ret != 0) {
 		// Right now there's no way to revert what this script
 		// have done. (e.g. add listeners). So there's not much
 		// we can do here except unref and return an error object
 
-		// Pop error handling function
+		// Pop the error, and converted error string
 		auto err = luaL_tolstring(L->L, -1, NULL);
-		lua_pop(L->L, 1);
+		lua_pop(L->L, 2);
 		return di_new_error("%s", err);
 	}
 	return di_ref_object((struct di_object *)s);
@@ -797,12 +800,14 @@ static int call_lua_function(struct di_lua_ref *ref, di_type_t *rt, union di_val
 
 	if (lua_pcall(L, t.length, 1, -(int)t.length - 2) != 0) {
 		auto err = luaL_tolstring(L, -1, NULL);
-		lua_pop(L, 1);
+		lua_pop(L, 1); // Pop the converted error string
 		ret->object = di_new_error("%s", err);
 		*rt = DI_TYPE_OBJECT;
 	} else {
 		di_lua_type_to_di(L, -1, rt, ret);
 	}
+
+	lua_pop(L, 2); // Pop (error or result) + errfunc
 
 	di_lua_xchg_env(L, script);
 
