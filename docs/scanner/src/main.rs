@@ -481,11 +481,17 @@ impl Docs {
                 CommentChild::Paragraph(children) => Some(
                     children
                         .into_iter()
-                        .map(|child| match child {
+                        .filter_map(|child| match child {
                             CommentChild::Text(txt) => {
-                                txt.strip_prefix(" ").map(|x| x.to_owned()).unwrap_or(txt)
+                                let stripped =
+                                    txt.strip_prefix(" ").map(|x| x.to_owned()).unwrap_or(txt);
+                                if stripped.is_empty() {
+                                    None
+                                } else {
+                                    Some(stripped)
+                                }
                             }
-                            _ => String::new(),
+                            _ => None,
                         })
                         .join("\n")
                         .to_owned(),
