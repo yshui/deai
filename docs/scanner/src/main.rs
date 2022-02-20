@@ -806,7 +806,7 @@ impl Docs {
                             Access::Ancestry { path } => format!(":lua:meth:`{}`", path),
                             Access::Member { ty, member } => format!(
                                 ":lua:attr:`{}.{member} <{}.{member}>`",
-                                ty,
+                                ty.simple_display(),
                                 ty.rst_display(),
                             ),
                         })
