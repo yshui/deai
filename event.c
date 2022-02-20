@@ -32,6 +32,12 @@ struct di_periodic {
 	ev_periodic pt;
 };
 
+/// SIGNAL: deai.builtin.event:IoEv.read() File descriptor became readable
+///
+/// SIGNAL: deai.builtin.event:IoEv.write() File descriptor became writable
+///
+/// SIGNAL: deai.builtin.event:IoEv.io(flag: :integer) File descriptor became either
+/// readable or writable
 static void di_ioev_callback(EV_P_ ev_io *w, int revents) {
 	auto ev = container_of(w, struct di_ioev, evh);
 	// Keep ev alive during emission
@@ -48,6 +54,7 @@ static void di_ioev_callback(EV_P_ ev_io *w, int revents) {
 	di_emit(ev, "io", dt);
 }
 
+/// SIGNAL: deai.builtin.event:Timer.elapsed(now: :float) Timeout was reached
 static void di_timer_callback(EV_P_ ev_timer *t, int revents) {
 	auto d = container_of(t, struct di_timer, evt);
 	// Keep timer alive during emission
@@ -66,6 +73,7 @@ static void di_timer_callback(EV_P_ ev_timer *t, int revents) {
 	di_object_downgrade_deai((struct di_object *)d);
 }
 
+/// SIGNAL: deai.builtin.event:Periodic.triggered(now: :float) Timeout was reached
 static void di_periodic_callback(EV_P_ ev_periodic *w, int revents) {
 	auto p = container_of(w, struct di_periodic, pt);
 	// Keep timer alive during emission
@@ -75,6 +83,9 @@ static void di_periodic_callback(EV_P_ ev_periodic *w, int revents) {
 	di_emit(p, "triggered", now);
 }
 
+/// Start the event source
+///
+/// EXPORT: deai.builtin.event:IoEv.start(), :void
 static void di_start_ioev(struct di_object *obj) {
 	struct di_ioev *ev = (void *)obj;
 	if (ev->running) {
@@ -93,6 +104,9 @@ static void di_start_ioev(struct di_object *obj) {
 	di_object_upgrade_deai(obj);
 }
 
+/// Stop the event source
+///
+/// EXPORT: deai.builtin.event:IoEv.stop(), :void
 static void di_stop_ioev(struct di_object *obj) {
 	struct di_ioev *ev = (void *)obj;
 	if (!ev->running) {
@@ -113,6 +127,9 @@ static void di_stop_ioev(struct di_object *obj) {
 	di_object_downgrade_deai(obj);
 }
 
+/// Toggle the event source
+///
+/// EXPORT: deai.builtin.event:IoEv.stop(), :void
 static void di_toggle_ioev(struct di_object *obj) {
 	struct di_ioev *ev = (void *)obj;
 	if (ev->running) {
@@ -122,6 +139,9 @@ static void di_toggle_ioev(struct di_object *obj) {
 	}
 }
 
+/// Change monitored file descriptor events
+///
+/// EXPORT: deai.builtin.event:IoEv.modify(flag: :integer), :void
 static void di_modify_ioev(struct di_object *obj, int events) {
 	auto ioev = (struct di_ioev *)obj;
 	if (events == 0) {
@@ -143,6 +163,16 @@ static void di_modify_ioev(struct di_object *obj, int events) {
 #endif
 }
 
+/// File descriptor events
+///
+/// EXPORT: event.fdevent(fd: :integer, flag: :integer), deai.builtin.event:IoEv
+///
+/// Arguments:
+///
+/// - flag bit mask of which events to monitor. bit 0 for readability, bit 1 for
+///        writability.
+///
+/// Wait for a file descriptor to be readable/writable.
 static struct di_object *di_create_ioev(struct di_object *obj, int fd, int t) {
 	struct di_module *em = (void *)obj;
 	auto ret = di_new_object_with_type(struct di_ioev);
@@ -182,6 +212,9 @@ static struct di_object *di_create_ioev(struct di_object *obj, int fd, int t) {
 	return (void *)ret;
 }
 
+/// Stop the timer
+///
+/// EXPORT: deai.builtin.event:Timer.stop(), :void
 static void di_timer_stop(struct di_object *obj) {
 	struct di_timer *ev = (void *)obj;
 	di_object_with_cleanup di_obj = di_object_get_deai_strong(obj);
@@ -197,6 +230,9 @@ static void di_timer_stop(struct di_object *obj) {
 	di_object_downgrade_deai(obj);
 }
 
+/// Re-arm the timer
+///
+/// EXPORT: deai.builtin.event:Timer.again(), :void
 static void di_timer_again(struct di_timer *obj) {
 	auto di_obj = di_object_get_deai_weak((struct di_object *)obj);
 	if (di_obj == NULL) {
@@ -209,12 +245,27 @@ static void di_timer_again(struct di_timer *obj) {
 	di_object_upgrade_deai((struct di_object *)obj);
 }
 
+/// Timer timeout
+///
+/// EXPORT: deai.builtin.event:Timer.timeout, :float
+///
+/// Write-only property to update the timer's timeout. Timer will be re-armed after the
+/// update.
 static void di_timer_set(struct di_timer *obj, double t) {
 	di_timer_stop((struct di_object *)obj);
 	obj->evt.repeat = t;
 	di_timer_again(obj);
 }
 
+/// Timer events
+///
+/// EXPORT: event.timer(timeout: :float), deai.builtin.event:Timer
+///
+/// Arguments:
+///
+/// - timeout timeout in seconds
+///
+/// Create a timer that emits a signal after timeout is reached.
 static struct di_object *di_create_timer(struct di_object *obj, double timeout) {
 	struct di_module *em = (void *)obj;
 	auto ret = di_new_object_with_type(struct di_timer);
@@ -249,6 +300,11 @@ static void periodic_dtor(struct di_periodic *p) {
 	ev_periodic_stop(di->loop, &p->pt);
 }
 
+/// Update timer interval and offset
+///
+/// EXPORT: deai.builtin.event:Periodic.set(interval: :float, offset: :float), :void
+///
+/// Timer will be reset after update.
 static void periodic_set(struct di_periodic *p, double interval, double offset) {
 	di_object_with_cleanup di_obj = di_object_get_deai_strong((struct di_object *)p);
 	DI_CHECK(di_obj != NULL);
@@ -258,6 +314,12 @@ static void periodic_set(struct di_periodic *p, double interval, double offset) 
 	ev_periodic_again(di->loop, &p->pt);
 }
 
+/// Periodic timer event
+///
+/// EXPORT: event.periodic(interval: :float, offset: :float), deai.builtin.event:Periodic
+///
+/// A timer that first fire after :code:`offset` seconds, then every :code:`interval`
+/// seconds.
 static struct di_object *
 di_create_periodic(struct di_module *evm, double interval, double offset) {
 	auto ret = di_new_object_with_type(struct di_periodic);
@@ -303,6 +365,12 @@ static void di_del_signal_prepare(struct di_object *eventm) {
 	di_remove_member_raw(eventm, di_string_borrow("___prepare_event_source"));
 }
 
+/// Core events
+///
+/// EXPORT: event, deai:module
+///
+/// Fundament event sources exposed by deai. This is the building blocks of other event
+/// sources.
 void di_init_event(struct deai *di) {
 	auto em = di_new_module(di);
 

@@ -530,7 +530,7 @@ impl Docs {
                 let (next, signature) =
                     parsers::signal_line(&p).map_err(|e| anyhow!("Invalid signal line: {}", e))?;
                 save_entry(&mut entry, &mut brief, &mut body);
-                let next = next.trim().replace(|ch| ch == '\n' || ch == '\r', "");
+                let next = next.trim().replace(|ch| ch == '\n' || ch == '\r', " ");
 
                 brief = Some(next);
                 entry = Some(signature);
