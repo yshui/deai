@@ -300,8 +300,8 @@ mod parsers {
 
     use itertools::Itertools;
     use nom::branch::alt;
-    use nom::bytes::complete::is_a;
     use nom::bytes::complete::tag;
+    use nom::bytes::complete::take_while1;
     use nom::character::complete::multispace0;
     use nom::character::complete::space0;
     use nom::combinator::map;
@@ -336,16 +336,8 @@ mod parsers {
         delimited(multispace0, tag(s), multispace0)
     }
 
-    fn ident(s: &str) -> IResult<&str, String> {
-        is_a("1234567890abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ_")(s).and_then(
-            |(i, o)| {
-                if o.len() > 0 {
-                    Ok((i, o.to_owned()))
-                } else {
-                    Err(nom::Err::Failure(nom::error::Error::new(i, nom::error::ErrorKind::IsA)))
-                }
-            },
-        )
+    fn ident(s: &str) -> IResult<&str, &str> {
+        take_while1(|c: char| c == '-' || c == '_' || c.is_alphanumeric())(s)
     }
     fn namespaced_ident(s: &str) -> IResult<&str, String> {
         separated_list1(tag("."), ident)(s).map(|(i, o)| (i, o.into_iter().join(".")))
@@ -355,7 +347,7 @@ mod parsers {
             (
                 i,
                 o.into_iter()
-                    .map(|s| Parameter { name: s, ty: None, doc: String::new() })
+                    .map(|s| Parameter { name: s.to_owned(), ty: None, doc: String::new() })
                     .collect(),
             )
         })
@@ -364,7 +356,7 @@ mod parsers {
         alt((
             map(separated_pair(base_type, tag("."), ident), |(ty, member)| Access::Member {
                 ty,
-                member: member.into(),
+                member: member.to_owned().into(),
             }),
             map(namespaced_ident, |path| Access::Ancestry { path: path.into() }),
         ))(s)
@@ -375,7 +367,7 @@ mod parsers {
     }
     fn base_type(s: &str) -> IResult<&str, Type> {
         tuple((opt(namespaced_ident), preceded(tag(":"), ident)))(s)
-            .map(|(i, (o1, o2))| (i, Type::Base { namespace: o1, member: o2 }))
+            .map(|(i, (o1, o2))| (i, Type::Base { namespace: o1, member: o2.to_owned() }))
     }
     // No nested array types
     fn array_type(s: &str) -> IResult<&str, Type> {
@@ -395,7 +387,7 @@ mod parsers {
                     )),
                 )),
             ),
-            |(name, ty)| Parameter { name, ty, doc: String::new() },
+            |(name, ty)| Parameter { name: name.to_owned(), ty, doc: String::new() },
         );
         let (rest, mut param) = prefix(s)?;
 
