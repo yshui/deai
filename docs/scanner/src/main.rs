@@ -503,7 +503,6 @@ impl Docs {
         let mut brief = None;
         let mut body = vec![];
         let mut entry: Option<Entry> = None;
-        let mut export_seen = false;
 
         let mut save_entry =
             |entry: &mut Option<Entry>, brief: &mut Option<String>, body: &mut Vec<String>| {
@@ -525,18 +524,16 @@ impl Docs {
                 let signature = parsers::export_line(&p);
                 let signature =
                     signature.map(|(_, a)| a).map_err(|e| anyhow!("Invalid export line: {}", e))?;
-                if !export_seen {
-                    save_entry(&mut entry, &mut brief, &mut body);
-                    entry = Some(signature);
-                    export_seen = true;
-                } else {
-                    return Err(anyhow!("Multiple export lines: {}", p))
-                }
+                save_entry(&mut entry, &mut brief, &mut body);
+                entry = Some(signature);
             } else if p.starts_with("SIGNAL:") {
                 log::debug!("Signal line: {}", p);
                 let (next, signature) =
                     parsers::signal_line(&p).map_err(|e| anyhow!("Invalid signal line: {}", e))?;
                 save_entry(&mut entry, &mut brief, &mut body);
+                let mut next = next.trim().to_owned();
+                next.remove_matches(&['\n', '\r']);
+
                 brief = Some(next.trim().to_owned());
                 entry = Some(signature);
             } else if p == "Arguments:" {
@@ -688,11 +685,13 @@ impl Docs {
         }
         self.has_error |= has_error;
     }
-    fn print_entries<'a, It, W: std::io::Write>(it: It, mut output: W) -> std::io::Result<()>
+    fn print_entries<'a, It, Item, W: std::io::Write>(it: It, mut output: W) -> std::io::Result<()>
     where
-        It: Iterator<Item = (&'a String, &'a Rc<RefCell<Entry>>)> + Clone,
+        It: Iterator<Item = (Item, &'a Rc<RefCell<Entry>>)> + Clone,
+        Item: AsRef<str>,
     {
         for (name, child) in it.clone() {
+            let name = name.as_ref();
             let child = child.borrow();
             writeln!(
                 output,
@@ -810,19 +809,24 @@ impl Docs {
                             writeln!(output, "{}\n", p)?;
                         }
                     }
-                    let references = type_entry
-                        .references
-                        .iter()
-                        .map(|ref_| match ref_ {
-                            Access::Ancestry { path } => format!(":lua:meth:`{}`", path),
-                            Access::Member { ty, member } => format!(
-                                ":lua:attr:`{}.{member} <{}.{member}>`",
-                                ty.simple_display(),
-                                ty.rst_display(),
-                            ),
-                        })
-                        .join(", ");
-                    writeln!(output, "See {references} for more information about this type\n")?;
+                    if type_entry.references.len() > 0 {
+                        let references = type_entry
+                            .references
+                            .iter()
+                            .map(|ref_| match ref_ {
+                                Access::Ancestry { path } => format!(":lua:meth:`{}`", path),
+                                Access::Member { ty, member } => format!(
+                                    ":lua:attr:`{}.{member} <{}.{member}>`",
+                                    ty.simple_display(),
+                                    ty.rst_display(),
+                                ),
+                            })
+                            .join(", ");
+                        writeln!(
+                            output,
+                            "See {references} for more information about this type\n"
+                        )?;
+                    }
                 }
             }
             let prop_it = children.iter().filter(|(_, c)| {
@@ -912,12 +916,13 @@ impl Docs {
         // Generate index
         let mut index = std::fs::File::create(output.join("index.rst"))?;
         writeln!(index, "========\n**deai**\n========\n")?;
+        writeln!(index, ".. toctree::\n   :maxdepth: 3\n   :hidden:\n\n   modules\n   types\n")?;
         writeln!(index, "=======\nModules\n=======\n")?;
 
-        writeln!(index, ".. toctree::\n   :maxdepth: 3\n   :hidden:\n\n   modules\n   types\n")?;
         writeln!(index, ".. list-table::\n   :header-rows: 0\n")?;
         for (access, entry) in &self.by_access {
-            if !access.is_ancestry() || access.parent().is_some() {
+            if !access.is_ancestry() || access.parent().is_some() || entry.borrow().params.is_some()
+            {
                 continue
             }
             writeln!(
@@ -926,6 +931,19 @@ impl Docs {
                 entry.borrow().doc.as_ref().map(|x| x.brief.as_str()).unwrap_or("")
             )?;
         }
+        writeln!(index, "\n=======\nMethods\n=======\n")?;
+
+        writeln!(index, ".. list-table::\n   :header-rows: 0\n")?;
+
+        let method_it = self
+            .by_access
+            .iter()
+            .filter(|(k, c)| {
+                let c = c.borrow();
+                c.params.is_some() && c.ty.is_some() && k.is_ancestry() && k.parent().is_none()
+            })
+            .map(|(k, v)| (k.to_string(), v));
+        Self::print_entries(method_it, index)?;
 
         Ok(())
     }
@@ -942,9 +960,6 @@ fn main() {
         clang::get_version().strip_prefix("clang version ").unwrap()
     );
     for cmd in cdb.get_all_compile_commands().get_commands() {
-        if !cmd.get_filename().display().to_string().contains("plugins") {
-            continue
-        }
         let full_name = cmd.get_directory().join(cmd.get_filename());
         log::debug!("{}", full_name.display());
         let mut parser = index.parser(&full_name);
