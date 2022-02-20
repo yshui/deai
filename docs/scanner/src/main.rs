@@ -196,10 +196,10 @@ impl Entry {
 
 #[derive(Default, Debug)]
 struct TypeEntry {
-    references:   BTreeSet<Access<'static>>,
-    children:     BTreeMap<String, Rc<RefCell<Entry>>>,
-    has_ancestor: bool,
-    doc:          Doc,
+    references: BTreeSet<Access<'static>>,
+    children:   BTreeMap<String, Rc<RefCell<Entry>>>,
+    ancestor:   Option<Access<'static>>,
+    doc:        Doc,
 }
 trait HasChildren {
     fn children(&self) -> &BTreeMap<String, Rc<RefCell<Entry>>>;
@@ -652,7 +652,7 @@ impl Docs {
                 });
                 te.borrow_mut().references.insert(k.clone());
                 if k.is_ancestry() && v.borrow().params.is_none() {
-                    te.borrow_mut().has_ancestor = true;
+                    te.borrow_mut().ancestor = Some(k.clone());
                 }
             } else {
                 if let Some(params) = &v.borrow().params {
@@ -784,7 +784,12 @@ impl Docs {
 
             match &e {
                 Either::Left(entry) => {
-                    writeln!(output, ".. lua:module:: {}\n", entry.path)?;
+                    let ty = entry.ty.as_ref().unwrap();
+                    if ty.to_string() == "deai:module" {
+                        writeln!(output, ".. lua:module:: {}\n", entry.path)?;
+                    } else {
+                        writeln!(output, ".. lua:module:: {}\n", ty.rst_display())?;
+                    }
                     if let Some(doc) = &entry.doc {
                         writeln!(output, "{}\n", doc.brief)?;
                         for p in &doc.body {
@@ -864,7 +869,7 @@ impl Docs {
         }
 
         for (k, type_entry) in &self.by_type {
-            if type_entry.borrow().has_ancestor {
+            if type_entry.borrow().ancestor.is_some() {
                 continue
             }
             if k.namespace().unwrap().is_none() {
@@ -884,6 +889,9 @@ impl Docs {
             if entry.borrow().params.is_some() {
                 continue
             }
+            if entry.borrow().ty.as_ref().unwrap().to_string() != "deai:module" {
+                continue
+            }
             writeln!(modules, "   {access} <{access}>")?;
         }
 
@@ -891,13 +899,15 @@ impl Docs {
         writeln!(types, "=========\n**Types**\n=========\n")?;
         writeln!(types, ".. toctree::\n   :maxdepth: 2\n")?;
         for (k, type_entry) in &self.by_type {
-            if type_entry.borrow().has_ancestor {
+            let ns = k.namespace().unwrap();
+            if ns.is_none() || ns.as_ref().map(String::as_str) == Some("deai") {
                 continue
             }
-            if k.namespace().unwrap().is_none() {
-                continue
+            if let Some(ancestor) = &type_entry.borrow().ancestor {
+                writeln!(types, "   {k} <{ancestor}>")?;
+            } else {
+                writeln!(types, "   {k} <{k}>")?;
             }
-            writeln!(types, "   {k} <{k}>")?;
         }
         // Generate index
         let mut index = std::fs::File::create(output.join("index.rst"))?;
