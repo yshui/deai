@@ -29,6 +29,51 @@ struct di_file_watch {
 };
 
 define_object_cleanup(di_file_watch);
+/// SIGNAL: deai.plugin.file:Watch.create(path: :string, file_name: :string)
+/// A file or directory is created.
+///
+/// SIGNAL: deai.plugin.file:Watch.access(path: :string, file_name: :string)
+/// A file was accessed.
+///
+/// SIGNAL: deai.plugin.file:Watch.attrib(path: :string, file_name: :string)
+/// A file's metadata was changed.
+///
+/// SIGNAL: deai.plugin.file:Watch.close-write(path: :string, file_name: :string)
+/// A file opened for writing was closed.
+///
+/// SIGNAL: deai.plugin.file:Watch.close-nowrite(path: :string, file_name: :string)
+/// A file or directory not opened for iting was closed.
+///
+/// SIGNAL: deai.plugin.file:Watch.delete(path: :string, file_name: :string)
+/// A file or directory was deleted from watched directory.
+///
+/// SIGNAL: deai.plugin.file:Watch.delete-self(path: :string, file_name: :string)
+/// A watched file or directory was itself deleted.
+///
+/// SIGNAL: deai.plugin.file:Watch.modify(path: :string, file_name: :string)
+/// A file was modified.
+///
+/// SIGNAL: deai.plugin.file:Watch.move-self(path: :string, file_name: :string)
+/// A watched file or directory was itself moved
+///
+/// SIGNAL: deai.plugin.file:Watch.open(path: :string, file_name: :string)
+/// A file or directory was opened
+///
+/// SIGNAL: deai.plugin.file:Watch.move-from(path: :string, file_name: :string, cookie: :integer)
+/// A file in a watched directory was renamed to a new place.
+///
+/// Arguments:
+///
+/// - cookie unique integer associated with this move, can be used to pair this event with
+///          a :lua:sgnl:`move-to` event.
+///
+/// SIGNAL: deai.plugin.file:Watch.move-to(path: :string, file_name: :string, cookie: :integer)
+/// A file was renamed into a watched directory.
+///
+/// Arguments:
+///
+/// - cookie unique integer associated with this move, can be used to pair this event with
+///          a :lua:sgnl:`move-from` event.
 static int di_file_ioev(struct di_weak_object *weak) {
 	with_object_cleanup(di_file_watch) fw = (void *)di_upgrade_weak_ref(weak);
 	DI_CHECK(fw != NULL, "got ioev events but the listener has died");
@@ -78,6 +123,11 @@ static int di_file_ioev(struct di_weak_object *weak) {
 	return 0;
 }
 
+/// Add a file
+///
+/// EXPORT: deai.plugin.file:Watch.add_one(path: :string), :integer
+///
+/// Add a single new file to a watch, returns 0 if successful.
 static int di_file_add_watch(struct di_file_watch *fw, struct di_string path) {
 	if (!path.data) {
 		return -EINVAL;
@@ -98,6 +148,11 @@ static int di_file_add_watch(struct di_file_watch *fw, struct di_string path) {
 	return ret;
 }
 
+/// Add files
+///
+/// EXPORT: deai.plugin.file:Watch.add(paths: [:string]), :integer
+///
+/// Add a new files to a watch, returns 0 if successful.
 static int di_file_add_many_watch(struct di_file_watch *fw, struct di_array paths) {
 	if (paths.length == 0) {
 		return 0;
@@ -126,6 +181,11 @@ static int di_file_add_many_watch(struct di_file_watch *fw, struct di_array path
 	return ret;
 }
 
+/// Remove a file
+///
+/// EXPORT: deai.plugin.file:Watch.remove(path: :string), :integer
+///
+/// Returns 0 if successful. If the file is not in the watch, return :code:`-ENOENT`.
 static int di_file_rm_watch(struct di_file_watch *fw, struct di_string path) {
 	if (!path.data) {
 		return -EINVAL;
@@ -159,6 +219,16 @@ static void stop_file_watcher(struct di_file_watch *fw) {
 	}
 }
 
+/// Create a new file watch
+///
+/// EXPORT: file.watch(paths), deai.plugin.file:Watch
+///
+/// The returned watch is set to monitor a given set of file from the start. But this set
+/// can be changed later.
+///
+/// Arguments:
+///
+/// - paths([:string]) an array of paths to watch
 static struct di_object *di_file_new_watch(struct di_module *f, struct di_array paths) {
 	if (paths.length > 0 && paths.elem_type != DI_TYPE_STRING &&
 	    paths.elem_type != DI_TYPE_STRING_LITERAL) {
@@ -196,9 +266,19 @@ static struct di_object *di_file_new_watch(struct di_module *f, struct di_array 
 	}
 	return (void *)fw;
 }
-DEAI_PLUGIN_ENTRY_POINT(di) {
+
+/// File events
+///
+/// EXPORT: file, deai:module
+///
+/// This module allows you to create event sources for monitoring file changes.
+static struct di_module *di_new_file(struct deai *di) {
 	auto fm = di_new_module(di);
 	di_method(fm, "watch", di_file_new_watch, struct di_array);
+	return fm;
+}
+DEAI_PLUGIN_ENTRY_POINT(di) {
+	auto fm = di_new_file(di);
 	di_register_module(di, di_string_borrow("file"), &fm);
 	return 0;
 }

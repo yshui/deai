@@ -100,6 +100,15 @@ static void output_handler(struct child *c, int fd, struct string_buf *b, const 
 	}
 }
 
+/// SIGNAL: deai.builtin.spawn:ChildProcess.stdout_line(line: :string) The child process
+/// wrote one line to stdout.
+///
+/// Only generated if "ignore_output" wasn't set to false
+///
+/// SIGNAL: deai.builtin.spawn:ChildProcess.stderr_line(line: :string) The child process
+/// wrote one line to stderr.
+///
+/// Only generated if "ignore_output" wasn't set to false
 static void sigchld_handler(EV_P_ ev_child *w, int revents) {
 	struct child *c = container_of(w, struct child, w);
 	// Keep child process object alive when emitting
@@ -157,12 +166,16 @@ static void stderr_cb(EV_P_ ev_io *w, int revents) {
 	output_handler(c, w->fd, c->err, "stderr_line");
 }
 
-/// Get the pid of the child process
+/// Pid of the child process
+///
+/// EXPORT: deai.builtin.spawn:ChildProcess.pid, :integer
 static uint64_t get_child_pid(struct child *c) {
 	return (uint64_t)c->pid;
 }
 
-/// Kill the child process with signal `sig`
+/// Send signal to child process
+///
+/// EXPORT: deai.builtin.spawn:ChildProcess.kill(signal: :integer), :void
 static void kill_child(struct child *c, int sig) {
 	kill(c->pid, sig);
 }
@@ -218,12 +231,17 @@ static struct di_object *di_setup_fds(bool ignore_output, int *opfds, int *epfds
 	return ret;
 }
 
-/// Start a child process, with arguments `argv`. If `ignore_output` is true, the output
-/// of the child process will be redirected to '/dev/null'
+/// Start a child process
+///
+/// EXPORT: spawn.run(argv, ignore_output: :bool), deai.builtin.spawn:ChildProcess
+///
+/// Arguments:
+///
+/// - argv([:string]) arguments passed to command
+/// - ignore_output if true, outputs of the child process will be redirected to
+///                 :code:`/dev/null`
 ///
 /// Returns an object representing the child object.
-///
-/// Return object type: ChildProcess
 struct di_object *di_spawn_run(struct di_spawn *p, struct di_array argv, bool ignore_output) {
 	if (argv.elem_type != DI_TYPE_STRING) {
 		return di_new_error("Invalid argv type");
@@ -279,7 +297,7 @@ struct di_object *di_spawn_run(struct di_spawn *p, struct di_array argv, bool ig
 	}
 
 	auto cp = di_new_object_with_type(struct child);
-	di_set_type((struct di_object *)cp, "deai:ChildProcess");
+	di_set_type((struct di_object *)cp, "deai.builtin.spawn:ChildProcess");
 	di_set_object_dtor((struct di_object *)cp, child_destroy);
 	di_method(cp, "__get_pid", get_child_pid);
 	di_method(cp, "kill", kill_child, int);
@@ -305,6 +323,9 @@ struct di_object *di_spawn_run(struct di_spawn *p, struct di_array argv, bool ig
 	return (void *)cp;
 }
 
+/// Spawn child processes
+///
+/// EXPORT: spawn, deai:module
 void di_init_spawn(struct deai *di) {
 	// Become subreaper
 #ifdef __FreeBSD__

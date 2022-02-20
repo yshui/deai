@@ -44,6 +44,12 @@ static void di_xorg_free_sub(struct di_xorg_ext *x) {
 	}
 }
 
+/// Disconnect from the X server
+///
+/// EXPORT: deai.plugin.xorg:Connection.disconnect(), :void
+///
+/// Disconnecting from the X server will stop all related event sources.
+/// You should stop using the Connection object after you have called disconnect.
 static void xorg_disconnect(struct di_xorg_connection *xc) {
 	if (!di_has_member(xc, "__xcb_fd_event")) {
 		return;
@@ -154,6 +160,12 @@ xcb_atom_t di_xorg_intern_atom(struct di_xorg_connection *xc, struct di_string n
 	return ae->atom;
 }
 
+/// The X resource database (xrdb)
+///
+/// EXPORT: deai.plugin.xorg:Connection.xrdb, :string
+///
+/// This property corresponds to the xrdb, which is usually set with the command line
+/// tool with the same name. Assigning to this property updates the xrdb.
 static struct di_string di_xorg_get_resource(struct di_xorg_connection *xc) {
 	auto scrn = screen_of_display(xc->c, xc->dflt_scrn);
 	auto r = xcb_get_property_reply(
@@ -232,10 +244,21 @@ static struct di_variant di_xorg_get_ext(struct di_xorg_connection *xc, struct d
 	return (struct di_variant){.type = DI_LAST_TYPE, .value = NULL};
 }
 
+/// TYPE: deai.plugin.xorg:Screen
 struct xscreen {
 	struct di_object;
-	uint64_t width, height;
+	/// Width of the screen
+	///
+	/// EXPORT: deai.plugin.xorg:Screen.width, :integer
+	uint64_t width;
+	/// Height of the screen
+	///
+	/// EXPORT: deai.plugin.xorg:Screen.height, :integer
+	uint64_t height;
 };
+/// Information about the current screen
+///
+/// EXPORT: deai.plugin.xorg:Connection.screen, deai.plugin.xorg:Screen
 static struct di_object *get_screen(struct di_xorg_connection *dc) {
 	auto scrn = screen_of_display(dc->c, dc->dflt_scrn);
 
@@ -344,6 +367,17 @@ static struct {
 	return ret;
 }
 
+/// Keyboard mapping
+///
+/// EXPORT: deai.plugin.xorg:Connection.keymap, :object
+///
+/// This is a write-only property which allows you to change your keyboard mapping. To set
+/// your keymap, you need to provide an object with these members:
+///
+/// - layout (mandatory): The layout, e.g. 'us', 'gb', etc.
+/// - model (optional)
+/// - variant (optional)
+/// - options (optional)
 static void set_keymap(struct di_xorg_connection *xc, struct di_object *o) {
 	di_string_with_cleanup layout = DI_STRING_INIT, model = DI_STRING_INIT,
 	                       variant = DI_STRING_INIT, options = DI_STRING_INIT;
@@ -462,6 +496,15 @@ out:
 	xkb_keymap_unref(map);
 }
 
+/// Connect to a X server
+///
+/// EXPORT: xorg.connect_to(display), deai.plugin.xorg:Connection
+///
+/// Connect to a X server using an explicit display string.
+///
+/// Arguments:
+///
+/// - display(:string) the display
 static struct di_object *di_xorg_connect_to(struct di_xorg *x, struct di_string displayname_) {
 	int scrn;
 	with_cleanup_t(char) displayname = NULL;
@@ -507,16 +550,29 @@ static struct di_object *di_xorg_connect_to(struct di_xorg *x, struct di_string 
 	return (void *)dc;
 }
 
+/// Connect to a X server
+///
+/// EXPORT: xorg.connect(), deai.plugin.xorg:Connection
+///
+/// Connect to the default X server, usually the one specified in the DISPLAY environment
+/// variable.
 static struct di_object *di_xorg_connect(struct di_xorg *x) {
 	return di_xorg_connect_to(x, DI_STRING_INIT);
 }
 
-DEAI_PLUGIN_ENTRY_POINT(di) {
+/// Xorg
+///
+/// EXPORT: xorg, deai:module
+static struct di_module *new_xorg_module(struct deai *di) {
 	auto x = di_new_module(di);
 
 	di_method(x, "connect", di_xorg_connect);
 	di_method(x, "connect_to", di_xorg_connect_to, struct di_string);
+	return x;
+}
 
+DEAI_PLUGIN_ENTRY_POINT(di) {
+	auto x = new_xorg_module(di);
 	di_register_module(di, di_string_borrow("xorg"), &x);
 	return 0;
 }

@@ -118,6 +118,11 @@ static void file_target_dtor(struct log_file *lf) {
 	fclose(lf->f);
 }
 
+/// Log target for file
+///
+/// EXPORT: log.file_target(filename: :string, overwrite: :bool), deai.builtin.log:FileTarget
+///
+/// Create a log target that writes to a file.
 static struct di_object *file_target(struct di_log *l, struct di_string filename, bool overwrite) {
 	char filename_str[PATH_MAX];
 	if (!di_string_to_chars(filename, filename_str, sizeof(filename_str))) {
@@ -147,6 +152,11 @@ static struct di_object *file_target(struct di_log *l, struct di_string filename
 	return (void *)lf;
 }
 
+/// Log target for stderr
+///
+/// EXPORT: log.stderr_target(), deai.builtin.log:StderrTarget
+///
+/// Create a log target that writes to stderr.
 static struct di_object *stderr_target(struct di_log *unused l) {
 	auto ls = di_new_object_with_type(struct log_file);
 	di_set_type((struct di_object *)ls, "deai.builtin.log:StderrTarget");
@@ -170,6 +180,11 @@ int di_log_va(struct di_object *o, int log_level, const char *fmt, ...) {
 	return ret;
 }
 
+/// Log level
+///
+/// EXPORT: log.log_level, :string
+///
+/// Read/write property for log level. Possible values are: "error", "warn", "info", "debug"
 static const char *get_log_level(struct di_log *l) {
 	return strdup(level_tostring(l->log_level));
 }
@@ -193,6 +208,21 @@ int di_set_log_level(struct di_object *o, int log_level) {
 }
 
 struct di_object *log_module;
+/// EXPORT: log, deai:module
+///
+/// Logging
+///
+/// This module can also be called like a method, it takes 2 arguments, the log level and
+/// the log string, and log them to the log target.
+///
+/// EXPORT: log.log_target, :object
+///
+/// Log target
+///
+/// Write only property used to set the log target. Any object with a
+/// :code:`write(string)` method could work. This module provides :lua:meth:`file_target`
+/// and :lua:meth:`stderr_target` for creating log targets that log to a file and stderr
+/// respectively.
 void di_init_log(struct deai *di) {
 	auto lm = di_new_module_with_size(di, sizeof(struct di_log));
 	if (!lm) {

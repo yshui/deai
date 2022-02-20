@@ -594,6 +594,15 @@ static struct di_lua_state *lua_new_state(struct di_module *m) {
 define_object_cleanup(di_lua_script);
 define_object_cleanup(di_lua_state);
 
+/// Load a lua script
+///
+/// EXPORT: lua.load_script(path: :string), deai.plugin.lua:LuaScript
+///
+/// Arguments:
+///
+/// - path path to the script
+///
+/// Load and execute a lua script. Returns a handle to the script.
 static struct di_object *di_lua_load_script(struct di_object *obj, struct di_string path_) {
 	/**
 	 * Reference count scheme for di_lua_script:
@@ -935,8 +944,20 @@ static void di_lua_signal_handler_wrapper_dtor(struct di_object *o) {
 	wrapper->listen_handle = NULL;
 }
 
-// Stack: [ object, string, lua closure ]
+/// EXPORT: deai.plugin.lua:Proxy.on(signal: :string, callback), deai:ListenHandle
+///
+/// Listen for signals
+///
+/// Returns a handle, which if dropped, will stop the callback from been called anymore.
+///
+/// EXPORT: deai.plugin.lua:Proxy.once(signal: :string, callback), deai:ListenHandle
+///
+/// Listen for signals only once
+///
+/// Same as :lua:meth:`on`, except the callback will only be called for the first time the
+/// signal is received.
 static int di_lua_add_listener(lua_State *L) {
+	// Stack: [ object, string, lua closure ]
 	bool once = lua_toboolean(L, lua_upvalueindex(1));
 	struct di_object *o = di_lua_checkproxy(L, 1);
 
@@ -1233,6 +1254,16 @@ static int call_lua_signal_handler_once(struct di_object *obj, di_type_t *rt,
 	return di_call_objectt(handler, rt, ret, t);
 }
 
+/// Lua proxy of a deai object
+///
+/// TYPE: deai.plugin.lua:Proxy
+///
+/// When you create a deai object, a proxy object is created in lua. Some extra methods
+/// are available from these proxies.
+struct di_lua_proxy_object {
+	// dummy object for documentation purposes
+};
+
 static int di_lua_meta_index(lua_State *L) {
 
 	/* This is __index for lua di_object proxies. This function
@@ -1322,11 +1353,34 @@ static int di_lua_meta_newindex(lua_State *L) {
 	return 0;
 }
 
-DEAI_PLUGIN_ENTRY_POINT(di) {
+/// Lua scripting
+///
+/// EXPORT: lua, deai:module
+///
+/// **Accessing deai modules**
+///
+/// All deai modules is available under the global lua table named "di", such as
+/// :code:`di.lua`, etc.
+///
+/// **Representation of deai objects**
+///
+/// In lua, a :lua:mod:`~deai.plugin.lua.Proxy` is created for each deai objects, which
+/// function like normal lua tables. Properties and methods are accessible as table
+/// entries. Note methods should be called like a lua method, i.e.
+/// :code:`obj:method(...)`.
+///
+/// **Receiving signals**
+///
+/// Use the :lua:meth:`~deai.plugin.lua.Proxy.on` methods from the proxy to register
+/// listeners on signals.
+static struct di_module *di_new_lua(struct deai *di) {
 	auto m = di_new_module(di);
 
 	di_method(m, "load_script", di_lua_load_script, struct di_string);
-
+	return m;
+}
+DEAI_PLUGIN_ENTRY_POINT(di) {
+	auto m = di_new_lua(di);
 	di_register_module(di, di_string_borrow("lua"), &m);
 	return 0;
 }

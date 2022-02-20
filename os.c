@@ -58,6 +58,16 @@ static const char *di_get_hostname(struct deai *p) {
 	return strdup(buf.nodename);
 }
 
+/// EXPORT: os, deai:module
+///
+/// OS environment
+///
+/// EXPORT: os.env, deai.builtin.os:Env
+///
+/// Environment variables
+///
+/// This object exposes environment variables as its members. You can get/set environment
+/// variables by reading/changing its member.
 void di_init_os(struct deai *di) {
 	struct di_module *m = di_new_module(di);
 

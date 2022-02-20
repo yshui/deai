@@ -137,6 +137,20 @@ static int refresh_binding(struct keybinding *kb) {
 	return 0;
 }
 
+/// Add a new key binding
+///
+/// EXPORT: deai.plugin.xorg:Key.new(modifiers, key, replay), deai.plugin.xorg.key:Binding
+///
+/// Create a new event source that emits a signal when a given key binding is pressed or
+/// released.
+///
+/// Arguments:
+///
+/// - modifiers([:string]) the modifier keys, valid ones are: mod1~5, shift, control, alt.
+/// - replay(:bool) whether the key press event will be passed on. If false, deai will
+///                 intercept the key press, otherwise it will behave like a normal key
+///                 press.
+/// - key(:string)
 struct di_object *
 new_binding(struct xorg_key *k, struct di_array modifiers, struct di_string key, bool replay) {
 	if (!k->dc) {
@@ -208,6 +222,9 @@ uint16_t mod_from_keycode(struct di_xorg_connection *dc, xcb_keycode_t kc) {
 	return ret;
 }
 
+/// SIGNAL: deai.plugin.xorg.key:Binding.pressed() key binding is pressed
+///
+/// SIGNAL: deai.plugin.xorg.key:Binding.released() key binding is released
 static int handle_key(struct di_xorg_ext *ext, xcb_generic_event_t *ev) {
 	xcb_keycode_t kc;
 	uint16_t mod;
@@ -283,6 +300,11 @@ static int handle_key(struct di_xorg_ext *ext, xcb_generic_event_t *ev) {
 	return 0;
 }
 
+/// Key bindings
+///
+/// EXPORT: deai.plugin.xorg:Connection.key, deai.plugin.xorg:Key
+///
+/// Manage keyboard short cuts.
 struct di_xorg_ext *new_key(struct di_xorg_connection *dc) {
 	auto k = di_new_object_with_type2(struct xorg_key, "deai.plugin.xorg:Key");
 	k->dc = dc;

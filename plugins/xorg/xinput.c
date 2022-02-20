@@ -142,6 +142,9 @@ xcb_input_get_device_info(xcb_connection_t *c, xcb_input_device_id_t deviceid,
 	return ret;
 }
 
+/// Name of the device
+///
+/// EXPORT: deai.plugin.xorg.xi:Device.name, :string
 static struct di_string di_xorg_xinput_get_device_name(struct di_xorg_xinput_device *dev) {
 	if (!dev->xi->dc) {
 		return di_string_dup("unknown");
@@ -156,6 +159,12 @@ static struct di_string di_xorg_xinput_get_device_name(struct di_xorg_xinput_dev
 	                      xcb_input_xi_device_info_name_length(info));
 }
 
+/// Use of the device
+///
+/// EXPORT: deai.plugin.xorg.xi:Device.use, :string
+///
+/// As reported by X, possible values are: "master keyboard", "master pointer",
+/// "keyboard", "pointer", or "unknown"
 static const char *di_xorg_xinput_get_device_use(struct di_xorg_xinput_device *dev) {
 	if (!dev->xi->dc) {
 		return "unknown";
@@ -192,6 +201,14 @@ const char *possible_types[] = {
 };
 #endif
 
+/// Type of the device
+///
+/// EXPORT: deai.plugin.xorg.xi:Device.type, :string
+///
+/// As reported by X, `possible values
+/// <https://gitlab.freedesktop.org/xorg/proto/xorgproto/-/blob/09602b2/specs/XIproto.txt#L361-380>`_.
+///
+/// Note all values are converted to lower case.
 static struct di_string di_xorg_xinput_get_device_type(struct di_xorg_xinput_device *dev) {
 	if (!dev->xi->dc) {
 		return di_string_dup("unknown");
@@ -505,6 +522,19 @@ di_xorg_xinput_get_prop(struct di_xorg_xinput_device *dev, struct di_string name
 	return di_variant_of(ret);
 }
 
+/// Property of the device
+///
+/// EXPORT: deai.plugin.xorg.xi:Device.props, :object
+///
+/// This is a proxy object that allows you to get and set properties of a X device.
+/// Accessing members of this object will read from device property, writing to members of
+/// this object will set device property.
+///
+/// To set device properties you could provide a single value or an array of values, if
+/// the property takes multiple values.
+///
+/// The property names are the same ones you can find by running the :code:`xinput list-props`
+/// command.
 static struct di_object *di_xorg_xinput_props(struct di_xorg_xinput_device *dev) {
 	auto obj = di_new_object_with_type2(struct di_xorg_xinput_device, "deai.plugin."
 	                                                                  "xorg.xi:"
@@ -545,6 +575,9 @@ static struct di_object *di_xorg_make_object_for_devid(struct di_xorg_xinput *xi
 	return (void *)obj;
 }
 
+/// All XInput devices
+///
+/// EXPORT: deai.plugin.xorg:XiExt.devices, [deai.plugin.xorg.xi:Device]
 static struct di_array di_xorg_get_all_devices(struct di_xorg_xinput *xi) {
 	if (!xi->dc) {
 		return DI_ARRAY_INIT;
@@ -578,6 +611,23 @@ static struct di_array di_xorg_get_all_devices(struct di_xorg_xinput *xi) {
 	return ret;
 }
 
+/// SIGNAL: deai.plugin.xorg:XiExt.new-device(dev) New device added
+///
+/// Arguments:
+///
+/// - dev(deai.plugin.xorg.xi:Device) the device
+///
+/// SIGNAL: deai.plugin.xorg:XiExt.device-enabled(dev) A device is enabled
+///
+/// Arguments:
+///
+/// - dev(deai.plugin.xorg.xi:Device) the device
+///
+/// SIGNAL: deai.plugin.xorg:XiExt.device-disabled(dev) A device is disabled
+///
+/// Arguments:
+///
+/// - dev(deai.plugin.xorg.xi:Device) the device
 static int handle_xinput_event(struct di_xorg_xinput *xi, xcb_generic_event_t *ev) {
 	if (ev->response_type != XCB_GE_GENERIC) {
 		return 1;
@@ -612,6 +662,9 @@ static int handle_xinput_event(struct di_xorg_xinput *xi, xcb_generic_event_t *e
 	return 0;
 }
 
+/// XInput extension
+///
+/// EXPORT: deai.plugin.xorg:Connection.xinput, deai.plugin.xorg:XiExt
 struct di_xorg_ext *new_xinput(struct di_xorg_connection *dc) {
 	char *extname = "XInputExtension";
 	if (!xorg_has_extension(dc->c, extname)) {

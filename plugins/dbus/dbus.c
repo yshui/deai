@@ -438,6 +438,15 @@ static void di_dbus_object_new_signal(di_dbus_object *dobj, struct di_string nam
 	free(srcsig);
 }
 
+/// Get a DBus object
+///
+/// EXPORT: dbus.session_bus.get(destionation: :string, object_path: :string), deai.plugin.dbus:DBusObject
+///
+/// Create a proxy object for a DBus object. Properties and methods are reflected as
+/// members of this object. DBus signals are also converted to signals emitted from this
+/// object.
+///
+/// For how DBus types map to deai type, see :lua:mod:`dbus` for more details.
 static struct di_object *
 di_dbus_get_object(struct di_object *o, struct di_string bus, struct di_string obj) {
 	di_dbus_connection *oc = (void *)o;
@@ -740,6 +749,11 @@ static DBusHandlerResult dbus_filter(DBusConnection *conn, DBusMessage *msg, voi
 	return DBUS_HANDLER_RESULT_HANDLED;
 }
 
+/// DBus session bus
+///
+/// EXPORT: dbus.session_bus, deai.plugin.dbus:DBusConnection
+///
+/// A connection to the DBus session bus.
 static struct di_object *di_dbus_get_session_bus(struct di_object *o) {
 	struct di_module *m = (void *)o;
 	DBusError e;
@@ -778,11 +792,32 @@ static struct di_object *di_dbus_get_session_bus(struct di_object *o) {
 	return (void *)ret;
 }
 
-DEAI_PLUGIN_ENTRY_POINT(di) {
+/// D-Bus
+///
+/// EXPORT: dbus, deai:module
+///
+/// **D-Bus types**
+///
+/// D-Bus Types are converted to/from deai types when reading a DBus property, receiving a
+/// DBus signal, or when calling a DBus method.
+///
+/// Going from DBus to deai is straightforward, all signed integers becomes integer, all
+/// unsigned integers becomes unsigned integer. Arrays become arrays. Structs become array
+/// of variants. Unix FD is not supported currently.
+///
+/// Going from deai to DBus is harder. Because deai doesn't have multiple integer types,
+/// it only uses DBus INT32 and UINT32, so sometimes calling a method could fail. To have
+/// complete support, we need to call Introspect and parse the XML to get the method
+/// signature. This is not yet implemented.
+///
+struct di_module *new_dbus_module(struct deai *di) {
 	auto m = di_new_module(di);
-
 	di_getter(m, session_bus, di_dbus_get_session_bus);
+	return m;
+}
 
+DEAI_PLUGIN_ENTRY_POINT(di) {
+	auto m = new_dbus_module(di);
 	di_register_module(di, di_string_borrow("dbus"), &m);
 	return 0;
 }

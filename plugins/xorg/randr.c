@@ -510,6 +510,9 @@ make_object_for_modes(struct di_xorg_randr *rr, xcb_randr_mode_info_t *m) {
 	return (void *)o;
 }
 
+/// Available modes from RandR
+///
+/// EXPORT: deai.plugin.xorg:RandrExt.modes, [deai.plugin.xorg.randr:Mode]
 static struct di_array rr_modes(struct di_xorg_randr *rr) {
 	struct di_array ret = DI_ARRAY_INIT;
 	if (!rr->dc) {
@@ -540,6 +543,9 @@ static void free_randr(struct di_xorg_ext *x) {
 	rr_select_input((void *)x, 0);
 }
 
+/// RandR extension
+///
+/// EXPORT: deai.plugin.xorg:Connection.randr, deai.plugin.xorg:RandrExt
 struct di_xorg_ext *new_randr(struct di_xorg_connection *dc) {
 	char *extname = "RANDR";
 	if (!xorg_has_extension(dc->c, extname)) {

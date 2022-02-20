@@ -53,6 +53,9 @@ static void load_plugin_impl(struct deai *p, char *sopath) {
 	init_fn(p);
 }
 
+/// Load a single plugin
+///
+/// EXPORT: load_plugin(file: :string), :void
 static void load_plugin(struct deai *p, struct di_string sopath) {
 	if (!sopath.data) {
 		return;
@@ -108,6 +111,9 @@ static int load_plugin_from_dir_impl(struct deai *di, const char *path) {
 	return 0;
 }
 
+/// Load plugins from a directory
+///
+/// EXPORT: load_plugin_from_dir(path: :string), :integer
 static int load_plugin_from_dir(struct deai *p, struct di_string path) {
 	if (!path.data) {
 		return -1;
@@ -120,6 +126,9 @@ static int load_plugin_from_dir(struct deai *p, struct di_string path) {
 	return load_plugin_from_dir_impl(p, path_str);
 }
 
+/// Change working directory
+///
+/// EXPORT: chdir(dir: :string), :integer
 int di_chdir(struct di_object *p, struct di_string dir) {
 	if (!dir.data) {
 		return -EINVAL;
@@ -302,12 +311,20 @@ struct di_ev_prepare {
 	struct deai *di;
 };
 
+/// Exit deai
+///
+/// EXPORT: exit(exit_code: :integer), :noreturn
+///
+/// Like :lua:meth:`quit` but with a return code.
 void di_prepare_exit(struct deai *di, int ec) {
 	*di->exit_code = ec;
 	// Drop all the roots, this should stop the program
 	di_finalize_object((struct di_object *)roots);
 }
 
+/// Exit deai
+///
+/// EXPORT: quit(), :noreturn
 void di_prepare_quit(struct deai *di) {
 	di_prepare_exit(di, 0);
 }
@@ -388,12 +405,21 @@ int di_register_module(struct deai *p, struct di_string name, struct di_module *
 	return ret;
 }
 
-// Don't consumer the ref, because it breaks the usual method call sementics
+/// Register a module
+///
+/// EXPORT: register_module(name: :string, module: deai:module), :integer
 static int
 di_register_module_method(struct deai *p, struct di_string name, struct di_module *m) {
+	// Don't consumer the ref, because it breaks the usual method call sementics
 	return di_add_member_clonev((void *)p, name, DI_TYPE_OBJECT, m);
 }
 
+/// Execute another binary
+///
+/// EXPORT: exec(argv: [:string]), :integer
+///
+/// This call replaces the current process by running another binary. One use case for
+/// this is to restart deai.
 int di_exec(struct deai *p, struct di_array argv) {
 	char **nargv = tmalloc(char *, argv.length + 1);
 	struct di_string *strings = argv.arr;
