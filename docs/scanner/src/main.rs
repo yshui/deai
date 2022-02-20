@@ -3,7 +3,7 @@ use anyhow::{anyhow, Context};
 use std::{
     borrow::Cow,
     cell::{Ref, RefCell, RefMut},
-    collections::{BTreeMap, HashSet},
+    collections::{BTreeMap, BTreeSet},
     iter::repeat,
     ops::{Deref, DerefMut},
     path::{Path, PathBuf},
@@ -196,7 +196,7 @@ impl Entry {
 
 #[derive(Default, Debug)]
 struct TypeEntry {
-    references:   HashSet<Access<'static>>,
+    references:   BTreeSet<Access<'static>>,
     children:     BTreeMap<String, Rc<RefCell<Entry>>>,
     has_ancestor: bool,
     doc:          Doc,
