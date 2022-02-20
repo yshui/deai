@@ -343,14 +343,12 @@ mod parsers {
         separated_list1(tag("."), ident)(s).map(|(i, o)| (i, o.into_iter().join(".")))
     }
     fn parameters(s: &str) -> IResult<&str, Vec<Parameter>> {
-        separated_list0(tag2(","), ident)(s).map(|(i, o)| {
-            (
-                i,
-                o.into_iter()
-                    .map(|s| Parameter { name: s.to_owned(), ty: None, doc: String::new() })
-                    .collect(),
-            )
-        })
+        let ty = alt((array_type, base_type));
+        map(separated_list0(tag2(","), tuple((ident, opt(preceded(tag2(":"), ty))))), |o| {
+            o.into_iter()
+                .map(|(s, ty)| Parameter { name: s.to_owned(), ty, doc: String::new() })
+                .collect()
+        })(s)
     }
     fn access(s: &str) -> IResult<&str, Access<'static>> {
         alt((
@@ -550,14 +548,16 @@ impl Docs {
                     if let Some(params) = &mut entry.params {
                         for p in params {
                             if let Some(detail) = param_detail.get_mut(&p.name) {
-                                if !p.doc.is_empty() || p.ty.is_some() {
+                                if !p.doc.is_empty() || (p.ty.is_some() && detail.ty.is_some()) {
                                     return Err(anyhow!(
                                         "Duplicated documentation for parameter {}",
                                         p.name
                                     ))
                                 }
                                 p.doc = std::mem::replace(&mut detail.doc, String::new());
-                                p.ty = detail.ty.take();
+                                if p.ty.is_none() {
+                                    p.ty = detail.ty.take();
+                                }
                             }
                         }
                     } else {
