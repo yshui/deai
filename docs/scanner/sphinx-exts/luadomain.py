@@ -32,7 +32,7 @@ logger = logging.getLogger(__name__)
 # REs for Lua signatures
 lua_sig_re = re.compile(
     r'''^ ([\w.]*\.)?            # class name(s)
-          ([0-9a-zA-Z-]+)  \s*   # thing name
+          ([0-9a-zA-Z_-]+)  \s*   # thing name
           (?: \((.*)\)           # optional: arguments
            (?:\s* -> \s* (.*))?  #           return annotation
           )? $                   # and nothing more
