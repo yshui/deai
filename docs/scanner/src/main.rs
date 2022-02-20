@@ -1,4 +1,3 @@
-#![feature(string_remove_matches)]
 use anyhow::{anyhow, Context};
 use std::{
     borrow::Cow,
@@ -47,9 +46,9 @@ impl std::fmt::Display for RstTypeDisplay<'_> {
         match self.0 {
             Type::Base { namespace, member } => {
                 if let Some(ns) = namespace {
-                    write!(f, "{ns}.")?;
+                    write!(f, "{ns}.", ns = ns)?;
                 }
-                write!(f, "{member}")
+                write!(f, "{member}", member = member)
             }
             Type::Array(inner) => write!(f, "{}", inner.rst_display()),
         }
@@ -531,10 +530,9 @@ impl Docs {
                 let (next, signature) =
                     parsers::signal_line(&p).map_err(|e| anyhow!("Invalid signal line: {}", e))?;
                 save_entry(&mut entry, &mut brief, &mut body);
-                let mut next = next.trim().to_owned();
-                next.remove_matches(&['\n', '\r']);
+                let next = next.trim().replace(|ch| ch == '\n' || ch == '\r', "");
 
-                brief = Some(next.trim().to_owned());
+                brief = Some(next);
                 entry = Some(signature);
             } else if p == "Arguments:" {
                 let p = paragraphs.next().context("Arguments: not followed by parameter block")?;
@@ -607,7 +605,7 @@ impl Docs {
                 }
             }
         }
-        entry.map(|entry| {
+        entry.map(move |entry| {
             let entry = self.by_type.entry(entry).or_insert_with(Default::default);
             entry.borrow_mut().doc.brief = brief.unwrap_or(String::new());
             entry.borrow_mut().doc.body.extend(body.into_iter());
@@ -698,7 +696,8 @@ impl Docs {
                 "   * - :{}:`{} <{name}>`\n     - {}",
                 child.role(),
                 child.display(),
-                child.doc.as_ref().map(|x| x.brief.as_str()).unwrap_or("")
+                child.doc.as_ref().map(|x| x.brief.as_str()).unwrap_or(""),
+                name = name
             )?;
         }
         writeln!(output)?;
@@ -723,7 +722,7 @@ impl Docs {
                     ty.simple_display(),
                 )?;
                 let type_tag = if child.params.is_none() { "type" } else { "rtype" };
-                write!(output, "   :{type_tag}: ")?;
+                write!(output, "   :{type_tag}: ", type_tag = type_tag)?;
                 ref_type(&mut output, child.ty.as_ref().unwrap())?;
             } else {
                 writeln!(output, "\n")?;
@@ -819,12 +818,14 @@ impl Docs {
                                     ":lua:attr:`{}.{member} <{}.{member}>`",
                                     ty.simple_display(),
                                     ty.rst_display(),
+                                    member = member
                                 ),
                             })
                             .join(", ");
                         writeln!(
                             output,
-                            "See {references} for more information about this type\n"
+                            "See {references} for more information about this type\n",
+                            references = references
                         )?;
                     }
                 }
@@ -896,7 +897,7 @@ impl Docs {
             if entry.borrow().ty.as_ref().unwrap().to_string() != "deai:module" {
                 continue
             }
-            writeln!(modules, "   {access} <{access}>")?;
+            writeln!(modules, "   {access} <{access}>", access = access)?;
         }
 
         let mut types = std::fs::File::create(output.join("types.rst"))?;
@@ -908,9 +909,9 @@ impl Docs {
                 continue
             }
             if let Some(ancestor) = &type_entry.borrow().ancestor {
-                writeln!(types, "   {k} <{ancestor}>")?;
+                writeln!(types, "   {k} <{ancestor}>", k = k, ancestor = ancestor)?;
             } else {
-                writeln!(types, "   {k} <{k}>")?;
+                writeln!(types, "   {k} <{k}>", k = k)?;
             }
         }
         // Generate index
@@ -928,7 +929,8 @@ impl Docs {
             writeln!(
                 index,
                 "   * - :doc:`{access} <{access}>`\n     - {}",
-                entry.borrow().doc.as_ref().map(|x| x.brief.as_str()).unwrap_or("")
+                entry.borrow().doc.as_ref().map(|x| x.brief.as_str()).unwrap_or(""),
+                access = access
             )?;
         }
         writeln!(index, "\n=======\nMethods\n=======\n")?;
@@ -1006,7 +1008,7 @@ fn main() {
                     if let Some(comment) = child.get_parsed_comment() {
                         if let Some(_) = docs.handle_type_comment(&comment) {
                             for member in child.get_children() {
-                                log::debug!("{member:?}");
+                                log::debug!("{member:?}", member = member);
                                 if member.get_kind() == EntityKind::FieldDecl {
                                     if let Some(comment) = member.get_parsed_comment() {
                                         docs.handle_comment(&comment);

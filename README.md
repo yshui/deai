@@ -184,6 +184,7 @@ I use the issue tracker to track the progress of these feature, so if you are in
 ### Build Dependencies
 
 * libev
+* libudev
 * dbus-libs
 * xorg
     * xcb
