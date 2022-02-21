@@ -152,7 +152,7 @@ static int di_file_add_watch(struct di_file_watch *fw, struct di_string path) {
 ///
 /// EXPORT: deai.plugin.file:Watch.add(paths: [:string]), :integer
 ///
-/// Add a new files to a watch, returns 0 if successful.
+/// Add new files to a watch, returns 0 if successful.
 static int di_file_add_many_watch(struct di_file_watch *fw, struct di_array paths) {
 	if (paths.length == 0) {
 		return 0;

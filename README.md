@@ -77,7 +77,7 @@ Right now the only supported scripting language is Lua, so the examples will be 
 * Set timer
 
   ```lua
-  di.event:timer(10).on("elapsed", function()
+  di.event:timer(10):on("elapsed", function()
       print("Time flies!")
   end)
   ```
