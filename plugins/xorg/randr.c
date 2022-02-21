@@ -582,8 +582,6 @@ static struct di_array rr_outputs(struct di_xorg_randr *rr) {
 		return ret;
 	}
 
-	fprintf(stderr, "%d\n", sr->config_timestamp);
-	fprintf(stderr, "%d\n", sr->timestamp);
 	ret.length = xcb_randr_get_screen_resources_current_outputs_length(sr);
 	ret.elem_type = DI_TYPE_OBJECT;
 	auto os = xcb_randr_get_screen_resources_current_outputs(sr);
