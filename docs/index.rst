@@ -29,3 +29,8 @@ References
 
    generated/modules
    generated/types
+
+Writing a Plugin for deai
+=========================
+
+This section is still working in progress.
