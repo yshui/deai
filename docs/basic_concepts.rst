@@ -43,7 +43,7 @@ This register a listener on the event :code:`"some-signal"`. This signal carries
 Language support
 ================
 
-Scripting language supports in deai are implemented in plugins. Currently there is only the Lua plugin, but I will use plural anyways.
+Scripting language supports in deai are implemented as plugins. Currently there is only the Lua plugin, but I will use plural anyways.
 
 These plugins implement the ability to load a script, and they also exposes deai objects in the languages' native form.
 
