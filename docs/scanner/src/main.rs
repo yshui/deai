@@ -884,22 +884,6 @@ impl Docs {
         }
 
         // Generate toc files
-        let mut modules = std::fs::File::create(output.join("modules.rst"))?;
-        writeln!(modules, "===========\n**Modules**\n===========\n")?;
-        writeln!(modules, ".. toctree::\n   :maxdepth: 2\n")?;
-        for (access, entry) in &self.by_access {
-            if !access.is_ancestry() {
-                continue
-            }
-            if entry.borrow().params.is_some() {
-                continue
-            }
-            if entry.borrow().ty.as_ref().unwrap().to_string() != "deai:module" {
-                continue
-            }
-            writeln!(modules, "   {access} <{access}>", access = access)?;
-        }
-
         let mut types = std::fs::File::create(output.join("types.rst"))?;
         writeln!(types, "=========\n**Types**\n=========\n")?;
         writeln!(types, ".. toctree::\n   :maxdepth: 2\n")?;
@@ -915,11 +899,24 @@ impl Docs {
             }
         }
         // Generate index
-        let mut index = std::fs::File::create(output.join("index.rst"))?;
-        writeln!(index, "========\n**deai**\n========\n")?;
-        writeln!(index, ".. toctree::\n   :maxdepth: 3\n   :hidden:\n\n   modules\n   types\n")?;
-        writeln!(index, "=======\nModules\n=======\n")?;
-
+        let mut index = std::fs::File::create(output.join("modules.rst"))?;
+        writeln!(index, "=================================")?;
+        writeln!(index, "**Modules and Top-level Methods**")?;
+        writeln!(index, "=================================\n")?;
+        writeln!(index, "\n-------\nModules\n-------\n")?;
+        writeln!(index, ".. toctree::\n   :maxdepth: 2\n   :hidden:\n")?;
+        for (access, entry) in &self.by_access {
+            if !access.is_ancestry() {
+                continue
+            }
+            if entry.borrow().params.is_some() {
+                continue
+            }
+            if entry.borrow().ty.as_ref().unwrap().to_string() != "deai:module" {
+                continue
+            }
+            writeln!(index, "   {access} <{access}>", access = access)?;
+        }
         writeln!(index, ".. list-table::\n   :header-rows: 0\n")?;
         for (access, entry) in &self.by_access {
             if !access.is_ancestry() || access.parent().is_some() || entry.borrow().params.is_some()
@@ -933,7 +930,7 @@ impl Docs {
                 access = access
             )?;
         }
-        writeln!(index, "\n=======\nMethods\n=======\n")?;
+        writeln!(index, "\n-------\nMethods\n-------\n")?;
 
         writeln!(index, ".. list-table::\n   :header-rows: 0\n")?;
 

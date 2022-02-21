@@ -313,9 +313,11 @@ struct di_ev_prepare {
 
 /// Exit deai
 ///
-/// EXPORT: exit(exit_code: :integer), :noreturn
+/// EXPORT: exit(exit_code: :integer), :void
 ///
-/// Like :lua:meth:`quit` but with a return code.
+/// Instruct deai to exit. deai won't exit immediately when the function is called, it
+/// will exit next time the control returns to the mainloop. (e.g. after your script
+/// finished running).
 void di_prepare_exit(struct deai *di, int ec) {
 	*di->exit_code = ec;
 	// Drop all the roots, this should stop the program
@@ -324,7 +326,9 @@ void di_prepare_exit(struct deai *di, int ec) {
 
 /// Exit deai
 ///
-/// EXPORT: quit(), :noreturn
+/// EXPORT: quit(), :void
+///
+/// Equivalent to :code:`exit(0)`
 void di_prepare_quit(struct deai *di) {
 	di_prepare_exit(di, 0);
 }

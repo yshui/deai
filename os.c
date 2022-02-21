@@ -67,7 +67,8 @@ static const char *di_get_hostname(struct deai *p) {
 /// Environment variables
 ///
 /// This object exposes environment variables as its members. You can get/set environment
-/// variables by reading/changing its member.
+/// variables by reading/changing its member. This will affect subsequently spawned
+/// processes.
 void di_init_os(struct deai *di) {
 	struct di_module *m = di_new_module(di);
 

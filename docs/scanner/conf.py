@@ -13,5 +13,8 @@ sys.path.append(str(Path(__file__).resolve().parent / "sphinx-exts"))
 extensions = ['luadomain']
 
 subprocess.run(["meson", "setup", "../../build", "../.."])
-os.symlink("build/compile_commands.json", "../../compile_commands.json")
-subprocess.run(["cargo", "run", "../..", "."])
+try:
+    os.symlink("build/compile_commands.json", "../../compile_commands.json")
+except:
+    pass
+subprocess.run(["cargo", "run", "../..", "generated"])
