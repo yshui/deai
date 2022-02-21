@@ -885,7 +885,7 @@ impl Docs {
 
         // Generate toc files
         let mut types = std::fs::File::create(output.join("types.rst"))?;
-        writeln!(types, "=========\n**Types**\n=========\n")?;
+        writeln!(types, "=====\nType\n=====\n")?;
         writeln!(types, ".. toctree::\n   :maxdepth: 2\n")?;
         for (k, type_entry) in &self.by_type {
             let ns = k.namespace().unwrap();
@@ -900,10 +900,10 @@ impl Docs {
         }
         // Generate index
         let mut index = std::fs::File::create(output.join("modules.rst"))?;
-        writeln!(index, "=================================")?;
-        writeln!(index, "**Modules and Top-level Methods**")?;
-        writeln!(index, "=================================\n")?;
-        writeln!(index, "\n-------\nModules\n-------\n")?;
+        writeln!(index, "=============================")?;
+        writeln!(index, "Modules and Top-level Methods")?;
+        writeln!(index, "=============================\n")?;
+        writeln!(index, "\nModules\n=======\n")?;
         writeln!(index, ".. toctree::\n   :maxdepth: 2\n   :hidden:\n")?;
         for (access, entry) in &self.by_access {
             if !access.is_ancestry() {
@@ -930,7 +930,7 @@ impl Docs {
                 access = access
             )?;
         }
-        writeln!(index, "\n-------\nMethods\n-------\n")?;
+        writeln!(index, "\nMethods\n=======\n")?;
 
         writeln!(index, ".. list-table::\n   :header-rows: 0\n")?;
 

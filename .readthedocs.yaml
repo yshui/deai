@@ -19,4 +19,4 @@ build:
     - liblua5.3-dev
     - libudev-dev
 sphinx:
-  configuration: docs/scanner/conf.py
+  configuration: docs/conf.py
