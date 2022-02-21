@@ -65,6 +65,12 @@ struct DeviceProperties {
 	}
 };
 
+/// udev device properties
+///
+/// EXPORT: deai.plugin.udev:Device.properties, deai.plugin.udev:DeviceProperties
+///
+/// A proxy object for udev device properties. Property names are the same ones you can
+/// see from running :code:`udevadm info`.
 auto Device::get_properties() -> Ref<Object> {
 	return util::new_object<DeviceProperties>(util::unsafe_to_object_ref(*this));
 }
@@ -90,6 +96,9 @@ private:
 
 public:
 	static constexpr const char *type [[maybe_unused]] = "deai.plugin.udev:Module";
+	/// Create a device object from a device node
+	///
+	/// EXPORT: udev.device_from_dev_node(path: :string), deai.plugin.udev:Device
 	auto device_from_dev_node(std::string_view dev_node) -> Ref<Object> {
 		auto context = get_or_create_context();
 		auto &context_inner = util::unsafe_to_inner<Context>(context);
@@ -107,10 +116,20 @@ public:
 	}
 };
 
-DEAI_CPP_PLUGIN_ENTRY_POINT(di) {
+/// udev
+///
+/// EXPORT: udev, deai:module
+///
+/// Interface to the udev Linux subsystem. This is very much work in progress.
+auto di_new_udev(::deai::Ref<::deai::Core> &di) {
 	auto obj = util::new_object<Module>();
 	auto &module = util::unsafe_to_inner<Module>(obj);
 	util::add_method<&Module::device_from_dev_node>(module, "device_from_dev_node");
+	return obj;
+}
+
+DEAI_CPP_PLUGIN_ENTRY_POINT(di) {
+	auto obj = di_new_udev(di);
 	static_cast<void>(di->register_module("udev", obj));
 	return 0;
 }

@@ -33,11 +33,24 @@ struct Device {
 		close(fd);
 	}
 };
+
 struct InputId {
 private:
+	/// Vendor
+	///
+	/// EXPORT: deai.plugin.evdev:InputId.vendor, :integer
 	uint16_t vendor_;
+	/// Product
+	///
+	/// EXPORT: deai.plugin.evdev:InputId.product, :integer
 	uint16_t product_;
+	/// Bus type
+	///
+	/// EXPORT: deai.plugin.evdev:InputId.bustype, :integer
 	uint16_t bustype_;
+	/// Version
+	///
+	/// EXPORT: deai.plugin.evdev:InputId.version, :integer
 	uint16_t version_;
 
 public:
@@ -69,6 +82,9 @@ public:
 	}
 };
 
+/// Device id
+///
+/// EXPORT: deai.plugin.evdev:Device.id, deai.plugin.evdev:InputId
 auto Device::id() const -> Ref<Object> {
 	::input_id id;
 	if (::ioctl(fd, EVIOCGID, &id) < 0) {
@@ -77,6 +93,9 @@ auto Device::id() const -> Ref<Object> {
 	return util::new_object<InputId>(id);
 }
 
+/// Device name
+///
+/// EXPORT: deai.plugin.evdev:Device.name, :string
 auto Device::name() const -> Variant {
 	std::vector<char> buf(80, 0);        // NOLINT
 	while (true) {
@@ -101,16 +120,28 @@ struct Module {
 private:
 public:
 	static constexpr const char *type [[maybe_unused]] = "deai.plugin.evdev:Module";
+	/// Open a device node
+	///
+	/// EXPORT: evdev.open(path: :string), deai.plugin.evdev:Device
 	auto device_from_dev_node(const std::string &dev_node) -> Ref<Object> {
 		static_cast<void>(this);        // slient "this functino could be static" warning
 		return util::new_object<Device>(dev_node);
 	}
 };
 
-DEAI_CPP_PLUGIN_ENTRY_POINT(di) {
+/// evdev
+///
+/// EXPORT: evdev, deai:module
+///
+/// Interface to the Linux evdev subsystem.
+auto di_new_evdev(::deai::Ref<::deai::Core> &di) {
 	auto obj = util::new_object<Module>();
 	auto &module = util::unsafe_to_inner<Module>(obj);
 	util::add_method<&Module::device_from_dev_node>(module, "open");
+	return obj;
+}
+DEAI_CPP_PLUGIN_ENTRY_POINT(di) {
+	auto obj = di_new_evdev(di);
 	static_cast<void>(di->register_module("evdev", obj));
 	return 0;
 }

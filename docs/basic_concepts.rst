@@ -48,3 +48,5 @@ Scripting language supports in deai are implemented in plugins. Currently there 
 These plugins implement the ability to load a script, and they also exposes deai objects in the languages' native form.
 
 For more information on, for example, how Lua scripting support works, see :lua:mod:`lua`.
+
+Compiled language support is implemented as bindings. C is supported by core deai, there is also C++ binding available.

@@ -947,6 +947,34 @@ impl Docs {
         Ok(())
     }
 }
+
+fn process_child(docs: &mut Docs, child: &clang::Entity) {
+    if !child.get_range().map(|x| x.is_in_main_file()).unwrap_or(false) {
+        return
+    }
+    match child.get_kind() {
+        EntityKind::FunctionDecl | EntityKind::FieldDecl | EntityKind::Method => {
+            if let Some(comment) = child.get_parsed_comment() {
+                docs.handle_comment(&comment);
+            }
+        }
+        EntityKind::StructDecl => {
+            if let Some(comment) = child.get_parsed_comment() {
+                docs.handle_type_comment(&comment);
+            }
+            for member in child.get_children() {
+                log::debug!("{member:?}", member = member);
+                process_child(docs, &member);
+            }
+        }
+        EntityKind::Namespace => {
+            for child in child.get_children() {
+                process_child(docs, &child);
+            }
+        }
+        _ => (),
+    }
+}
 fn main() {
     env_logger::init();
     let mut docs = Docs::new();
@@ -989,34 +1017,7 @@ fn main() {
         let entity = tu.get_entity();
         //println!("{:?}", entity.get_comment());
         for child in entity.get_children() {
-            // TODO: parse struct comments and members
-            // TODO: parse SIGNAL lines
-            if !child.get_range().map(|x| x.is_in_main_file()).unwrap_or(false) {
-                continue
-            }
-            //println!("\t{:?}", child.get_kind());
-            match child.get_kind() {
-                EntityKind::FunctionDecl => {
-                    if let Some(comment) = child.get_parsed_comment() {
-                        docs.handle_comment(&comment);
-                    }
-                }
-                EntityKind::StructDecl => {
-                    if let Some(comment) = child.get_parsed_comment() {
-                        if let Some(_) = docs.handle_type_comment(&comment) {
-                            for member in child.get_children() {
-                                log::debug!("{member:?}", member = member);
-                                if member.get_kind() == EntityKind::FieldDecl {
-                                    if let Some(comment) = member.get_parsed_comment() {
-                                        docs.handle_comment(&comment);
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-                _ => (),
-            }
+            process_child(&mut docs, &child);
         }
     }
     docs.build_tree();
