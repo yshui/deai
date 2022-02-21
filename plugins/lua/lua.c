@@ -1373,6 +1373,15 @@ static int di_lua_meta_newindex(lua_State *L) {
 ///
 /// Use the :lua:meth:`~deai.plugin.lua.Proxy.on` methods from the proxy to register
 /// listeners on signals.
+///
+/// **Quirks**
+///
+/// In lua there's only table, there's no such thing as an array. deai will treat a lua
+/// table as an array if it has integer 1 as a key. The length of the array is determined
+/// by the largest consecutive integer key following 1. However, we don't know what
+/// exactly to do with an empty table. Is it a table or an array? Right now, it's treated
+/// as a table, thus translates to an object in deai. So if you want to pass an empty
+/// array as argument, you would have to pass "nil".
 static struct di_module *di_new_lua(struct deai *di) {
 	auto m = di_new_module(di);
 
