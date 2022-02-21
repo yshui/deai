@@ -11,6 +11,7 @@ To start, some :doc:`basic concepts <basic_concepts>` could help you understand 
 
 .. toctree::
    :hidden:
+   :caption: Getting Started
 
    basic_concepts
    how_to_run
@@ -24,6 +25,7 @@ References
 .. toctree::
    :maxdepth: 3
    :hidden:
+   :caption: References
 
    generated/modules
    generated/types
