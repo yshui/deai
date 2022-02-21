@@ -103,12 +103,12 @@ static void output_handler(struct child *c, int fd, struct string_buf *b, const 
 /// SIGNAL: deai.builtin.spawn:ChildProcess.stdout_line(line: :string) The child process
 /// wrote one line to stdout.
 ///
-/// Only generated if "ignore_output" wasn't set to false
+/// Only generated if "ignore_output" wasn't set to true.
 ///
 /// SIGNAL: deai.builtin.spawn:ChildProcess.stderr_line(line: :string) The child process
 /// wrote one line to stderr.
 ///
-/// Only generated if "ignore_output" wasn't set to false
+/// Only generated if "ignore_output" wasn't set to true.
 static void sigchld_handler(EV_P_ ev_child *w, int revents) {
 	struct child *c = container_of(w, struct child, w);
 	// Keep child process object alive when emitting
@@ -241,7 +241,7 @@ static struct di_object *di_setup_fds(bool ignore_output, int *opfds, int *epfds
 /// - ignore_output if true, outputs of the child process will be redirected to
 ///                 :code:`/dev/null`
 ///
-/// Returns an object representing the child object.
+/// Returns an object representing the child process.
 struct di_object *di_spawn_run(struct di_spawn *p, struct di_array argv, bool ignore_output) {
 	if (argv.elem_type != DI_TYPE_STRING) {
 		return di_new_error("Invalid argv type");
