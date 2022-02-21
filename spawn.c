@@ -109,6 +109,9 @@ static void output_handler(struct child *c, int fd, struct string_buf *b, const 
 /// wrote one line to stderr.
 ///
 /// Only generated if "ignore_output" wasn't set to true.
+///
+/// SIGNAL: deai.builtin.spawn:ChildProcess.exit(exit_code: :integer, signal: :integer)
+/// The child process exited.
 static void sigchld_handler(EV_P_ ev_child *w, int revents) {
 	struct child *c = container_of(w, struct child, w);
 	// Keep child process object alive when emitting
