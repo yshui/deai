@@ -393,6 +393,20 @@ static inline struct di_variant unused di_variant_of_impl(di_type_t type,
 	return ret;
 }
 
+static inline union di_value as_di_value(di_type_t type, void *value) {
+	union di_value ret;
+	memcpy(&ret, value, di_sizeof_type(type));
+	return ret;
+}
+
+/// Get the array element at a given index, as a variant. This variant doesn't have
+/// ownership, and can't escaped
+#define di_array_index(arr, index)                                                       \
+	((struct di_variant){                                                            \
+	    .type = arr.elem_type,                                                       \
+	    .value = (union di_value[]){as_di_value(                                     \
+	        arr.elem_type, arr.arr + di_sizeof_type(arr.elem_type) + index)}})
+
 #define di_variant_of(v)                                                                 \
 	({                                                                               \
 		auto __deai_variant_tmp = (v);                                           \
