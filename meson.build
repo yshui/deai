@@ -105,12 +105,11 @@ deai_exe = executable('deai', [
   'helper.c',
   'os.c',
   'spawn.c',
-  'string_buf.c',
   'exception.cc',
 ], c_args: base_c_args
 , cpp_args: base_cpp_args
 , dependencies: [libev, libffi, dl]
-, link_with: [ cpp_dummy ]
+, link_with: [ cpp_dummy, libutils ]
 , include_directories: incs
 , link_args: base_ld_args
 , install: true)

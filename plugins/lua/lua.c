@@ -362,7 +362,6 @@ static int di_lua_gc(lua_State *L) {
 	di_lua_get_state(L, s);
 	DI_CHECK(s != NULL);
 
-
 	// Forget about this object
 	struct di_lua_object_map_entry *e = NULL;
 	HASH_FIND_PTR(s->object_to_lua_ref, &o, e);
@@ -809,14 +808,14 @@ static int call_lua_function(struct di_lua_ref *ref, di_type_t *rt, union di_val
 
 	if (lua_pcall(L, t.length, 1, -(int)t.length - 2) != 0) {
 		auto err = luaL_tolstring(L, -1, NULL);
-		lua_pop(L, 1); // Pop the converted error string
+		lua_pop(L, 1);        // Pop the converted error string
 		ret->object = di_new_error("%s", err);
 		*rt = DI_TYPE_OBJECT;
 	} else {
 		di_lua_type_to_di(L, -1, rt, ret);
 	}
 
-	lua_pop(L, 2); // Pop (error or result) + errfunc
+	lua_pop(L, 2);        // Pop (error or result) + errfunc
 
 	di_lua_xchg_env(L, script);
 
@@ -1376,12 +1375,15 @@ static int di_lua_meta_newindex(lua_State *L) {
 ///
 /// **Quirks**
 ///
-/// In lua there's only table, there's no such thing as an array. deai will treat a lua
-/// table as an array if it has integer 1 as a key. The length of the array is determined
-/// by the largest consecutive integer key following 1. However, we don't know what
-/// exactly to do with an empty table. Is it a table or an array? Right now, it's treated
-/// as a table, thus translates to an object in deai. So if you want to pass an empty
-/// array as argument, you would have to pass "nil".
+/// In lua there's only table, there's no such thing as an array. To decide if a table is
+/// an arraay deai will first check if it has integer 1 as a key, then the length of the
+/// array is determined to be the largest contiguous integer key following 1, then deai
+/// check if all these keys map to elements with the same type. If all passes, then that
+/// table becomes a deai array.
+///
+/// Additionally, we don't know what exactly to do with an empty table. Should it be a
+/// table or an array? Right now, it's treated as a table, thus translates to an object in
+/// deai. So if you want to pass an empty array as argument, you would have to pass "nil".
 static struct di_module *di_new_lua(struct deai *di) {
 	auto m = di_new_module(di);
 

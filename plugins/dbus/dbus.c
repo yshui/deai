@@ -379,6 +379,9 @@ static void di_free_dbus_object(struct di_object *o) {
 	free(od->obj);
 }
 
+/// TYPE: deai.plugin.dbus:DBusMethod
+///
+/// Represents a dbus method that can be called. This object is callable.
 typedef struct {
 	struct di_object;
 	char *method;
@@ -445,10 +448,10 @@ static void di_dbus_object_new_signal(di_dbus_object *dobj, struct di_string nam
 /// (Note: getting properties are not implemented yet, but you can call
 /// org.freedesktop.DBus.Properties.Get manually)
 ///
-/// Create a proxy object for a DBus object. Properties and methods are reflected as
-/// members of this object. DBus signals are also converted to signals emitted from this
-/// object. Properties and methods must be accessed with their fully qualified names, i.e.
-/// "interface.Method".
+/// Create a proxy object for a DBus object. Methods are reflected as members of this
+/// object. DBus signals are also converted to signals emitted from this object. Methods
+/// must be accessed with their fully qualified names, i.e. "interface.Method". Proxy
+/// objects for methods are returned, see :lua:mod:`deai.plugin.dbus.DBusMethod`.
 ///
 /// Calling a dbus method will not give you a reply directly, instead an object is
 /// returned. Listen for a "reply" signal on the object to receive the reply.

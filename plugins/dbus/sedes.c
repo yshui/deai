@@ -257,8 +257,7 @@ struct dbus_signature {
 // TODO(yshui) Serialization of arrays is ambiguous. It can be serialized as an array, a
 // struct, or a dict in different cases. We need dbus type information from introspection,
 // to figure out how to properly serialize the value.
-// Same for variants. They can be serialized as variant, or as their inner typep.
-// FIXME currently array of variants are always serialized as dbus struct.
+// Same for variants. They can be serialized as variant, or as their inner types.
 static int type_signature_length_of_di_value(di_type_t type, void *d) {
 	int dtype = di_type_to_dbus_basic(type);
 	if (dbus_type_is_basic(dtype)) {
@@ -293,43 +292,118 @@ static int type_signature_length_of_di_value(di_type_t type, void *d) {
 	return -1;
 }
 
-static const char *verify_type_signature(di_type_t type, void *d, const char *signature) {
+/// Whether deai type `type` can be converted to `dbus_type`
+static bool is_basic_type_compatible(di_type_t type, int dbus_type) {
+	switch (dbus_type) {
+	case DBUS_TYPE_BOOLEAN:
+		return type == DI_TYPE_BOOL;
+	case DBUS_TYPE_INT16:
+	case DBUS_TYPE_INT32:
+	case DBUS_TYPE_INT64:
+	case DBUS_TYPE_UINT16:
+	case DBUS_TYPE_UINT32:
+	case DBUS_TYPE_UINT64:
+		return type == DI_TYPE_UINT || type == DI_TYPE_INT ||
+		       type == DI_TYPE_NINT || type == DI_TYPE_NUINT;
+	case DBUS_TYPE_DOUBLE:
+		return type == DI_TYPE_FLOAT;
+	case DBUS_TYPE_STRING:
+	case DBUS_TYPE_OBJECT_PATH:
+		return type == DI_TYPE_STRING;
+	case DBUS_TYPE_UNIX_FD:
+		// TODO(yshui)
+		return false;
+	case DBUS_TYPE_ARRAY:
+	case DBUS_TYPE_STRUCT:
+	case DBUS_TYPE_VARIANT:
+		assert(false);
+	default:
+		return false;
+	}
+}
+
+/// Verify a deai value `d` of type `type` against a dbus type signature. Some type
+/// conversion will be performed. i.e. conversion between integer types, string to/from
+/// object path, deai array/tuple vs dbus struct/array/dict, deai variant vs dbus variant
+/// or plain dbus type
+///
+/// Returns the rest of the dbus signature not matched with `d`.
+static const char *
+verify_type_signature(di_type_t type, union di_value *d, const char *signature) {
 	int dtype = di_type_to_dbus_basic(type);
 	if (dbus_type_is_basic(dtype)) {
-		return dtype == *signature ? signature + 1 : NULL;
+		return is_basic_type_compatible(type, *signature) ? signature + 1 : NULL;
 	}
-	struct di_array *arr = d;
-	if (type == DI_TYPE_ARRAY && arr->elem_type != DI_TYPE_VARIANT) {
-		if (*signature != 'a') {
+	// If our target is a variant, stop here since anything can become a variant
+	if (*signature == DBUS_TYPE_VARIANT) {
+		return signature + 1;
+	}
+
+	if (type == DI_TYPE_VARIANT) {
+		// We aren't expecting a variant, so unwrap it.
+		return verify_type_signature(d->variant.type, d->variant.value, signature);
+	}
+
+	if (*signature == DBUS_TYPE_ARRAY) {
+		if (type != DI_TYPE_ARRAY) {
+			// In theory, a tuple of all same type can be an array, but we
+			// don't do it.
 			return NULL;
 		}
-		int step = di_sizeof_type(arr->elem_type);
+		struct di_array *arr = &d->array;
+		int step_size = di_sizeof_type(arr->elem_type);
 		auto ret = verify_type_signature(arr->elem_type, arr->arr, signature + 1);
-		for (int i = 1; i < arr->length; i++) {
-			if (!verify_type_signature(arr->elem_type, arr->arr + step * i,
-			                           signature + 1)) {
-				return NULL;
+		if (arr->elem_type == DI_TYPE_ARRAY || arr->elem_type == DI_TYPE_TUPLE ||
+		    arr->elem_type == DI_TYPE_VARIANT) {
+			// These types can have different internal structures, but dbus
+			// require them to all be the same.
+			for (int i = 1; i < arr->length; i++) {
+				auto ret2 = verify_type_signature(
+				    arr->elem_type, arr->arr + step_size * i, signature + 1);
+				if (ret2 == NULL || ret2 != ret) {
+					return NULL;
+				}
 			}
 		}
 		return ret;
 	}
-	if (type == DI_TYPE_ARRAY && arr->elem_type == DI_TYPE_VARIANT) {
-		struct di_variant *vars = arr->arr;
-		if (*signature != '(') {
-			return NULL;
-		}
-		auto curr = signature;
-		for (int i = 0; i < arr->length; i++) {
-			auto next = verify_type_signature(vars[i].type, vars[i].value, curr);
-			if (!next) {
+
+	if (*signature == DBUS_STRUCT_BEGIN_CHAR) {
+		if (type == DI_TYPE_ARRAY) {
+			struct di_array *arr = &d->array;
+			auto step_size = di_sizeof_type(arr->elem_type);
+			auto curr = signature + 1;
+			for (int i = 0; i < arr->length; i++) {
+				auto next = verify_type_signature(
+				    arr->elem_type, arr->arr + step_size * i, curr);
+				if (!next) {
+					return NULL;
+				}
+				curr = next;
+			}
+			if (*curr != ')') {
 				return NULL;
 			}
-			curr = next;
+			return curr + 1;
 		}
-		if (*curr != ')') {
-			return NULL;
+		if (type == DI_TYPE_TUPLE) {
+			auto curr = signature + 1;
+			struct di_tuple *t = &d->tuple;
+			for (int i = 0; i < t->length; i++) {
+				auto next = verify_type_signature(
+				    DI_TYPE_VARIANT, t->elements[i].value, curr);
+				if (!next) {
+					return NULL;
+				}
+				curr = next;
+			}
+			if (*curr != ')') {
+				return NULL;
+			}
+			return curr + 1;
 		}
 	}
+	// TODO: handle dict
 	return NULL;
 }
 
@@ -419,8 +493,8 @@ static int dbus_serialize_with_signature(DBusMessageIter *i, struct di_variant v
 		}
 		return 0;
 	}
-	struct di_array *arr = &var.value->array;
-	if (var.type == DI_TYPE_ARRAY && arr->elem_type != DI_TYPE_VARIANT) {
+	if (var.type == DI_TYPE_ARRAY) {
+		struct di_array *arr = &var.value->array;
 		assert(dtype == DBUS_TYPE_ARRAY);
 		assert(dtype == *si.current);
 		int atype = di_type_to_dbus_basic(arr->elem_type);
@@ -462,18 +536,19 @@ static int dbus_serialize_with_signature(DBusMessageIter *i, struct di_variant v
 		dbus_message_iter_close_container(i, &i2);
 		return 0;
 	}
-	if (var.type == DI_TYPE_ARRAY && arr->elem_type == DI_TYPE_VARIANT) {
+	if (var.type == DI_TYPE_TUPLE) {
+		struct di_tuple *t = &var.value->tuple;
 		assert(dtype == DBUS_TYPE_STRUCT);
 		assert(*si.current == '(');
-		assert(si.length == arr->length);
-		struct di_variant *vars = arr->arr;
+		assert(si.length == t->length);
 		DBusMessageIter i2;
 		bool ret = dbus_message_iter_open_container(i, dtype, NULL, &i2);
 		if (!ret) {
 			return -ENOMEM;
 		}
-		for (int i = 0; i < arr->length; i++) {
-			int ret = dbus_serialize_with_signature(&i2, vars[i], si.child[i]);
+		for (int i = 0; i < t->length; i++) {
+			int ret =
+			    dbus_serialize_with_signature(&i2, t->elements[i], si.child[i]);
 			if (ret < 0) {
 				return ret;
 			}
