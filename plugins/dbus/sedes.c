@@ -24,13 +24,15 @@ static di_type_t dbus_type_to_di(int type) {
 	case DBUS_TYPE_DOUBLE:
 		return DI_TYPE_FLOAT;
 	case DBUS_TYPE_STRING:
+	case DBUS_TYPE_OBJECT_PATH:
 		return DI_TYPE_STRING;
 	case DBUS_TYPE_UNIX_FD:
 		// TODO(yshui)
 		return DI_TYPE_INT;
 	case DBUS_TYPE_ARRAY:
-	case DBUS_TYPE_STRUCT:
 		return DI_TYPE_ARRAY;
+	case DBUS_TYPE_STRUCT:
+		return DI_TYPE_TUPLE;
 	default:
 		return DI_LAST_TYPE;
 	}
@@ -58,7 +60,8 @@ dbus_deserialize_basic(DBusMessageIter *i, union di_value *retp, di_type_t *otyp
 		DESERIAL(DBUS_TYPE_UINT32, dbus_uint32_t, uint);
 		DESERIAL(DBUS_TYPE_UINT64, dbus_uint64_t, uint);
 		DESERIAL(DBUS_TYPE_DOUBLE, double, float_);
-	case DBUS_TYPE_STRING:;
+	case DBUS_TYPE_STRING:
+	case DBUS_TYPE_OBJECT_PATH:;
 		const char *dbus_string;
 		dbus_message_iter_get_basic(i, &dbus_string);
 		retp->string = di_string_dup(dbus_string);

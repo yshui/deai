@@ -442,9 +442,16 @@ static void di_dbus_object_new_signal(di_dbus_object *dobj, struct di_string nam
 ///
 /// EXPORT: dbus.session_bus.get(destionation: :string, object_path: :string), deai.plugin.dbus:DBusObject
 ///
+/// (Note: getting properties are not implemented yet, but you can call
+/// org.freedesktop.DBus.Properties.Get manually)
+///
 /// Create a proxy object for a DBus object. Properties and methods are reflected as
 /// members of this object. DBus signals are also converted to signals emitted from this
-/// object.
+/// object. Properties and methods must be accessed with their fully qualified names, i.e.
+/// "interface.Method".
+///
+/// Calling a dbus method will not give you a reply directly, instead an object is
+/// returned. Listen for a "reply" signal on the object to receive the reply.
 ///
 /// For how DBus types map to deai type, see :lua:mod:`dbus` for more details.
 static struct di_object *
