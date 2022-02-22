@@ -33,6 +33,8 @@ static di_type_t dbus_type_to_di(int type) {
 		return DI_TYPE_ARRAY;
 	case DBUS_TYPE_STRUCT:
 		return DI_TYPE_TUPLE;
+	case DBUS_TYPE_VARIANT:
+		return DI_TYPE_VARIANT;
 	default:
 		return DI_LAST_TYPE;
 	}
@@ -107,8 +109,8 @@ dbus_deserialize_array(DBusMessageIter *i, struct di_array *retp, int type, int 
 	*retp = ret;
 }
 
-/// Deserialize a dbus struct to a di_array of di_variants
-void _dbus_deserialize_struct(DBusMessageIter *i, void *retp) {
+/// Deserialize a dbus struct to a di_tuple
+void dbus_deserialize_struct(DBusMessageIter *i, void *retp) {
 	struct di_tuple t = DI_TUPLE_INIT;
 	DBusMessageIter tmpi = *i;
 	while (dbus_message_iter_get_arg_type(&tmpi) != DBUS_TYPE_INVALID) {
@@ -144,7 +146,7 @@ static void dbus_deserialize_dict(DBusMessageIter *i, void *retp, int length) {
 		struct di_tuple t;
 		DBusMessageIter i2;
 		dbus_message_iter_recurse(i, &i2);
-		_dbus_deserialize_struct(&i2, &t);
+		dbus_deserialize_struct(&i2, &t);
 		assert(t.length == 2);
 		assert(t.elements[0].type == DI_TYPE_STRING);
 		di_add_member_move(o, t.elements[0].value->string, &t.elements[1].type,
@@ -158,6 +160,20 @@ static void dbus_deserialize_dict(DBusMessageIter *i, void *retp, int length) {
 static void dbus_deserialize_one(DBusMessageIter *i, void *retp, di_type_t *otype, int type) {
 	if (dbus_type_is_basic(type)) {
 		return dbus_deserialize_basic(i, retp, otype, type);
+	}
+
+	if (type == DBUS_TYPE_VARIANT) {
+		DBusMessageIter i2;
+		struct di_variant *v = retp;
+		dbus_message_iter_recurse(i, &i2);
+		int type2 = dbus_message_iter_get_arg_type(&i2);
+		di_type_t di_type = DI_LAST_TYPE;
+		v->type = dbus_type_to_di(type2);
+		v->value = calloc(1, di_sizeof_type(v->type));
+		dbus_deserialize_one(&i2, v->value, &di_type, type2);
+		assert(di_type == v->type);
+		*otype = DI_TYPE_VARIANT;
+		return;
 	}
 
 	if (type == DBUS_TYPE_ARRAY) {
@@ -191,7 +207,7 @@ static void dbus_deserialize_one(DBusMessageIter *i, void *retp, di_type_t *otyp
 		DBusMessageIter i2;
 		dbus_message_iter_recurse(i, &i2);
 		*otype = DI_TYPE_TUPLE;
-		_dbus_deserialize_struct(&i2, retp);
+		dbus_deserialize_struct(&i2, retp);
 	}
 }
 

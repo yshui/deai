@@ -300,7 +300,7 @@ static void dbus_call_method_reply_cb(struct di_weak_object *weak, void *msg) {
 	struct di_tuple t;
 	DBusMessageIter i;
 	dbus_message_iter_init(msg, &i);
-	_dbus_deserialize_struct(&i, &t);
+	dbus_deserialize_struct(&i, &t);
 
 	if (dbus_message_get_type(msg) == DBUS_MESSAGE_TYPE_METHOD_RETURN) {
 		di_emitn(sig, di_string_borrow("reply"), t);
@@ -699,7 +699,7 @@ static DBusHandlerResult dbus_filter(DBusConnection *conn, DBusMessage *msg, voi
 	dbus_message_iter_init(msg, &i);
 
 	struct di_tuple t;
-	_dbus_deserialize_struct(&i, &t);
+	dbus_deserialize_struct(&i, &t);
 
 	di_dbus_connection *c = ud;
 	if (strcmp(dbus_message_get_member(msg), "NameOwnerChanged") == 0 &&
