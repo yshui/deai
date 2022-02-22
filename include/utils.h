@@ -13,6 +13,7 @@
 #include <string.h>
 
 #include <deai/compiler.h>
+#include <deai/helper.h>
 #include <deai/object.h>
 #include "common.h"
 
@@ -22,64 +23,105 @@ static inline void typed_alloc_copy(di_type_t type, const void *src, void **dest
 	*dest = ret;
 }
 
-static inline int integer_conversion(di_type_t inty, const union di_value *restrict inp,
-                                     di_type_t outty, union di_value *restrict outp) {
-	if (inty == outty) {
-		memcpy(outp, inp, di_sizeof_type(outty));
-		return 0;
+#define to_max(ui)                                                                       \
+	static inline intmax_t to_##ui##max(int8_t input_bits, const void *input) {      \
+		switch (input_bits) {                                                    \
+		case 8:                                                                  \
+			return *(const ui##8_t *)input;                                  \
+		case 16:                                                                 \
+			return *(const ui##16_t *)input;                                 \
+		case 32:                                                                 \
+			return *(const ui##32_t *)input;                                 \
+		case 64:                                                                 \
+			return *(const ui##64_t *)input;                                 \
+		default:                                                                 \
+			assert(false);                                                   \
+		}                                                                        \
+	}
+#define int_is_unsigned() false
+#define uint_is_unsigned() true
+#define from_max(target_bits, ui, uo)                                                    \
+	static inline bool from_##ui##max_t_to_##uo##target_bits##_t(ui##max_t input,    \
+	                                                             void *output) {     \
+		uo##target_bits##_t tmp = input;                                         \
+		ui##max_t tmp2 = tmp;                                                    \
+		if (tmp2 != input) {                                                     \
+			return false;                                                    \
+		}                                                                        \
+		if (CONCAT(ui, _is_unsigned)() && tmp < 0) {                             \
+			return false;                                                    \
+		}                                                                        \
+		if (CONCAT(uo, _is_unsigned)() && input < 0) {                           \
+			return false;                                                    \
+		}                                                                        \
+		*(uo##target_bits##_t *)output = tmp;                                    \
+		return true;                                                             \
 	}
 
-#define convert_case(srcfield, dstfield, dstmax, dstmin)                                 \
-	case di_typeof(((union di_value *)0)->srcfield):                                 \
-		do {                                                                     \
-			__auto_type tmp = inp->srcfield;                                 \
-			if (tmp > (dstmax) || tmp < (dstmin)) {                          \
-				return -ERANGE;                                          \
-			}                                                                \
-			outp->dstfield = (typeof(outp->dstfield))tmp;                    \
-		} while (0);                                                             \
-		break
-
-#define convert_switch(s1, s2, s3, ...)                                                  \
-	switch (inty) {                                                                  \
-		convert_case(s1, __VA_ARGS__);                                           \
-		convert_case(s2, __VA_ARGS__);                                           \
-		convert_case(s3, __VA_ARGS__);                                           \
-	case di_typeof(((union di_value *)0)->VA_ARG_HEAD(__VA_ARGS__)):                 \
-		unreachable();                                                           \
-	case DI_TYPE_ANY:                                                                \
-	case DI_TYPE_NIL:                                                                \
-	case DI_TYPE_FLOAT:                                                              \
-	case DI_TYPE_BOOL:                                                               \
-	case DI_TYPE_ARRAY:                                                              \
-	case DI_TYPE_TUPLE:                                                              \
-	case DI_TYPE_VARIANT:                                                            \
-	case DI_TYPE_OBJECT:                                                             \
-	case DI_TYPE_WEAK_OBJECT:                                                        \
-	case DI_TYPE_STRING:                                                             \
-	case DI_TYPE_STRING_LITERAL:                                                     \
-	case DI_TYPE_POINTER:                                                            \
-	case DI_LAST_TYPE:                                                               \
-	default:                                                                         \
-		return -EINVAL;                                                          \
+#define from_max_to_any(ui, uo)                                                          \
+	static inline bool from_##ui##max_t_to_##uo##_any(                               \
+	    ui##max_t input, int8_t output_bits, void *output) {                         \
+		switch (output_bits) {                                                   \
+		case 8:                                                                  \
+			return from_##ui##max_t_to_##uo##8_t(input, output);             \
+		case 16:                                                                 \
+			return from_##ui##max_t_to_##uo##16_t(input, output);            \
+		case 32:                                                                 \
+			return from_##ui##max_t_to_##uo##32_t(input, output);            \
+		case 64:                                                                 \
+			return from_##ui##max_t_to_##uo##64_t(input, output);            \
+		default:                                                                 \
+			assert(false);                                                   \
+		}                                                                        \
 	}
 
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wpragmas"
-#pragma GCC diagnostic ignored "-Wtautological-constant-out-of-range-compare"
-	switch (outty) {
+to_max(int);
+to_max(uint);
+
+#define from_maxii(x) from_max(x, int, int)
+#define from_maxiu(x) from_max(x, int, uint)
+#define from_maxui(x) from_max(x, uint, int)
+#define from_maxuu(x) from_max(x, uint, uint)
+LIST_APPLY(from_maxii, SEP_NONE, 8, 16, 32, 64);
+LIST_APPLY(from_maxui, SEP_NONE, 8, 16, 32, 64);
+LIST_APPLY(from_maxiu, SEP_NONE, 8, 16, 32, 64);
+LIST_APPLY(from_maxuu, SEP_NONE, 8, 16, 32, 64);
+
+from_max_to_any(int, int);
+from_max_to_any(int, uint);
+from_max_to_any(uint, int);
+from_max_to_any(uint, uint);
+
+static inline bool
+integer_conversion_impl(int8_t input_bits, const void *input, int8_t output_bits,
+                        void *output, bool input_unsigned, bool output_unsigned) {
+	if (input_unsigned) {
+		uintmax_t tmp = to_uintmax(input_bits, input);
+		if (output_unsigned) {
+			return from_uintmax_t_to_uint_any(tmp, output_bits, output);
+		} else {
+			return from_uintmax_t_to_int_any(tmp, output_bits, output);
+		}
+	} else {
+		intmax_t tmp = to_intmax(input_bits, input);
+		if (output_unsigned) {
+			return from_intmax_t_to_uint_any(tmp, output_bits, output);
+		} else {
+			return from_intmax_t_to_int_any(tmp, output_bits, output);
+		}
+	}
+	unreachable();
+}
+/// Whether di_type is an unsigned integer type. Returns 0 if signed, 1 if unsigned, 2 if
+/// not an integer type.
+static inline int is_unsigned(di_type_t type) {
+	switch (type) {
 	case DI_TYPE_INT:
-		convert_switch(nuint, nint, uint, int_, INT64_MAX, INT64_MIN);
-		break;
 	case DI_TYPE_NINT:
-		convert_switch(nuint, uint, int_, nint, INT_MAX, INT_MIN);
-		break;
+		return 0;
 	case DI_TYPE_UINT:
-		convert_switch(nuint, nint, int_, uint, UINT64_MAX, 0);
-		break;
 	case DI_TYPE_NUINT:
-		convert_switch(nint, int_, uint, nuint, UINT_MAX, 0);
-		break;
+		return 1;
 	case DI_TYPE_ANY:
 	case DI_TYPE_NIL:
 	case DI_TYPE_FLOAT:
@@ -94,12 +136,24 @@ static inline int integer_conversion(di_type_t inty, const union di_value *restr
 	case DI_TYPE_POINTER:
 	case DI_LAST_TYPE:
 	default:
+		return 2;
+	}
+}
+static inline int integer_conversion(di_type_t inty, const union di_value *restrict inp,
+                                     di_type_t outty, union di_value *restrict outp) {
+	int input_unsigned = is_unsigned(inty), output_unsigned = is_unsigned(outty);
+	int8_t input_bits = di_sizeof_type(inty) * 8, output_bits = di_sizeof_type(outty) * 8;
+	if (input_unsigned == 2 || output_unsigned == 2) {
 		return -EINVAL;
 	}
-#pragma GCC diagnostic pop
-
-#undef convert_case
-#undef convert_switch
+	if (inty == outty) {
+		memcpy(outp, inp, di_sizeof_type(outty));
+		return 0;
+	}
+	if (!integer_conversion_impl(input_bits, inp, output_bits, outp,
+	                             input_unsigned == 1, output_unsigned == 1)) {
+		return -ERANGE;
+	}
 	return 0;
 }
 
@@ -140,8 +194,8 @@ static inline int unused di_type_conversion(di_type_t inty, const union di_value
 			    .length = strlen(inp->string_literal),
 			};
 		} else {
-			// If downstream expect an owned string, they will try to free it,
-			// so we have to cloned the string literal
+			// If downstream expect an owned string, they will try to
+			// free it, so we have to cloned the string literal
 			outp->string = (struct di_string){
 			    .data = strdup(inp->string_literal),
 			    .length = strlen(inp->string_literal),
@@ -199,8 +253,8 @@ static inline int unused di_type_conversion(di_type_t inty, const union di_value
 	return -EINVAL;
 }
 
-/// Fetch a value based on di_type from va_arg, and put it into `buf` if `buf` is not
-/// NULL. This function only borrows the value, without cloning it.
+/// Fetch a value based on di_type from va_arg, and put it into `buf` if `buf` is
+/// not NULL. This function only borrows the value, without cloning it.
 static inline void unused va_arg_with_di_type(va_list ap, di_type_t t, void *buf) {
 	union di_value v;
 
