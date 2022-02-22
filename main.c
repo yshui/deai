@@ -306,11 +306,6 @@ void di_dtor(struct deai *di) {
 	ev_break(di->loop, EVBREAK_ALL);
 }
 
-struct di_ev_prepare {
-	ev_prepare;
-	struct deai *di;
-};
-
 /// Exit deai
 ///
 /// EXPORT: exit(exit_code: :integer), :void

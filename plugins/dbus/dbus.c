@@ -9,6 +9,7 @@
 #include "common.h"
 #include "list.h"
 #include "sedes.h"
+#include "signature.h"
 
 #define DBUS_INTROSPECT_IFACE "org.freedesktop.DBus.Introspectable"
 
@@ -320,22 +321,11 @@ static void dbus_call_method_reply_cb(struct di_weak_object *weak, void *msg) {
 }
 
 static struct di_object *
-dbus_call_method(const char *iface, const char *method, struct di_tuple t) {
-	// The first argument is the dbus object
-	if (t.length == 0 || t.elements[0].type != DI_TYPE_OBJECT) {
-		return di_new_error("first argument to dbus method call is not a dbus "
-		                    "object");
-	}
-
-	auto dobj = (di_dbus_object *)t.elements[0].value->object;
+dbus_call_method(di_dbus_object *dobj, const char *iface, const char *method,
+                 const char *signature, struct di_tuple t) {
 
 	di_object_with_cleanup conn = NULL;
 	DI_CHECK_OK(di_get(dobj, "___deai_dbus_connection", conn));
-
-	struct di_tuple shifted_args = {
-	    .length = t.length - 1,
-	    .elements = t.elements + 1,
-	};
 
 	// XXX: probably better to destroy all objects when disconnect from bus
 	if (conn == NULL) {
@@ -346,7 +336,8 @@ dbus_call_method(const char *iface, const char *method, struct di_tuple t) {
 	DBusMessageIter i;
 	dbus_message_iter_init_append(msg, &i);
 
-	if (_dbus_serialize_struct(&i, shifted_args) < 0) {
+	if (dbus_serialize_struct(&i, t, signature) < 0) {
+		//dbus_message_unref(msg);
 		return di_new_error("Can't serialize arguments");
 	}
 
@@ -396,9 +387,45 @@ static void di_dbus_free_method(struct di_object *o) {
 
 static int
 call_dbus_method(struct di_object *m, di_type_t *rt, union di_value *ret, struct di_tuple t) {
+	// The first argument is the dbus object
+	if (t.length < 1 || t.elements[0].type != DI_TYPE_OBJECT) {
+		fprintf(stderr, "invalid\n");
+		return -EINVAL;
+	}
+
+	auto dobj = (di_dbus_object *)t.elements[0].value->object;
 	auto dbus_method = (di_dbus_method *)m;
 	*rt = DI_TYPE_OBJECT;
-	ret->object = dbus_call_method(dbus_method->interface, dbus_method->method, t);
+
+	// Skip the first object argument
+	t.elements += 1;
+	t.length -= 1;
+	ret->object =
+	    dbus_call_method(dobj, dbus_method->interface, dbus_method->method, NULL, t);
+	return 0;
+}
+
+static int call_dbus_method_with_signature(struct di_object *m, di_type_t *rt,
+                                           union di_value *ret, struct di_tuple t) {
+	*rt = DI_TYPE_OBJECT;
+	if (t.length < 3 || t.elements[0].type != DI_TYPE_OBJECT ||
+	    t.elements[1].type != DI_TYPE_OBJECT ||
+	    (t.elements[2].type != DI_TYPE_STRING && t.elements[2].type != DI_TYPE_STRING_LITERAL)) {
+		return -EINVAL;
+	}
+	auto dbus_method = (di_dbus_method *)t.elements[0].value->object;
+	auto dobj = (di_dbus_object *)t.elements[1].value->object;
+	char *signature = NULL;
+	if (t.elements[2].type == DI_TYPE_STRING) {
+		signature = di_string_to_chars_alloc(t.elements[2].value->string);
+	} else {
+		signature = strdup(t.elements[2].value->string_literal);
+	}
+	t.elements += 3;
+	t.length -= 3;
+	ret->object =
+	    dbus_call_method(dobj, dbus_method->interface, dbus_method->method, signature, t);
+	free(signature);
 	return 0;
 }
 
@@ -427,6 +454,11 @@ static struct di_object *di_dbus_object_getter(di_dbus_object *dobj, struct di_s
 
 	di_set_object_dtor((void *)ret, di_dbus_free_method);
 	di_set_object_call((void *)ret, call_dbus_method);
+
+	auto cwm = di_new_object_with_type(struct di_object);
+	di_set_object_call(cwm, call_dbus_method_with_signature);
+	di_add_member_move((void *)ret, di_string_borrow("call_with_signature"),
+	                   (di_type_t[]){DI_TYPE_OBJECT}, &cwm);
 	return (void *)ret;
 }
 
@@ -486,8 +518,7 @@ static void ioev_callback(void *conn, void *ptr, int event) {
 	}
 }
 
-static void di_dbus_shutdown_part2(
-                                   void *root_handle_ptr, DBusConnection *conn) {
+static void di_dbus_shutdown_part2(void *root_handle_ptr, DBusConnection *conn) {
 	// Stop the listen for "prepare"
 	auto root_handle = *(uint64_t *)root_handle_ptr;
 	auto roots = di_get_roots();
@@ -513,9 +544,8 @@ static void di_dbus_shutdown(di_dbus_connection *conn) {
 	auto roots = di_get_roots();
 	DI_CHECK(roots);
 	uint64_t *root_handle_storage = tmalloc(uint64_t, 1);
-	di_closure_with_cleanup shutdown =
-	    di_closure(di_dbus_shutdown_part2,
-	               ((void *)root_handle_storage, (void *)conn->conn));
+	di_closure_with_cleanup shutdown = di_closure(
+	    di_dbus_shutdown_part2, ((void *)root_handle_storage, (void *)conn->conn));
 
 	di_object_with_cleanup listen_handle =
 	    di_listen_to(eventm, di_string_borrow("prepare"), (struct di_object *)shutdown);
@@ -802,6 +832,60 @@ static struct di_object *di_dbus_get_session_bus(struct di_object *o) {
 	return (void *)ret;
 }
 
+#ifdef UNITTESTS
+static void di_dbus_unit_tests(struct di_object *unused obj) {
+	auto signature = "a(io)i";
+	auto ret = parse_dbus_signature(signature);
+	DI_CHECK(ret.nchild == 2);
+	DI_CHECK(ret.length == strlen(signature));
+	DI_CHECK(ret.child[0].length == 5);
+	DI_CHECK(ret.child[0].nchild == 1);
+	DI_CHECK(ret.child[0].child[0].length == 4);
+	DI_CHECK(ret.child[0].child[0].nchild == 2);
+	free_dbus_signature(ret);
+
+	signature = "(iii)";
+	ret = parse_dbus_signature(signature);
+	DI_CHECK(ret.nchild == 1);
+	DI_CHECK(ret.child[0].nchild == 3);
+	free_dbus_signature(ret);
+
+	// Test unpacking of di_variant
+	DBusMessage *msg = dbus_message_new_method_call("a.b", "/", "a.b.c", "asdf");
+	struct di_tuple t = {
+	    .length = 1,
+	    .elements =
+	        (struct di_variant[]){
+	            {
+	                .type = DI_TYPE_VARIANT,
+	                .value =
+	                    (union di_value[]){
+	                        {
+	                            .variant =
+	                                (struct di_variant){
+	                                    .type = DI_TYPE_ARRAY,
+	                                    .value =
+	                                        (union di_value[]){
+	                                            {.array =
+	                                                 (struct di_array){
+	                                                     .elem_type = DI_TYPE_INT,
+	                                                     .length = 3,
+	                                                     .arr = (int64_t[]){1, 2, 3},
+	                                                 }},
+	                                        },
+	                                },
+	                        },
+	                    },
+	            },
+	        },
+	};
+	DBusMessageIter it;
+	dbus_message_iter_init(msg, &it);
+	DI_CHECK(dbus_serialize_struct(&it, t, "ai") == 0);
+	dbus_message_unref(msg);
+}
+#endif
+
 /// D-Bus
 ///
 /// EXPORT: dbus, deai:module
@@ -822,6 +906,9 @@ static struct di_object *di_dbus_get_session_bus(struct di_object *o) {
 ///
 struct di_module *new_dbus_module(struct deai *di) {
 	auto m = di_new_module(di);
+#ifdef UNITTESTS
+	di_method(m, "run_unit_tests", di_dbus_unit_tests);
+#endif
 	di_getter(m, session_bus, di_dbus_get_session_bus);
 	return m;
 }

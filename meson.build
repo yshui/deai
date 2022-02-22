@@ -69,6 +69,9 @@ foreach arg: test_common_args
 endforeach
 
 base_c_args = base_c_args + [ '-fvisibility=hidden', '-D_GNU_SOURCE' ]
+if get_option('unittests')
+  base_c_args = base_c_args + [ '-DUNITTESTS' ]
+endif
 plugin_install_dir = get_option('libdir')+'/deai'
 if host_machine.system() == 'linux'
   have_setproctitle = true

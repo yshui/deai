@@ -1,4 +1,3 @@
-di:load_plugin("./plugins/dbus/di_dbus.so")
 di.os.env.DBUS_SESSION_BUS_PID = nil
 di.os.env.DBUS_SESSION_BUS_ADDRESS = nil
 di.os.env.DISPLAY = nil
@@ -22,20 +21,28 @@ errlh = dbusl:on("stderr_line", function(l)
     errlh:stop()
     di.os.env.DBUS_SESSION_BUS_PID = l
 end)
-function call_with_error(o, name, ...)
-    t = o[name](o, ...)
-    if t.errmsg then
-        print(t.errmsg)
+function with_error(pending)
+    if pending.errmsg then
+        print(pending.errmsg)
         di:exit(1)
     end
     local errlh, replylh
-    replylh = t:once("reply", function(_)
+    replylh = pending:once("reply", function(_)
         errlh:stop()
     end)
-    errlh = t:once("error", function(e)
+    errlh = pending:once("error", function(e)
         replylh:stop()
         print(e)
     end)
+end
+function call_with_error(o, name, ...)
+    t = o[name](o, ...)
+    with_error(t)
+end
+
+function call_with_signature_and_error(o, name, sig, ...)
+    t = o[name]:call_with_signature(o, sig, ...)
+    with_error(t)
 end
 
 dbusl:once("exit", function()
@@ -63,6 +70,8 @@ dbusl:once("exit", function()
     call_with_error(o, "org.dummy.Dummy", {"asdf","qwer"})
     call_with_error(o, "org.dummy.Dummy", 1)
     call_with_error(o, "org.dummy.Dummy", "asdf")
+    call_with_signature_and_error(o, "org.dummy.Dummy", "iii", 1,2,"asdf")
+    call_with_signature_and_error(o, "org.dummy.Dummy", "av", {1,2,3})
     o = nil
     collectgarbage("collect")
 end)

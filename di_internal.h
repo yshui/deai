@@ -16,8 +16,6 @@
 #include "uthash.h"
 #include "config.h"
 
-struct di_ev_prepare;
-
 struct di_member {
 	struct di_string name;
 	void *nonnull data;

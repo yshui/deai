@@ -1,2 +1,3 @@
 option('preferred_lua', type: 'string', description: 'The preferred lua package to use')
 option('track_objects', type: 'boolean', value: false, description: 'Whether to enable the object tracking debug feature')
+option('unittests', type: 'boolean', value: false, description: 'Whether to build unittests')
