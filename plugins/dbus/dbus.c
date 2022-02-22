@@ -337,7 +337,7 @@ dbus_call_method(di_dbus_object *dobj, const char *iface, const char *method,
 	dbus_message_iter_init_append(msg, &i);
 
 	if (dbus_serialize_struct(&i, t, signature) < 0) {
-		//dbus_message_unref(msg);
+		dbus_message_unref(msg);
 		return di_new_error("Can't serialize arguments");
 	}
 
@@ -518,41 +518,55 @@ static void ioev_callback(void *conn, void *ptr, int event) {
 	}
 }
 
-static void di_dbus_shutdown_part2(void *root_handle_ptr, DBusConnection *conn) {
-	// Stop the listen for "prepare"
-	auto root_handle = *(uint64_t *)root_handle_ptr;
+struct di_dbus_shutdown_handler {
+	struct di_object;
+	uint64_t root_handle;
+	DBusConnection *conn;
+};
+
+static void di_dbus_shutdown_part2(struct di_object *self_) {
+	auto self = (struct di_dbus_shutdown_handler *)self_;
+
+	dbus_connection_close(self->conn);
+	dbus_connection_unref(self->conn);
+}
+
+static int di_dbus_drop_root(struct di_object *self_, di_type_t *rtype,
+                              union di_value *unused value, struct di_tuple unused args) {
+	auto self = (struct di_dbus_shutdown_handler *)self_;
+	*rtype = DI_LAST_TYPE;
 	auto roots = di_get_roots();
 	DI_CHECK(roots != NULL);
-	DI_CHECK_OK(di_call(roots, "__remove_anonymous", root_handle));
-	free(root_handle_ptr);
-
-	dbus_connection_close(conn);
-	dbus_connection_unref(conn);
+	// Remove the listen handle so self gets dropped and di_dbus_shutdown_part2 gets
+	// called.
+	DI_CHECK_OK(di_call(roots, "__remove_anonymous", self->root_handle));
+	self->root_handle = 0;
+	return 0;
 }
 
 static void di_dbus_shutdown(di_dbus_connection *conn) {
 	if (!conn->conn) {
 		return;
 	}
-	// this function might be called in dbus dispatch function,
-	// closing connection in that context is bad.
-	// so delay the shutdown until we return to mainloop
 	di_object_with_cleanup di = di_object_get_deai_strong((struct di_object *)conn);
 	di_object_with_cleanup eventm = NULL;
 	DI_CHECK_OK(di_get(di, "event", eventm));
 
+	// This function might be called in dbus dispatch function, closing connection in
+	// that context is bad. So, we add the connection object to roots and drop it in
+	// the "prepare" signal handler, to make sure it is dropped when there is nothing
+	// on the stack.
 	auto roots = di_get_roots();
 	DI_CHECK(roots);
-	uint64_t *root_handle_storage = tmalloc(uint64_t, 1);
-	di_closure_with_cleanup shutdown = di_closure(
-	    di_dbus_shutdown_part2, ((void *)root_handle_storage, (void *)conn->conn));
+	auto shutdown = di_new_object_with_type(struct di_dbus_shutdown_handler);
+	shutdown->conn = conn->conn;
+	di_set_object_dtor((void *)shutdown, di_dbus_shutdown_part2);
+	di_set_object_call((void *)shutdown, di_dbus_drop_root);
 
 	di_object_with_cleanup listen_handle =
 	    di_listen_to(eventm, di_string_borrow("prepare"), (struct di_object *)shutdown);
 
-	// Keep the listen handle alive as a root. As this is the dtor for `conn`, we
-	// cannot keep the handle inside `conn`.
-	di_callr(roots, "__add_anonymous", *root_handle_storage, listen_handle);
+	di_callr(roots, "__add_anonymous", shutdown->root_handle, listen_handle);
 
 	// Clear the watch functions so they won't get called. They need the connection
 	// object which we are freeing now. And we don't need to be notified about watch

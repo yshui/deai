@@ -821,6 +821,10 @@ static void di_listen_handle_dtor(struct di_object *nonnull obj) {
 	lh->listen_entry = PTR_POISON;
 }
 
+/// Listen to signal with name `name` from object `_obj`, with `h` as callback.
+/// Returns a listen handle object.
+///
+/// Ownership of `h` is not transfered.
 struct di_object *
 di_listen_to(struct di_object *_obj, struct di_string name, struct di_object *h) {
 	auto obj = (struct di_object_internal *)_obj;
