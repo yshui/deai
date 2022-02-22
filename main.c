@@ -347,8 +347,13 @@ static void di_sighandler(struct ev_loop *l, ev_signal *w, int revents) {
 static void setproctitle_init(int argc, char **argv, struct deai *p) {
 	p->proctitle = argv[0];
 
-	// Available space extends until the end of the page
+	// Find the last argument
 	uintptr_t end = (uintptr_t)p->proctitle;
+	for (int i = 0; argv[i]; i++) {
+		end = (uintptr_t)argv[i] + strlen(argv[i]);
+	}
+
+	// Available space extends until the end of the page
 	auto pgsz = getpagesize();
 	end = (end / pgsz + 1) * pgsz;
 	p->proctitle_end = (void *)end;
