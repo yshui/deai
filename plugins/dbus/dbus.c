@@ -405,6 +405,19 @@ call_dbus_method(struct di_object *m, di_type_t *rt, union di_value *ret, struct
 	return 0;
 }
 
+/// Call the dbus method with a signature
+///
+/// EXPORT: deai.plugin.dbus:DBusMethod.call_with_signature(dbus_object, signature, ...),
+/// deai.plugin.dbus:DBusPendingReply
+///
+/// Arguments:
+///
+/// - dbus_object(deai.plugin.dbus:DBusObject) the dbus object that provided this method.
+/// - signature(:string) a dbus type signature
+///
+/// Since there is multiple possible ways to serialize a deai value to dbus, sometimes
+/// deai can get it wrong and not create the desired dbus types. This method accepts an
+/// explicit dbus type signature and tries to match that.
 static int call_dbus_method_with_signature(struct di_object *m, di_type_t *rt,
                                            union di_value *ret, struct di_tuple t) {
 	*rt = DI_TYPE_OBJECT;

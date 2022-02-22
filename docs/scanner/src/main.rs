@@ -150,8 +150,9 @@ struct Entry {
     /// How can this export be accessed. If None, this export is accessed indirectly via return
     /// types of methods, or as a property.
     path:     Access<'static>,
-    /// List of parameters to the method, `None` if this is a property
-    params:   Option<Vec<Parameter>>,
+    /// List of parameters to the method, `None` if this is a property. bool indicate if there's
+    /// '...' at the end.
+    params:   Option<(Vec<Parameter>, bool)>,
     ty:       Option<Type>,
     doc:      Option<Doc>,
     children: BTreeMap<String, Rc<RefCell<Entry>>>,
@@ -162,8 +163,13 @@ struct EntryDisplay<'a>(&'a Entry);
 impl std::fmt::Display for EntryDisplay<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.0.path.base_name())?;
-        if let Some(params) = &self.0.params {
-            write!(f, "({})", params.iter().map(|x| &x.name).join(", "))?;
+        if let Some((params, dots)) = &self.0.params {
+            write!(
+                f,
+                "({}{})",
+                params.iter().map(|x| &x.name).join(", "),
+                if *dots { ", ..." } else { "" }
+            )?;
         }
         Ok(())
     }
@@ -358,8 +364,12 @@ mod parsers {
             map(namespaced_ident, |path| Access::Ancestry { path: path.into() }),
         ))(s)
     }
-    fn declaration(s: &str) -> IResult<&str, (Access<'static>, Option<Vec<Parameter>>)> {
-        let param_list = delimited(tag2("("), parameters, tag2(")"));
+    fn declaration(s: &str) -> IResult<&str, (Access<'static>, Option<(Vec<Parameter>, bool)>)> {
+        let param_list = delimited(
+            tag2("("),
+            tuple((parameters, map(opt(preceded(tag2(","), tag("..."))), |o| o.is_some()))),
+            tag2(")"),
+        );
         tuple((access, opt(param_list)))(s)
     }
     fn base_type(s: &str) -> IResult<&str, Type> {
@@ -540,7 +550,7 @@ impl Docs {
                     anyhow!("Parameter block not proceeded by a signal or export line")
                 })?;
                 if let Some(entry) = &mut entry {
-                    if let Some(params) = &mut entry.params {
+                    if let Some((params, _)) = &mut entry.params {
                         for p in params {
                             if let Some(detail) = param_detail.get_mut(&p.name) {
                                 if !p.doc.is_empty() || (p.ty.is_some() && detail.ty.is_some()) {
@@ -650,7 +660,7 @@ impl Docs {
                     te.borrow_mut().ancestor = Some(k.clone());
                 }
             } else {
-                if let Some(params) = &v.borrow().params {
+                if let Some((params, _)) = &v.borrow().params {
                     // Add references for types used in a signal
                     for p in params {
                         if let Some(ty) = &p.ty {
@@ -730,7 +740,7 @@ impl Docs {
 
             // Print parameters
 
-            for p in child.params.iter().flatten() {
+            for p in child.params.as_ref().map(|(a, _)| a.iter()).into_iter().flatten() {
                 if !p.doc.is_empty() {
                     writeln!(output, "   :param {}: {}", p.name, p.doc)?;
                 }
@@ -813,7 +823,17 @@ impl Docs {
                             .references
                             .iter()
                             .map(|ref_| match ref_ {
-                                Access::Ancestry { path } => format!(":lua:meth:`{}`", path),
+                                a @ Access::Ancestry { .. } => self
+                                    .with_entry(&a.parent().unwrap(), |e| match e {
+                                        Either::Left(e) => format!(
+                                            ":lua:meth:`{} <{}.{}>`",
+                                            a,
+                                            e.ty.as_ref().unwrap().rst_display(),
+                                            a.base_name()
+                                        ),
+                                        _ => panic!(),
+                                    })
+                                    .unwrap(),
                                 Access::Member { ty, member } => format!(
                                     ":lua:attr:`{}.{member} <{}.{member}>`",
                                     ty.simple_display(),
