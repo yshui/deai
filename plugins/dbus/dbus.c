@@ -911,7 +911,7 @@ static void di_dbus_unit_tests(struct di_object *unused obj) {
 	        },
 	};
 	DBusMessageIter it;
-	dbus_message_iter_init(msg, &it);
+	dbus_message_iter_init_append(msg, &it);
 	DI_CHECK(dbus_serialize_struct(&it, t, "ai") == 0);
 	dbus_message_unref(msg);
 }
