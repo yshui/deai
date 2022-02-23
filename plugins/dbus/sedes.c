@@ -320,10 +320,7 @@ static int dbus_serialize_with_signature(DBusMessageIter *i, struct di_variant v
 
 	if (var.type == DI_TYPE_VARIANT) {
 		// We aren't expecting a variant, so unwrap it.
-		if (!dbus_serialize_with_signature(i, var.value->variant, si)) {
-			return -ENOMEM;
-		}
-		return 0;
+		return dbus_serialize_with_signature(i, var.value->variant, si);
 	}
 	if (*si.current == DBUS_TYPE_ARRAY) {
 		if (var.type != DI_TYPE_ARRAY) {
