@@ -37,7 +37,7 @@ define_trivial_cleanup_t(char);
 
 static void load_plugin_impl(struct deai *p, char *sopath) {
 
-	void *handle = dlopen(sopath, RTLD_NOW);
+	void *handle = dlopen(sopath, RTLD_NOW | RTLD_LOCAL);
 
 	if (!handle) {
 		fprintf(stderr, "Failed to load %s: %s\n", sopath, dlerror());
