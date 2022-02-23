@@ -580,6 +580,7 @@ static void di_dbus_shutdown(di_dbus_connection *conn) {
 	    di_listen_to(eventm, di_string_borrow("prepare"), (struct di_object *)shutdown);
 
 	di_callr(roots, "__add_anonymous", shutdown->root_handle, listen_handle);
+	di_unref_object((void *)shutdown);
 
 	// Clear the watch functions so they won't get called. They need the connection
 	// object which we are freeing now. And we don't need to be notified about watch
