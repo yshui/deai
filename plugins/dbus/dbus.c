@@ -550,7 +550,7 @@ static void di_dbus_shutdown_part2(struct di_object *self_) {
 static int di_dbus_drop_root(struct di_object *self_, di_type_t *rtype,
                               union di_value *unused value, struct di_tuple unused args) {
 	auto self = (struct di_dbus_shutdown_handler *)self_;
-	*rtype = DI_LAST_TYPE;
+	*rtype = DI_TYPE_NIL;
 	auto roots = di_get_roots();
 	DI_CHECK(roots != NULL);
 	// Remove the listen handle so self gets dropped and di_dbus_shutdown_part2 gets

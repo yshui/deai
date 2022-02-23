@@ -70,7 +70,7 @@ dbusl:once("exit", function()
     call_with_error(o, "org.dummy.Dummy", {"asdf","qwer"})
     call_with_error(o, "org.dummy.Dummy", 1)
     call_with_error(o, "org.dummy.Dummy", "asdf")
-    call_with_signature_and_error(o, "org.dummy.Dummy", "iii", 1,2,"asdf")
+    call_with_signature_and_error(o, "org.dummy.Dummy", "iii", 1,2,3)
     call_with_signature_and_error(o, "org.dummy.Dummy", "av", {1,2,3})
     o = nil
     collectgarbage("collect")
