@@ -168,7 +168,15 @@ impl std::fmt::Display for EntryDisplay<'_> {
                 f,
                 "({}{})",
                 params.iter().map(|x| &x.name).join(", "),
-                if *dots { ", ..." } else { "" }
+                if *dots {
+                    if params.len() > 0 {
+                        ", ..."
+                    } else {
+                        "..."
+                    }
+                } else {
+                    ""
+                }
             )?;
         }
         Ok(())

@@ -292,6 +292,9 @@ static void _dbus_lookup_member(_di_dbus_object *o, const char *method,
 }
 #endif
 
+/// SIGNAL: deai.plugin.dbus:DBusPendingReply.reply(,...) reply received
+///
+/// SIGNAL: deai.plugin.dbus:DBusPendingReply.error(,...) error received
 static void dbus_call_method_reply_cb(struct di_weak_object *weak, void *msg) {
 	di_object_with_cleanup sig = di_upgrade_weak_ref(weak);
 	if (sig == NULL) {
