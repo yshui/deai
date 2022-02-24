@@ -343,9 +343,13 @@ struct di_prepare {
 };
 
 static void di_prepare(EV_P_ ev_prepare *w, int revents) {
-	if (di_mark_and_sweep()) {
-		di_log_va(log_module, DI_LOG_WARN, "Leak detected\n");
+	bool has_cycle;
+	if (di_mark_and_sweep(&has_cycle) || has_cycle) {
+		di_log_va(log_module, DI_LOG_WARN, "Reference bug detected\n");
 		di_dump_objects();
+#ifdef UNITTESTS
+		abort();
+#endif
 	}
 
 	struct di_prepare *dep = (void *)w;

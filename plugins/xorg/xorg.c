@@ -19,8 +19,6 @@
 
 #include "xorg.h"
 
-define_trivial_cleanup_t(char);
-
 struct di_atom_entry {
 	struct di_string name;
 	xcb_atom_t atom;

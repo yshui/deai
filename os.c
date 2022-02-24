@@ -13,7 +13,6 @@
 
 #include "os.h"
 
-define_trivial_cleanup_t(char);
 static struct di_variant di_env_get(struct di_module *m, struct di_string name_) {
 	struct di_variant ret = {
 	    .type = DI_LAST_TYPE,

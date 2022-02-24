@@ -14,7 +14,6 @@
 #include "string_buf.h"
 #include "xorg.h"
 
-define_trivial_cleanup_t(char);
 struct xorg_key {
 	struct di_xorg_ext;
 

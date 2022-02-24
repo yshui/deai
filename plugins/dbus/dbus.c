@@ -598,7 +598,6 @@ static void di_dbus_shutdown(di_dbus_connection *conn) {
 	}
 }
 
-define_trivial_cleanup_t(char);
 static unsigned int dbus_add_watch(DBusWatch *w, void *ud) {
 	di_dbus_connection *oc = ud;
 	unsigned int flags = dbus_watch_get_flags(w);

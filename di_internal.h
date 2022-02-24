@@ -12,9 +12,9 @@
 
 #include <deai/deai.h>
 
+#include "config.h"
 #include "list.h"
 #include "uthash.h"
-#include "config.h"
 
 struct di_member {
 	struct di_string name;
@@ -169,8 +169,12 @@ struct di_object *nullable di_try(void (*nonnull func)(void *nullable), void *nu
 #ifdef TRACK_OBJECTS
 void di_dump_objects(void);
 /// Returns true if leaks are found
-bool di_mark_and_sweep(void);
+bool di_mark_and_sweep(bool *has_cycle);
 #else
-static inline void di_dump_objects(void) {}
-static inline bool di_mark_and_sweep(void) { return false; }
+static inline void di_dump_objects(void) {
+}
+static inline bool di_mark_and_sweep(bool *has_cycle) {
+	*has_cycle = false;
+	return false;
+}
 #endif

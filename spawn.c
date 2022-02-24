@@ -183,8 +183,6 @@ static void kill_child(struct child *c, int sig) {
 	kill(c->pid, sig);
 }
 
-define_trivial_cleanup(char *, free_charpp);
-
 static struct di_object *di_setup_fds(bool ignore_output, int *opfds, int *epfds, int *ifd) {
 	opfds[0] = opfds[1] = -1;
 	epfds[0] = epfds[1] = -1;

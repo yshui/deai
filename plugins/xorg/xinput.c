@@ -17,8 +17,6 @@
 #include "utils.h"
 #include "xorg.h"
 
-define_trivial_cleanup_t(char);
-
 #define XI_LASTEVENT XCB_INPUT_BARRIER_LEAVE
 struct di_xorg_xinput {
 	struct di_xorg_ext;

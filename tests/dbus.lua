@@ -1,6 +1,9 @@
 di.os.env.DBUS_SESSION_BUS_PID = nil
 di.os.env.DBUS_SESSION_BUS_ADDRESS = nil
 di.os.env.DISPLAY = nil
+
+di.log.log_level = "debug"
+
 local dbusl = di.spawn:run({"dbus-daemon", "--print-address=1", "--print-pid=2", "--session", "--fork"}, false)
 local outlh
 outlh = dbusl:on("stdout_line", function(l)

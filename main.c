@@ -33,8 +33,6 @@
 #include "uthash.h"
 #include "utils.h"
 
-define_trivial_cleanup_t(char);
-
 static void load_plugin_impl(struct deai *p, char *sopath) {
 
 	void *handle = dlopen(sopath, RTLD_NOW | RTLD_LOCAL);
@@ -716,8 +714,13 @@ int main(int argc, char *argv[]) {
 	// (4) Start mainloop
 	di_unref_object((void *)p);
 
-	di_mark_and_sweep();
-	di_dump_objects();
+	bool has_cycle;
+	if (di_mark_and_sweep(&has_cycle) || has_cycle) {
+		di_dump_objects();
+#ifdef UNITTESTS
+		abort();
+#endif
+	}
 	if (!quit) {
 		ev_run(p->loop, 0);
 	}

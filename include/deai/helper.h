@@ -312,8 +312,10 @@ PUBLIC_DEAI_API int di_proxy_signal(struct di_object *nonnull src, struct di_str
 	             LIST_APPLY_pre(di_typeid, SEP_COMMA, ##__VA_ARGS__))
 
 define_object_cleanup(di_closure);
+define_object_cleanup(di_promise);
 
 #define di_closure_with_cleanup with_object_cleanup(di_closure)
+#define di_promise_with_cleanup with_object_cleanup(di_promise)
 
 static inline unused const char *nonnull di_type_to_string(di_type_t type) {
 #define TYPE_CASE(name)                                                                  \

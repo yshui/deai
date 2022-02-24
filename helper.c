@@ -12,7 +12,6 @@
 
 #include "di_internal.h"
 #include "utils.h"
-define_trivial_cleanup_t(char);
 struct di_object *di_new_error(const char *fmt, ...) {
 	va_list ap;
 	va_start(ap, fmt);
