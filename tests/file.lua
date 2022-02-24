@@ -1,5 +1,6 @@
 di:load_plugin("./plugins/file/di_file.so")
 
+unpack = table.unpack or unpack
 md = di.spawn:run({"mkdir", "testdir"}, true)
 listen_handles = {}
 

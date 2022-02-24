@@ -497,6 +497,7 @@ struct di_object *nullable di_upgrade_weak_ref(struct di_weak_object *weak) {
 static inline void di_decrement_weak_ref_count(struct di_object_internal *obj) {
 	obj->weak_ref_count--;
 	if (obj->weak_ref_count == 0) {
+		assert(obj->ref_count == 0);
 #ifdef TRACK_OBJECTS
 		list_del(&obj->siblings);
 #endif
@@ -913,6 +914,7 @@ int di_signal_promise_handler(struct di_object *handler, di_type_t *rt, union di
 struct di_promise *di_signal_promise(struct di_object *_obj, struct di_string name) {
 	di_object_with_cleanup handler = di_new_object_with_type(struct di_object);
 	struct di_promise *ret = di_new_object_with_type(struct di_promise);
+	di_set_type((void *)ret, "deai:Promise");
 	auto weak_ret = di_weakly_ref_object((void *)ret);
 
 	// Need to be weak here, because otherwise there will be a cycle: handler ->
@@ -1097,5 +1099,4 @@ bool di_mark_and_sweep(void) {
 	}
 	return false;
 }
-
 #endif

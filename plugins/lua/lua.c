@@ -80,12 +80,6 @@
 		s = tmp;                                                                 \
 	} while (0)
 
-struct di_lua_object_map_entry {
-	int ref;
-	struct di_object *object;
-	UT_hash_handle hh;
-};
-
 /// A singleton for lua_State
 struct di_lua_state {
 	// Beware of cycles, could happen if one lua object is registered as module
@@ -103,14 +97,19 @@ struct di_lua_state {
 	// Object tracking is done in 3 parts:
 	//    1) Weak references to the proxies in the lua registry. This is used so when
 	//       the same object are pushed multiple times, we can use a reference to the
-	//       same proxy. Also because we cannot do 2) multiple times on the same
-	//       object, so the proxy of an object must be a singleton.
-	//    2) The object_to_lua_ref map. This maps the object to its index in the table
-	//       of objects in 1).
-	//    3) The ___di_object_<number> member of the di_lua_state object, where the
-	//       number is the index of the object in the table. This stores a reference
-	//       to the object in di_lua_script, so mark-and-sweep will see the object
-	struct di_lua_object_map_entry *object_to_lua_ref;
+	//       same proxy.
+	//    2) The ___lua_userdata_to_object_<pointer> members of the di_lua_state
+	//       object, that maps lua userdata pointer to di_object, this also make
+	//       makr-and-sweep work.
+	//    3) The ___di_object_to_ref_<pointer> member of the di_lua_state object,
+	//       which maps di_object pointers to the index of the lua proxies in the
+	//       registry.
+	//
+	// For most part object <-> proxy is a 1-to-1 map, but because of a quirk of Lua
+	// it might transiently stops being one. The weak reference in the lua registry
+	// could die before __gc for the proxy is called. In that scenario,
+	// di_lua_pushproxy has to create a new proxy, which means 2 proxies could exist
+	// (although one of them is going to be GC'd soon).
 };
 
 struct di_lua_ref {
@@ -197,9 +196,9 @@ static bool di_lua_isproxy(lua_State *L, int index) {
 	return ret;
 }
 
-static void *di_lua_checkproxy(lua_State *L, int index) {
+static void **di_lua_checkproxy(lua_State *L, int index) {
 	if (di_lua_isproxy(L, index)) {
-		return *(struct di_object **)lua_touserdata(L, index);
+		return lua_touserdata(L, index);
 	}
 	luaL_argerror(L, index, "not a di_object");
 	unreachable();
@@ -344,42 +343,81 @@ static int di_lua_method_handler(lua_State *L) {
 	return di_lua_method_handler_impl(L, name, m);
 }
 
-static void di_lua_forget_object(struct di_lua_state *s, struct di_lua_object_map_entry *e) {
-	char *buf;
-	HASH_DEL(s->object_to_lua_ref, e);
-	/*fprintf(stderr, "forgetting %d\n", e->ref);*/
-	asprintf(&buf, "___di_object_%d", e->ref);
-	DI_CHECK_OK(di_remove_member_raw((struct di_object *)s, di_string_borrow(buf)));
-	luaL_unref(s->L, LUA_REGISTRYINDEX, e->ref);
-	free(buf);
-	free(e);
+/// Store a weak reference to the object on the top of the stack in the table at `index`,
+/// pops the value.
+///
+/// This creates an extra weak table indirection, and stores the object in the table. We
+/// cannot just use 1 weak table to store all the objects, because the luaL_ref machinary
+/// doesn't work with weak tables.
+static int luaL_weakref(lua_State *L, int index) {
+	lua_newtable(L);        // new_table={}
+	lua_newtable(L);        // metatable={}
+	lua_pushliteral(L, "__mode");
+	lua_pushliteral(L, "v");
+	lua_rawset(L, -3);              // metatable.__mode='v'
+	lua_setmetatable(L, -2);        // setmetatable(new_table,metatable)
+	lua_pushvalue(L, -2);           // push the previous top of stack
+	lua_rawseti(L, -2, 1);          // new_table[1]=value, pops the value
+
+	lua_remove(L, -2);        // removes the original top of stack
+
+	// Now new_table is on top of the stack
+	return luaL_ref(L, index);
+}
+
+/// Get the weak reference `r` from the table at `index`. Leaves the value at the top of
+/// the stack. Value `nil` will be at the top of the stack if the weak ref is dead.
+///
+/// Returns whether the weak reference is still alive
+static bool luaL_weakref_get(lua_State *L, int index, int r) {
+	// Get the weak table indirection
+	lua_rawgeti(L, index, r);
+
+	DI_CHECK(lua_type(L, -1) == LUA_TTABLE);
+	lua_rawgeti(L, -1, 1);
+
+	// Remove the weak table indirection from the stack
+	lua_remove(L, -2);
+
+	return !lua_isnil(L, -1);
 }
 
 static int di_lua_gc(lua_State *L) {
-	struct di_object *o = di_lua_checkproxy(L, 1);
+	void **optr = di_lua_checkproxy(L, 1);
+	struct di_object *o = *optr;
 	struct di_lua_state *s;
 
 	di_lua_get_state(L, s);
 	DI_CHECK(s != NULL);
 
 	// Forget about this object
-	struct di_lua_object_map_entry *e = NULL;
-	HASH_FIND_PTR(s->object_to_lua_ref, &o, e);
+	char *buf = NULL;
+	asprintf(&buf, "___lua_userdata_to_object_%p", optr);
+	DI_CHECK_OK(di_remove_member_raw((void *)s, di_string_borrow(buf)));
+	free(buf);
 
-	// This object might have already been forgotten, if:
-	//   1) the proxy has been GC'd, but __gc hasn't been called, and
-	//   2) di_lua_pushobject is called for the corresponding object in this state
-	//
-	// In that case, di_lua_pushobject will forget the GC'd entry and create a new
-	// weakref for the object.
-	if (e != NULL) {
-		di_lua_forget_object(s, e);
+	// Check if ___di_object_<object> is still pointing to this proxy. If that's the
+	// case, remove this entry. Otherwise it means the weak ref has died before gc and
+	// di_lua_pushobject created a new one (see :ref:`lua quirk`).
+	int64_t lua_ref;
+	asprintf(&buf, "___di_object_to_ref_%p", o);
+	DI_CHECK_OK(di_get(s, buf, lua_ref));
+
+	// Check the userdata pointer store in the registry. If it has already died (i.e.
+	// weakref_get returning false), we know it's ourself; otherwise load the new one.
+	void **current_optr = optr;
+	if (luaL_weakref_get(L, LUA_REGISTRYINDEX, lua_ref)) {
+		current_optr = di_lua_checkproxy(L, -1);
 	}
+	if (current_optr == optr) {
+		DI_CHECK_OK(di_remove_member_raw((void *)s, di_string_borrow(buf)));
+	}
+	free(buf);
 	return 0;
 }
 
 static int di_lua_gc_for_weak_object(lua_State *L) {
-	struct di_weak_object *weak = di_lua_checkproxy(L, 1);
+	struct di_weak_object *weak = *di_lua_checkproxy(L, 1);
 	di_drop_weak_ref(&weak);
 	return 0;
 }
@@ -440,7 +478,7 @@ di_lua_create_metatable_for_object(lua_State *L, const luaL_Reg *reg, bool calla
 }
 
 // Push a proxy for `o` to lua stack. `o` can be a pointer to anything
-static void
+static void **
 di_lua_pushproxy(lua_State *L, const char *name, void *o, const luaL_Reg *reg, bool callable) {
 	// struct di_lua_script *s;
 	void **ptr;
@@ -456,45 +494,7 @@ di_lua_pushproxy(lua_State *L, const char *name, void *o, const luaL_Reg *reg, b
 		}
 	}
 	di_lua_create_metatable_for_object(L, reg, callable);
-}
-
-/// Store a weak reference to the object on the top of the stack in the table at `index`,
-/// pops the value.
-///
-/// This creates an extra weak table indirection, and stores the object in the table. We
-/// cannot just use 1 weak table to store all the objects, because the luaL_ref machinary
-/// doesn't work with weak tables.
-static int luaL_weakref(lua_State *L, int index) {
-	lua_newtable(L);        // new_table={}
-	lua_newtable(L);        // metatable={}
-	lua_pushliteral(L, "__mode");
-	lua_pushliteral(L, "v");
-	lua_rawset(L, -3);              // metatable._mode='v'
-	lua_setmetatable(L, -2);        // setmetatable(new_table,metatable)
-	lua_pushvalue(L, -2);           // push the previous top of stack
-	lua_rawseti(L, -2, 1);          // new_table[1]=value, pops the value
-
-	lua_remove(L, -2);        // removes the original top of stack
-
-	// Now new_table is on top of the stack, replacing the original top of stack
-	return luaL_ref(L, index);
-}
-
-/// Get the weak reference `r` from the table at `index`. Leaves the value at the top of
-/// the stack. Value `nil` will be at the top of the stack if the weak ref is dead.
-///
-/// Returns whether the weak reference is still alive
-static bool luaL_weakref_get(lua_State *L, int index, int r) {
-	// Get the weak table indirection
-	lua_rawgeti(L, index, r);
-
-	DI_CHECK(lua_type(L, -1) == LUA_TTABLE);
-	lua_rawgeti(L, -1, 1);
-
-	// Remove the weak table indirection from the stack
-	lua_remove(L, -2);
-
-	return !lua_isnil(L, -1);
+	return ptr;
 }
 
 /// Push an object to lua stack. A wrapper of di_lua_pushproxy, which also handles
@@ -504,38 +504,37 @@ static bool luaL_weakref_get(lua_State *L, int index, int r) {
 static void di_lua_pushobject(lua_State *L, const char *name, struct di_object *obj) {
 	struct di_lua_state *s;
 	di_lua_get_state(L, s);
-	struct di_lua_object_map_entry *e = NULL;
-	HASH_FIND_PTR(s->object_to_lua_ref, &obj, e);
 
-	if (e != NULL) {
-		/*fprintf(stderr, "found %d\n", e->ref);*/
-		if (luaL_weakref_get(L, LUA_REGISTRYINDEX, e->ref)) {
+	with_cleanup_t(char) buf1;
+	int64_t lua_ref;
+
+	asprintf(&buf1, "___di_object_to_ref_%p", obj);
+	int rc = di_get(s, buf1, lua_ref);
+
+	if (rc == 0) {
+		if (luaL_weakref_get(L, LUA_REGISTRYINDEX, lua_ref)) {
 			// We have already pushed this object before, return the same proxy
 			di_unref_object(obj);
 			return;
 		}
-
-		// The weak reference died before __gc is called for this object.
-		// Clear the stale record
-		di_lua_forget_object(s, e);
+		// .. _lua quirk:
+		// The weak reference to this proxy died before __gc is called for it.
 	}
 
 	// Push the proxy, and weakly reference it from the lua registry
-	di_lua_pushproxy(L, name, obj, di_lua_object_methods, true);
+	void **userdata = di_lua_pushproxy(L, name, obj, di_lua_object_methods, true);
 	// Copy the proxy, as we are going to consume it when we put it into the registry
 	lua_pushvalue(L, -1);
+	lua_ref = luaL_weakref(L, LUA_REGISTRYINDEX);
 
-	e = tmalloc(struct di_lua_object_map_entry, 1);
-	e->object = obj;
-	e->ref = luaL_weakref(L, LUA_REGISTRYINDEX);
+	// Store or update the object to lua ref map
+	DI_CHECK_OK(di_setx((void *)s, di_string_borrow(buf1), DI_TYPE_INT, &lua_ref));
 
-	// Store the object as a member of di_lua_state, so mark and sweep will see it
-	char *buf;
-	asprintf(&buf, "___di_object_%d", e->ref);
-	DI_CHECK_OK(di_member(s, buf, obj));
-	free(buf);
-	HASH_ADD_PTR(s->object_to_lua_ref, object, e);
-	/*fprintf(stderr, "added %d\n", e->ref);*/
+	// Update userdata -> object map
+	with_cleanup_t(char) buf2;
+	asprintf(&buf2, "___lua_userdata_to_object_%p", userdata);
+	DI_CHECK_OK(di_add_member_move((void *)s, di_string_borrow(buf2),
+	                               (di_type_t[]){DI_TYPE_OBJECT}, &obj));
 }
 
 const char *allowed_os[] = {"time", "difftime", "clock", "tmpname", "date", NULL};
@@ -958,7 +957,7 @@ static void di_lua_signal_handler_wrapper_dtor(struct di_object *o) {
 static int di_lua_add_listener(lua_State *L) {
 	// Stack: [ object, string, lua closure ]
 	bool once = lua_toboolean(L, lua_upvalueindex(1));
-	struct di_object *o = di_lua_checkproxy(L, 1);
+	struct di_object *o = *di_lua_checkproxy(L, 1);
 
 	if (lua_gettop(L) != 3) {
 		return luaL_error(L, "'on' takes 3 arguments");
@@ -1121,7 +1120,7 @@ pushnumber:
 
 // Stack: [ object, string (signal name), arguments... ]
 int di_lua_emit_signal(lua_State *L) {
-	struct di_object *o = di_lua_checkproxy(L, 1);
+	struct di_object *o = *di_lua_checkproxy(L, 1);
 	const char *signame = luaL_checkstring(L, 2);
 	int top = lua_gettop(L);
 	int rc = 0;
@@ -1151,7 +1150,7 @@ err:
 }
 
 static int di_lua_upgrade_weak_ref(lua_State *L) {
-	struct di_weak_object *weak = di_lua_checkproxy(L, 1);
+	struct di_weak_object *weak = *di_lua_checkproxy(L, 1);
 	struct di_object *strong = di_upgrade_weak_ref(weak);
 	if (strong == NULL) {
 		return 0;
@@ -1163,7 +1162,7 @@ static int di_lua_upgrade_weak_ref(lua_State *L) {
 
 // Stack: [ object ]
 static int di_lua_weak_ref(lua_State *L) {
-	struct di_object *strong = di_lua_checkproxy(L, 1);
+	struct di_object *strong = *di_lua_checkproxy(L, 1);
 	union di_value weak = {.weak_object = di_weakly_ref_object(strong)};
 	int nret = di_lua_pushvariant(
 	    L, NULL, (struct di_variant){.type = DI_TYPE_WEAK_OBJECT, .value = &weak});
@@ -1206,13 +1205,13 @@ static void di_lua_stop_listener_impl(struct di_lua_listen_handle_proxy *proxy) 
 }
 
 static int di_lua_stop_listener(lua_State *L) {
-	struct di_lua_listen_handle_proxy *proxy = di_lua_checkproxy(L, 1);
+	struct di_lua_listen_handle_proxy *proxy = *di_lua_checkproxy(L, 1);
 	di_lua_stop_listener_impl(proxy);
 	return 0;
 }
 
 static int di_lua_gc_for_listen_handle(lua_State *L) {
-	struct di_lua_listen_handle_proxy *proxy = di_lua_checkproxy(L, 1);
+	struct di_lua_listen_handle_proxy *proxy = *di_lua_checkproxy(L, 1);
 	// When listen handles are dropped, the listeners will be left running forever, so
 	// we just free the listen_handle without stopping it
 	proxy->lua_object_alive = false;
@@ -1277,7 +1276,7 @@ static int di_lua_meta_index(lua_State *L) {
 	}
 
 	const char *key = luaL_checklstring(L, 2, NULL);
-	struct di_object *ud = di_lua_checkproxy(L, 1);
+	struct di_object *ud = *di_lua_checkproxy(L, 1);
 
 	// Handle the special methods
 	if (strcmp(key, "on") == 0) {
@@ -1322,7 +1321,7 @@ static int di_lua_meta_newindex(lua_State *L) {
 		return luaL_error(L, "wrong number of arguments to __newindex");
 	}
 
-	struct di_object *ud = di_lua_checkproxy(L, 1);
+	struct di_object *ud = *di_lua_checkproxy(L, 1);
 	struct di_string key;
 	key.data = luaL_checklstring(L, 2, &key.length);
 	di_type_t vt;
