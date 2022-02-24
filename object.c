@@ -889,6 +889,7 @@ di_listen_to(struct di_object *_obj, struct di_string name, struct di_object *h)
 	listen_handle->signal = sig;
 
 	di_member_clone(listen_handle, "__handler", h);
+	di_member_clone(listen_handle, "__event_source", _obj);
 
 	list_add(&l->siblings, &sig->listeners);
 	sig->nlisteners++;
