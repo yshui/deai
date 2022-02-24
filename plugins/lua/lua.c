@@ -946,7 +946,10 @@ static void di_lua_signal_handler_wrapper_dtor(struct di_object *o) {
 ///
 /// Listen for signals
 ///
-/// Returns a handle, which if dropped, will stop the callback from been called anymore.
+/// Returns a handle. The handle can be used to stop the signal listener, by calling the
+/// "stop" method.
+///
+/// If the handle is garbage collected, the listener will be left running forever.
 ///
 /// EXPORT: deai.plugin.lua:Proxy.once(signal: :string, callback), deai:ListenHandle
 ///
