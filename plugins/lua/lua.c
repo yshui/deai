@@ -1173,6 +1173,19 @@ static int di_lua_weak_ref(lua_State *L) {
 	return nret;
 }
 
+static int di_lua_signal(lua_State *L) {
+	if (lua_gettop(L) != 2) {
+		return luaL_error(L, "'signal' takes 2 arguments");
+	}
+	struct di_object *o = *di_lua_checkproxy(L, 1);
+	struct di_string signame;
+	signame.data = luaL_checklstring(L, 2, &signame.length);
+
+	struct di_promise *p = di_signal_promise(o, signame);
+	di_lua_pushobject(L, "promise", (void *)p);
+	return 1;
+}
+
 static int di_lua_meta_index_for_weak_object(lua_State *L) {
 	/* This is __index for lua di_weak_object proxies. Weak object reference proxies
 	 * only have one method, `upgrade()`, to retrieve a strong object reference
@@ -1298,6 +1311,10 @@ static int di_lua_meta_index(lua_State *L) {
 	}
 	if (strcmp(key, "weakref") == 0) {
 		lua_pushcclosure(L, di_lua_weak_ref, 0);
+		return 1;
+	}
+	if (strcmp(key, "signal") == 0) {
+		lua_pushcclosure(L, di_lua_signal, 0);
 		return 1;
 	}
 

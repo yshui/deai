@@ -30,10 +30,11 @@ function with_error(pending)
         di:exit(1)
     end
     local errlh, replylh
-    replylh = pending:once("reply", function(_)
+    replylh = pending:signal("reply"):once("resolved", function(r)
         errlh:stop()
+        print("Reply:", r)
     end)
-    errlh = pending:once("error", function(e)
+    errlh = pending:signal("error"):once("resolved", function(e)
         replylh:stop()
         print(e)
     end)
