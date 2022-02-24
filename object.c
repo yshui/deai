@@ -31,6 +31,18 @@ struct di_listener {
 	struct list_head siblings;
 };
 
+/// A pending value
+///
+/// TYPE: deai:Promise
+///
+/// This encapsulates a pending value. Once this value become available, a "resolved"
+/// signal will be emitted with the value. Each promise should resolve only once ever.
+///
+/// SIGNAL: deai:Promise.resolved(result) The promise was resolved
+struct di_promise {
+	struct di_object;
+};
+
 static const struct di_object_internal dead_weakly_referenced_object = {
     .ref_count = 0,
     .weak_ref_count = 1,        // Keep this object from being freed
@@ -438,6 +450,29 @@ static void di_destroy_object(struct di_object *_obj) {
 	di_unref_object(_obj);
 }
 
+#if 0
+static inline __attribute__((always_inline)) void print_caller(int depth) {
+	unw_context_t ctx;
+	unw_cursor_t cursor;
+	unw_getcontext(&ctx);
+	unw_init_local(&cursor, &ctx);
+	for (int i = 0; i < depth && unw_step(&cursor) > 0; i++) {
+		if (i) {
+			printf(", ");
+		}
+		unw_word_t ip, off;
+		unw_get_reg(&cursor, UNW_REG_IP, &ip);
+		char buf[256];
+		if (unw_get_proc_name(&cursor, buf, sizeof(buf), &off) == 0) {
+			printf("%s+%#08lx", buf, off);
+		} else {
+			printf("%#08lx", ip);
+		}
+	}
+	printf("\n");
+}
+#endif
+
 struct di_object *di_ref_object(struct di_object *_obj) {
 	auto obj = (struct di_object_internal *)_obj;
 	obj->ref_count++;
@@ -821,10 +856,6 @@ static void di_listen_handle_dtor(struct di_object *nonnull obj) {
 	lh->listen_entry = PTR_POISON;
 }
 
-/// Listen to signal with name `name` from object `_obj`, with `h` as callback.
-/// Returns a listen handle object.
-///
-/// Ownership of `h` is not transfered.
 struct di_object *
 di_listen_to(struct di_object *_obj, struct di_string name, struct di_object *h) {
 	auto obj = (struct di_object_internal *)_obj;
@@ -862,6 +893,38 @@ di_listen_to(struct di_object *_obj, struct di_string name, struct di_object *h)
 	sig->nlisteners++;
 
 	return (struct di_object *)listen_handle;
+}
+
+int di_signal_promise_handler(struct di_object *handler, di_type_t *rt, union di_value *r,
+                              struct di_tuple args) {
+	di_weak_object_with_cleanup weak_ret;
+	di_get(handler, "__promise", weak_ret);
+
+	di_object_with_cleanup promise = di_upgrade_weak_ref(weak_ret);
+	if (promise) {
+		di_emitn(promise, di_string_borrow("resolved"), args);
+		// Stop listening for the signal
+		di_remove_member(promise, di_string_borrow("__listen_handle"));
+	}
+	return 0;
+}
+
+/// Create a promise that resolves when a signal is received.
+struct di_promise *di_signal_promise(struct di_object *_obj, struct di_string name) {
+	di_object_with_cleanup handler = di_new_object_with_type(struct di_object);
+	struct di_promise *ret = di_new_object_with_type(struct di_promise);
+	auto weak_ret = di_weakly_ref_object((void *)ret);
+
+	// Need to be weak here, because otherwise there will be a cycle: handler ->
+	// promise -> listen_handle -> handler
+	di_add_member_move(handler, di_string_borrow("__promise"),
+	                   (di_type_t[]){DI_TYPE_WEAK_OBJECT}, &weak_ret);
+	di_set_object_call(handler, di_signal_promise_handler);
+
+	auto listen_handle = di_listen_to(_obj, name, handler);
+	di_add_member_move((void *)ret, di_string_borrow("__listen_handle"),
+	                   (di_type_t[]){DI_TYPE_OBJECT}, &listen_handle);
+	return ret;
 }
 
 int di_emitn(struct di_object *o, struct di_string name, struct di_tuple args) {

@@ -151,6 +151,11 @@ static_assert(sizeof(di_type_t) == sizeof(int), "di_type_t has wrong type");
 #endif
 
 struct di_object;
+/// A pending value
+///
+/// This encapsulates a pending value. Once this value become available, a "resolved"
+/// signal will be emitted with the value. Each promise should resolve only once ever.
+struct di_promise;
 struct di_tuple;
 union di_value;
 typedef int (*di_call_fn_t)(struct di_object *nonnull, di_type_t *nonnull rt,
@@ -294,8 +299,10 @@ PUBLIC_DEAI_API int di_rawgetxt(struct di_object *nonnull o, struct di_string pr
 ///
 /// The getter can return a normal value, or a variant. Variants returned by the getters
 /// are automatically unpacked recursively. A variant of DI_LAST_TYPE can be used by the
-/// generic getter ("__get") to indicate that `prop` doesn't exist in `o`. Specifialized
+/// generic getter ("__get") to indicate that `prop` doesn't exist in `o`. Specialized
 /// getter cannot return DI_LAST_TYPE.
+///
+/// The returned value holds ownership.
 PUBLIC_DEAI_API int di_getx(struct di_object *nonnull o, struct di_string prop,
                             di_type_t *nonnull type, union di_value *nonnull ret);
 
@@ -358,10 +365,15 @@ PUBLIC_DEAI_API struct di_object *nullable di_new_object(size_t sz, size_t align
 /// `h` will be called. If the returned object is dropped, the listen-to relationship is
 /// automatically stopped.
 ///
+/// Ownership of `h` is not transfered.
+///
 /// Return object type: ListenerHandle
 PUBLIC_DEAI_API struct di_object *nullable di_listen_to(struct di_object *nonnull,
                                                         struct di_string name,
                                                         struct di_object *nullable h);
+
+/// Create a promise that resolves when a signal is received.
+PUBLIC_DEAI_API struct di_promise *di_signal_promise(struct di_object *_obj, struct di_string name);
 
 /// Emit a signal with `name`, and `args`. The emitter of the signal is responsible of
 /// freeing `args`.
