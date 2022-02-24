@@ -1027,11 +1027,13 @@ static void di_dump_object(struct di_object_internal *obj) {
 	          "%p, ref count: %lu strong %lu weak (live: %d), type: %s\n", obj,
 	          obj->ref_count, obj->weak_ref_count, obj->mark, di_get_type((void *)obj));
 	for (struct di_member *m = obj->members; m != NULL; m = m->hh.next) {
-		di_log_va(log_module, DI_LOG_DEBUG, "\tmember: %.*s, type: %s",
-		          (int)m->name.length, m->name.data, di_type_to_string(m->type));
+		char *value_string = di_value_to_string(m->type, m->data);
+		di_log_va(log_module, DI_LOG_DEBUG, "\tmember: %.*s, type: %s (%s)",
+		          (int)m->name.length, m->name.data, di_type_to_string(m->type),
+		          value_string);
+		free(value_string);
 		if (m->type == DI_TYPE_OBJECT) {
 			union di_value *val = m->data;
-			di_log_va(log_module, DI_LOG_DEBUG, " (%s)", di_get_type(val->object));
 			auto obj_internal = (struct di_object_internal *)val->object;
 			obj_internal->excess_ref_count--;
 		}

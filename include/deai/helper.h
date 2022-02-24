@@ -13,6 +13,7 @@
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
+#include <stdio.h>
 
 #define CONCAT2(a, b) a##b
 #define CONCAT1(a, b) CONCAT2(a, b)
@@ -330,6 +331,65 @@ static inline unused const char *nonnull di_type_to_string(di_type_t type) {
 		return "LAST_TYPE";
 	}
 	unreachable();
+}
+
+static inline unused char *di_value_to_string(di_type_t type, union di_value *value) {
+	char *buf = NULL;
+	switch (type) {
+	case DI_TYPE_OBJECT:
+		asprintf(&buf, "%s: %p", di_get_type(value->object), value->object);
+		break;
+	case DI_TYPE_INT:
+		asprintf(&buf, "%ld", value->int_);
+		break;
+	case DI_TYPE_UINT:
+		asprintf(&buf, "%lu", value->uint);
+		break;
+	case DI_TYPE_NINT:
+		asprintf(&buf, "%d", value->nint);
+		break;
+	case DI_TYPE_NUINT:
+		asprintf(&buf, "%u", value->nuint);
+		break;
+	case DI_TYPE_FLOAT:
+		asprintf(&buf, "%lf", value->float_);
+		break;
+	case DI_TYPE_BOOL:
+		if (value->bool_) {
+			buf = strdup("true");
+		} else {
+			buf = strdup("false");
+		}
+		break;
+	case DI_TYPE_STRING:
+		buf = strndup(value->string.data, value->string.length);
+		break;
+	case DI_TYPE_STRING_LITERAL:
+		buf = strdup(value->string_literal);
+		break;
+	case DI_TYPE_POINTER:
+		asprintf(&buf, "%p", value->pointer);
+		break;
+	case DI_TYPE_WEAK_OBJECT:
+		asprintf(&buf, "%p", value->weak_object);
+		break;
+	case DI_TYPE_ARRAY:
+		asprintf(&buf, "[%s; %ld]", di_type_to_string(value->array.elem_type),
+		         value->array.length);
+		break;
+	case DI_TYPE_VARIANT:;
+		char *inner = di_value_to_string(value->variant.type, value->variant.value);
+		asprintf(&buf, "variant(%s)", inner);
+		free(inner);
+		break;
+	case DI_TYPE_TUPLE:
+	case DI_TYPE_ANY:
+	case DI_TYPE_NIL:
+	case DI_LAST_TYPE:
+	default:
+		buf = strdup("");
+	}
+	return buf;
 }
 
 #define DEAI_MEMBER_NAME_RAW "__deai"
