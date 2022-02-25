@@ -259,12 +259,14 @@ static inline void unused va_arg_with_di_type(va_list ap, di_type_t t, void *buf
 	union di_value v;
 
 	switch (t) {
-	case DI_TYPE_STRING:
 	case DI_TYPE_STRING_LITERAL:
 	case DI_TYPE_POINTER:
 	case DI_TYPE_OBJECT:
 	case DI_TYPE_WEAK_OBJECT:
 		v.pointer = va_arg(ap, void *);
+		break;
+	case DI_TYPE_STRING:
+		v.string = va_arg(ap, struct di_string);
 		break;
 	case DI_TYPE_NINT:
 		v.nint = va_arg(ap, int);
