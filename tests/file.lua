@@ -2,9 +2,8 @@ di:load_plugin("./plugins/file/di_file.so")
 
 unpack = table.unpack or unpack
 md = di.spawn:run({"mkdir", "testdir"}, true)
-listen_handles = {}
 
-table.insert(listen_handles, md:on("exit", function()
+md:once("exit", function()
 w = di.file:watch({"testdir"})
 
 function sigh(ev)
@@ -17,8 +16,9 @@ events = {"create", "access", "attrib", "close-write", "close-nowrite",
 "delete", "delete-self", "modify", "move-self", "open",
 "moved-to", "moved-from"}
 
+listen_handles = {}
 for _, i in pairs(events) do
-    table.insert(listen_handles, w:on(i, sigh(i)))
+    table.insert(listen_handles, w:on(i, sigh(i)):auto_stop())
 end
 
 fname = "./testdir/testfile"
@@ -40,18 +40,16 @@ function run_one(i)
         print("running ", unpack(cmds[i]))
         c = di.spawn:run(cmds[i], true)
         if i < #cmds then
-            table.insert(listen_handles, c:on("exit", run_one(i+1)))
+            c:once("exit", run_one(i+1))
         else
             w:remove("testdir")
             w = nil
-            for _, lh in pairs(listen_handles) do
-                -- Stop all listeners, so the callback functions can be freed,
-                -- which in turn frees the lua script object
-                lh:stop()
-            end
+            listen_handles = nil
             collectgarbage()
         end
     end
 end
 run_one(1)()
-end))
+end)
+md = nil
+collectgarbage()
