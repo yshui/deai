@@ -53,7 +53,9 @@ static int _di_typed_trampoline(ffi_cif *cif, void (*fn)(void), void *ret, const
 	union di_value **xargs = alloca((args0.length + args.length) * sizeof(void *));
 	bool *args_cloned = alloca(args.length * sizeof(bool));
 	if (args0.elements != 0) {
-		memcpy(xargs, args0.elements, sizeof(void *) * args0.length);
+		for (int i = 0; i < args0.length; i++) {
+			xargs[i] = args0.elements[i].value;
+		}
 	}
 	memset(xargs + args0.length, 0, sizeof(void *) * args.length);
 
