@@ -259,6 +259,22 @@ PUBLIC_DEAI_API int di_proxy_signal(struct di_object *nonnull src, struct di_str
 
 #define di_getter(o, name, g) di_method(o, STRINGIFY(__get_##name), g)
 #define di_setter(o, name, s, type) di_method(o, STRINGIFY(__set_##name), s, type);
+#define di_signal_setter_deleter(o, sig, setter, deleter)                                \
+	do {                                                                             \
+		di_method(o, di_signal_setter_of(sig), setter, struct di_object *);      \
+		di_method(o, di_signal_deleter_of(sig), deleter);                        \
+	} while (0)
+
+#define di_signal_setter_deleter_with_signal_name(o, sig, setter, deleter)               \
+	do {                                                                             \
+		const char *signal_name = di_signal_member_of(sig);                      \
+		struct di_object *setter_closure = (void *)di_closure(                   \
+		    setter, (signal_name), struct di_object *, struct di_object *);      \
+		di_member(o, di_signal_setter_of(sig), setter_closure);                  \
+		struct di_object *deleter_closure =                                      \
+		    (void *)di_closure(deleter, (signal_name), struct di_object *);      \
+		di_member(o, di_signal_deleter_of(sig), deleter_closure);                \
+	} while (0)
 
 #define di_getter_setter(o, name, g, s)                                                      \
 	({                                                                                   \

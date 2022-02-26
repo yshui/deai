@@ -218,10 +218,8 @@ static struct di_object *di_create_ioev(struct di_object *obj, int fd) {
 	auto weak_di = di_weakly_ref_object(di_obj);
 	di_member(ret, DEAI_MEMBER_NAME_RAW, weak_di);
 
-	di_method(ret, "__set___signal_read", di_enable_read, struct di_object *);
-	di_method(ret, "__set___signal_write", di_enable_write, struct di_object *);
-	di_method(ret, "__delete___signal_read", di_disable_read);
-	di_method(ret, "__delete___signal_write", di_disable_write);
+	di_signal_setter_deleter(ret, "read", di_enable_read, di_disable_read);
+	di_signal_setter_deleter(ret, "write", di_enable_write, di_disable_write);
 	return (void *)ret;
 }
 
@@ -319,8 +317,7 @@ static struct di_object *di_create_timer(struct di_object *obj, double timeout) 
 
 	// Set the timeout and restart the timer
 	di_method(ret, "__set_timeout", di_timer_set, double);
-	di_method(ret, "__set___signal_elapsed", di_timer_add_signal, struct di_object *);
-	di_method(ret, "__delete___signal_elapsed", di_timer_delete_signal);
+	di_signal_setter_deleter(ret, "elapsed", di_timer_add_signal, di_timer_delete_signal);
 
 	ev_init(&ret->evt, di_timer_callback);
 	ret->evt.repeat = timeout;
@@ -386,7 +383,7 @@ struct di_prepare {
 static void di_prepare(EV_P_ ev_prepare *w, int revents) {
 	bool has_cycle;
 	if (di_mark_and_sweep(&has_cycle) || has_cycle) {
-		di_log_va(log_module, DI_LOG_WARN, "Reference bug detected\n");
+		di_log_va(log_module, DI_LOG_DEBUG, "Reference bug detected\n");
 		di_dump_objects();
 #ifdef UNITTESTS
 		abort();
