@@ -109,6 +109,7 @@ static int file_target_write(struct log_file *lf, struct di_string log) {
 	auto rc = fwrite(log.data, 1, log.length, lf->f);
 	if (log.data[log.length - 1] != '\n') {
 		fputs("\n", lf->f);
+		rc += 1;
 	}
 	fflush(lf->f);
 	return rc;
@@ -123,7 +124,8 @@ static void file_target_dtor(struct log_file *lf) {
 /// EXPORT: log.file_target(filename: :string, overwrite: :bool), deai.builtin.log:FileTarget
 ///
 /// Create a log target that writes to a file.
-static struct di_object *file_target(struct di_log *l, struct di_string filename, bool overwrite) {
+static struct di_object *
+file_target(struct di_log *l, struct di_string filename, bool overwrite) {
 	char filename_str[PATH_MAX];
 	if (!di_string_to_chars(filename, filename_str, sizeof(filename_str))) {
 		return di_new_error("Filename too long for file target");
@@ -166,15 +168,35 @@ static struct di_object *stderr_target(struct di_log *unused l) {
 	return (void *)ls;
 }
 
+int saved_log_level = DI_LOG_WARN;
 // Public API to be used by C plugins
 int di_log_va(struct di_object *o, int log_level, const char *fmt, ...) {
-	struct di_log *l = (void *)o;
-	if (log_level > l->log_level) {
-		return 0;
-	}
 	va_list ap;
 	va_start(ap, fmt);
-	int ret = vfprintf(stderr, fmt, ap);
+	int ret = 0;
+	if (o == NULL) {
+		// Log module is gone, best effort logging to stderr
+		if (log_level > saved_log_level) {
+			return 0;
+		}
+		char *buf;
+		ret = vasprintf(&buf, fmt, ap);
+		if (buf[ret - 1] == '\n') {
+			ret = fprintf(stderr, "%s", buf);
+		} else {
+			ret = fprintf(stderr, "%s\n", buf);
+		}
+	} else {
+		di_string_with_cleanup log = di_string_vprintf(fmt, ap);
+		di_type_t return_type;
+		union di_value return_value;
+		const char *level_string = level_tostring(log_level);
+		di_call_object(o, &return_type, &return_value, DI_TYPE_OBJECT, o,
+		               DI_TYPE_STRING_LITERAL, level_string, DI_TYPE_STRING, log,
+		               DI_LAST_TYPE);
+		DI_CHECK(return_type == DI_TYPE_NINT);
+		ret = return_value.nint;
+	}
 	va_end(ap);
 
 	return ret;
@@ -189,25 +211,25 @@ static const char *get_log_level(struct di_log *l) {
 	return strdup(level_tostring(l->log_level));
 }
 
-static int set_log_level(struct di_log *l, struct di_string ll) {
-	int nll = level_lookup(ll);
-	if (nll <= DI_LOG_DEBUG) {
-		l->log_level = nll;
-		return 0;
-	}
-	return -1;
-}
-
 int di_set_log_level(struct di_object *o, int log_level) {
 	if (log_level > DI_LOG_DEBUG) {
 		return -1;
 	}
 	struct di_log *l = (void *)o;
 	l->log_level = log_level;
+	saved_log_level = log_level;
 	return 0;
 }
 
-struct di_object *log_module;
+static int set_log_level(struct di_log *l, struct di_string ll) {
+	int nll = level_lookup(ll);
+	return di_set_log_level((void *)l, nll);
+}
+
+struct di_object *log_module = NULL;
+void log_dtor(struct di_object *unused _) {
+	log_module = NULL;
+}
 /// EXPORT: log, deai:module
 ///
 /// Logging
@@ -242,6 +264,7 @@ void di_init_log(struct deai *di) {
 	di_method(l, "stderr_target", stderr_target);
 	di_getter(l, log_level, get_log_level);
 	di_setter(l, log_level, set_log_level, struct di_string);
+	di_set_object_dtor((void *)l, log_dtor);
 
 	log_module = (struct di_object *)lm;
 	di_register_module(di, di_string_borrow("log"), &lm);
