@@ -804,14 +804,18 @@ static void di_listen_handle_stop(struct di_object *nonnull obj) {
 		return;
 	}
 
-	DI_CHECK_OK(di_call(sig, "remove", weak_handler));
+	if (di_call(sig, "remove", weak_handler) != 0) {
+		di_log_va(log_module, DI_LOG_ERROR, "Failed to call \"remove\" on signal object");
+	}
 }
 
 static void di_listen_handle_auto_stop_stop(struct di_object *obj) {
 	DI_CHECK(di_check_type(obj, "deai:AutoStopListenHandle"));
 	di_object_with_cleanup listen_handle;
 	DI_CHECK_OK(di_get(obj, "listen_handle", listen_handle));
-	DI_CHECK_OK(di_call(listen_handle, "stop"));
+	if (di_call(listen_handle, "stop") != 0) {
+		di_log_va(log_module, DI_LOG_ERROR, "Failed to call \"stop\" on listen handle");
+	}
 }
 
 /// An object that stops a listen handle when dropped
@@ -929,7 +933,9 @@ di_listen_to(struct di_object *_obj, struct di_string name, struct di_object *h)
 		return di_new_error("Failed to get signal object %s", strerror(rc));
 	}
 
-	DI_CHECK_OK(di_call(sig, "add", h));
+	if (di_call(sig, "add", h) != 0) {
+		return di_new_error("Failed to call \"add\" on signal object");
+	}
 
 	auto listen_handle = di_new_object_with_type(struct di_listen_handle);
 	DI_CHECK_OK(di_set_type((void *)listen_handle, "deai:ListenHandle"));
