@@ -99,19 +99,29 @@ cpp_dummy = static_library('cpp_dummy', ['dummy.cc'])
 
 subdir('plugins')
 
-deai_exe = executable('deai', [
-  'main.c',
-  'object.c',
-  'callable.c',
-  'event.c',
-  'log.c',
-  'helper.c',
-  'os.c',
-  'spawn.c',
-  'exception.cc',
-], c_args: base_c_args
+core_src = [
+  'main.c'
+, 'object.c'
+, 'callable.c'
+, 'event.c'
+, 'log.c'
+, 'helper.c'
+, 'os.c'
+, 'spawn.c'
+, 'exception.cc'
+]
+core_deps = [libev, libffi, dl]
+if get_option('track_objects')
+  core_src += [ 'stacktrace.c' ]
+  core_deps += [
+    dependency('libunwind', required: true)
+  , dependency('libunwind-generic', required: true)
+  , dependency('libdw', required: true)
+  ]
+endif
+deai_exe = executable('deai', core_src, c_args: base_c_args
 , cpp_args: base_cpp_args
-, dependencies: [libev, libffi, dl]
+, dependencies: core_deps
 , link_with: [ cpp_dummy, libutils ]
 , include_directories: incs
 , link_args: base_ld_args

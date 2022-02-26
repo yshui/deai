@@ -304,6 +304,7 @@ bool di_check_type(struct di_object *o, const char *tyname) {
 
 #ifdef TRACK_OBJECTS
 thread_local struct list_head all_objects;
+struct di_ref_tracked_object *ref_tracked;
 #endif
 
 struct di_object *di_new_object(size_t sz, size_t alignment) {
@@ -458,6 +459,15 @@ static inline __attribute__((always_inline)) void print_caller(int depth) {
 struct di_object *di_ref_object(struct di_object *_obj) {
 	auto obj = (struct di_object_internal *)_obj;
 	obj->ref_count++;
+#ifdef TRACK_OBJECTS
+	struct di_ref_tracked_object *t = NULL;
+	HASH_FIND_PTR(ref_tracked, (void **)&_obj, t);
+	if (t != NULL) {
+		di_log_va(log_module, DI_LOG_DEBUG, "%p is referenced (%ld)\n", _obj,
+		          obj->ref_count);
+		print_stack_trace(0, 10);
+	}
+#endif
 	return _obj;
 }
 
@@ -498,6 +508,15 @@ void di_unref_object(struct di_object *_obj) {
 	auto obj = (struct di_object_internal *)_obj;
 	assert(obj->ref_count > 0);
 	obj->ref_count--;
+#ifdef TRACK_OBJECTS
+	struct di_ref_tracked_object *t = NULL;
+	HASH_FIND_PTR(ref_tracked, (void **)&_obj, t);
+	if (t != NULL) {
+		di_log_va(log_module, DI_LOG_DEBUG, "%p is unreferenced (%ld)\n", _obj,
+		          obj->ref_count);
+		print_stack_trace(0, 10);
+	}
+#endif
 	if (obj->ref_count == 0) {
 		if (obj->destroyed) {
 			// If we reach here, destroy must have completed
@@ -949,6 +968,11 @@ struct di_object *di_get_roots(void) {
 }
 
 #ifdef TRACK_OBJECTS
+void di_track_object_ref(struct di_object *unused obj, void *pointer) {
+	auto t = tmalloc(struct di_ref_tracked_object, 1);
+	t->ptr = pointer;
+	HASH_ADD_PTR(ref_tracked, ptr, t);
+}
 static void di_dump_object(struct di_object_internal *obj) {
 	di_log_va(log_module, DI_LOG_DEBUG,
 	          "%p, ref count: %lu strong %lu weak (live: %d), type: %s\n", obj,

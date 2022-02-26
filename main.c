@@ -597,6 +597,8 @@ int main(int argc, char *argv[]) {
 	auto closure = (struct di_object *)di_closure(di_dump_objects, ());
 	di_member(p, "dump_objects", closure);
 
+	DI_CHECK_OK(di_method(p, "track_object_ref", di_track_object_ref, struct di_object *));
+
 	DI_CHECK_OK(di_method(p, "__get_roots", di_roots_getter));
 	DI_CHECK_OK(di_method(p, "__get_argv", di_get_argv));
 

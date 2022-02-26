@@ -60,6 +60,11 @@ struct di_roots {
 	struct di_anonymous_root *nullable anonymous_roots;
 };
 
+struct di_ref_tracked_object {
+	void *ptr;
+	UT_hash_handle hh;
+};
+
 struct deai {
 	struct di_object_internal;
 	struct ev_loop *nonnull loop;
@@ -164,16 +169,19 @@ static inline ffi_status unused di_ffi_prep_cif(ffi_cif *nonnull cif, unsigned i
 struct di_module *nullable di_new_module_with_size(struct deai *nonnull di, size_t size);
 
 struct di_object *nullable di_try(void (*nonnull func)(void *nullable), void *nullable args);
-
 #ifdef TRACK_OBJECTS
 void di_dump_objects(void);
 /// Returns true if leaks are found
 bool di_mark_and_sweep(bool *has_cycle);
+void di_track_object_ref(struct di_object *, void *);
+void __attribute__((noinline)) print_stack_trace(int skip, int limit);
 #else
 static inline void di_dump_objects(void) {
 }
 static inline bool di_mark_and_sweep(bool *has_cycle) {
 	*has_cycle = false;
 	return false;
+}
+static inline void di_track_object_ref(struct di_object *unused a, void *unused b) {
 }
 #endif
