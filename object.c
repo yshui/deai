@@ -9,6 +9,7 @@
 #include <deai/helper.h>
 #include <deai/object.h>
 #include <assert.h>
+#include <ev.h>
 #include <stdalign.h>
 #include <stdarg.h>
 #include <stdio.h>
@@ -17,12 +18,10 @@
 #include "di_internal.h"
 #include "utils.h"
 
+#define HANDLER_PREFIX "handler_object_"
 struct di_signal {
-	struct di_string name;
-	int nlisteners;
-	struct di_weak_object *owner;
-	struct list_head listeners;
-	UT_hash_handle hh;
+	struct di_object;
+	int nhandlers;
 };
 
 // This is essentially a fat weak reference, from object to its listeners.
@@ -58,10 +57,6 @@ static_assert(sizeof(struct di_object) == sizeof(struct di_object_internal),
 static_assert(alignof(struct di_object) == alignof(struct di_object_internal),
               "di_object alignment mismatch");
 // clang-format on
-
-static bool di_is_internal(struct di_string s) {
-	return s.length >= 2 && strncmp(s.data, "__", 2) == 0;
-}
 
 static int di_call_internal(struct di_object *self, struct di_object *method_, di_type_t *rt,
                             union di_value *ret, struct di_tuple args, bool *called) {
@@ -111,10 +106,6 @@ static int call_handler_with_fallback(struct di_object *nonnull o,
                                       struct di_variant arg, di_type_t *nullable rtype,
                                       union di_value *nullable ret, bool *found) {
 	*found = false;
-	// Internal names doesn't go through handler
-	if (di_is_internal(name)) {
-		return -ENOENT;
-	}
 
 	char *buf;
 	asprintf(&buf, "%s_%.*s", prefix, (int)name.length, name.data);
@@ -219,6 +210,11 @@ static void di_flatten_variant(struct di_variant *var) {
 			free(inner);
 		}
 	}
+}
+
+/// A di_call_fn_t that does nothing.
+int di_noop(struct di_object *o, di_type_t *rt, union di_value *r, struct di_tuple args) {
+	return 0;
 }
 
 int di_getx(struct di_object *o, struct di_string prop, di_type_t *type, union di_value *ret) {
@@ -437,16 +433,6 @@ static void di_destroy_object(struct di_object *_obj) {
 	obj->destroyed = 1;
 
 	_di_finalize_object(obj);
-
-	struct di_signal *sig, *tmpsig;
-	HASH_ITER (hh, obj->signals, sig, tmpsig) {
-		// Detach the signal structs from this object, don't free them.
-		// The signal structs are collectively owned by the listener structs,
-		// which in turn is owned by the listen handles, and will be freed when
-		// the listen handles are dropped.
-		HASH_DEL(obj->signals, sig);
-	}
-
 	di_unref_object(_obj);
 }
 
@@ -534,9 +520,6 @@ size_t di_min_return_size(size_t in) {
 }
 
 static int check_new_member(struct di_object_internal *obj, struct di_member *m) {
-	// member name rules:
-	// internal names (starts with __) can't have getter/setter/deleter (might change)
-
 	struct di_member *om = NULL;
 
 	if (!m->name.data) {
@@ -546,33 +529,6 @@ static int check_new_member(struct di_object_internal *obj, struct di_member *m)
 	HASH_FIND(hh, obj->members, m->name.data, m->name.length, om);
 	if (om) {
 		return -EEXIST;
-	}
-
-	static const char *const getter_prefix = "__get_";
-	const size_t getter_prefix_len = strlen(getter_prefix);
-	static const char *const setter_prefix = "__set_";
-	const size_t setter_prefix_len = strlen(setter_prefix);
-	static const char *const deleter_prefix = "__delete_";
-	const size_t deleter_prefix_len = strlen(setter_prefix);
-
-	const char *real_name = NULL;
-	size_t real_name_len = 0;
-	if (m->name.length >= getter_prefix_len &&
-	    strncmp(m->name.data, getter_prefix, getter_prefix_len) == 0) {
-		real_name = m->name.data + getter_prefix_len;
-		real_name_len = m->name.length - getter_prefix_len;
-	} else if (m->name.length >= setter_prefix_len &&
-	           strncmp(m->name.data, setter_prefix, setter_prefix_len) == 0) {
-		real_name = m->name.data + setter_prefix_len;
-		real_name_len = m->name.length - setter_prefix_len;
-	} else if (m->name.length >= deleter_prefix_len &&
-	           strncmp(m->name.data, deleter_prefix, deleter_prefix_len) == 0) {
-		real_name = m->name.data + deleter_prefix_len;
-		real_name_len = m->name.length - deleter_prefix_len;
-	}
-
-	if (real_name_len >= 2 && strncmp(real_name, "__", 2) == 0) {
-		return -EINVAL;
 	}
 	return 0;
 }
@@ -813,185 +769,90 @@ void di_copy_value(di_type_t t, void *dst, const void *src) {
 }
 
 struct di_listen_handle {
-	struct di_object_internal;
-	struct di_signal *nonnull signal;
-
-	// listen_handle owns the listen_entry
-	struct di_listener *nonnull listen_entry;
+	struct di_object;
 };
 
-static void di_listen_handle_dtor(struct di_object *nonnull obj) {
-	auto lh = (struct di_listen_handle *)obj;
-	DI_CHECK(lh->signal != PTR_POISON);
-	DI_CHECK(lh->listen_entry != PTR_POISON);
+/// Stop the handler
+///
+/// EXPORT: deai:ListenHandle.stop(), :void
+///
+/// After calling this the signal handler will stop from being called.
+static void di_listen_handle_stop(struct di_object *nonnull obj) {
+	di_weak_object_with_cleanup weak_sig;
+	di_weak_object_with_cleanup weak_handler;
+	DI_CHECK_OK(di_get(obj, "weak_signal", weak_sig));
+	DI_CHECK_OK(di_get(obj, "weak_handler", weak_handler));
 
-	lh->signal->nlisteners--;
-	list_del(&lh->listen_entry->siblings);
-	if (list_empty(&lh->signal->listeners)) {
-		// Owner might have already died. In that case we just free the signal
-		// struct. If the owner is still alive, we also call its signal deleter
-		// if this is the last listener of signal, and detach the signal struct
-		// from the owner's signals.
-		di_object_with_cleanup owner = di_upgrade_weak_ref(lh->signal->owner);
-		auto owner_internal = (struct di_object_internal *)owner;
-		if (owner_internal) {
-			HASH_DEL(owner_internal->signals, lh->signal);
-
-			// Don't call deleter for internal signal names
-			if (!di_is_internal(lh->signal->name)) {
-				bool handler_found;
-				call_handler_with_fallback(
-				    owner, "__del_signal", lh->signal->name,
-				    (struct di_variant){NULL, DI_LAST_TYPE}, NULL, NULL,
-				    &handler_found);
-			}
-		}
-		di_drop_weak_ref(&lh->signal->owner);
-		di_free_string(lh->signal->name);
-		free(lh->signal);
+	di_object_with_cleanup sig = di_upgrade_weak_ref(weak_sig);
+	if (sig == NULL) {
+		// Signal object already dead
+		return;
 	}
 
-	lh->signal = PTR_POISON;
-	di_drop_weak_ref(&lh->listen_entry->listen_handle);
-	free(lh->listen_entry);
-	lh->listen_entry = PTR_POISON;
+	DI_CHECK_OK(di_call(sig, "remove", weak_handler));
 }
 
-struct di_object *
-di_listen_to(struct di_object *_obj, struct di_string name, struct di_object *h) {
-	auto obj = (struct di_object_internal *)_obj;
-	assert(!obj->destroyed);
-
-	struct di_signal *sig = NULL;
-	HASH_FIND(hh, obj->signals, name.data, name.length, sig);
-	if (!sig) {
-		sig = tmalloc(struct di_signal, 1);
-		sig->name = di_clone_string(name);
-		sig->owner = di_weakly_ref_object(_obj);
-
-		INIT_LIST_HEAD(&sig->listeners);
-		HASH_ADD_KEYPTR(hh, obj->signals, sig->name.data, sig->name.length, sig);
-		if (!di_is_internal(name)) {
-			bool handler_found;
-			call_handler_with_fallback(_obj, "__new_signal", sig->name,
-			                           (struct di_variant){NULL, DI_LAST_TYPE},
-			                           NULL, NULL, &handler_found);
-		}
-	}
-
-	auto l = tmalloc(struct di_listener, 1);
-	auto listen_handle = di_new_object_with_type(struct di_listen_handle);
-	DI_CHECK_OK(di_set_type((void *)listen_handle, "deai:ListenHandle"));
-	l->listen_handle = di_weakly_ref_object((struct di_object *)listen_handle);
-	listen_handle->listen_entry = l;
-
-	listen_handle->dtor = di_listen_handle_dtor;
-	listen_handle->signal = sig;
-
-	di_member_clone(listen_handle, "__handler", h);
-	di_member_clone(listen_handle, "__event_source", _obj);
-
-	list_add(&l->siblings, &sig->listeners);
-	sig->nlisteners++;
-
-	return (struct di_object *)listen_handle;
+static void di_listen_handle_auto_stop_stop(struct di_object *obj) {
+	di_object_with_cleanup listen_handle;
+	DI_CHECK_OK(di_get(obj, "listen_handle", listen_handle));
+	DI_CHECK_OK(di_call(listen_handle, "stop"));
 }
 
-int di_signal_promise_handler(struct di_object *handler, di_type_t *rt, union di_value *r,
-                              struct di_tuple args) {
-	di_weak_object_with_cleanup weak_ret;
-	di_get(handler, "__promise", weak_ret);
-
-	di_object_with_cleanup promise = di_upgrade_weak_ref(weak_ret);
-	if (promise) {
-		di_emitn(promise, di_string_borrow("resolved"), args);
-		// Stop listening for the signal
-		di_remove_member(promise, di_string_borrow("__listen_handle"));
-	}
-	return 0;
-}
-
-/// Create a promise that resolves when a signal is received.
-struct di_promise *di_signal_promise(struct di_object *_obj, struct di_string name) {
-	di_object_with_cleanup handler = di_new_object_with_type(struct di_object);
-	struct di_promise *ret = di_new_object_with_type(struct di_promise);
-	di_set_type((void *)ret, "deai:Promise");
-	auto weak_ret = di_weakly_ref_object((void *)ret);
-
-	// Need to be weak here, because otherwise there will be a cycle: handler ->
-	// promise -> listen_handle -> handler
-	di_add_member_move(handler, di_string_borrow("__promise"),
-	                   (di_type_t[]){DI_TYPE_WEAK_OBJECT}, &weak_ret);
-	di_set_object_call(handler, di_signal_promise_handler);
-
-	auto listen_handle = di_listen_to(_obj, name, handler);
-	di_add_member_move((void *)ret, di_string_borrow("__listen_handle"),
-	                   (di_type_t[]){DI_TYPE_OBJECT}, &listen_handle);
+/// An object that stops a listen handle when dropped
+///
+/// EXPORT: deai:ListenHandle.auto_stop(), deai:AutoStopListenHandle
+static struct di_object *di_listen_handle_auto_stop(struct di_object *obj) {
+	auto ret = di_new_object_with_type(struct di_object);
+	DI_CHECK_OK(di_set_type(ret, "deai:AutoStopListenHandle"));
+	di_set_object_dtor(ret, di_listen_handle_auto_stop_stop);
 	return ret;
 }
 
-int di_emitn(struct di_object *o, struct di_string name, struct di_tuple args) {
-	if (args.length > MAX_NARGS) {
-		return -E2BIG;
-	}
+static void di_signal_remove_handler(struct di_object *sig_, struct di_weak_object *handler) {
+	struct di_signal *sig = (void *)sig_;
+	di_string_with_cleanup handler_member_name =
+	    di_string_printf(HANDLER_PREFIX "%p", handler);
 
-	assert(args.length == 0 || (args.elements != NULL));
-
-	struct di_signal *sig;
-	HASH_FIND(hh, ((struct di_object_internal *)o)->signals, name.data, name.length, sig);
-	if (!sig) {
-		return 0;
+	if (di_remove_member_raw(sig_, handler_member_name) != -ENOENT) {
+		sig->nhandlers -= 1;
+		if (sig->nhandlers == 0) {
+			// No handler remains, remove ourself from parent.
+			di_weak_object_with_cleanup weak_source;
+			di_string_with_cleanup signal_member_name;
+			DI_CHECK_OK(di_get(sig_, "weak_source", weak_source));
+			DI_CHECK_OK(di_get(sig_, "signal_name", signal_member_name));
+			di_object_with_cleanup source = di_upgrade_weak_ref(weak_source);
+			if (source != NULL) {
+				di_remove_member(source, signal_member_name);
+			}
+		}
 	}
+}
+
+static void di_signal_dispatch(struct di_object *sig_, struct di_tuple args) {
+	auto sig = (struct di_signal *)sig_;
+	auto inner = (struct di_object_internal *)sig_;
+	struct di_member *i, *tmpi;
 
 	int cnt = 0;
-	struct di_weak_object **all_handle = tmalloc(struct di_weak_object *, sig->nlisteners);
-
-	{
-		// Listen handles can be dropped during emission, in which case their
-		// listener structs will be freed too. And there is no limit on which
-		// handle can be dropped by which handler, so list_for_each_entry_safe is
-		// not enough.
-		//
-		// So first we retrieve the list of listen handles we need, and stop using
-		// the listener structs from here on.
-		struct di_listener *l;
-		list_for_each_entry (l, &sig->listeners, siblings) {
-			di_copy_value(DI_TYPE_WEAK_OBJECT, &all_handle[cnt++], &l->listen_handle);
-		}
-
-		// Q: why don't we just grab the list of handlers instead?
-		// A: because what we really care about is whether the listen handle is
-		//    alive or not. the handler object could be kept alive by something
-		//    else even though the listener has stopped. in that case we will
-		//    unnecessarily call the handler.
-	}
-
-	assert(cnt == sig->nlisteners);
-	for (int i = 0; i < cnt; i++) {
-		auto handle = (struct di_listen_handle *)di_upgrade_weak_ref(all_handle[i]);
-		if (!handle) {
-			// Listener has stopped, because the listen handle has been
-			// dropped
+	struct di_object **handlers = tmalloc(struct di_object *, sig->nhandlers);
+	HASH_ITER (hh, inner->members, i, tmpi) {
+		if (!di_string_starts_with(i->name, HANDLER_PREFIX)) {
 			continue;
 		}
 
-		struct di_object *handler;
-		DI_CHECK_OK(di_get(handle, "__handler", handler));
+		// Any of the handlers can be removed during emission, so first we copy
+		// the list of handlers we need
+		di_copy_value(DI_TYPE_OBJECT, &handlers[cnt++], i->data);
+	}
 
-		// Drop the handle early, we have a strong reference to handler, so we
-		// don't need the handle anymore. This also allows the handle to be
-		// dropped during the handler call. If we keep a ref to the handle,
-		// dropping the handle in the handler won't take immediate effect until
-		// the handler returns, which is undesirable.
-		di_unref_object((struct di_object *)handle);
-		handle = NULL;
-
+	assert(cnt == sig->nhandlers);
+	for (int i = 0; i < cnt; i++) {
 		di_type_t rtype;
 		union di_value ret;
-		int rc = di_call_objectt(handler, &rtype, &ret, args);
+		int rc = di_call_objectt(handlers[i], &rtype, &ret, args);
 
-		di_unref_object(handler);
-		di_drop_weak_ref(&all_handle[i]);
+		di_unref_object(handlers[i]);
 
 		if (rc == 0) {
 			if (rtype == DI_TYPE_OBJECT) {
@@ -1007,10 +868,78 @@ int di_emitn(struct di_object *o, struct di_string name, struct di_tuple args) {
 			di_free_value(rtype, &ret);
 		} else {
 			di_log_va(log_module, DI_LOG_ERROR,
-			          "Failed to call a listener callback: %s\n", strerror(-rc));
+			          "Failed to call a signal handler: %s\n", strerror(-rc));
 		}
 	}
-	free(all_handle);
+	free(handlers);
+}
+
+static void di_signal_add_handler(struct di_object *sig, struct di_object *handler) {
+	with_cleanup_t(char) new_signal_listener_name;
+	asprintf(&new_signal_listener_name, HANDLER_PREFIX "%p", handler);
+	di_member_clone(sig, new_signal_listener_name, handler);
+
+	((struct di_signal *)sig)->nhandlers += 1;
+}
+
+struct di_object *
+di_listen_to(struct di_object *_obj, struct di_string name, struct di_object *h) {
+	with_cleanup_t(char) signal_member_name = NULL;
+	asprintf(&signal_member_name, "__signal_%*s", (int)name.length, name.data);
+
+	auto signal_member_name_str = di_string_borrow(signal_member_name);
+
+	auto obj = (struct di_object_internal *)_obj;
+	assert(!obj->destroyed);
+
+	di_object_with_cleanup sig = NULL;
+	int rc = di_get(_obj, signal_member_name, sig);
+	if (rc == -ENOENT) {
+		auto weak_source = di_weakly_ref_object(_obj);
+		sig = (void *)di_new_object_with_type(struct di_signal);
+		((struct di_signal *)sig)->nhandlers = 0;
+		DI_CHECK_OK(di_member(sig, "weak_source", weak_source));
+		DI_CHECK_OK(di_member_clone(sig, "signal_name", signal_member_name_str));
+		DI_CHECK_OK(di_method(sig, "remove", di_signal_remove_handler,
+		                      struct di_weak_object *));
+		DI_CHECK_OK(di_method(sig, "add", di_signal_add_handler, struct di_object *));
+		DI_CHECK_OK(di_method(sig, "dispatch", di_signal_dispatch, struct di_tuple));
+		rc = di_setx(_obj, signal_member_name_str, DI_TYPE_OBJECT, &sig);
+		if (rc != 0) {
+			return di_new_error("Failed to set signal object %s", strerror(rc));
+		}
+	} else if (rc != 0) {
+		return di_new_error("Failed to get signal object %s", strerror(rc));
+	}
+
+	DI_CHECK_OK(di_call(sig, "add", h));
+
+	auto listen_handle = di_new_object_with_type(struct di_listen_handle);
+	DI_CHECK_OK(di_set_type((void *)listen_handle, "deai:ListenHandle"));
+
+	auto weak_sig = di_weakly_ref_object(sig);
+	auto weak_handler = di_weakly_ref_object(h);
+	di_member(listen_handle, "weak_signal", weak_sig);
+	di_member(listen_handle, "weak_handler", weak_handler);
+	di_method(listen_handle, "stop", di_listen_handle_stop);
+	di_method(listen_handle, "auto_stop", di_listen_handle_auto_stop);
+
+	return (struct di_object *)listen_handle;
+}
+
+int di_emitn(struct di_object *o, struct di_string name, struct di_tuple args) {
+	if (args.length > MAX_NARGS) {
+		return -E2BIG;
+	}
+
+	assert(args.length == 0 || (args.elements != NULL));
+
+	with_cleanup_t(char) signal_member_name = NULL;
+	asprintf(&signal_member_name, "__signal_%*s", (int)name.length, name.data);
+	di_object_with_cleanup sig = NULL;
+	if (di_get(o, signal_member_name, sig) == 0) {
+		DI_CHECK_OK(di_call(sig, "dispatch", args));
+	}
 	return 0;
 }
 
@@ -1038,10 +967,6 @@ static void di_dump_object(struct di_object_internal *obj) {
 			obj_internal->excess_ref_count--;
 		}
 		di_log_va(log_module, DI_LOG_DEBUG, "\n");
-	}
-	for (struct di_signal *s = obj->signals; s != NULL; s = s->hh.next) {
-		di_log_va(log_module, DI_LOG_DEBUG, "\tsignal: %.*s, nlisteners: %d\n",
-		          (int)s->name.length, s->name.data, s->nlisteners);
 	}
 }
 void di_dump_objects(void) {

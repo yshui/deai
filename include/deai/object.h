@@ -13,9 +13,11 @@
 #include <ctype.h>
 #include <errno.h>
 #include <stdalign.h>
+#include <stdarg.h>
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -372,15 +374,12 @@ PUBLIC_DEAI_API struct di_object *nullable di_listen_to(struct di_object *nonnul
                                                         struct di_string name,
                                                         struct di_object *nullable h);
 
-/// Create a promise that resolves when a signal is received.
-PUBLIC_DEAI_API struct di_promise *di_signal_promise(struct di_object *_obj, struct di_string name);
-
 /// Emit a signal with `name`, and `args`. The emitter of the signal is responsible of
 /// freeing `args`.
 PUBLIC_DEAI_API int
 di_emitn(struct di_object *nonnull, struct di_string name, struct di_tuple args);
-/// Call object dtor, remove all public members from the object. Listeners are not removed,
-/// they can only be removed when the object's strong refcount drop to 0
+/// Call object dtor, remove all public members from the object. Listeners are not
+/// removed, they can only be removed when the object's strong refcount drop to 0
 PUBLIC_DEAI_API void di_finalize_object(struct di_object *nonnull);
 
 PUBLIC_DEAI_API struct di_object *
@@ -473,6 +472,24 @@ static inline struct di_string unused di_string_tolower(struct di_string str) {
 		ret[i] = (char)tolower(str.data[i]);
 	}
 	return (struct di_string){.data = ret, .length = str.length};
+}
+
+static inline unused bool di_string_starts_with(struct di_string str, const char *pat) {
+	size_t len = strlen(pat);
+	if (str.length < len || strncmp(str.data, pat, len) != 0) {
+		return false;
+	}
+	return true;
+}
+
+static inline struct di_string
+    unused __attribute__((format(printf, 1, 2))) di_string_printf(const char *fmt, ...) {
+	struct di_string ret;
+	va_list args;
+	va_start(args, fmt);
+	ret.length = vasprintf((char **)&ret.data, fmt, args);        // minus the null byte
+	va_end(args);
+	return ret;
 }
 
 /// Get a substring of `str`, starting from `start`. `str` will be borrowed.
@@ -574,7 +591,7 @@ static inline unused size_t di_sizeof_type(di_type_t t) {
 #define di_set_return(v)                                                                 \
 	do {                                                                             \
 		*rtype = di_typeof(v);                                                   \
-		typeof(v) * retv;                                                        \
+		typeof(v) *retv;                                                         \
 		if (!*ret)                                                               \
 			*ret = calloc(1, di_min_return_size(sizeof(v)));                 \
 		retv = *(typeof(v) **)ret;                                               \

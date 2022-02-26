@@ -25,7 +25,6 @@ struct di_member {
 
 struct di_object_internal {
 	struct di_member *nullable members;
-	struct di_signal *nullable signals;
 
 	di_dtor_fn_t nullable dtor;
 	di_call_fn_t nullable call;
@@ -35,13 +34,13 @@ struct di_object_internal {
 	uint8_t destroyed;
 
 #ifdef TRACK_OBJECTS
-	char padding[54];
+	char padding[62];
 	uint8_t mark;
 	uint64_t excess_ref_count;
 	struct list_head siblings;
 #else
 	// Reserved for future use
-	char padding[79];
+	char padding[87];
 #endif
 };
 

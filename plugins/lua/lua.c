@@ -125,7 +125,6 @@ struct di_lua_script {
 static int di_lua_pushvariant(lua_State *L, const char *name, struct di_variant var);
 static int di_lua_meta_index(lua_State *L);
 static int di_lua_meta_index_for_weak_object(lua_State *L);
-static int di_lua_meta_index_for_listen_handle(lua_State *L);
 static int di_lua_meta_newindex(lua_State *L);
 
 static int di_lua_errfunc(lua_State *L) {
@@ -422,8 +421,6 @@ static int di_lua_gc_for_weak_object(lua_State *L) {
 	return 0;
 }
 
-static int di_lua_gc_for_listen_handle(lua_State *L);
-
 static const luaL_Reg di_lua_object_methods[] = {
     {"__index", di_lua_meta_index},
     {"__newindex", di_lua_meta_newindex},
@@ -434,12 +431,6 @@ static const luaL_Reg di_lua_object_methods[] = {
 static const luaL_Reg di_lua_weak_object_methods[] = {
     {"__index", di_lua_meta_index_for_weak_object},
     {"__gc", di_lua_gc_for_weak_object},
-    {0, 0},
-};
-
-static const luaL_Reg di_lua_listen_handle_methods[] = {
-    {"__index", di_lua_meta_index_for_listen_handle},
-    {"__gc", di_lua_gc_for_listen_handle},
     {0, 0},
 };
 
@@ -925,23 +916,6 @@ struct di_signal_handler_wrapper {
 
 static int call_lua_signal_handler_once(struct di_object *obj, di_type_t *rt,
                                         union di_value *ret, struct di_tuple t);
-
-static void di_lua_free_listen_handle(struct di_lua_listen_handle_proxy *proxy) {
-	if (proxy->lua_object_alive || proxy->once_wrapper_alive) {
-		return;
-	}
-
-	// `proxy` is not a di_object
-	free(proxy);
-}
-
-static void di_lua_signal_handler_wrapper_dtor(struct di_object *o) {
-	auto wrapper = (struct di_signal_handler_wrapper *)o;
-	wrapper->listen_handle->once_wrapper_alive = false;
-	di_lua_free_listen_handle(wrapper->listen_handle);
-	wrapper->listen_handle = NULL;
-}
-
 /// EXPORT: deai.plugin.lua:Proxy.on(signal: :string, callback), deai:ListenHandle
 ///
 /// Listen for signals
@@ -972,46 +946,30 @@ static int di_lua_add_listener(lua_State *L) {
 		return luaL_argerror(L, 3, "not a function");
 	}
 
-	// TODO(yshui) implement `once` listeners again.
-	// remember the once flag, wrap the handler function, stop the listener in the
-	// wrapper if once == true
 	auto handler = (struct di_object *)lua_type_to_di_object(L, -1, call_lua_function);
-	auto proxy = tmalloc(struct di_lua_listen_handle_proxy, 1);
 
 	if (once) {
 		auto wrapped_handler =
 		    di_new_object_with_type2(struct di_signal_handler_wrapper,
 		                             "deai.plugin.lua:OnceSignalHandler");
-		wrapped_handler->listen_handle = proxy;
 		di_set_object_call((struct di_object *)wrapped_handler,
 		                   call_lua_signal_handler_once);
-		di_set_object_dtor((struct di_object *)wrapped_handler,
-		                   di_lua_signal_handler_wrapper_dtor);
-		di_member(wrapped_handler, "___handler", handler);
-		proxy->once_wrapper_alive = true;
+		di_member(wrapped_handler, "wrapped", handler);
 		handler = (struct di_object *)wrapped_handler;
 	}
 
-	di_object_with_cleanup listen_handle = di_listen_to(o, signame, (void *)handler);
+	auto listen_handle = di_listen_to(o, signame, (void *)handler);
+	if (once) {
+		di_member_clone(handler, "listen_handle", listen_handle);
+	}
 	di_unref_object((struct di_object *)handler);
 
-	if (IS_ERR(listen_handle)) {
-		return luaL_error(L, "failed to add listener %s",
-		                  strerror((int)PTR_ERR(listen_handle)));
+	if (di_check_type(listen_handle, "deai:Error")) {
+		di_string_with_cleanup errmsg;
+		DI_CHECK_OK(di_get(listen_handle, "errmsg", errmsg));
+		return luaL_error(L, "failed to add listener %*s", errmsg.length, errmsg.data);
 	}
-
-	struct di_lua_script *s;
-	di_lua_get_env(L, s);
-
-	di_object_with_cleanup state_obj = NULL;
-	DI_CHECK_OK(di_get(s, "___di_lua_state", state_obj));
-
-	auto roots = di_get_roots();
-	DI_CHECK(roots);
-	di_callr(roots, "__add_anonymous", proxy->root_handle_for_listen_handle, listen_handle);
-	di_callr(roots, "__add_anonymous", proxy->root_handle_for_source, o);
-	proxy->lua_object_alive = true;
-	di_lua_pushproxy(L, NULL, proxy, di_lua_listen_handle_methods, false);
+	di_lua_pushobject(L, NULL, listen_handle);
 	return 1;
 }
 
@@ -1173,19 +1131,6 @@ static int di_lua_weak_ref(lua_State *L) {
 	return nret;
 }
 
-static int di_lua_signal(lua_State *L) {
-	if (lua_gettop(L) != 2) {
-		return luaL_error(L, "'signal' takes 2 arguments");
-	}
-	struct di_object *o = *di_lua_checkproxy(L, 1);
-	struct di_string signame;
-	signame.data = luaL_checklstring(L, 2, &signame.length);
-
-	struct di_promise *p = di_signal_promise(o, signame);
-	di_lua_pushobject(L, "promise", (void *)p);
-	return 1;
-}
-
 static int di_lua_meta_index_for_weak_object(lua_State *L) {
 	/* This is __index for lua di_weak_object proxies. Weak object reference proxies
 	 * only have one method, `upgrade()`, to retrieve a strong object reference
@@ -1205,66 +1150,16 @@ static int di_lua_meta_index_for_weak_object(lua_State *L) {
 	return 0;
 }
 
-static void di_lua_stop_listener_impl(struct di_lua_listen_handle_proxy *proxy) {
-	if (proxy->root_handle_for_listen_handle == 0) {
-		// Already stopped
-		return;
-	}
-	DI_CHECK(proxy->root_handle_for_source != 0);
-
-	auto roots = di_get_roots();
-	DI_CHECK(roots != NULL);
-	di_call(roots, "__remove_anonymous", proxy->root_handle_for_listen_handle);
-	di_call(roots, "__remove_anonymous", proxy->root_handle_for_source);
-	proxy->root_handle_for_listen_handle = 0;
-	proxy->root_handle_for_source = 0;
-}
-
-static int di_lua_stop_listener(lua_State *L) {
-	struct di_lua_listen_handle_proxy *proxy = *di_lua_checkproxy(L, 1);
-	di_lua_stop_listener_impl(proxy);
-	return 0;
-}
-
-static int di_lua_gc_for_listen_handle(lua_State *L) {
-	struct di_lua_listen_handle_proxy *proxy = *di_lua_checkproxy(L, 1);
-	// When listen handles are dropped, the listeners will be left running forever, so
-	// we just free the listen_handle without stopping it
-	proxy->lua_object_alive = false;
-	di_lua_free_listen_handle(proxy);
-	return 0;
-}
-
-static int di_lua_meta_index_for_listen_handle(lua_State *L) {
-	/* This is __index for lua listen handle proxies. These proxies only have one
-	 * method, `stop()`, to remove the listen handle from roots.
-	 */
-
-	if (lua_gettop(L) != 2) {
-		return luaL_error(L, "wrong number of arguments to __index");
-	}
-
-	const char *key = luaL_checklstring(L, 2, NULL);
-
-	if (strcmp(key, "stop") == 0) {
-		lua_pushcclosure(L, di_lua_stop_listener, 0);
-		return 1;
-	}
-
-	return 0;
-}
-
 static int call_lua_signal_handler_once(struct di_object *obj, di_type_t *rt,
                                         union di_value *ret, struct di_tuple t) {
 	di_object_with_cleanup handler = NULL;
-	DI_CHECK_OK(di_get(obj, "___handler", handler));
+	di_object_with_cleanup listen_handle = NULL;
+	DI_CHECK_OK(di_get(obj, "wrapped", handler));
+	DI_CHECK_OK(di_get(obj, "listen_handle", listen_handle));
 
-	auto wrapper = (struct di_signal_handler_wrapper *)obj;
 	// Stop the listener first, in case the signal is emitted again during the
 	// handler call.
-	di_lua_stop_listener_impl(wrapper->listen_handle);
-	di_finalize_object(obj);
-
+	DI_CHECK_OK(di_call(listen_handle, "stop"));
 	return di_call_objectt(handler, rt, ret, t);
 }
 
@@ -1311,10 +1206,6 @@ static int di_lua_meta_index(lua_State *L) {
 	}
 	if (strcmp(key, "weakref") == 0) {
 		lua_pushcclosure(L, di_lua_weak_ref, 0);
-		return 1;
-	}
-	if (strcmp(key, "signal") == 0) {
-		lua_pushcclosure(L, di_lua_signal, 0);
 		return 1;
 	}
 

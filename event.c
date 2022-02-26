@@ -25,6 +25,7 @@ struct di_ioev {
 struct di_timer {
 	struct di_object_internal;
 	ev_timer evt;
+	uint64_t root_handle;
 };
 
 struct di_periodic {
@@ -42,16 +43,12 @@ static void di_ioev_callback(EV_P_ ev_io *w, int revents) {
 	auto ev = container_of(w, struct di_ioev, evh);
 	// Keep ev alive during emission
 	di_object_with_cleanup unused obj = di_ref_object((struct di_object *)ev);
-	int dt = 0;
 	if (revents & EV_READ) {
 		di_emit(ev, "read");
-		dt |= IOEV_READ;
 	}
 	if (revents & EV_WRITE) {
 		di_emit(ev, "write");
-		dt |= IOEV_WRITE;
 	}
-	di_emit(ev, "io", dt);
 }
 
 /// SIGNAL: deai.builtin.event:Timer.elapsed(now: :float) Timeout was reached
@@ -86,13 +83,12 @@ static void di_periodic_callback(EV_P_ ev_periodic *w, int revents) {
 /// Start the event source
 ///
 /// EXPORT: deai.builtin.event:IoEv.start(), :void
-static void di_start_ioev(struct di_object *obj) {
-	struct di_ioev *ev = (void *)obj;
+static void di_start_ioev(struct di_ioev *ev) {
 	if (ev->running) {
 		return;
 	}
 
-	auto di_obj = di_object_get_deai_weak(obj);
+	auto di_obj = di_object_get_deai_weak((void *)ev);
 	if (di_obj == NULL) {
 		// deai is shutting down
 		return;
@@ -101,19 +97,25 @@ static void di_start_ioev(struct di_object *obj) {
 	auto di = (struct deai *)di_obj;
 	ev_io_start(di->loop, &ev->evh);
 	ev->running = true;
-	di_object_upgrade_deai(obj);
+
+	// Keep the mainloop alive while we are running
+	di_object_upgrade_deai((void *)ev);
+
+	// Add event source to roots when it's running
+	auto roots = di_get_roots();
+	di_string_with_cleanup root_key = di_string_printf("fdevent_for_%d", ev->evh.fd);
+	DI_CHECK_OK(di_call(roots, "add", root_key, (struct di_object *)ev));
 }
 
 /// Stop the event source
 ///
 /// EXPORT: deai.builtin.event:IoEv.stop(), :void
-static void di_stop_ioev(struct di_object *obj) {
-	struct di_ioev *ev = (void *)obj;
+static void di_stop_ioev(struct di_ioev *ev) {
 	if (!ev->running) {
 		return;
 	}
 
-	di_object_with_cleanup di_obj = di_object_get_deai_strong(obj);
+	di_object_with_cleanup di_obj = di_object_get_deai_strong((void *)ev);
 	if (di_obj == NULL) {
 		return;
 	}
@@ -122,45 +124,70 @@ static void di_stop_ioev(struct di_object *obj) {
 	ev_io_stop(di->loop, &ev->evh);
 	ev->running = false;
 
-	// This object won't generate further event until the user calls `start`
-	// So drop the strong __deai reference
-	di_object_downgrade_deai(obj);
-}
+	// Stop referencing the mainloop since we are not running
+	di_object_downgrade_deai((void *)ev);
 
-/// Toggle the event source
-///
-/// EXPORT: deai.builtin.event:IoEv.stop(), :void
-static void di_toggle_ioev(struct di_object *obj) {
-	struct di_ioev *ev = (void *)obj;
-	if (ev->running) {
-		di_stop_ioev(obj);
-	} else {
-		di_start_ioev(obj);
-	}
+	auto roots = di_get_roots();
+	di_string_with_cleanup root_key = di_string_printf("fdevent_for_%d", ev->evh.fd);
+	DI_CHECK_OK(di_call(roots, "remove", root_key));
 }
 
 /// Change monitored file descriptor events
 ///
 /// EXPORT: deai.builtin.event:IoEv.modify(flag: :integer), :void
-static void di_modify_ioev(struct di_object *obj, int events) {
-	auto ioev = (struct di_ioev *)obj;
-	if (events == 0) {
-		return di_stop_ioev(obj);
-	}
-
-	unsigned int flags = 0;
-	if (events & IOEV_READ) {
-		flags |= EV_READ;
-	}
-	if (events & IOEV_WRITE) {
-		flags |= EV_WRITE;
-	}
-
+static void di_modify_ioev(struct di_ioev *ioev, unsigned int flags) {
 #ifdef ev_io_modify
 	ev_io_modify(&ioev->evh, flags);
 #else
 	ev_io_set(&ioev->evh, ioev->evh.fd, flags);
 #endif
+	if (!ioev->running && flags != 0) {
+		di_start_ioev(ioev);
+	} else if (ioev->running && flags == 0) {
+		di_stop_ioev(ioev);
+	}
+}
+
+static void di_enable_read(struct di_object *obj, struct di_object *sig) {
+	if (di_member_clone(obj, "__signal_read", sig) != 0) {
+		return;
+	}
+
+	auto ioev = (struct di_ioev *)obj;
+	unsigned int flags = ioev->evh.events;
+	flags |= EV_READ;
+	di_modify_ioev(ioev, flags);
+}
+
+static void di_enable_write(struct di_object *obj, struct di_object *sig) {
+	if (di_member_clone(obj, "__signal_write", sig) != 0) {
+		return;
+	}
+
+	auto ioev = (struct di_ioev *)obj;
+	unsigned int flags = ioev->evh.events;
+	flags |= EV_WRITE;
+	di_modify_ioev(ioev, flags);
+}
+
+static void di_disable_read(struct di_object *obj) {
+	if (di_remove_member_raw(obj, di_string_borrow("__signal_read")) != 0) {
+		return;
+	}
+
+	auto ioev = (struct di_ioev *)obj;
+	unsigned int flags = ioev->evh.events & (~EV_READ);
+	di_modify_ioev(ioev, flags);
+}
+
+static void di_disable_write(struct di_object *obj) {
+	if (di_remove_member_raw(obj, di_string_borrow("__signal_write")) != 0) {
+		return;
+	}
+
+	auto ioev = (struct di_ioev *)obj;
+	unsigned int flags = ioev->evh.events & (~EV_WRITE);
+	di_modify_ioev(ioev, flags);
 }
 
 /// File descriptor events
@@ -173,42 +200,28 @@ static void di_modify_ioev(struct di_object *obj, int events) {
 ///        writability.
 ///
 /// Wait for a file descriptor to be readable/writable.
-static struct di_object *di_create_ioev(struct di_object *obj, int fd, int t) {
+static struct di_object *di_create_ioev(struct di_object *obj, int fd) {
 	struct di_module *em = (void *)obj;
 	auto ret = di_new_object_with_type(struct di_ioev);
 	di_set_type((void *)ret, "deai.builtin.event:IoEv");
 
-	auto di_obj = di_module_get_deai(em);
+	di_object_with_cleanup di_obj = di_module_get_deai(em);
 	if (di_obj == NULL) {
 		return di_new_error("deai is shutting down...");
 	}
 
-	unsigned int flags = 0;
-	if (t & IOEV_READ) {
-		flags |= EV_READ;
-	}
-	if (t & IOEV_WRITE) {
-		flags |= EV_WRITE;
-	}
-
-	ev_io_init(&ret->evh, di_ioev_callback, fd, flags);
-	{
-		auto di = (struct deai *)di_obj;
-		ev_io_start(di->loop, &ret->evh);
-	}
+	ev_io_init(&ret->evh, di_ioev_callback, fd, 0);
+	ret->running = false;
 
 	// Started ioev has strong ref to ddi
 	// Stopped has weak ref
-	di_member(ret, DEAI_MEMBER_NAME_RAW, di_obj);
+	auto weak_di = di_weakly_ref_object(di_obj);
+	di_member(ret, DEAI_MEMBER_NAME_RAW, weak_di);
 
-	di_method(ret, "start", di_start_ioev);
-	di_method(ret, "stop", di_stop_ioev);
-	di_method(ret, "toggle", di_toggle_ioev);
-	di_method(ret, "modify", di_modify_ioev, int);
-	di_method(ret, "close", di_finalize_object);
-
-	ret->dtor = di_stop_ioev;
-	ret->running = true;
+	di_method(ret, "__set___signal_read", di_enable_read, struct di_object *);
+	di_method(ret, "__set___signal_write", di_enable_write, struct di_object *);
+	di_method(ret, "__delete___signal_read", di_disable_read);
+	di_method(ret, "__delete___signal_write", di_disable_write);
 	return (void *)ret;
 }
 
@@ -257,6 +270,31 @@ static void di_timer_set(struct di_timer *obj, double t) {
 	di_timer_again(obj);
 }
 
+static void di_timer_add_signal(struct di_object *o, struct di_object *sig) {
+	if (di_member_clone(o, "__signal_elapsed", sig) != 0) {
+		return;
+	}
+
+	auto t = (struct di_timer *)o;
+	di_object_upgrade_deai(o);
+
+	// Add ourselve to GC root
+	auto roots = di_get_roots();
+	DI_CHECK_OK(di_callr(roots, "__add_anonymous", t->root_handle, o));
+}
+
+static void di_timer_delete_signal(struct di_object *o) {
+	if (di_remove_member_raw(o, di_string_borrow("__signal_elapsed")) != 0) {
+		return;
+	}
+
+	auto t = (struct di_timer *)o;
+	auto roots = di_get_roots();
+	DI_CHECK_OK(di_call(roots, "__remove_anonymous", t->root_handle));
+
+	di_object_downgrade_deai(o);
+}
+
 /// Timer events
 ///
 /// EXPORT: event.timer(timeout: :float), deai.builtin.event:Timer
@@ -270,7 +308,7 @@ static struct di_object *di_create_timer(struct di_object *obj, double timeout) 
 	struct di_module *em = (void *)obj;
 	auto ret = di_new_object_with_type(struct di_timer);
 	di_set_type((void *)ret, "deai.builtin.event:Timer");
-	auto di_obj = di_module_get_deai(em);
+	di_object_with_cleanup di_obj = di_module_get_deai(em);
 	if (di_obj == NULL) {
 		return di_new_error("deai is shutting down...");
 	}
@@ -281,6 +319,8 @@ static struct di_object *di_create_timer(struct di_object *obj, double timeout) 
 
 	// Set the timeout and restart the timer
 	di_method(ret, "__set_timeout", di_timer_set, double);
+	di_method(ret, "__set___signal_elapsed", di_timer_add_signal, struct di_object *);
+	di_method(ret, "__delete___signal_elapsed", di_timer_delete_signal);
 
 	ev_init(&ret->evt, di_timer_callback);
 	ret->evt.repeat = timeout;
@@ -290,7 +330,8 @@ static struct di_object *di_create_timer(struct di_object *obj, double timeout) 
 
 	// Started timers have strong references to di
 	// Stopped ones have weak ones
-	di_member(ret, DEAI_MEMBER_NAME_RAW, di_obj);
+	auto weak_di = di_weakly_ref_object(di_obj);
+	di_member(ret, DEAI_MEMBER_NAME_RAW, weak_di);
 	return (struct di_object *)ret;
 }
 
@@ -367,7 +408,7 @@ static void di_prepare(EV_P_ ev_prepare *w, int revents) {
 void di_init_event(struct deai *di) {
 	auto em = di_new_module(di);
 
-	di_method(em, "fdevent", di_create_ioev, int, int);
+	di_method(em, "fdevent", di_create_ioev, int);
 	di_method(em, "timer", di_create_timer, double);
 	di_method(em, "periodic", di_create_periodic, double, double);
 

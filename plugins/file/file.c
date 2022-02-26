@@ -24,6 +24,7 @@ struct di_file_watch_entry {
 struct di_file_watch {
 	struct di_object;
 	int fd;
+	int nsignals;
 
 	struct di_file_watch_entry *byname, *bywd;
 };
@@ -59,16 +60,16 @@ define_object_cleanup(di_file_watch);
 /// SIGNAL: deai.plugin.file:Watch.open(path: :string, file_name: :string)
 /// A file or directory was opened
 ///
-/// SIGNAL: deai.plugin.file:Watch.move-from(path: :string, file_name: :string, cookie: :integer)
-/// A file in a watched directory was renamed to a new place.
+/// SIGNAL: deai.plugin.file:Watch.move-from(path: :string, file_name: :string, cookie:
+/// :integer) A file in a watched directory was renamed to a new place.
 ///
 /// Arguments:
 ///
 /// - cookie unique integer associated with this move, can be used to pair this event with
 ///          a :lua:sgnl:`move-to` event.
 ///
-/// SIGNAL: deai.plugin.file:Watch.move-to(path: :string, file_name: :string, cookie: :integer)
-/// A file was renamed into a watched directory.
+/// SIGNAL: deai.plugin.file:Watch.move-to(path: :string, file_name: :string, cookie:
+/// :integer) A file was renamed into a watched directory.
 ///
 /// Arguments:
 ///
@@ -219,6 +220,59 @@ static void stop_file_watcher(struct di_file_watch *fw) {
 	}
 }
 
+static void di_file_new_signal(struct di_object *fw_, struct di_string member_name,
+                               struct di_object *sig) {
+	if (!di_string_starts_with(member_name, "__signal_")) {
+		return;
+	}
+
+	if (di_add_member_clone(fw_, member_name, DI_TYPE_OBJECT, sig) != 0) {
+		return;
+	}
+
+	auto fw = (struct di_file_watch *)fw_;
+	fw->nsignals += 1;
+	if (fw->nsignals == 1) {
+		// Start fdevent
+		di_weak_object_with_cleanup weak_eventm = NULL;
+		DI_CHECK_OK(di_get(fw, "__weak_event_module", weak_eventm));
+		di_object_with_cleanup event_module = di_upgrade_weak_ref(weak_eventm);
+		if (event_module == NULL) {
+			// Event module went away, deai is exiting?
+			return;
+		}
+
+		di_object_with_cleanup fdevent = NULL;
+		DI_CHECK_OK(di_callr(event_module, "fdevent", fdevent, fw->fd));
+
+		di_closure_with_cleanup cl =
+		    di_closure(di_file_ioev, ((struct di_object *)fw));
+		di_object_with_cleanup listen_handle =
+		    di_listen_to(fdevent, di_string_borrow("read"), (void *)cl);
+		struct di_object *autohandle;
+		DI_CHECK_OK(di_callr(listen_handle, "auto_stop", autohandle));
+		di_member(fw, "__inotify_fd_event_read_listen_handle", autohandle);
+	}
+}
+
+static void di_file_delete_signal(struct di_object *fw_, struct di_string member_name) {
+	if (!di_string_starts_with(member_name, "__signal_")) {
+		return;
+	}
+
+	if (di_remove_member_raw(fw_, member_name) != 0) {
+		return;
+	}
+
+	auto fw = (struct di_file_watch *)fw_;
+	fw->nsignals -= 1;
+	if (fw->nsignals == 0) {
+		// Drop listen handle to stop it
+		di_remove_member_raw(
+		    fw_, di_string_borrow("__inotify_fd_event_read_listen_handle"));
+	}
+}
+
 /// Create a new file watch
 ///
 /// EXPORT: file.watch(paths), deai.plugin.file:Watch
@@ -248,17 +302,12 @@ static struct di_object *di_file_new_watch(struct di_module *f, struct di_array 
 	di_method(fw, "add", di_file_add_many_watch, struct di_array);
 	di_method(fw, "add_one", di_file_add_watch, struct di_string);
 	di_method(fw, "remove", di_file_rm_watch, struct di_string);
+	di_method(fw, "__set", di_file_new_signal, struct di_string, struct di_object *);
+	di_method(fw, "__delete", di_file_delete_signal, struct di_string);
 	di_mgetm(f, event, di_new_error("Can't find event module"));
 
-	struct di_object *fdevent = NULL;
-	DI_CHECK_OK(di_callr(eventm, "fdevent", fdevent, fw->fd, IOEV_READ));
-
-	di_weak_object_with_cleanup tmpo = di_weakly_ref_object((struct di_object *)fw);
-	di_closure_with_cleanup cl = di_closure(di_file_ioev, (tmpo));
-	auto listen_handle = di_listen_to(fdevent, di_string_borrow("read"), (void *)cl);
-
-	di_member(fw, "__inotify_fd_event", fdevent);
-	di_member(fw, "__inotify_fd_event_read_listen_handle", listen_handle);
+	auto weak_eventm = di_weakly_ref_object(eventm);
+	di_member(fw, "__weak_event_module", weak_eventm);
 
 	if (di_file_add_many_watch(fw, paths) != 0) {
 		di_unref_object((struct di_object *)fw);
