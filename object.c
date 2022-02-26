@@ -398,13 +398,9 @@ static void _di_finalize_object(struct di_object_internal *obj) {
 	while (m) {
 		auto next_m = m->hh.next;
 #if 0
-		if (m->type != DI_TYPE_OBJECT)
-			fprintf(stderr, "removing member %s\n", m->name);
-		else
-			fprintf(stderr, "removing member %s(%d)\n", m->name,
-			        *(struct di_object **)m->data
-			            ? (*(struct di_object **)m->data)->ref_count
-			            : -1);
+		with_cleanup_t(char) dbg = di_value_to_string(m->type, m->data);
+		fprintf(stderr, "removing member %.*s (%s)\n", (int)m->name.length,
+		        m->name.data, dbg);
 #endif
 		di_remove_member_raw_impl(obj, m);
 		m = next_m;
@@ -793,6 +789,7 @@ static void di_listen_handle_stop(struct di_object *nonnull obj) {
 }
 
 static void di_listen_handle_auto_stop_stop(struct di_object *obj) {
+	DI_CHECK(di_check_type(obj, "deai:AutoStopListenHandle"));
 	di_object_with_cleanup listen_handle;
 	DI_CHECK_OK(di_get(obj, "listen_handle", listen_handle));
 	DI_CHECK_OK(di_call(listen_handle, "stop"));
@@ -805,6 +802,7 @@ static struct di_object *di_listen_handle_auto_stop(struct di_object *obj) {
 	auto ret = di_new_object_with_type(struct di_object);
 	DI_CHECK_OK(di_set_type(ret, "deai:AutoStopListenHandle"));
 	di_set_object_dtor(ret, di_listen_handle_auto_stop_stop);
+	DI_CHECK_OK(di_member_clone(ret, "listen_handle", obj));
 	return ret;
 }
 

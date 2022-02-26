@@ -207,8 +207,6 @@ static int di_file_rm_watch(struct di_file_watch *fw, struct di_string path) {
 }
 
 static void stop_file_watcher(struct di_file_watch *fw) {
-	DI_CHECK(di_has_member(fw, "__inotify_fd_event"));
-
 	close(fw->fd);
 
 	struct di_file_watch_entry *we, *twe;
@@ -226,7 +224,7 @@ static void di_file_new_signal(struct di_object *fw_, struct di_string member_na
 		return;
 	}
 
-	if (di_add_member_clone(fw_, member_name, DI_TYPE_OBJECT, sig) != 0) {
+	if (di_add_member_clone(fw_, member_name, DI_TYPE_OBJECT, &sig) != 0) {
 		return;
 	}
 
