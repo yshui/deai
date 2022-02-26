@@ -345,6 +345,9 @@ static void setproctitle_init(int argc, char **argv, struct deai *p) {
 	for (int i = 0; argv[i]; i++) {
 		end = (uintptr_t)argv[i] + strlen(argv[i]);
 	}
+	for (int i = 0; environ[i]; i++) {
+		end = (uintptr_t)environ[i] + strlen(environ[i]);
+	}
 
 	// Available space extends until the end of the page
 	auto pgsz = getpagesize();
