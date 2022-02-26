@@ -973,6 +973,49 @@ void di_track_object_ref(struct di_object *unused obj, void *pointer) {
 	t->ptr = pointer;
 	HASH_ADD_PTR(ref_tracked, ptr, t);
 }
+static char *indent(int level) {
+	char *ret = malloc(2 * level + 1);
+	memset(ret, ' ', 2 * level);
+	ret[2 * level] = '\0';
+	return ret;
+}
+
+static void di_dump_array(struct di_array arr, int depth);
+static void di_dump_tuple(struct di_tuple t, int depth) {
+	with_cleanup_t(char) prefix = indent(depth);
+	di_log_va(log_module, DI_LOG_DEBUG, "\t%s(", prefix);
+	for (int i = 0; i < t.length; i++) {
+		with_cleanup_t(char) value_string =
+		    di_value_to_string(t.elements[i].type, t.elements[i].value);
+		di_log_va(log_module, DI_LOG_DEBUG, "\t%s  %s,", prefix, value_string);
+		if (t.elements[i].type == DI_TYPE_OBJECT) {
+			((struct di_object_internal *)t.elements[i].value->object)->excess_ref_count--;
+		} else if (t.elements[i].type == DI_TYPE_ARRAY) {
+			di_dump_array(t.elements[i].value->array, depth + 1);
+		} else if (t.elements[i].type == DI_TYPE_TUPLE) {
+			di_dump_tuple(t.elements[i].value->tuple, depth + 1);
+		}
+	}
+	di_log_va(log_module, DI_LOG_DEBUG, "\t%s)", prefix);
+}
+static void di_dump_array(struct di_array arr, int depth) {
+	with_cleanup_t(char) prefix = indent(depth);
+	auto step_size = di_sizeof_type(arr.elem_type);
+	di_log_va(log_module, DI_LOG_DEBUG, "\t%s[", prefix);
+	for (int i = 0; i < arr.length; i++) {
+		void *curr = arr.arr + i * step_size;
+		with_cleanup_t(char) value_string = di_value_to_string(arr.elem_type, curr);
+		di_log_va(log_module, DI_LOG_DEBUG, "\t%s  %s,", prefix, value_string);
+		if (arr.elem_type == DI_TYPE_OBJECT) {
+			((struct di_object_internal *)curr)->excess_ref_count--;
+		} else if (arr.elem_type == DI_TYPE_ARRAY) {
+			di_dump_array(*(struct di_array *)curr, depth + 1);
+		} else if (arr.elem_type == DI_TYPE_TUPLE) {
+			di_dump_tuple(*(struct di_tuple *)curr, depth + 1);
+		}
+	}
+	di_log_va(log_module, DI_LOG_DEBUG, "\t%s]", prefix);
+}
 static void di_dump_object(struct di_object_internal *obj) {
 	di_log_va(log_module, DI_LOG_DEBUG,
 	          "%p, ref count: %lu strong %lu weak (live: %d), type: %s\n", obj,
@@ -987,8 +1030,11 @@ static void di_dump_object(struct di_object_internal *obj) {
 			union di_value *val = m->data;
 			auto obj_internal = (struct di_object_internal *)val->object;
 			obj_internal->excess_ref_count--;
+		} else if (m->type == DI_TYPE_ARRAY) {
+			di_dump_array(m->data->array, 0);
+		} else if (m->type == DI_TYPE_TUPLE) {
+			di_dump_tuple(m->data->tuple, 0);
 		}
-		di_log_va(log_module, DI_LOG_DEBUG, "\n");
 	}
 }
 void di_dump_objects(void) {
@@ -1009,19 +1055,44 @@ void di_dump_objects(void) {
 	}
 
 	list_for_each_entry (i, &all_objects, siblings) {
-		// Excess ref count doesn't count references in roots. Object added as
-		// roots will have 1 excess_ref_count per root.
-		di_log_va(log_module, DI_LOG_DEBUG, "%p, excess_ref_count: %lu/%lu\n", i,
-		          i->excess_ref_count, i->ref_count);
+		const char *color = "";
+		if (i->excess_ref_count > 0) {
+			color = "\033[31;1m";
+		}
+		di_log_va(log_module, DI_LOG_DEBUG, "%s%p, excess_ref_count: %lu/%lu\033[0m\n",
+		          color, i, i->excess_ref_count, i->ref_count);
+	}
+}
+
+static void *di_mark_and_sweep_dfs(struct di_object_internal *o, bool *has_cycle);
+static void di_mark_and_sweep_detect_cycle(struct di_object_internal *o,
+                                           struct di_object_internal *next,
+                                           bool *has_cycle, void **cycle_return) {
+	void *cycle = di_mark_and_sweep_dfs(next, has_cycle);
+
+	if (cycle != NULL) {
+		if (cycle != o) {
+			// The cycle doesn't stop with us
+			// We will overwrite cycle_return if it's not NULL,
+			// meaning when we detect cycles, we only print any one of them.
+			*cycle_return = cycle;
+			di_log_va(log_module, DI_LOG_DEBUG, "\t%p ->", o);
+		} else {
+			di_log_va(log_module, DI_LOG_DEBUG, "\t%p", o);
+		}
 	}
 }
 
 static void *di_mark_and_sweep_dfs(struct di_object_internal *o, bool *has_cycle) {
 	if (o->mark != 0) {
 		if (o->mark == 1) {
-			di_log_va(log_module, DI_LOG_WARN, "Reference cycle detected:\n\t%p", o);
-			*has_cycle = true;
-			return o;
+			if (!*has_cycle) {
+				di_log_va(log_module, DI_LOG_DEBUG,
+				          "Reference cycle detected:\n\t%p ->", o);
+				*has_cycle = true;
+				return o;
+			}
+			// Don't start reporting a new cycle if we already have one
 		}
 		return NULL;
 	}
@@ -1029,23 +1100,26 @@ static void *di_mark_and_sweep_dfs(struct di_object_internal *o, bool *has_cycle
 	o->mark = 1;
 	void *cycle_return = NULL;
 	for (auto i = o->members; i != NULL; i = i->hh.next) {
-		if (i->type != DI_TYPE_OBJECT) {
-			continue;
-		}
-		union di_value *val = i->data;
-		void *cycle = di_mark_and_sweep_dfs(
-		    (struct di_object_internal *)val->object, has_cycle);
-
-		if (cycle != NULL) {
-			di_log_va(log_module, DI_LOG_WARN, " -> %p", o);
-			if (cycle != o) {
-				// The cycle doesn't stop with us
-				// We will overwrite cycle_return if it's not NULL,
-				// meaning when we detect cycles, we only print any one of them.
-				cycle_return = cycle;
-			} else {
-				di_log_va(log_module, DI_LOG_WARN, "\n");
+		if (i->type == DI_TYPE_OBJECT) {
+			di_mark_and_sweep_detect_cycle(o, (void *)i->data->object,
+			                               has_cycle, &cycle_return);
+		} else if (i->type == DI_TYPE_ARRAY && i->data->array.elem_type == DI_TYPE_OBJECT) {
+			struct di_object_internal **objects = i->data->array.arr;
+			for (int j = 0; j < i->data->array.length; j++) {
+				di_mark_and_sweep_detect_cycle(o, objects[j], has_cycle,
+				                               &cycle_return);
 			}
+		} else if (i->type == DI_TYPE_TUPLE) {
+			for (int j = 0; j < i->data->tuple.length; j++) {
+				if (i->data->tuple.elements[j].type == DI_TYPE_OBJECT) {
+					di_mark_and_sweep_detect_cycle(
+					    o, (void *)i->data->tuple.elements[j].value->object,
+					    has_cycle, &cycle_return);
+				}
+			}
+		} else if (i->type == DI_TYPE_VARIANT && i->data->variant.type == DI_TYPE_OBJECT) {
+			di_mark_and_sweep_detect_cycle(o, (void *)i->data->variant.value->object,
+			                               has_cycle, &cycle_return);
 		}
 	}
 
@@ -1064,7 +1138,7 @@ bool di_mark_and_sweep(bool *has_cycle) {
 	}
 	list_for_each_entry (i, &all_objects, siblings) {
 		if (i->mark == 0 && i->ref_count > 0) {
-			di_log_va(log_module, DI_LOG_WARN, "%p is not marked\n", i);
+			di_log_va(log_module, DI_LOG_DEBUG, "%p is not marked\n", i);
 			return true;
 		}
 	}
