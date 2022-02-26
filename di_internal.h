@@ -18,7 +18,7 @@
 
 struct di_member {
 	struct di_string name;
-	void *nonnull data;
+	union di_value *nonnull data;
 	di_type_t type;
 	UT_hash_handle hh;
 };

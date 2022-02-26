@@ -987,7 +987,8 @@ static void di_dump_tuple(struct di_tuple t, int depth) {
 	for (int i = 0; i < t.length; i++) {
 		with_cleanup_t(char) value_string =
 		    di_value_to_string(t.elements[i].type, t.elements[i].value);
-		di_log_va(log_module, DI_LOG_DEBUG, "\t%s  %s,", prefix, value_string);
+		di_log_va(log_module, DI_LOG_DEBUG, "\t%s  %s: %s,", prefix,
+		          di_type_to_string(t.elements[i].type), value_string);
 		if (t.elements[i].type == DI_TYPE_OBJECT) {
 			((struct di_object_internal *)t.elements[i].value->object)->excess_ref_count--;
 		} else if (t.elements[i].type == DI_TYPE_ARRAY) {

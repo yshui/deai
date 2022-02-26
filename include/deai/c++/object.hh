@@ -281,6 +281,16 @@ auto to_borrowed_deai_value(const T &input) {
 	unreachable();
 }
 
+/// Borrow a C++ value into a deai variant
+template <typename T, c_api::di_type type = deai_typeof<typename std::remove_reference<T>::type>::value>
+auto to_borrowed_deai_variant(const T &input) -> c_api::di_variant {
+	c_api::di_value *value_ptr =
+	    reinterpret_cast<c_api::di_value *>(::malloc(sizeof(c_api::di_value)));
+	auto value = to_borrowed_deai_value(input);
+	::memcpy(value_ptr, &value, sizeof(value));
+	return {.value = value, .type = type};
+}
+
 inline auto string_to_owned_deai_value(std::string &&input) -> c_api::di_string {
 	auto moved = std::move(input);
 	return c_api::di_string_ndup(moved.c_str(), moved.size());
@@ -781,11 +791,11 @@ public:
 	template <typename Return, typename... Args>
 	auto method_call(std::string_view method_name, const Args &...args)
 	    -> std::enable_if_t<(util::deai_typeof<Return>::value, true), Return> {
-		    std::optional<Variant> method = (*this)[method_name];
-		    if (!method.has_value()) {
-			    throw std::out_of_range("method not found in object");
-		    }
-		    return method->object_ref().value().call<Return>(raw(), args...);
+		std::optional<Variant> method = (*this)[method_name];
+		if (!method.has_value()) {
+			throw std::out_of_range("method not found in object");
+		}
+		return method->object_ref().value().call<Return>(raw(), args...);
 	}
 
 	/// Returns a getter with which you can get members of the object without going
@@ -922,8 +932,7 @@ auto unsafe_to_inner(const Ref<Object> &obj) -> T & {
 /// args will go through a to_borrowed_cpp_type<to_borrowed_deai_type<T>> transformation,
 /// and have to remain passable to the original function, they have to be borrow inversible.
 template <typename R, auto func, typename... Args>
-auto wrap_cpp_function(to_borrowed_deai_type<Args>... args)
-    -> to_owned_deai_type<R> {
+auto wrap_cpp_function(to_borrowed_deai_type<Args>... args) -> to_owned_deai_type<R> {
 	if constexpr (deai_typeof<R>::value == c_api::di_type::NIL) {
 		// Special treatment for void
 		func(to_borrowed_cpp_value(args)...);
@@ -970,21 +979,15 @@ auto to_di_closure(const Captures &...captures) -> Ref<Object> {
 	using wrapper_info = typename make_wrapper<Captures...>::template wrapper<func>;
 	constexpr auto function = wrapper_info::value;
 	constexpr auto nargs = wrapper_info::nargs;
-	auto capture_types = get_deai_types<Captures...>();
-	auto di_captures =
-	    std::array<c_api::di_value, nargs>{to_borrowed_deai_value_union(captures)...};
-	std::array<c_api::di_value *, ncaptures> di_capture_ptrs;
-	for (size_t i = 0; i < ncaptures; i++) {
-		di_capture_ptrs[i] = &di_captures[i];
-	}
+	c_api::di_variant elements[] = {to_borrowed_deai_variant(captures)...};
+	c_api::di_tuple capture_tuple = {.length = ncaptures, .elements = elements};
 
 	// XXX passing a C++ function pointer to C... not the best thing to do. C++/C
 	// could have different ABIs in some cases. This seems to be OK currently, but ABI
 	// changes could break us.
 	return *Ref<Object>::take(reinterpret_cast<c_api::di_object *>(c_api::di_create_closure(
-	    reinterpret_cast<void (*)()>(function), wrapper_info::return_type, ncaptures,
-	    capture_types.data(), di_capture_ptrs.data(), nargs,
-	    wrapper_info::arg_types.data())));
+	    reinterpret_cast<void (*)()>(function), wrapper_info::return_type,
+	    capture_tuple, nargs, wrapper_info::arg_types.data())));
 }
 
 template <typename T>

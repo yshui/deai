@@ -450,6 +450,9 @@ static inline struct di_string unused di_string_borrow(const char *nonnull str) 
 	};
 }
 
+#define di_string_borrow_literal(str)                                                    \
+	((struct di_string){.data = str, .length = sizeof(str) - 1})
+
 static inline bool unused di_string_to_chars(struct di_string str, char *nonnull output,
                                              size_t capacity) {
 	if (capacity < str.length + 1) {
@@ -482,12 +485,18 @@ static inline unused bool di_string_starts_with(struct di_string str, const char
 	return true;
 }
 
+static inline struct di_string unused di_string_vprintf(const char *fmt, va_list args) {
+	struct di_string ret;
+	ret.length = vasprintf((char **)&ret.data, fmt, args);        // minus the null byte
+	return ret;
+}
+
 static inline struct di_string
     unused __attribute__((format(printf, 1, 2))) di_string_printf(const char *fmt, ...) {
 	struct di_string ret;
 	va_list args;
 	va_start(args, fmt);
-	ret.length = vasprintf((char **)&ret.data, fmt, args);        // minus the null byte
+	ret = di_string_vprintf(fmt, args);
 	va_end(args);
 	return ret;
 }
@@ -585,6 +594,11 @@ static inline unused size_t di_sizeof_type(di_type_t t) {
 	void *: DI_TYPE_NIL, \
 	bool *: DI_TYPE_BOOL \
 )
+
+#define di_signal_member_of_(sig) "__signal_" sig
+#define di_signal_member_of(sig) (di_signal_member_of_(sig))
+#define di_signal_setter_of(sig) ("__set_" di_signal_member_of_(sig))
+#define di_signal_deleter_of(sig) ("__delete_" di_signal_member_of_(sig))
 
 #define di_typeof(expr) di_typeid(typeof(expr))
 

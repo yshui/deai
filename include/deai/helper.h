@@ -123,7 +123,7 @@ PUBLIC_DEAI_API int di_proxy_signal(struct di_object *nonnull src, struct di_str
 
 #define di_closure(fn, caps, ...)                                                             \
 	di_create_closure((void *)fn, di_return_typeid(fn capture_types caps, ##__VA_ARGS__), \
-	                  capture caps, VA_ARGS_LENGTH(__VA_ARGS__),                          \
+	                  di_tuple caps, VA_ARGS_LENGTH(__VA_ARGS__),                          \
 	                  (di_type_t[]){LIST_APPLY(di_typeid, SEP_COMMA, __VA_ARGS__)})
 
 #define _di_getm(di_expr, modn, on_err)                                                  \
