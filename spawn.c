@@ -38,7 +38,6 @@ struct child {
 	pid_t pid;
 
 	ev_child w;
-	ev_io output_ev[2];
 	int fds[2];
 
 	struct string_buf *output_buf[2];
@@ -50,7 +49,7 @@ struct di_spawn {
 	struct child *children;
 };
 
-static void output_handler(struct child *c, int fd, struct string_buf *b, const char *ev) {
+static void output_handler(struct child *c, int fd, int id, const char *ev) {
 	static char buf[4096];
 	int ret;
 	while ((ret = read(fd, buf, sizeof(buf))) > 0) {
@@ -60,10 +59,10 @@ static void output_handler(struct child *c, int fd, struct string_buf *b, const 
 			char *eol = memchr(pos, '\n', len);
 			if (eol) {
 				*eol = '\0';
-				if (!string_buf_is_empty(b)) {
-					string_buf_push(b, pos);
+				if (!string_buf_is_empty(c->output_buf[id])) {
+					string_buf_push(c->output_buf[id], pos);
 
-					const char *out = string_buf_dump(b);
+					const char *out = string_buf_dump(c->output_buf[id]);
 					di_emit(c, ev, out);
 					free((char *)out);
 				} else {
@@ -71,8 +70,13 @@ static void output_handler(struct child *c, int fd, struct string_buf *b, const 
 				}
 				pos = eol + 1;
 			} else {
-				string_buf_lpush(b, pos, len);
+				string_buf_lpush(c->output_buf[id], pos, len);
 				break;
+			}
+			if (c->output_buf[id] == NULL) {
+				// Signal listeners have stopped after we emitted the
+				// previous signal, so we should stop as well
+				return;
 			}
 		}
 	}
@@ -104,8 +108,9 @@ static void sigchld_handler(EV_P_ ev_child *w, int revents) {
 	int ec = WEXITSTATUS(w->rstatus);
 	for (int i = 0; i < 2; i++) {
 		if (c->output_buf[i]) {
-			output_handler(c, c->output_ev[i].fd, c->output_buf[i], SIGNAL_NAME[i]);
-			if (!string_buf_is_empty(c->output_buf[i])) {
+			output_handler(c, c->fds[i], i, SIGNAL_NAME[i]);
+			// output_handler might caused the output_buf to be freed.
+			if (c->output_buf[i] && !string_buf_is_empty(c->output_buf[i])) {
 				const char *o = string_buf_dump(c->output_buf[i]);
 				di_emit(c, SIGNAL_NAME[i], o);
 				free((char *)o);
@@ -134,7 +139,7 @@ static void child_destroy(struct di_object *obj) {
 static void output_cb(struct di_object *obj, int id) {
 	auto c = (struct child *)obj;
 	assert(c->output_buf[id]);
-	output_handler(c, c->fds[id], c->output_buf[id], SIGNAL_NAME[id]);
+	output_handler(c, c->fds[id], id, SIGNAL_NAME[id]);
 }
 
 /// Pid of the child process
@@ -201,7 +206,9 @@ static struct di_object *di_setup_fds(bool ignore_output, int *opfds, int *epfds
 }
 
 static void di_child_process_new_exit_signal(struct di_object *p, struct di_object *sig) {
-	di_member_clone(p, "__signal_exit", sig);
+	if (di_member_clone(p, "__signal_exit", sig) != 0) {
+		return;
+	}
 
 	auto child = (struct child *)p;
 	di_object_with_cleanup di_obj = di_object_get_deai_weak(p);
@@ -222,10 +229,10 @@ static void di_child_process_new_exit_signal(struct di_object *p, struct di_obje
 	DI_CHECK_OK(di_call(roots, "add", child_root_key, p));
 }
 
-static bool di_child_start_output_listener(struct di_object *p, int id) {
+static void di_child_start_output_listener(struct di_object *p, int id) {
 	di_object_with_cleanup di_obj = di_object_get_deai_weak(p);
 	if (di_obj == NULL) {
-		return false;
+		return;
 	}
 
 	auto c = (struct child *)p;
@@ -246,19 +253,21 @@ static bool di_child_start_output_listener(struct di_object *p, int id) {
 	di_string_with_cleanup listen_handle_key =
 	    di_string_printf("__listen_handle_for_output_%d", id);
 	di_add_member_move(p, listen_handle_key, (di_type_t[]){DI_TYPE_OBJECT}, &autohandle);
-	return true;
+	c->output_buf[id] = string_buf_new();
 }
 
 static void di_child_process_new_stdout_signal(struct di_object *p, struct di_object *sig) {
-	if (di_child_start_output_listener(p, 0)) {
-		di_member_clone(p, "__signal_stdout_line", sig);
+	if (di_member_clone(p, "__signal_stdout_line", sig) != 0) {
+		return;
 	}
+	di_child_start_output_listener(p, 0);
 }
 
 static void di_child_process_new_stderr_signal(struct di_object *p, struct di_object *sig) {
-	if (di_child_start_output_listener(p, 1)) {
-		di_member_clone(p, "__signal_stderr_line", sig);
+	if (di_member_clone(p, "__signal_stderr_line", sig) != 0) {
+		return;
 	}
+	di_child_start_output_listener(p, 1);
 }
 
 static void di_child_process_delete_exit_signal(struct di_object *obj) {
@@ -283,7 +292,12 @@ static void di_child_process_delete_exit_signal(struct di_object *obj) {
 static void di_child_process_stop_output_listener(struct di_object *obj, int id) {
 	di_string_with_cleanup listen_handle_key =
 	    di_string_printf("__listen_handle_for_output_%d", id);
-	di_remove_member_raw(obj, listen_handle_key);
+	DI_CHECK_OK(di_remove_member_raw(obj, listen_handle_key));
+
+	auto c = (struct child *)obj;
+	string_buf_clear(c->output_buf[id]);
+	free(c->output_buf[id]);
+	c->output_buf[id] = NULL;
 }
 
 static void di_child_process_delete_stdout_signal(struct di_object *obj) {
