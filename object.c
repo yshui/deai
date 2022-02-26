@@ -885,7 +885,7 @@ static void di_signal_add_handler(struct di_object *sig, struct di_object *handl
 struct di_object *
 di_listen_to(struct di_object *_obj, struct di_string name, struct di_object *h) {
 	with_cleanup_t(char) signal_member_name = NULL;
-	asprintf(&signal_member_name, "__signal_%*s", (int)name.length, name.data);
+	asprintf(&signal_member_name, "__signal_%.*s", (int)name.length, name.data);
 
 	auto signal_member_name_str = di_string_borrow(signal_member_name);
 
@@ -935,7 +935,7 @@ int di_emitn(struct di_object *o, struct di_string name, struct di_tuple args) {
 	assert(args.length == 0 || (args.elements != NULL));
 
 	with_cleanup_t(char) signal_member_name = NULL;
-	asprintf(&signal_member_name, "__signal_%*s", (int)name.length, name.data);
+	asprintf(&signal_member_name, "__signal_%.*s", (int)name.length, name.data);
 	di_object_with_cleanup sig = NULL;
 	if (di_get(o, signal_member_name, sig) == 0) {
 		DI_CHECK_OK(di_call(sig, "dispatch", args));

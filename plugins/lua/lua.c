@@ -967,7 +967,7 @@ static int di_lua_add_listener(lua_State *L) {
 	if (di_check_type(listen_handle, "deai:Error")) {
 		di_string_with_cleanup errmsg;
 		DI_CHECK_OK(di_get(listen_handle, "errmsg", errmsg));
-		return luaL_error(L, "failed to add listener %*s", errmsg.length, errmsg.data);
+		return luaL_error(L, "failed to add listener %.*s", errmsg.length, errmsg.data);
 	}
 	di_lua_pushobject(L, NULL, listen_handle);
 	return 1;
