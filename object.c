@@ -480,7 +480,7 @@ struct di_weak_object *di_weakly_ref_object(struct di_object *_obj) {
 struct di_object *nullable di_upgrade_weak_ref(struct di_weak_object *weak) {
 	assert(weak != PTR_POISON);
 	auto obj = (struct di_object_internal *)weak;
-	if (obj->ref_count > 0) {
+	if (obj->ref_count > 0 && obj->destroyed == 0) {
 		return di_ref_object((struct di_object *)obj);
 	}
 	return NULL;
