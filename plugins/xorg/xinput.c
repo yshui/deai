@@ -531,8 +531,8 @@ di_xorg_xinput_get_prop(struct di_xorg_xinput_device *dev, struct di_string name
 /// To set device properties you could provide a single value or an array of values, if
 /// the property takes multiple values.
 ///
-/// The property names are the same ones you can find by running the :code:`xinput list-props`
-/// command.
+/// The property names are the same ones you can find by running the :code:`xinput
+/// list-props` command.
 static struct di_object *di_xorg_xinput_props(struct di_xorg_xinput_device *dev) {
 	auto obj = di_new_object_with_type2(struct di_xorg_xinput_device, "deai.plugin."
 	                                                                  "xorg.xi:"
@@ -691,5 +691,11 @@ struct di_xorg_ext *new_xinput(struct di_xorg_connection *dc) {
 	enable_hierarchy_event(xi);
 
 	di_method(xi, "__get_devices", di_xorg_get_all_devices);
+	di_signal_setter_deleter_with_signal_name(
+	    xi, "new-device", di_xorg_ext_signal_setter, di_xorg_ext_signal_deleter);
+	di_signal_setter_deleter_with_signal_name(
+	    xi, "device-enabled", di_xorg_ext_signal_setter, di_xorg_ext_signal_deleter);
+	di_signal_setter_deleter_with_signal_name(
+	    xi, "device-disabled", di_xorg_ext_signal_setter, di_xorg_ext_signal_deleter);
 	return (void *)xi;
 }

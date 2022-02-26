@@ -6,6 +6,7 @@
 
 #include <deai/builtins/log.h>
 #include <deai/helper.h>
+#include <deai/object.h>
 #include <xcb/xcb.h>
 #include <xcb/xcb_keysyms.h>
 #include <xkbcommon/xkbcommon-names.h>
@@ -135,7 +136,21 @@ static int refresh_binding(struct keybinding *kb) {
 	}
 	return 0;
 }
-
+static void
+keybinding_new_signal(const char *signal, struct di_object *obj, struct di_object *sig) {
+	if (di_member_clone(obj, signal, sig) != 0) {
+		return;
+	}
+	struct keybinding *kb = (void *)obj;
+	di_xorg_add_signal(kb->k->dc);
+}
+static void keybinding_del_signal(const char *signal, struct di_object *obj) {
+	if (di_remove_member_raw(obj, di_string_borrow(signal)) != 0) {
+		return;
+	}
+	struct keybinding *kb = (void *)obj;
+	di_xorg_del_signal(kb->k->dc);
+}
 /// Add a new key binding
 ///
 /// EXPORT: deai.plugin.xorg:Key.new(modifiers, key, replay), deai.plugin.xorg.key:Binding
@@ -184,6 +199,11 @@ new_binding(struct xorg_key *k, struct di_array modifiers, struct di_string key,
 	kb->replay = replay;
 	di_ref_object((void *)k);
 	list_add(&kb->siblings, &k->bindings);
+
+	di_signal_setter_deleter_with_signal_name(kb, "pressed", keybinding_new_signal,
+	                                          keybinding_del_signal);
+	di_signal_setter_deleter_with_signal_name(kb, "released", keybinding_new_signal,
+	                                          keybinding_del_signal);
 
 	int ret = refresh_binding(kb);
 	if (ret != 0) {
@@ -267,8 +287,7 @@ static int handle_key(struct di_xorg_ext *ext, xcb_generic_event_t *ev) {
 	}
 
 	struct keybinding *kb, *nkb;
-	list_for_each_entry (kb, &k->bindings, siblings)
-		di_ref_object((void *)kb);
+	list_for_each_entry (kb, &k->bindings, siblings) { di_ref_object((void *)kb); }
 
 	bool replay = true;
 	list_for_each_entry_safe (kb, nkb, &k->bindings, siblings) {

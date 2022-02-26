@@ -46,13 +46,10 @@ static void di_xorg_free_sub(struct di_xorg_ext *x) {
 ///
 /// EXPORT: deai.plugin.xorg:Connection.disconnect(), :void
 ///
-/// Disconnecting from the X server will stop all related event sources.
+/// Disconnecting from the X server will stop all related event sources. All objects
+/// coming from this connection will stop generating any events after this.
 /// You should stop using the Connection object after you have called disconnect.
 static void xorg_disconnect(struct di_xorg_connection *xc) {
-	if (!di_has_member(xc, "__xcb_fd_event")) {
-		return;
-	}
-
 	if (xc->xkb_ctx) {
 		xkb_context_unref(xc->xkb_ctx);
 	}
@@ -67,6 +64,11 @@ static void xorg_disconnect(struct di_xorg_connection *xc) {
 	xcb_disconnect(xc->c);
 	xc->x = NULL;
 	xc->c = NULL;
+	xc->nsignals = 0;
+
+	// Drop the auto stop handle to stop the signal listener
+	di_remove_member_raw(
+	    (void *)xc, di_string_borrow_literal("__xcb_fd_event_read_listen_handle"));
 
 	struct di_atom_entry *ae, *tae;
 	HASH_ITER (hh, xc->a_byatom, ae, tae) {
@@ -77,14 +79,10 @@ static void xorg_disconnect(struct di_xorg_connection *xc) {
 	}
 }
 
-static void di_xorg_ioev(struct di_weak_object *weak) {
+static void di_xorg_ioev(struct di_object *dc_obj) {
 	// di_get_log(dc->x->di);
 	// di_log_va((void *)log, DI_LOG_DEBUG, "xcb ioev\n");
-
-	di_object_with_cleanup dc_obj = di_upgrade_weak_ref(weak);
 	auto dc = (struct di_xorg_connection *)dc_obj;
-
-	DI_CHECK(dc != NULL, "got ioev events but the listener has died");
 	xcb_generic_event_t *ev;
 
 	while ((ev = xcb_poll_for_event(dc->c))) {
@@ -211,6 +209,15 @@ struct _xext {
 };
 
 static struct di_variant di_xorg_get_ext(struct di_xorg_connection *xc, struct di_string name) {
+	if (di_string_starts_with(name, "__signal_")) {
+		// Trying to get a signal object, use raw get
+		union di_value *sig = tmalloc(union di_value, 1);
+		if (di_rawgetxt((void *)xc, name, DI_TYPE_OBJECT, sig) != 0) {
+			return (struct di_variant){.type = DI_LAST_TYPE, .value = NULL};
+		}
+		return (struct di_variant){.type = DI_TYPE_OBJECT, .value = sig};
+	}
+
 	struct di_xorg_ext *ext;
 	HASH_FIND(hh, xc->xext, name.data, name.length, ext);
 	if (ext) {
@@ -415,8 +422,8 @@ static void set_keymap(struct di_xorg_connection *xc, struct di_object *o) {
 	}
 
 	int keysym_per_keycode = 0;
-	int max_keycode = xkb_keymap_max_keycode(map),
-	    min_keycode = xkb_keymap_min_keycode(map);
+	int max_keycode = xkb_keymap_max_keycode(map), min_keycode =
+	                                                   xkb_keymap_min_keycode(map);
 	if (max_keycode > xsetup->max_keycode) {
 		// Xorg doesn't accept keycode > 255
 		max_keycode = xsetup->max_keycode;
@@ -494,6 +501,72 @@ out:
 	xkb_keymap_unref(map);
 }
 
+void print_stack_trace(int, int);
+void di_xorg_add_signal(struct di_xorg_connection *xc) {
+	xc->nsignals += 1;
+	if (xc->nsignals != 1) {
+		return;
+	}
+	di_weak_object_with_cleanup weak_event = NULL;
+	DI_CHECK_OK(di_get(xc, "__weak_event_module", weak_event));
+	di_object_with_cleanup eventm = di_upgrade_weak_ref(weak_event);
+	if (eventm == NULL) {
+		// mostly likely deai is shutting down
+		return;
+	}
+
+	di_object_with_cleanup xcb_fd_event = NULL;
+	DI_CHECK_OK(di_callr(eventm, "fdevent", xcb_fd_event, xcb_get_file_descriptor(xc->c)));
+	di_closure_with_cleanup cl = di_closure(di_xorg_ioev, ((struct di_object *)xc));
+	di_object_with_cleanup lh =
+	    di_listen_to(xcb_fd_event, di_string_borrow("read"), (void *)cl);
+
+	struct di_object *autol;
+	DI_CHECK_OK(di_callr(lh, "auto_stop", autol));
+	di_member(xc, "__xcb_fd_event_read_listen_handle", autol);
+}
+
+void di_xorg_del_signal(struct di_xorg_connection *xc) {
+	xc->nsignals -= 1;
+	if (xc->nsignals != 0) {
+		return;
+	}
+	// Drop the auto stop handle to stop the listener
+	di_remove_member_raw(
+	    (void *)xc, di_string_borrow_literal("__xcb_fd_event_read_listen_handle"));
+}
+
+void di_xorg_connection_error_setter(struct di_object *obj, struct di_object *sig) {
+	if (di_member_clone(obj, di_signal_member_of("connection-error"), sig) != 0) {
+		return;
+	}
+	di_xorg_add_signal((void *)obj);
+}
+
+void di_xorg_connection_error_deleter(struct di_object *obj) {
+	if (di_remove_member_raw(
+	        obj, di_string_borrow_literal(di_signal_member_of("connection-error"))) != 0) {
+		return;
+	}
+	di_xorg_del_signal((void *)obj);
+}
+
+void di_xorg_ext_signal_setter(const char *signal, struct di_object *obj, struct di_object *sig) {
+	if (di_member_clone(obj, signal, sig) != 0) {
+		return;
+	}
+	struct di_xorg_ext *ext = (void *)obj;
+	di_xorg_add_signal(ext->dc);
+}
+
+void di_xorg_ext_signal_deleter(const char *signal, struct di_object *obj) {
+	if (di_remove_member_raw(obj, di_string_borrow(signal)) != 0) {
+		return;
+	}
+	struct di_xorg_ext *ext = (void *)obj;
+	di_xorg_del_signal(ext->dc);
+}
+
 /// Connect to a X server
 ///
 /// EXPORT: xorg.connect_to(display), deai.plugin.xorg:Connection
@@ -517,21 +590,14 @@ static struct di_object *di_xorg_connect_to(struct di_xorg *x, struct di_string 
 
 	di_mgetm(x, event, di_new_error("Can't get event module"));
 
-	struct di_xorg_connection *dc =
-	    di_new_object_with_type2(struct di_xorg_connection, "deai.plugin.xorg:"
-	                                                        "Connection");
+	struct di_xorg_connection *dc = di_new_object_with_type2(
+	    struct di_xorg_connection, "deai.plugin.xorg:Connection");
 	dc->c = c;
 	dc->dflt_scrn = scrn;
+	dc->nsignals = 0;
 
-	struct di_object *xcb_fd_event = NULL;
-	di_callr(eventm, "fdevent", xcb_fd_event, xcb_get_file_descriptor(dc->c), IOEV_READ);
-
-	di_weak_object_with_cleanup odc = di_weakly_ref_object((struct di_object *)dc);
-	di_closure_with_cleanup cl = di_closure(di_xorg_ioev, (odc));
-	auto lh = di_listen_to(xcb_fd_event, di_string_borrow("read"), (void *)cl);
-
-	di_member(dc, "__xcb_fd_event", xcb_fd_event);
-	di_member(dc, "__xcb_fd_event_read_listen_handle", lh);
+	di_weak_object_with_cleanup weak_eventm = di_weakly_ref_object(eventm);
+	di_member(dc, "__weak_event_module", weak_eventm);
 
 	di_set_object_dtor((void *)dc, (void *)xorg_disconnect);
 
@@ -540,6 +606,8 @@ static struct di_object *di_xorg_connect_to(struct di_xorg *x, struct di_string 
 	di_method(dc, "__set_xrdb", di_xorg_set_resource, struct di_string);
 	di_method(dc, "__get_screen", get_screen);
 	di_method(dc, "__set_keymap", set_keymap, struct di_object *);
+	di_signal_setter_deleter(dc, "connection-error", di_xorg_connection_error_setter,
+	                         di_xorg_connection_error_deleter);
 	di_method(dc, "disconnect", di_finalize_object);
 
 	dc->x = x;

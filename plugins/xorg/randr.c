@@ -678,6 +678,11 @@ struct di_xorg_ext *new_randr(struct di_xorg_connection *dc) {
 	di_getter(rr, outputs, rr_outputs);
 	di_getter(rr, modes, rr_modes);
 
+	di_signal_setter_deleter_with_signal_name(
+	    rr, "output-change", di_xorg_ext_signal_setter, di_xorg_ext_signal_deleter);
+	di_signal_setter_deleter_with_signal_name(
+	    rr, "view-change", di_xorg_ext_signal_setter, di_xorg_ext_signal_deleter);
+
 	rr_select_input(rr, XCB_RANDR_NOTIFY_MASK_OUTPUT_CHANGE | XCB_RANDR_NOTIFY_MASK_CRTC_CHANGE |
 	                        XCB_RANDR_NOTIFY_MASK_SCREEN_CHANGE);
 

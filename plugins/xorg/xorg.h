@@ -24,6 +24,7 @@ struct di_xorg_connection {
 	struct di_xorg *x;
 	xcb_connection_t *c;
 	int dflt_scrn;
+	int nsignals;
 	struct di_xorg_ext *xext;
 
 	struct xkb_context *xkb_ctx;
@@ -84,3 +85,9 @@ xcb_atom_t di_xorg_intern_atom(struct di_xorg_connection *xc, struct di_string n
 struct di_xorg_ext *new_xinput(struct di_xorg_connection *);
 struct di_xorg_ext *new_randr(struct di_xorg_connection *);
 struct di_xorg_ext *new_key(struct di_xorg_connection *);
+/// Increment the signal count and start fdevent when necessary
+void di_xorg_add_signal(struct di_xorg_connection *);
+void di_xorg_ext_signal_setter(const char *signal, struct di_object *obj, struct di_object *sig);
+/// Decrement the signal count and stop fdevent when necessary
+void di_xorg_del_signal(struct di_xorg_connection *);
+void di_xorg_ext_signal_deleter(const char *signal, struct di_object *obj);
