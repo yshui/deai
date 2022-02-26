@@ -88,7 +88,7 @@ static void di_start_ioev(struct di_ioev *ev) {
 		return;
 	}
 
-	auto di_obj = di_object_get_deai_weak((void *)ev);
+	di_object_with_cleanup di_obj = di_object_get_deai_weak((void *)ev);
 	if (di_obj == NULL) {
 		// deai is shutting down
 		return;
