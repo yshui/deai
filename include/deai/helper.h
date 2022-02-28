@@ -22,6 +22,17 @@
 PUBLIC_DEAI_API int di_proxy_signal(struct di_object *nonnull src, struct di_string srcsig,
                                     struct di_object *nonnull proxy,
                                     struct di_string proxysig) nonnull_args(1, 3);
+/// Create a setter that, when called, sets member `theirs` of `them` instead
+PUBLIC_DEAI_API struct di_object *
+di_redirected_setter(struct di_weak_object *them, struct di_string theirs);
+/// Create a getter that, when called, returns member `theirs` from `them`
+PUBLIC_DEAI_API struct di_object *
+di_redirected_getter(struct di_weak_object *them, struct di_string theirs);
+/// Redirect listeners of `ours` on `us` to `theirs` on `them`. Whenever handlers are
+/// registered for `ours` on `us`, they will be redirected to `theirs` on `them` instead,
+/// by adding a getter/setter for __signal_<ours> on `us`.
+PUBLIC_DEAI_API int di_redirect_signal(struct di_object *us, struct di_weak_object *them,
+                       struct di_string ours, struct di_string theirs);
 
 #define DTOR(o) ((struct di_object *)(o))->dtor
 
@@ -123,7 +134,7 @@ PUBLIC_DEAI_API int di_proxy_signal(struct di_object *nonnull src, struct di_str
 
 #define di_closure(fn, caps, ...)                                                             \
 	di_create_closure((void *)fn, di_return_typeid(fn capture_types caps, ##__VA_ARGS__), \
-	                  di_tuple caps, VA_ARGS_LENGTH(__VA_ARGS__),                          \
+	                  di_tuple caps, VA_ARGS_LENGTH(__VA_ARGS__),                         \
 	                  (di_type_t[]){LIST_APPLY(di_typeid, SEP_COMMA, __VA_ARGS__)})
 
 #define _di_getm(di_expr, modn, on_err)                                                  \

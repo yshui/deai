@@ -830,6 +830,33 @@ static struct di_object *di_listen_handle_auto_stop(struct di_object *obj) {
 	return ret;
 }
 
+int di_rename_signal_member_raw(struct di_object *obj, struct di_string old_member_name,
+                                struct di_string new_member_name) {
+	if (!di_string_starts_with(old_member_name, "__signal_") ||
+	    !di_string_starts_with(new_member_name, "__signal_")) {
+		return -EINVAL;
+	}
+	if (di_lookup(obj, new_member_name) != NULL) {
+		return -EEXIST;
+	}
+	union di_value val;
+	int rc = di_rawgetxt(obj, old_member_name, DI_TYPE_OBJECT, &val);
+	if (rc != 0) {
+		return rc;
+	}
+	rc = di_setx(val.object, di_string_borrow_literal("signal_name"), DI_TYPE_STRING,
+	             &new_member_name);
+	if (rc != 0) {
+		return rc;
+	}
+
+	rc = di_remove_member_raw(obj, old_member_name);
+	if (rc != 0) {
+		return rc;
+	}
+	return di_add_member_move(obj, new_member_name, (di_type_t[]){DI_TYPE_OBJECT}, &val);
+}
+
 static void di_signal_remove_handler(struct di_object *sig_, struct di_weak_object *handler) {
 	struct di_signal *sig = (void *)sig_;
 	di_string_with_cleanup handler_member_name =
@@ -989,6 +1016,9 @@ static char *indent(int level) {
 
 static void di_dump_array(struct di_array arr, int depth);
 static void di_dump_tuple(struct di_tuple t, int depth) {
+	if (t.length == 0) {
+		return;
+	}
 	with_cleanup_t(char) prefix = indent(depth);
 	di_log_va(log_module, DI_LOG_DEBUG, "\t%s(", prefix);
 	for (int i = 0; i < t.length; i++) {
@@ -1007,6 +1037,9 @@ static void di_dump_tuple(struct di_tuple t, int depth) {
 	di_log_va(log_module, DI_LOG_DEBUG, "\t%s)", prefix);
 }
 static void di_dump_array(struct di_array arr, int depth) {
+	if (arr.length == 0) {
+		return;
+	}
 	with_cleanup_t(char) prefix = indent(depth);
 	auto step_size = di_sizeof_type(arr.elem_type);
 	di_log_va(log_module, DI_LOG_DEBUG, "\t%s[", prefix);

@@ -106,3 +106,131 @@ int di_proxy_signal(struct di_object *src, struct di_string srcsig,
 
 	return ret;
 }
+
+static int di_redirected_getter_imp(struct di_object *getter, di_type_t *rt,
+                                    union di_value *r, struct di_tuple args) {
+	// argument should be one object "self".
+	if (args.length != 1) {
+		return -EINVAL;
+	}
+	di_weak_object_with_cleanup them = NULL;
+	di_string_with_cleanup theirs = DI_STRING_INIT;
+	if (di_get(getter, "them", them) != 0) {
+		return -ENOENT;
+	}
+	if (di_get(getter, "theirs", theirs) != 0) {
+		return -ENOENT;
+	}
+	di_object_with_cleanup them_obj = di_upgrade_weak_ref(them);
+	if (them_obj == NULL) {
+		return -ENOENT;
+	}
+
+	return di_getx(them_obj, theirs, rt, r);
+}
+
+/// Create a getter that, when called, returns member `theirs` from `them`
+struct di_object *di_redirected_getter(struct di_weak_object *them, struct di_string theirs) {
+	auto ret = di_new_object_with_type(struct di_object);
+	DI_CHECK_OK(di_member_clone(ret, "them", them));
+	DI_CHECK_OK(di_member_clone(ret, "theirs", theirs));
+	di_set_object_call(ret, di_redirected_getter_imp);
+
+	return ret;
+}
+
+static int di_redirected_setter_imp(struct di_object *setter, di_type_t *rt,
+                                    union di_value *r, struct di_tuple args) {
+	if (args.length != 2) {
+		return -EINVAL;
+	}
+	di_weak_object_with_cleanup them = NULL;
+	di_string_with_cleanup theirs = DI_STRING_INIT;
+	if (di_get(setter, "them", them) != 0) {
+		return -ENOENT;
+	}
+	if (di_get(setter, "theirs", theirs) != 0) {
+		return -ENOENT;
+	}
+	di_object_with_cleanup them_obj = di_upgrade_weak_ref(them);
+	if (them_obj == NULL) {
+		return -ENOENT;
+	}
+	return di_setx(them_obj, theirs, args.elements[1].type, args.elements[1].value);
+}
+/// Create a setter that, when called, sets member `theirs` of `them` instead
+struct di_object *di_redirected_setter(struct di_weak_object *them, struct di_string theirs) {
+	auto ret = di_new_object_with_type(struct di_object);
+	DI_CHECK_OK(di_member_clone(ret, "them", them));
+	DI_CHECK_OK(di_member_clone(ret, "theirs", theirs));
+	di_set_object_call(ret, di_redirected_setter_imp);
+
+	return ret;
+}
+
+static int di_redirected_signal_setter_imp(struct di_object *setter, di_type_t *rt,
+                                           union di_value *r, struct di_tuple args) {
+	if (args.length != 2) {
+		return -EINVAL;
+	}
+	if (args.elements[1].type != DI_TYPE_OBJECT) {
+		return -EINVAL;
+	}
+	di_weak_object_with_cleanup them = NULL;
+	di_string_with_cleanup theirs = DI_STRING_INIT;
+	if (di_get(setter, "them", them) != 0) {
+		return -ENOENT;
+	}
+	if (di_get(setter, "theirs", theirs) != 0) {
+		return -ENOENT;
+	}
+	di_object_with_cleanup them_obj = di_upgrade_weak_ref(them);
+	if (them_obj == NULL) {
+		return -ENOENT;
+	}
+	int rc = di_setx(them_obj, theirs, args.elements[1].type, args.elements[1].value);
+	if (rc != 0) {
+		return rc;
+	}
+
+	struct di_object *sig = args.elements[1].value->object;
+	rc = di_setx(sig, di_string_borrow_literal("weak_source"), DI_TYPE_WEAK_OBJECT, &them);
+	if (rc != 0) {
+		return rc;
+	}
+	return di_setx(sig, di_string_borrow_literal("signal_name"), DI_TYPE_STRING, &theirs);
+}
+/// Create a setter that, when called, sets member `theirs` of `them` instead. Specialized
+/// for setting signal objects, meaning it will update the signal metadata too.
+struct di_object *
+di_redirected_signal_setter(struct di_weak_object *them, struct di_string theirs) {
+	auto ret = di_new_object_with_type(struct di_object);
+	DI_CHECK_OK(di_member_clone(ret, "them", them));
+	DI_CHECK_OK(di_member_clone(ret, "theirs", theirs));
+	di_set_object_call(ret, di_redirected_signal_setter_imp);
+
+	return ret;
+}
+
+/// Redirect listener of `ours` on `us` to `theirs` on `them`. Whenever handlers are
+/// registered for `ours` on `us`, they will be redirected to `theirs` on `them` instead,
+/// by adding a getter/setter for __signal_<ours> on `us`.
+int di_redirect_signal(struct di_object *us, struct di_weak_object *them,
+                       struct di_string ours, struct di_string theirs) {
+	di_string_with_cleanup sig_theirs =
+	    di_string_printf("__signal_%.*s", (int)theirs.length, theirs.data);
+
+	di_object_with_cleanup getter = di_redirected_getter(them, sig_theirs);
+	di_object_with_cleanup setter = di_redirected_signal_setter(them, sig_theirs);
+	di_string_with_cleanup get_ours =
+	    di_string_printf("__get___signal_%.*s", (int)ours.length, ours.data);
+	di_string_with_cleanup set_ours =
+	    di_string_printf("__set___signal_%.*s", (int)ours.length, ours.data);
+
+	int rc = di_add_member_move(us, get_ours, (di_type_t[]){DI_TYPE_OBJECT}, &getter);
+	if (rc != 0) {
+		return rc;
+	}
+	rc = di_add_member_move(us, set_ours, (di_type_t[]){DI_TYPE_OBJECT}, &setter);
+	return rc;
+}

@@ -420,6 +420,13 @@ PUBLIC_DEAI_API void di_free_value(di_type_t t, union di_value *nullable value_p
 /// beforehand
 PUBLIC_DEAI_API void di_copy_value(di_type_t t, void *nullable dst, const void *nullable src);
 
+/// Rename the signal object `old_member_name` to `new_member_name`. Both names have to
+/// start with "__signal_", getter/setter/deleters are not used. This takes care of
+/// updating the metadata fields in the signal object
+PUBLIC_DEAI_API int
+di_rename_signal_member_raw(struct di_object *obj, struct di_string old_member_name,
+                            struct di_string new_member_name);
+
 /// Duplicate null terminated string `str` into a di_string
 static inline struct di_string unused di_string_dup(const char *nonnull str) {
 	return (struct di_string){
