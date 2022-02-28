@@ -209,15 +209,6 @@ struct _xext {
 };
 
 static struct di_variant di_xorg_get_ext(struct di_xorg_connection *xc, struct di_string name) {
-	if (di_string_starts_with(name, "__signal_")) {
-		// Trying to get a signal object, use raw get
-		union di_value *sig = tmalloc(union di_value, 1);
-		if (di_rawgetxt((void *)xc, name, DI_TYPE_OBJECT, sig) != 0) {
-			return (struct di_variant){.type = DI_LAST_TYPE, .value = NULL};
-		}
-		return (struct di_variant){.type = DI_TYPE_OBJECT, .value = sig};
-	}
-
 	struct di_xorg_ext *ext;
 	HASH_FIND(hh, xc->xext, name.data, name.length, ext);
 	if (ext) {
