@@ -176,6 +176,7 @@ int di_setx(struct di_object *o, struct di_string prop, di_type_t type, const vo
 		di_free_value(mem->type, mem->data);
 
 		mem->data = realloc(mem->data, di_sizeof_type(type));
+		mem->type = type;
 		di_copy_value(mem->type, mem->data, val);
 		return 0;
 	}
