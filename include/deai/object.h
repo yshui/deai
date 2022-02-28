@@ -407,6 +407,7 @@ PUBLIC_DEAI_API void frees(malloc, 1) di_unref_object(struct di_object *nonnull)
 PUBLIC_DEAI_API void di_set_object_dtor(struct di_object *nonnull, di_dtor_fn_t nullable);
 PUBLIC_DEAI_API void di_set_object_call(struct di_object *nonnull, di_call_fn_t nullable);
 PUBLIC_DEAI_API bool di_is_object_callable(struct di_object *nonnull);
+PUBLIC_DEAI_API struct di_array di_get_all_member_names_raw(struct di_object *obj_);
 
 PUBLIC_DEAI_API void di_free_tuple(struct di_tuple);
 PUBLIC_DEAI_API void di_free_array(struct di_array);

@@ -635,6 +635,25 @@ struct di_member *di_lookup(struct di_object *_obj, struct di_string name) {
 	return (void *)ret;
 }
 
+/// Return an array of strings of all raw member names
+struct di_array di_get_all_member_names_raw(struct di_object *obj_) {
+	auto obj = (struct di_object_internal *)obj_;
+	struct di_array ret = {
+	    .arr = NULL,
+	    .elem_type = DI_TYPE_STRING,
+	    .length = HASH_COUNT(obj->members),
+	};
+	struct di_string *arr = ret.arr = tmalloc(struct di_string, ret.length);
+	int cnt = 0;
+	struct di_member *i, *ni;
+	HASH_ITER (hh, obj->members, i, ni) {
+		di_copy_value(DI_TYPE_STRING, &arr[cnt], &i->name);
+		cnt += 1;
+	}
+	assert(cnt == ret.length);
+	return ret;
+}
+
 void di_set_object_dtor(struct di_object *nonnull obj, di_dtor_fn_t nullable dtor) {
 	auto internal = (struct di_object_internal *)obj;
 	internal->dtor = dtor;
