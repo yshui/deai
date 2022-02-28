@@ -471,6 +471,25 @@ static inline bool unused di_string_to_chars(struct di_string str, char *nonnull
 	return true;
 }
 
+/// Split `str` at the first appearence of `sep`, returns if `sep` is found. If `sep` is
+/// not found, `head` and `rest` will not be touched
+static inline bool unused di_string_split_once(struct di_string str, char sep,
+                                               struct di_string *head, struct di_string *rest) {
+	const char *pos = (const char *)memchr(str.data, sep, str.length);
+	if (pos == NULL) {
+		return false;
+	}
+	*head = (struct di_string){
+	    .data = str.data,
+	    .length = (size_t)(pos - str.data),
+	};
+	*rest = (struct di_string){
+	    .data = pos + 1,
+	    .length = str.length - head->length - 1,
+	};
+	return true;
+}
+
 static inline char *nullable unused di_string_to_chars_alloc(struct di_string str) {
 	if (str.length == 0) {
 		return NULL;

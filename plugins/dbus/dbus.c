@@ -641,41 +641,32 @@ static void dbus_remove_watch(DBusWatch *w, void *ud) {
 // connection will emit signal like this:
 // <bus name>%<path>%<interface>.<signal name>
 static char *to_dbus_match_rule(struct di_string name) {
-	const char *sep = memchr(name.data, '%', name.length);
-	if (!sep) {
+	struct di_string bus, path, rest, iface;
+	if (!di_string_split_once(name, '%', &bus, &rest) || bus.length == 0) {
 		return NULL;
 	}
-	const char *sep2 = memchr(sep + 1, '%', name.length - (sep + 1 - name.data));
-	if (!sep2 || sep2 == sep + 1) {
+	if (!di_string_split_once(rest, '%', &path, &rest) || path.length == 0) {
 		return NULL;
 	}
-	const char *sep3 = memrchr(sep2 + 1, '.', name.length - (sep2 + 1 - name.data));
-	if (sep3 == sep2 + 1 || (sep3 && !*(sep3 + 1))) {
-		return NULL;
+	bool has_iface = di_string_split_once(rest, '.', &iface, &rest);
+	if (has_iface) {
+		if (iface.length == 0 || rest.length == 0) {
+			return NULL;
+		}
 	}
-
-	char *bus = strndup(name.data, sep - name.data);
-	char *path = strndup(sep + 1, sep2 - sep - 1);
-	char *interface = NULL;
-	if (sep3) {
-		interface = strndup(sep2 + 1, sep3 - sep2 - 1);
-	}
-	const char *signal = sep3 ? sep3 + 1 : sep2 + 1;
 
 	char *match;
-	if (interface) {
+	if (has_iface) {
 		asprintf(&match,
-		         "type='signal',sender='%s',path='%s',interface='%s'"
-		         ",member='%s'",
-		         bus, path, interface, signal);
+		         "type='signal',sender='%.*s',path='%.*s',interface='%.*s'"
+		         ",member='%.*s'",
+		         (int)bus.length, bus.data, (int)path.length, path.data,
+		         (int)iface.length, iface.data, (int)rest.length, rest.data);
 	} else {
-		asprintf(&match, "type='signal',sender='%s',path='%s',member='%s'", bus,
-		         path, signal);
+		asprintf(&match, "type='signal',sender='%.*s',path='%.*s',member='%.*s'",
+		         (int)bus.length, bus.data, (int)path.length, path.data,
+		         (int)rest.length, rest.data);
 	}
-
-	free(bus);
-	free(path);
-	free(interface);
 	return match;
 }
 
