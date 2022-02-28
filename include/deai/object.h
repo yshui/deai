@@ -430,8 +430,8 @@ di_rename_signal_member_raw(struct di_object *obj, struct di_string old_member_n
 /// Duplicate null terminated string `str` into a di_string
 static inline struct di_string unused di_string_dup(const char *nonnull str) {
 	return (struct di_string){
-	    .data = strdup(str),
-	    .length = strlen(str),
+	    .data = str != NULL ? strdup(str) : NULL,
+	    .length = str != NULL ? strlen(str) : 0,
 	};
 }
 
@@ -471,6 +471,9 @@ static inline bool unused di_string_to_chars(struct di_string str, char *nonnull
 }
 
 static inline char *nullable unused di_string_to_chars_alloc(struct di_string str) {
+	if (str.length == 0) {
+		return NULL;
+	}
 	__auto_type ret = (char *)malloc(str.length + 1);
 	di_string_to_chars(str, ret, str.length + 1);
 	return ret;
@@ -492,6 +495,22 @@ static inline unused bool di_string_starts_with(struct di_string str, const char
 	return true;
 }
 
+static inline unused bool
+di_string_starts_with_string(struct di_string str, struct di_string pat) {
+	if (str.length < pat.length) {
+		return false;
+	}
+	return memcmp(str.data, pat.data, pat.length) == 0;
+}
+
+static inline unused struct di_string di_string_concat(struct di_string a, struct di_string b) {
+	struct di_string ret = {.data = NULL, .length = a.length + b.length};
+	ret.data = (const char *)malloc(ret.length);
+	memcpy((void *)ret.data, a.data, a.length);
+	memcpy((void *)(ret.data + a.length), b.data, b.length);
+	return ret;
+}
+
 static inline struct di_string unused di_string_vprintf(const char *fmt, va_list args) {
 	struct di_string ret;
 	ret.length = vasprintf((char **)&ret.data, fmt, args);        // minus the null byte
@@ -508,14 +527,34 @@ static inline struct di_string
 	return ret;
 }
 
+static inline bool di_string_eq(struct di_string a, struct di_string b) {
+	if (a.length != b.length) {
+		return false;
+	}
+	return memcmp(a.data, b.data, a.length) == 0;
+}
+
 /// Get a substring of `str`, starting from `start`. `str` will be borrowed.
-static inline struct di_string unused di_substring_start(struct di_string str, size_t start) {
+static inline struct di_string unused di_suffix(struct di_string str, size_t start) {
 	if (start >= str.length) {
 		return DI_STRING_INIT;
 	}
 	return (struct di_string){
 	    .data = str.data + start,
 	    .length = str.length - start,
+	};
+}
+/// Get a substring of `str`, starting from `start`, with `length`. `str` will be borrowed.
+static inline struct di_string unused di_substring(struct di_string str, size_t start, size_t len) {
+	if (start >= str.length || len == 0) {
+		return DI_STRING_INIT;
+	}
+	if (start + len > str.length) {
+		len = str.length - start;
+	}
+	return (struct di_string){
+	    .data = str.data + start,
+	    .length = len,
 	};
 }
 
@@ -640,6 +679,7 @@ static inline void unused di_free_di_weak_objectp(struct di_weak_object *nullabl
 #define di_object_with_cleanup with_object_cleanup(di_object)
 #define di_weak_object_with_cleanup with_object_cleanup(di_weak_object)
 #define di_string_with_cleanup with_cleanup(di_free_stringp) struct di_string
+#define di_tuple_with_cleanup with_cleanup(di_free_tuplep) struct di_tuple
 
 /// A valid but non-upgradeable weak reference
 PUBLIC_DEAI_API extern const struct di_weak_object *const nonnull dead_weak_ref;

@@ -40,6 +40,9 @@ static char *get_debug_info(const char *func, const void *ip) {
 		int nline;
 		Dwarf_Addr addr;
 		const char *filename = dwfl_lineinfo(line, &addr, &nline, NULL, NULL, NULL);
+		if (strcmp(filename, "../object.c") == 0) {
+			goto out;
+		}
 		asprintf(&buf, "%s (%s:%d)", function_name, filename, nline);
 	} else {
 		asprintf(&buf, "%s (%p)", function_name, ip);
@@ -58,6 +61,7 @@ void __attribute__((noinline)) print_stack_trace(int skip, int limit) {
 	unw_cursor_t cursor;
 	unw_init_local(&cursor, &uc);
 
+	int skipped = 0;
 	while (unw_step(&cursor) > 0) {
 		unw_word_t ip;
 		unw_get_reg(&cursor, UNW_REG_IP, &ip);
@@ -70,10 +74,18 @@ void __attribute__((noinline)) print_stack_trace(int skip, int limit) {
 			// `ip` will normally be after the "call" instruction, so we move
 			// it back to get the line number of the call.
 			with_cleanup_t(char) detail = get_debug_info(name, (void *)(ip - 1));
-			di_log_va(log_module, DI_LOG_DEBUG, "\tat %s\n", detail);
-			limit -= 1;
-			if (limit <= 0) {
-				break;
+			if (detail != NULL) {
+				if (skipped) {
+					di_log_va(log_module, DI_LOG_DEBUG, "\t(skipped %d)\n", skipped);
+				}
+				skipped = 0;
+				di_log_va(log_module, DI_LOG_DEBUG, "\tat %s\n", detail);
+				limit -= 1;
+				if (limit <= 0) {
+					break;
+				}
+			} else {
+				skipped += 1;
 			}
 		}
 
