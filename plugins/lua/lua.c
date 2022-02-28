@@ -400,10 +400,15 @@ static int di_lua_gc(lua_State *L) {
 	// di_lua_pushobject created a new one (see :ref:`lua quirk`).
 	int64_t lua_ref;
 	asprintf(&buf, "___di_object_to_ref_%p", o);
-	DI_CHECK_OK(di_get(s, buf, lua_ref));
+	if (di_get(s, buf, lua_ref) != 0) {
+		// This means the newer proxy got GC'd before us, the older one.
+		free(buf);
+		return 0;
+	}
 
 	// Check the userdata pointer store in the registry. If it has already died (i.e.
-	// weakref_get returning false), we know it's ourself; otherwise load the new one.
+	// weakref_get returning false), we know it's ourself; otherwise load the one in
+	// the registry.
 	void **current_optr = optr;
 	if (luaL_weakref_get(L, LUA_REGISTRYINDEX, lua_ref)) {
 		current_optr = di_lua_checkproxy(L, -1);
