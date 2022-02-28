@@ -28,20 +28,6 @@ struct di_atom_entry {
 
 define_trivial_cleanup_t(xcb_generic_error_t);
 
-static void di_xorg_free_sub(struct di_xorg_ext *x) {
-	if (x->dc) {
-		HASH_DEL(x->dc->xext, x);
-		di_unref_object((void *)x->dc);
-		x->dc = NULL;
-
-		if (x->free) {
-			// HACKY, x->free might free x.
-			// TODO(yshui) hold a weak reference to x
-			x->free(x);
-		}
-	}
-}
-
 /// Disconnect from the X server
 ///
 /// EXPORT: deai.plugin.xorg:Connection.disconnect(), :void
@@ -87,9 +73,27 @@ static void di_xorg_ioev(struct di_object *dc_obj) {
 
 	while ((ev = xcb_poll_for_event(dc->c))) {
 		// handle event
+		{
+			di_string_with_cleanup event_name =
+			    di_string_printf("___raw_x_event_%d", ev->response_type);
+			union di_value tmp;
+			tmp.pointer = ev;
+			di_emitn((void *)dc, event_name,
+			         (struct di_tuple){
+			             .length = 1,
+			             .elements =
+			                 &(struct di_variant){
+			                     .type = DI_TYPE_POINTER,
+			                     .value = &tmp,
+			                 },
+			         });
+		}
 
 		struct di_xorg_ext *ex, *tmp;
 		HASH_ITER (hh, dc->xext, ex, tmp) {
+			if (ex->handle_event == NULL) {
+				continue;
+			}
 			int status = ex->handle_event(ex, ev);
 			if (status != 1) {
 				break;
@@ -160,8 +164,8 @@ xcb_atom_t di_xorg_intern_atom(struct di_xorg_connection *xc, struct di_string n
 ///
 /// EXPORT: deai.plugin.xorg:Connection.xrdb, :string
 ///
-/// This property corresponds to the xrdb, which is usually set with the command line
-/// tool with the same name. Assigning to this property updates the xrdb.
+/// This property corresponds to the xrdb, which is usually set with the command
+/// line tool with the same name. Assigning to this property updates the xrdb.
 static struct di_string di_xorg_get_resource(struct di_xorg_connection *xc) {
 	auto scrn = screen_of_display(xc->c, xc->dflt_scrn);
 	auto r = xcb_get_property_reply(
@@ -209,33 +213,34 @@ struct _xext {
 };
 
 static struct di_variant di_xorg_get_ext(struct di_xorg_connection *xc, struct di_string name) {
-	struct di_xorg_ext *ext;
-	HASH_FIND(hh, xc->xext, name.data, name.length, ext);
-	if (ext) {
-		auto ret = tmalloc(union di_value, 1);
-		di_ref_object((void *)ext);
-		ret->object = (struct di_object *)ext;
-		return (struct di_variant){.type = DI_TYPE_OBJECT, .value = ret};
+	di_weak_object_with_cleanup weak_ext = NULL;
+	di_string_with_cleanup ext_member =
+	    di_string_concat(di_string_borrow_literal("___weak_x_ext_"), name);
+	union di_value tmp;
+	if (di_rawgetxt((void *)xc, ext_member, DI_TYPE_WEAK_OBJECT, &tmp) == 0) {
+		weak_ext = tmp.weak_object;
+	}
+	if (weak_ext) {
+		auto ext = di_upgrade_weak_ref(weak_ext);
+		if (ext != NULL) {
+			return di_variant_of(di_upgrade_weak_ref(weak_ext));
+		}
+		di_remove_member_raw((void *)xc, ext_member);
 	}
 	for (int i = 0; xext_reg[i].name; i++) {
-		if (strlen(xext_reg[i].name) != name.length) {
+		if (!di_string_eq(di_string_borrow(xext_reg[i].name), name)) {
 			continue;
 		}
-		if (memcmp(xext_reg[i].name, name.data, name.length) == 0) {
-			auto ext = xext_reg[i].new(xc);
-			if (ext == NULL) {
-				break;
-			}
-
-			di_set_object_dtor((void *)ext, (void *)di_xorg_free_sub);
-
-			HASH_ADD_KEYPTR(hh, xc->xext, ext->extname, strlen(ext->extname), ext);
-			di_ref_object((void *)xc);
-
-			auto ret = tmalloc(union di_value, 1);
-			ret->object = (struct di_object *)ext;
-			return (struct di_variant){.type = DI_TYPE_OBJECT, .value = ret};
+		auto ext = xext_reg[i].new(xc);
+		if (ext == NULL) {
+			break;
 		}
+
+		DI_CHECK_OK(di_member_clone(ext, XORG_CONNECTION_MEMBER, (struct di_object *)xc));
+		weak_ext = di_weakly_ref_object((void *)ext);
+		DI_CHECK_OK(di_add_member_clone((void *)xc, ext_member,
+		                                DI_TYPE_WEAK_OBJECT, &weak_ext));
+		return di_variant_of((struct di_object *)ext);
 	}
 	return (struct di_variant){.type = DI_LAST_TYPE, .value = NULL};
 }
@@ -268,8 +273,8 @@ static struct di_object *get_screen(struct di_xorg_connection *dc) {
 	return (void *)ret;
 }
 
-// A really hacky way of finding all modifiers in a keymap. Because xkbcommon doesn't
-// expose an API for that.
+// A really hacky way of finding all modifiers in a keymap. Because xkbcommon
+// doesn't expose an API for that.
 static struct {
 	int keycode_per_modifiers;
 	xcb_keycode_t *keycodes;
@@ -367,8 +372,8 @@ static struct {
 ///
 /// EXPORT: deai.plugin.xorg:Connection.keymap, :object
 ///
-/// This is a write-only property which allows you to change your keyboard mapping. To set
-/// your keymap, you need to provide an object with these members:
+/// This is a write-only property which allows you to change your keyboard
+/// mapping. To set your keymap, you need to provide an object with these members:
 ///
 /// - layout (mandatory): The layout, e.g. 'us', 'gb', etc.
 /// - model (optional)
@@ -472,7 +477,8 @@ static void set_keymap(struct di_xorg_connection *xc, struct di_object *o) {
 		    NULL);
 		if (!r2 || r2->status == XCB_MAPPING_STATUS_FAILURE) {
 			di_log_va(logm, DI_LOG_ERROR,
-			          "Failed to set modifiers, your keymap will be broken.");
+			          "Failed to set modifiers, your keymap will be "
+			          "broken.");
 			free(r2);
 			break;
 		}
@@ -498,6 +504,7 @@ void di_xorg_add_signal(struct di_xorg_connection *xc) {
 	if (xc->nsignals != 1) {
 		return;
 	}
+	fprintf(stderr, "X start\n");
 	di_weak_object_with_cleanup weak_event = NULL;
 	DI_CHECK_OK(di_get(xc, "__weak_event_module", weak_event));
 	di_object_with_cleanup eventm = di_upgrade_weak_ref(weak_event);
@@ -522,40 +529,52 @@ void di_xorg_del_signal(struct di_xorg_connection *xc) {
 	if (xc->nsignals != 0) {
 		return;
 	}
+	fprintf(stderr, "X stop\n");
 	// Drop the auto stop handle to stop the listener
 	di_remove_member_raw(
 	    (void *)xc, di_string_borrow_literal("__xcb_fd_event_read_listen_handle"));
 }
 
-void di_xorg_connection_error_setter(struct di_object *obj, struct di_object *sig) {
-	if (di_member_clone(obj, di_signal_member_of("connection-error"), sig) != 0) {
+void di_xorg_signal_setter(struct di_object *obj, struct di_string member, struct di_object *sig) {
+	if (!di_string_starts_with(member, "__signal_")) {
+		return;
+	}
+	if (di_add_member_clone(obj, member, DI_TYPE_OBJECT, &sig) != 0) {
 		return;
 	}
 	di_xorg_add_signal((void *)obj);
 }
 
-void di_xorg_connection_error_deleter(struct di_object *obj) {
-	if (di_remove_member_raw(
-	        obj, di_string_borrow_literal(di_signal_member_of("connection-error"))) != 0) {
+void di_xorg_signal_deleter(struct di_object *obj, struct di_string member) {
+	if (!di_string_starts_with(member, "__signal_")) {
+		return;
+	}
+	if (di_remove_member_raw(obj, member) != 0) {
 		return;
 	}
 	di_xorg_del_signal((void *)obj);
 }
 
 void di_xorg_ext_signal_setter(const char *signal, struct di_object *obj, struct di_object *sig) {
+	di_object_with_cleanup dc_obj = NULL;
+	if (di_get(obj, XORG_CONNECTION_MEMBER, dc_obj) != 0) {
+		return;
+	}
 	if (di_member_clone(obj, signal, sig) != 0) {
 		return;
 	}
-	struct di_xorg_ext *ext = (void *)obj;
-	di_xorg_add_signal(ext->dc);
+	di_xorg_add_signal((void *)dc_obj);
 }
 
 void di_xorg_ext_signal_deleter(const char *signal, struct di_object *obj) {
+	di_object_with_cleanup dc_obj = NULL;
+	if (di_get(obj, XORG_CONNECTION_MEMBER, dc_obj) != 0) {
+		return;
+	}
 	if (di_remove_member_raw(obj, di_string_borrow(signal)) != 0) {
 		return;
 	}
-	struct di_xorg_ext *ext = (void *)obj;
-	di_xorg_del_signal(ext->dc);
+	di_xorg_del_signal((void *)dc_obj);
 }
 
 /// Connect to a X server
@@ -593,12 +612,12 @@ static struct di_object *di_xorg_connect_to(struct di_xorg *x, struct di_string 
 	di_set_object_dtor((void *)dc, (void *)xorg_disconnect);
 
 	di_method(dc, "__get", di_xorg_get_ext, struct di_string);
+	di_method(dc, "__set", di_xorg_signal_setter, struct di_string, struct di_object *);
+	di_method(dc, "__delete", di_xorg_signal_deleter, struct di_string);
 	di_method(dc, "__get_xrdb", di_xorg_get_resource);
 	di_method(dc, "__set_xrdb", di_xorg_set_resource, struct di_string);
 	di_method(dc, "__get_screen", get_screen);
 	di_method(dc, "__set_keymap", set_keymap, struct di_object *);
-	di_signal_setter_deleter(dc, "connection-error", di_xorg_connection_error_setter,
-	                         di_xorg_connection_error_deleter);
 	di_method(dc, "disconnect", di_finalize_object);
 
 	dc->x = x;
@@ -611,8 +630,8 @@ static struct di_object *di_xorg_connect_to(struct di_xorg *x, struct di_string 
 ///
 /// EXPORT: xorg.connect(), deai.plugin.xorg:Connection
 ///
-/// Connect to the default X server, usually the one specified in the DISPLAY environment
-/// variable.
+/// Connect to the default X server, usually the one specified in the DISPLAY
+/// environment variable.
 static struct di_object *di_xorg_connect(struct di_xorg *x) {
 	return di_xorg_connect_to(x, DI_STRING_INIT);
 }

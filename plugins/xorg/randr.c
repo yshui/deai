@@ -145,12 +145,15 @@ static void free_output_info(struct di_object *o) {
 ///
 /// EXPORT: deai.plugin.xorg.randr:Output.info, deai.plugin.xorg.randr:OutputInfo
 static struct di_object *get_output_info(struct di_xorg_output *o) {
-	if (!o->rr->dc) {
+	di_object_with_cleanup dc_obj = NULL;
+	if (di_get(o->rr, XORG_CONNECTION_MEMBER, dc_obj) != 0) {
 		return di_new_object_with_type(struct di_object);
 	}
 
+	struct di_xorg_connection *dc = (void *)dc_obj;
+
 	with_cleanup_t(xcb_randr_get_output_info_reply_t) r = xcb_randr_get_output_info_reply(
-	    o->rr->dc->c, xcb_randr_get_output_info(o->rr->dc->c, o->oid, o->rr->cts), NULL);
+	    dc->c, xcb_randr_get_output_info(dc->c, o->oid, o->rr->cts), NULL);
 
 	if (!r || r->status != 0) {
 		return di_new_object_with_type(struct di_object);
@@ -182,12 +185,15 @@ static struct di_object *get_output_info(struct di_xorg_output *o) {
 ///
 /// A "view" is the portion of the overall Xorg screen that's displayed on this output.
 static struct di_object *get_output_view(struct di_xorg_output *o) {
-	if (!o->rr->dc) {
+	di_object_with_cleanup dc_obj = NULL;
+	if (di_get(o->rr, XORG_CONNECTION_MEMBER, dc_obj) != 0) {
 		return di_new_object_with_type(struct di_object);
 	}
 
+	struct di_xorg_connection *dc = (void *)dc_obj;
+
 	with_cleanup_t(xcb_randr_get_output_info_reply_t) r = xcb_randr_get_output_info_reply(
-	    o->rr->dc->c, xcb_randr_get_output_info(o->rr->dc->c, o->oid, o->rr->cts), NULL);
+	    dc->c, xcb_randr_get_output_info(dc->c, o->oid, o->rr->cts), NULL);
 	if (!r || r->status != 0 || r->crtc == 0) {
 		return di_new_object_with_type(struct di_object);
 	}
@@ -201,12 +207,15 @@ static struct di_object *get_output_view(struct di_xorg_output *o) {
 /// The size, offset, and rotation settings of this view. This is read/write so you can,
 /// say, change your screen resolution by changing the view config.
 static struct di_object *get_view_config(struct di_xorg_view *v) {
-	if (!v->rr->dc) {
+	di_object_with_cleanup dc_obj = NULL;
+	if (di_get(v->rr, XORG_CONNECTION_MEMBER, dc_obj) != 0) {
 		return di_new_object_with_type(struct di_object);
 	}
 
+	struct di_xorg_connection *dc = (void *)dc_obj;
+
 	with_cleanup_t(xcb_randr_get_crtc_info_reply_t) cr = xcb_randr_get_crtc_info_reply(
-	    v->rr->dc->c, xcb_randr_get_crtc_info(v->rr->dc->c, v->cid, v->rr->cts), NULL);
+	    dc->c, xcb_randr_get_crtc_info(dc->c, v->cid, v->rr->cts), NULL);
 	if (!cr || cr->status != 0) {
 		return di_new_object_with_type(struct di_object);
 	}
@@ -251,10 +260,12 @@ static struct di_object *get_view_config(struct di_xorg_view *v) {
 }
 
 static void set_view_config(struct di_xorg_view *v, struct di_object *cfg) {
-	if (!v->rr->dc) {
+	di_object_with_cleanup dc_obj = NULL;
+	if (di_get(v->rr, XORG_CONNECTION_MEMBER, dc_obj) != 0) {
 		return;
 	}
 
+	struct di_xorg_connection *dc = (void *)dc_obj;
 	int x, y;
 	xcb_randr_mode_t mode;
 	int rotation, reflection;
@@ -299,15 +310,15 @@ static void set_view_config(struct di_xorg_view *v, struct di_object *cfg) {
 retry:
 	// We might need to retry under race conditions, because Xorg sucks
 	cr = xcb_randr_get_crtc_info_reply(
-	    v->rr->dc->c, xcb_randr_get_crtc_info(v->rr->dc->c, v->cid, v->rr->cts), NULL);
+	    dc->c, xcb_randr_get_crtc_info(dc->c, v->cid, v->rr->cts), NULL);
 	if (!cr || cr->status != 0) {
 		return;
 	}
 
 	with_cleanup_t(xcb_randr_set_crtc_config_reply_t) scr = xcb_randr_set_crtc_config_reply(
-	    v->rr->dc->c,
-	    xcb_randr_set_crtc_config(v->rr->dc->c, v->cid, cr->timestamp, v->rr->cts, x, y,
-	                              mode, rr_rot, xcb_randr_get_crtc_info_outputs_length(cr),
+	    dc->c,
+	    xcb_randr_set_crtc_config(dc->c, v->cid, cr->timestamp, v->rr->cts, x, y, mode,
+	                              rr_rot, xcb_randr_get_crtc_info_outputs_length(cr),
 	                              xcb_randr_get_crtc_info_outputs(cr)),
 	    NULL);
 	if (!scr) {
@@ -325,22 +336,22 @@ retry:
 /// Read/write property for getting/setting the screen backlight level. Check
 /// :lua:attr:`max_backlight` for the largest possible level.
 static int get_output_backlight(struct di_xorg_output *o) {
-	if (!o->rr->dc) {
+	di_object_with_cleanup dc_obj = NULL;
+	if (di_get(o->rr, XORG_CONNECTION_MEMBER, dc_obj) != 0) {
 		return 0;
 	}
 
+	struct di_xorg_connection *dc = (void *)dc_obj;
 	xcb_generic_error_t *e;
-	auto bklatom = di_xorg_intern_atom(o->rr->dc, di_string_borrow("Backlight"), &e);
+	auto bklatom = di_xorg_intern_atom(dc, di_string_borrow("Backlight"), &e);
 	if (e) {
 		free(e);
 		return -1;
 	}
-	with_cleanup_t(xcb_randr_get_output_property_reply_t) r =
-	    xcb_randr_get_output_property_reply(
-	        o->rr->dc->c,
-	        xcb_randr_get_output_property(o->rr->dc->c, o->oid, bklatom, XCB_ATOM_ANY,
-	                                      0, 4, 0, 0),
-	        NULL);
+	with_cleanup_t(xcb_randr_get_output_property_reply_t) r = xcb_randr_get_output_property_reply(
+	    dc->c,
+	    xcb_randr_get_output_property(dc->c, o->oid, bklatom, XCB_ATOM_ANY, 0, 4, 0, 0),
+	    NULL);
 
 	if (!r || r->type != XCB_ATOM_INTEGER || r->num_items != 1 || r->format != 32) {
 		return -1;
@@ -350,23 +361,26 @@ static int get_output_backlight(struct di_xorg_output *o) {
 }
 
 static void set_output_backlight(struct di_xorg_output *o, int bkl) {
-	if (!o->rr->dc) {
+	di_object_with_cleanup dc_obj = NULL;
+	if (di_get(o->rr, XORG_CONNECTION_MEMBER, dc_obj) != 0) {
 		return;
 	}
 
+	struct di_xorg_connection *dc = (void *)dc_obj;
+
 	xcb_generic_error_t *e;
-	auto bklatom = di_xorg_intern_atom(o->rr->dc, di_string_borrow("Backlight"), &e);
+	auto bklatom = di_xorg_intern_atom(dc, di_string_borrow("Backlight"), &e);
 	if (e) {
 		free(e);
 		return;
 	}
 
 	int32_t v = bkl;
-	e = xcb_request_check(o->rr->dc->c, xcb_randr_change_output_property(
-	                                        o->rr->dc->c, o->oid, bklatom, XCB_ATOM_INTEGER,
-	                                        32, XCB_PROP_MODE_REPLACE, 1, (void *)&v));
+	e = xcb_request_check(dc->c, xcb_randr_change_output_property(
+	                                 dc->c, o->oid, bklatom, XCB_ATOM_INTEGER, 32,
+	                                 XCB_PROP_MODE_REPLACE, 1, (void *)&v));
 	if (e) {
-		di_mgetm(o->rr->dc->x, log, (void)0);
+		di_mgetm(dc->x, log, (void)0);
 		di_log_va(logm, DI_LOG_ERROR, "Failed to set backlight");
 	}
 }
@@ -375,12 +389,15 @@ static void set_output_backlight(struct di_xorg_output *o, int bkl) {
 ///
 /// EXPORT: deai.plugin.xorg.randr:Output.max_backlight, :integer
 static int get_output_max_backlight(struct di_xorg_output *o) {
-	if (!o->rr->dc) {
+	di_object_with_cleanup dc_obj = NULL;
+	if (di_get(o->rr, XORG_CONNECTION_MEMBER, dc_obj) != 0) {
 		return 0;
 	}
 
+	struct di_xorg_connection *dc = (void *)dc_obj;
+
 	xcb_generic_error_t *e;
-	auto bklatom = di_xorg_intern_atom(o->rr->dc, di_string_borrow("Backlight"), &e);
+	auto bklatom = di_xorg_intern_atom(dc, di_string_borrow("Backlight"), &e);
 	if (e) {
 		free(e);
 		return -1;
@@ -388,8 +405,7 @@ static int get_output_max_backlight(struct di_xorg_output *o) {
 
 	with_cleanup_t(xcb_randr_query_output_property_reply_t) r =
 	    xcb_randr_query_output_property_reply(
-	        o->rr->dc->c,
-	        xcb_randr_query_output_property(o->rr->dc->c, o->oid, bklatom), NULL);
+	        dc->c, xcb_randr_query_output_property(dc->c, o->oid, bklatom), NULL);
 	if (!r) {
 		return -1;
 	}
@@ -408,7 +424,7 @@ static void output_dtor(struct di_xorg_output *o) {
 
 static struct di_object *
 make_object_for_output(struct di_xorg_randr *rr, xcb_randr_output_t oid) {
-	assert(rr->dc);
+	DI_CHECK(di_has_member(rr, XORG_CONNECTION_MEMBER));
 
 	auto obj = di_new_object_with_type2(struct di_xorg_output, "deai.plugin.xorg."
 	                                                           "randr:"
@@ -433,12 +449,15 @@ make_object_for_output(struct di_xorg_randr *rr, xcb_randr_output_t oid) {
 /// A list of outputs that is connected to this view.
 static struct di_array get_view_outputs(struct di_xorg_view *v) {
 	struct di_array ret = DI_ARRAY_INIT;
-	if (!v->rr->dc) {
+	di_object_with_cleanup dc_obj = NULL;
+	if (di_get(v->rr, XORG_CONNECTION_MEMBER, dc_obj) != 0) {
 		return ret;
 	}
 
+	struct di_xorg_connection *dc = (void *)dc_obj;
+
 	auto r = xcb_randr_get_crtc_info_reply(
-	    v->rr->dc->c, xcb_randr_get_crtc_info(v->rr->dc->c, v->cid, v->rr->cts), NULL);
+	    dc->c, xcb_randr_get_crtc_info(dc->c, v->cid, v->rr->cts), NULL);
 
 	auto outputs = xcb_randr_get_crtc_info_outputs(r);
 	ret.elem_type = DI_TYPE_OBJECT;
@@ -456,7 +475,7 @@ static void view_dtor(struct di_xorg_view *v) {
 }
 
 static struct di_object *make_object_for_view(struct di_xorg_randr *rr, xcb_randr_crtc_t cid) {
-	assert(rr->dc);
+	DI_CHECK(di_has_member(rr, XORG_CONNECTION_MEMBER));
 
 	auto obj = di_new_object_with_type2(struct di_xorg_view, "deai.plugin.xorg.randr:"
 	                                                         "View");
@@ -508,14 +527,16 @@ static int handle_randr_event(struct di_xorg_ext *ext, xcb_generic_event_t *ev) 
 }
 
 static inline void rr_select_input(struct di_xorg_randr *rr, uint16_t mask) {
-	if (rr->dc == NULL) {
+	di_object_with_cleanup dc_obj = NULL;
+	if (di_get(rr, XORG_CONNECTION_MEMBER, dc_obj) != 0) {
 		return;
 	}
-	auto scrn = screen_of_display(rr->dc->c, rr->dc->dflt_scrn);
-	auto e =
-	    xcb_request_check(rr->dc->c, xcb_randr_select_input(rr->dc->c, scrn->root, mask));
 
-	di_mgetm(rr->dc->x, log, (void)0);
+	struct di_xorg_connection *dc = (void *)dc_obj;
+	auto scrn = screen_of_display(dc->c, dc->dflt_scrn);
+	auto e = xcb_request_check(dc->c, xcb_randr_select_input(dc->c, scrn->root, mask));
+
+	di_mgetm(dc->x, log, (void)0);
 	if (e) {
 		di_log_va(logm, DI_LOG_ERROR, "randr select input failed\n");
 	}
@@ -570,14 +591,17 @@ static void disable_randr_event(struct di_xorg_randr *rr, uint16_t mask) {
 /// Generally, outputs are what we would call monitors.
 static struct di_array rr_outputs(struct di_xorg_randr *rr) {
 	struct di_array ret = DI_ARRAY_INIT;
-	if (!rr->dc) {
+	di_object_with_cleanup dc_obj = NULL;
+	if (di_get(rr, XORG_CONNECTION_MEMBER, dc_obj) != 0) {
 		return ret;
 	}
 
-	auto scrn = screen_of_display(rr->dc->c, rr->dc->dflt_scrn);
+	struct di_xorg_connection *dc = (void *)dc_obj;
+
+	auto scrn = screen_of_display(dc->c, dc->dflt_scrn);
 	with_cleanup_t(xcb_randr_get_screen_resources_current_reply_t) sr =
 	    xcb_randr_get_screen_resources_current_reply(
-	        rr->dc->c, xcb_randr_get_screen_resources_current(rr->dc->c, scrn->root), NULL);
+	        dc->c, xcb_randr_get_screen_resources_current(dc->c, scrn->root), NULL);
 	if (!sr) {
 		return ret;
 	}
@@ -613,14 +637,17 @@ make_object_for_modes(struct di_xorg_randr *rr, xcb_randr_mode_info_t *m) {
 /// EXPORT: deai.plugin.xorg:RandrExt.modes, [deai.plugin.xorg.randr:Mode]
 static struct di_array rr_modes(struct di_xorg_randr *rr) {
 	struct di_array ret = DI_ARRAY_INIT;
-	if (!rr->dc) {
+	di_object_with_cleanup dc_obj = NULL;
+	if (di_get(rr, XORG_CONNECTION_MEMBER, dc_obj) != 0) {
 		return ret;
 	}
 
-	auto scrn = screen_of_display(rr->dc->c, rr->dc->dflt_scrn);
+	struct di_xorg_connection *dc = (void *)dc_obj;
+
+	auto scrn = screen_of_display(dc->c, dc->dflt_scrn);
 	with_cleanup_t(xcb_randr_get_screen_resources_current_reply_t) sr =
 	    xcb_randr_get_screen_resources_current_reply(
-	        rr->dc->c, xcb_randr_get_screen_resources_current(rr->dc->c, scrn->root), NULL);
+	        dc->c, xcb_randr_get_screen_resources_current(dc->c, scrn->root), NULL);
 	if (!sr) {
 		return ret;
 	}
@@ -668,9 +695,7 @@ struct di_xorg_ext *new_randr(struct di_xorg_connection *dc) {
 	                                                         "RandrExt");
 	rr->opcode = r->major_opcode;
 	rr->handle_event = (void *)handle_randr_event;
-	rr->dc = dc;
 	rr->extname = "randr";
-	rr->free = free_randr;
 	rr->evbase = r->first_event;
 
 	rr->cts = sr->config_timestamp;
@@ -682,6 +707,7 @@ struct di_xorg_ext *new_randr(struct di_xorg_connection *dc) {
 	    rr, "output-change", di_xorg_ext_signal_setter, di_xorg_ext_signal_deleter);
 	di_signal_setter_deleter_with_signal_name(
 	    rr, "view-change", di_xorg_ext_signal_setter, di_xorg_ext_signal_deleter);
+	di_set_object_dtor((void *)rr, (void *)free_randr);
 
 	rr_select_input(rr, XCB_RANDR_NOTIFY_MASK_OUTPUT_CHANGE | XCB_RANDR_NOTIFY_MASK_CRTC_CHANGE |
 	                        XCB_RANDR_NOTIFY_MASK_SCREEN_CHANGE);

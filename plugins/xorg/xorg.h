@@ -34,7 +34,6 @@ struct di_xorg_connection {
 
 struct di_xorg_ext {
 	struct di_object;
-	struct di_xorg_connection *dc;
 	const char *id;
 	const char *extname;
 
@@ -91,3 +90,5 @@ void di_xorg_ext_signal_setter(const char *signal, struct di_object *obj, struct
 /// Decrement the signal count and stop fdevent when necessary
 void di_xorg_del_signal(struct di_xorg_connection *);
 void di_xorg_ext_signal_deleter(const char *signal, struct di_object *obj);
+
+#define XORG_CONNECTION_MEMBER "___xorg_connection"
