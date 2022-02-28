@@ -129,7 +129,9 @@ static void di_stop_ioev(struct di_ioev *ev) {
 
 	auto roots = di_get_roots();
 	di_string_with_cleanup root_key = di_string_printf("fdevent_for_%d", ev->evh.fd);
-	DI_CHECK_OK(di_call(roots, "remove", root_key));
+
+	// Ignore error here, if someone called di:exit, we would've been removed already.
+	di_call(roots, "remove", root_key);
 }
 
 /// Change monitored file descriptor events
@@ -190,6 +192,14 @@ static void di_disable_write(struct di_object *obj) {
 	di_modify_ioev(ioev, flags);
 }
 
+static void di_ioev_dtor(struct di_object *obj) {
+	// Normally the ev_io won't be running, but if someone removed us from the roots,
+	// e.g. by calling di:exit(), then ev_io could be running.
+	// Removing the signal objects should be enough to stop it.
+	di_remove_member(obj, di_string_borrow_literal("__signal_read"));
+	di_remove_member(obj, di_string_borrow_literal("__signal_write"));
+}
+
 /// File descriptor events
 ///
 /// EXPORT: event.fdevent(fd: :integer, flag: :integer), deai.builtin.event:IoEv
@@ -204,6 +214,7 @@ static struct di_object *di_create_ioev(struct di_object *obj, int fd) {
 	struct di_module *em = (void *)obj;
 	auto ret = di_new_object_with_type(struct di_ioev);
 	di_set_type((void *)ret, "deai.builtin.event:IoEv");
+	di_set_object_dtor((void *)ret, di_ioev_dtor);
 
 	di_object_with_cleanup di_obj = di_module_get_deai(em);
 	if (di_obj == NULL) {
