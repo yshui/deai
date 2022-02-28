@@ -301,19 +301,19 @@ dbus_serialize_basic_with_type(DBusMessageIter *i, struct di_variant var, int db
 
 static int dbus_serialize_with_signature(DBusMessageIter *i, struct di_variant var,
                                          struct dbus_signature si) {
-	if (dbus_type_is_basic(*si.current)) {
-		if (!dbus_serialize_basic_with_type(i, var, *si.current)) {
+	if (dbus_type_is_basic(*si.current.data)) {
+		if (!dbus_serialize_basic_with_type(i, var, *si.current.data)) {
 			return -EINVAL;
 		}
 		return 0;
 	}
-	if (*si.current == DBUS_TYPE_VARIANT) {
+	if (*si.current.data == DBUS_TYPE_VARIANT) {
 		auto inner = type_signature_of_di_value(var);
 		DBusMessageIter i2;
-		dbus_message_iter_open_container(i, DBUS_TYPE_VARIANT, inner.current, &i2);
+		dbus_message_iter_open_container(i, DBUS_TYPE_VARIANT, inner.current.data, &i2);
 		dbus_serialize_with_signature(&i2, var, inner);
 		auto ret = dbus_message_iter_close_container(i, &i2) ? 0 : -ENOMEM;
-		free((char *)inner.current);
+		di_free_string(inner.current);
 		free_dbus_signature(inner);
 		return ret;
 	}
@@ -322,7 +322,7 @@ static int dbus_serialize_with_signature(DBusMessageIter *i, struct di_variant v
 		// We aren't expecting a variant, so unwrap it.
 		return dbus_serialize_with_signature(i, var.value->variant, si);
 	}
-	if (*si.current == DBUS_TYPE_ARRAY) {
+	if (*si.current.data == DBUS_TYPE_ARRAY) {
 		if (var.type != DI_TYPE_ARRAY) {
 			return -EINVAL;
 		}
@@ -334,7 +334,7 @@ static int dbus_serialize_with_signature(DBusMessageIter *i, struct di_variant v
 		DBusMessageIter i2;
 
 		if (dbus_type_is_basic(atype) && atype != DBUS_TYPE_STRING &&
-		    atype == *si2.current) {
+		    atype == *si2.current.data) {
 			// Basic data type and no conversion needed
 			bool ret = dbus_message_iter_open_container(
 			    i, DBUS_TYPE_ARRAY, (char[]){(char)atype, 0}, &i2);
@@ -350,7 +350,7 @@ static int dbus_serialize_with_signature(DBusMessageIter *i, struct di_variant v
 			return dbus_message_iter_close_container(i, &i2) ? 0 : -ENOMEM;
 		}
 
-		char *tmp = strndup(si2.current, si2.length);
+		char *tmp = di_string_to_chars_alloc(si2.current);
 		int step = di_sizeof_type(arr.elem_type);
 		bool ret = dbus_message_iter_open_container(i, DBUS_TYPE_ARRAY, tmp, &i2);
 		free(tmp);
@@ -366,7 +366,7 @@ static int dbus_serialize_with_signature(DBusMessageIter *i, struct di_variant v
 		}
 		return dbus_message_iter_close_container(i, &i2) ? 0 : -ENOMEM;
 	}
-	if (*si.current == DBUS_STRUCT_BEGIN_CHAR) {
+	if (*si.current.data == DBUS_STRUCT_BEGIN_CHAR) {
 		DBusMessageIter i2;
 		bool ret = dbus_message_iter_open_container(i, DBUS_TYPE_STRUCT, NULL, &i2);
 		if (!ret) {
@@ -404,18 +404,18 @@ static int dbus_serialize_with_signature(DBusMessageIter *i, struct di_variant v
 	return -EINVAL;
 }
 
-int dbus_serialize_struct(DBusMessageIter *it, struct di_tuple t, const char *signature) {
+int dbus_serialize_struct(DBusMessageIter *it, struct di_tuple t, struct di_string signature) {
 	auto var = di_variant_of(t);
 	struct dbus_signature sig;
 	int ret = 0;
-	if (!signature) {
+	if (!signature.length) {
 		sig = type_signature_of_di_value(var);
 	} else {
 		sig = parse_dbus_signature(signature);
 	}
-	if (!sig.current) {
-		// error code is return via .length
-		return sig.length;
+	if (sig.nchild < 0) {
+		// error code is return via .nchild
+		return sig.nchild;
 	}
 	for (int i = 0; i < t.length; i++) {
 		ret = dbus_serialize_with_signature(it, t.elements[i], sig.child[i]);
@@ -424,8 +424,8 @@ int dbus_serialize_struct(DBusMessageIter *it, struct di_tuple t, const char *si
 		}
 	}
 
-	if (!signature) {
-		free((char *)sig.current);
+	if (!signature.length) {
+		di_free_string(sig.current);
 	}
 	free_dbus_signature(sig);
 	free(var.value);

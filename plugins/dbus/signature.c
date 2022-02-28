@@ -195,7 +195,7 @@ type_signature_of_di_value_to_buffer(struct di_variant var, char *buffer) {
 	int dtype = di_type_to_dbus_basic(var.type);
 	if (dbus_type_is_basic(dtype)) {
 		*buffer = (char)dtype;
-		return (struct dbus_signature){buffer, 1, 0, NULL};
+		return (struct dbus_signature){(struct di_string){buffer, 1}, 0, NULL};
 	}
 	if (var.type == DI_TYPE_ARRAY) {
 		*buffer = 'a';
@@ -205,12 +205,11 @@ type_signature_of_di_value_to_buffer(struct di_variant var, char *buffer) {
 		auto v = verify_type_signature(var, buffer);
 		if (!v) {
 			free_dbus_signature(res);
-			return (struct dbus_signature){NULL, -EINVAL, 0, NULL};
+			return (struct dbus_signature){DI_STRING_INIT, -EINVAL, NULL};
 		}
 
 		struct dbus_signature ret;
-		ret.current = buffer;
-		ret.length = res.length + 1;
+		ret.current = (struct di_string){buffer, res.current.length + 1};
 		ret.nchild = 1;
 		ret.child = tmalloc(struct dbus_signature, 1);
 		ret.child[0] = res;
@@ -221,20 +220,19 @@ type_signature_of_di_value_to_buffer(struct di_variant var, char *buffer) {
 		*curr++ = '(';
 		struct di_tuple t = var.value->tuple;
 		struct dbus_signature ret;
-		ret.current = buffer;
-		ret.length = 2;
+		ret.current = (struct di_string){buffer, 2};
 		ret.nchild = t.length;
 		ret.child = tmalloc(struct dbus_signature, t.length);
 		for (int i = 0; i < t.length; i++) {
 			ret.child[i] =
 			    type_signature_of_di_value_to_buffer(t.elements[i], curr);
-			if (!ret.child[i].current) {
+			if (ret.child[i].nchild < 0) {
 				auto tmp = ret.child[i];
 				free_dbus_signature(ret);
 				return tmp;
 			}
-			ret.length += ret.child[i].length;
-			curr += ret.child[i].length;
+			ret.current.length += ret.child[i].current.length;
+			curr += ret.child[i].current.length;
 		}
 		*curr++ = ')';
 		return ret;
@@ -242,101 +240,102 @@ type_signature_of_di_value_to_buffer(struct di_variant var, char *buffer) {
 	if (var.type == DI_TYPE_VARIANT) {
 		return type_signature_of_di_value_to_buffer(var.value->variant, buffer);
 	}
-	return (struct dbus_signature){NULL, -EINVAL, 0, NULL};
+	return (struct dbus_signature){DI_STRING_INIT, -EINVAL, NULL};
 }
 
 struct dbus_signature type_signature_of_di_value(struct di_variant var) {
 	int len = type_signature_length_of_di_value(var);
 	if (len < 0) {
-		return (struct dbus_signature){NULL, -EINVAL, 0, NULL};
+		return (struct dbus_signature){DI_STRING_INIT, -EINVAL, NULL};
 	}
 	char *ret = malloc(len + 1);
 	auto rc = type_signature_of_di_value_to_buffer(var, ret);
-	if (rc.length < 0) {
+	if (rc.nchild < 0) {
 		free(ret);
 	}
 	ret[len] = '\0';
 	return rc;
 }
 
-struct dbus_signature parse_dbus_signature_one(const char *signature, const char **rest);
 struct dbus_signature
-parse_dbus_signaure_sequence(const char *signature, char end_char, const char **rest) {
-	const char *curr = signature;
+parse_dbus_signature_one(struct di_string signature, struct di_string *rest);
+struct dbus_signature parse_dbus_signaure_sequence(struct di_string signature,
+                                                   char end_char, struct di_string *rest) {
+	auto curr = signature;
 	struct dbus_signature *children = NULL;
 	int capacity = 0;
 	int length = 0;
 	int nchild = 0;
-	while (*signature != end_char) {
-		const char *next;
+	while (signature.length != 0 && *signature.data != end_char) {
+		struct di_string next;
 		if (nchild == capacity) {
 			capacity += capacity + 1;
 			children = realloc(children, sizeof(struct dbus_signature) * capacity);
 		}
 		children[nchild] = parse_dbus_signature_one(signature, &next);
-		if (children[nchild].current == NULL) {
+		if (children[nchild].nchild < 0) {
 			free(children);
 			return children[nchild];
 		}
-		length += children[nchild].length;
+		length += children[nchild].current.length;
 		nchild += 1;
 		signature = next;
 	}
 	*rest = signature;
 	return (struct dbus_signature){
-	    .current = curr,
-	    .length = length,
+	    .current = di_substring(curr, 0, length),
 	    .nchild = nchild,
 	    .child = realloc(children, sizeof(struct dbus_signature) * nchild)};
 }
 
-struct dbus_signature parse_dbus_signature_one(const char *signature, const char **rest) {
-	if ((dbus_type_is_valid(*signature) && dbus_type_is_basic(*signature)) ||
-	    *signature == 'v') {
-		*rest = signature + 1;
+struct dbus_signature
+parse_dbus_signature_one(struct di_string signature, struct di_string *rest) {
+	if ((dbus_type_is_valid(*signature.data) && dbus_type_is_basic(*signature.data)) ||
+	    *signature.data == 'v') {
+		*rest = di_suffix(signature, 1);
 		return (struct dbus_signature){
-		    .current = signature, .length = 1, .nchild = 0, .child = NULL};
+		    .current = di_substring(signature, 0, 1), .nchild = 0, .child = NULL};
 	}
 
-	if (*signature == DBUS_TYPE_ARRAY) {
+	if (*signature.data == DBUS_TYPE_ARRAY) {
 		auto children = tmalloc(struct dbus_signature, 1);
-		children[0] = parse_dbus_signature_one(signature + 1, rest);
-		if (children[0].current == NULL) {
+		children[0] = parse_dbus_signature_one(di_suffix(signature, 1), rest);
+		if (children[0].nchild < 0) {
 			free(children);
 			return children[0];
 		}
-		return (struct dbus_signature){.current = signature,
-		                               .length = children[0].length + 1,
-		                               .nchild = 1,
-		                               .child = children};
+		return (struct dbus_signature){
+		    .current = di_substring(signature, 0, children[0].current.length + 1),
+		    .nchild = 1,
+		    .child = children};
 	}
-	if (*signature == DBUS_STRUCT_BEGIN_CHAR) {
-		const char *next;
-		auto ret =
-		    parse_dbus_signaure_sequence(signature + 1, DBUS_STRUCT_END_CHAR, &next);
-		if (ret.current == NULL) {
+	if (*signature.data == DBUS_STRUCT_BEGIN_CHAR) {
+		struct di_string next;
+		auto ret = parse_dbus_signaure_sequence(di_suffix(signature, 1),
+		                                        DBUS_STRUCT_END_CHAR, &next);
+		if (ret.nchild < 0) {
 			return ret;
 		}
-		assert(*next == DBUS_STRUCT_END_CHAR);
-		ret.current = signature;
-		ret.length += 2;
-		*rest = next + 1;
+		assert(next.length != 0);
+		assert(*next.data == DBUS_STRUCT_END_CHAR);
+		ret.current = di_substring(signature, 0, ret.current.length + 2);
+		*rest = di_suffix(next, 1);
 		return ret;
 	}
 	return (struct dbus_signature){
-	    .current = NULL, .length = -EINVAL, .nchild = 0, .child = NULL};
+	    .current = DI_STRING_INIT, .nchild = -EINVAL, .child = NULL};
 }
 
-struct dbus_signature parse_dbus_signature(const char *signature) {
+struct dbus_signature parse_dbus_signature(struct di_string signature) {
 	struct dbus_signature ret;
-	ret.current = (char *)signature;
-	ret.length = strlen(signature);
-	const char *rest;
+	ret.current = signature;
+	;
+	struct di_string rest;
 	auto ret2 = parse_dbus_signaure_sequence(ret.current, '\0', &rest);
-	if (ret2.current == NULL) {
+	if (ret2.nchild) {
 		return ret2;
 	}
-	assert(*rest == '\0');
+	assert(rest.length == 0);
 	ret.child = ret2.child;
 	ret.nchild = ret2.nchild;
 	return ret;

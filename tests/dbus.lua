@@ -1,8 +1,7 @@
 di.os.env.DBUS_SESSION_BUS_PID = nil
 di.os.env.DBUS_SESSION_BUS_ADDRESS = nil
 di.os.env.DISPLAY = nil
-
-di.log.log_level = "debug"
+--di.log.log_level = "debug"
 
 local dbusl = di.spawn:run({"dbus-daemon", "--print-address=1", "--print-pid=2", "--session", "--fork"}, false)
 local outlh
@@ -24,18 +23,22 @@ errlh = dbusl:on("stderr_line", function(l)
     errlh:stop()
     di.os.env.DBUS_SESSION_BUS_PID = l
 end)
+local total_request = 0
+local b
 function with_error(pending)
     if pending.errmsg then
-        print(pending.errmsg)
+        print("ASDF", pending.errmsg)
         di:exit(1)
     end
     local errlh, replylh
-    replylh = pending:signal("reply"):once("resolved", function(r)
+    replylh = pending:once("reply", function(r)
         errlh:stop()
+        total_request = total_request - 1
         print("Reply:", r)
     end)
-    errlh = pending:signal("error"):once("resolved", function(e)
+    errlh = pending:once("error", function(e)
         replylh:stop()
+        total_request = total_request - 1
         print(e)
     end)
 end
@@ -50,13 +53,14 @@ function call_with_signature_and_error(o, name, sig, ...)
 end
 
 dbusl:once("exit", function()
-    local b = di.dbus.session_bus
+    b = di.dbus.session_bus
     if b.errmsg then
-        print(b.errmsg)
+        print("ASDF2", b.errmsg)
         di:exit(1)
     end
     b = nil
-    local o = di.dbus.session_bus:get("org.freedesktop.DBus", "/org/freedesktop/DBus")
+    b = di.dbus.session_bus
+    local o = b:get("org.freedesktop.DBus", "/org/freedesktop/DBus")
     o:Introspect():once("reply", function(s)
         print(s)
     end)
@@ -70,6 +74,7 @@ dbusl:once("exit", function()
     end)
 
     -- Use non-existent method to test message serialization
+    total_request = 6
     call_with_error(o, "org.dummy.Dummy", {1,2,3})
     call_with_error(o, "org.dummy.Dummy", {"asdf","qwer"})
     call_with_error(o, "org.dummy.Dummy", 1)
