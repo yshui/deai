@@ -21,7 +21,6 @@ struct xorg_key {
 	xcb_key_symbols_t *keysyms;
 
 	struct list_head bindings;
-	int nsignals;
 };
 
 struct keybinding {
@@ -62,7 +61,8 @@ static void ungrab(struct keybinding *kb) {
 		return;
 	}
 	struct di_xorg_connection *dc = (void *)dc_obj;
-	if (dc != NULL) {
+	// Check if we already disconnected from X
+	if (dc != NULL && dc->c) {
 		auto s = screen_of_display(dc->c, dc->dflt_scrn);
 		for (int i = 0; kb->keycodes[i] != XCB_NO_SYMBOL; i++) {
 			xcb_ungrab_key(dc->c, kb->keycodes[i], s->root, kb->modifiers);
@@ -416,6 +416,7 @@ struct di_xorg_ext *new_key(struct di_xorg_connection *dc) {
 	k->keysyms = xcb_key_symbols_alloc(dc->c);
 
 	INIT_LIST_HEAD(&k->bindings);
+	DI_CHECK_OK(di_member_clone(k, XORG_CONNECTION_MEMBER, (struct di_object *)dc));
 	di_method(k, "new", new_binding, struct di_array, struct di_string, bool);
 	di_set_object_dtor((void *)k, (void *)free_key);
 	return (void *)k;

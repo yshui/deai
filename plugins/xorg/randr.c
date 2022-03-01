@@ -607,6 +607,9 @@ static struct di_array rr_outputs(struct di_xorg_randr *rr) {
 	}
 
 	ret.length = xcb_randr_get_screen_resources_current_outputs_length(sr);
+	if (ret.length == 0) {
+		return ret;
+	}
 	ret.elem_type = DI_TYPE_OBJECT;
 	auto os = xcb_randr_get_screen_resources_current_outputs(sr);
 	void **arr = ret.arr = tmalloc(void *, ret.length);
@@ -653,6 +656,10 @@ static struct di_array rr_modes(struct di_xorg_randr *rr) {
 	}
 
 	ret.length = xcb_randr_get_screen_resources_current_modes_length(sr);
+	if (ret.length == 0) {
+		return ret;
+	}
+
 	ret.elem_type = DI_TYPE_OBJECT;
 
 	auto mi = xcb_randr_get_screen_resources_current_modes_iterator(sr);
@@ -709,6 +716,8 @@ struct di_xorg_ext *new_randr(struct di_xorg_connection *dc) {
 	    rr, "view-change", di_xorg_ext_signal_setter, di_xorg_ext_signal_deleter);
 	di_set_object_dtor((void *)rr, (void *)free_randr);
 
+
+	DI_CHECK_OK(di_member_clone(rr, XORG_CONNECTION_MEMBER, (struct di_object *)dc));
 	rr_select_input(rr, XCB_RANDR_NOTIFY_MASK_OUTPUT_CHANGE | XCB_RANDR_NOTIFY_MASK_CRTC_CHANGE |
 	                        XCB_RANDR_NOTIFY_MASK_SCREEN_CHANGE);
 

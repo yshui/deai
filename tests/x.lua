@@ -21,7 +21,9 @@ table.insert(listen_handles, di.event:timer(0.2):on("elapsed", function()
 
     o.keymap = { layout = "us", options = "ctrl:nocaps" }
     xi = o.xinput
+    local new_device = false
     table.insert(listen_handles, xi:on("new-device", function(dev)
+        new_device = true
         print(string.format("new device %s %s %s %d", dev.type, dev.use, dev.name, dev.id))
         print("enabled:", dev.props["Device Enabled"])
         if dev.use == "pointer" then
@@ -35,6 +37,8 @@ table.insert(listen_handles, di.event:timer(0.2):on("elapsed", function()
     end))
 
     local key_pressed = false
+    local view_changed = false
+    local output_changed = false
     table.insert(listen_handles, o.key:new({"mod4"}, "d", false):on("pressed", function()
         print("pressed")
         key_pressed = true
@@ -80,12 +84,29 @@ table.insert(listen_handles, di.event:timer(0.2):on("elapsed", function()
         end
 
         o:disconnect()
-        assert(key_pressed)
         o = di.xorg:connect_to(":2")
         if o.errmsg then
             print(o.errmsg)
+            di:exit(1)
+        else
+            o:disconnect()
         end
-        o:disconnect()
+        if not key_pressed then
+            print("key pressed not received")
+            di:exit(1)
+        end
+        if not output_changed then
+            print("output changed not received")
+            di:exit(1)
+        end
+        if not view_changed then
+            print("view changed not received")
+            di:exit(1)
+        end
+        if not new_device then
+            print("new device not received")
+            di:exit(1)
+        end
         for _, lh in pairs(listen_handles) do
             lh:stop()
         end

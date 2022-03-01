@@ -713,6 +713,7 @@ struct di_xorg_ext *new_xinput(struct di_xorg_connection *dc) {
 
 	free(r);
 
+	DI_CHECK_OK(di_member_clone(xi, XORG_CONNECTION_MEMBER, (struct di_object *)dc));
 	// TODO(yshui): only enable if there are listeners?
 	enable_hierarchy_event(xi);
 

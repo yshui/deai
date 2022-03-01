@@ -36,6 +36,7 @@ struct di_xorg_ext {
 	struct di_object;
 	const char *id;
 	const char *extname;
+	int nsignals;
 
 	uint8_t opcode;
 

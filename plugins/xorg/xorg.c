@@ -65,6 +65,16 @@ static void xorg_disconnect(struct di_xorg_connection *xc) {
 	}
 }
 
+struct _xext {
+	const char *name;
+	struct di_xorg_ext *(*new)(struct di_xorg_connection *xc);
+} xext_reg[] = {
+    {"xinput", new_xinput},
+    {"randr", new_randr},
+    {"key", new_key},
+    {NULL, NULL},
+};
+
 static void di_xorg_ioev(struct di_object *dc_obj) {
 	// di_get_log(dc->x->di);
 	// di_log_va((void *)log, DI_LOG_DEBUG, "xcb ioev\n");
@@ -89,12 +99,18 @@ static void di_xorg_ioev(struct di_object *dc_obj) {
 			         });
 		}
 
-		struct di_xorg_ext *ex, *tmp;
-		HASH_ITER (hh, dc->xext, ex, tmp) {
-			if (ex->handle_event == NULL) {
+		for (int i = 0; xext_reg[i].name != NULL; i++) {
+			// Only strongly referenced ext have signal listerners.
+			di_string_with_cleanup ext_key =
+			    di_string_printf("___strong_x_ext_%s", xext_reg[i].name);
+			struct di_xorg_ext *ext;
+			if (di_getxt(dc_obj, ext_key, DI_TYPE_OBJECT, (void *)&ext) != 0) {
 				continue;
 			}
-			int status = ex->handle_event(ex, ev);
+			if (ext->handle_event == NULL) {
+				continue;
+			}
+			int status = ext->handle_event(ext, ev);
 			if (status != 1) {
 				break;
 			}
@@ -202,16 +218,6 @@ static void di_xorg_set_resource(struct di_xorg_connection *xc, struct di_string
 	(void)e;
 }
 
-struct _xext {
-	const char *name;
-	struct di_xorg_ext *(*new)(struct di_xorg_connection *xc);
-} xext_reg[] = {
-    {"xinput", new_xinput},
-    {"randr", new_randr},
-    {"key", new_key},
-    {NULL, NULL},
-};
-
 static struct di_variant di_xorg_get_ext(struct di_xorg_connection *xc, struct di_string name) {
 	di_weak_object_with_cleanup weak_ext = NULL;
 	di_string_with_cleanup ext_member =
@@ -235,8 +241,6 @@ static struct di_variant di_xorg_get_ext(struct di_xorg_connection *xc, struct d
 		if (ext == NULL) {
 			break;
 		}
-
-		DI_CHECK_OK(di_member_clone(ext, XORG_CONNECTION_MEMBER, (struct di_object *)xc));
 		weak_ext = di_weakly_ref_object((void *)ext);
 		DI_CHECK_OK(di_add_member_clone((void *)xc, ext_member,
 		                                DI_TYPE_WEAK_OBJECT, &weak_ext));
@@ -563,7 +567,19 @@ void di_xorg_ext_signal_setter(const char *signal, struct di_object *obj, struct
 	if (di_member_clone(obj, signal, sig) != 0) {
 		return;
 	}
-	di_xorg_add_signal((void *)dc_obj);
+
+	// Keep ext object alive while it has signals
+	struct di_xorg_ext *ext = (void *)obj;
+	fprintf(stderr, "ext signal setter %s\n", ext->extname);
+	ext->nsignals += 1;
+	if (ext->nsignals == 1) {
+		di_string_with_cleanup strong_ext_member =
+		    di_string_printf("___strong_x_ext_%s", ext->extname);
+		if (di_add_member_clone(dc_obj, strong_ext_member, DI_TYPE_OBJECT, &ext) != 0) {
+			return;
+		}
+		di_xorg_add_signal((void *)dc_obj);
+	}
 }
 
 void di_xorg_ext_signal_deleter(const char *signal, struct di_object *obj) {
@@ -574,7 +590,15 @@ void di_xorg_ext_signal_deleter(const char *signal, struct di_object *obj) {
 	if (di_remove_member_raw(obj, di_string_borrow(signal)) != 0) {
 		return;
 	}
-	di_xorg_del_signal((void *)dc_obj);
+	struct di_xorg_ext *ext = (void *)obj;
+	fprintf(stderr, "delete ext signal %s\n", ext->extname);
+	ext->nsignals -= 1;
+	if (ext->nsignals == 0) {
+		di_string_with_cleanup strong_ext_member =
+		    di_string_printf("___strong_x_ext_%s", ext->extname);
+		di_remove_member_raw(dc_obj, strong_ext_member);
+		di_xorg_del_signal((void *)dc_obj);
+	}
 }
 
 /// Connect to a X server
