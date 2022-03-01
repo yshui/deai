@@ -31,6 +31,7 @@ struct di_timer {
 struct di_periodic {
 	struct di_object_internal;
 	ev_periodic pt;
+	uint64_t root_handle;
 };
 
 /// SIGNAL: deai.builtin.event:IoEv.read() File descriptor became readable
@@ -345,6 +346,10 @@ static struct di_object *di_create_timer(struct di_object *obj, double timeout) 
 }
 
 static void periodic_dtor(struct di_periodic *p) {
+	if (p->root_handle == 0) {
+		return;
+	}
+
 	di_object_with_cleanup di_obj = di_object_get_deai_strong((struct di_object *)p);
 	auto di = (struct deai *)di_obj;
 	ev_periodic_stop(di->loop, &p->pt);
@@ -364,6 +369,27 @@ static void periodic_set(struct di_periodic *p, double interval, double offset) 
 	ev_periodic_again(di->loop, &p->pt);
 }
 
+static void di_periodic_signal_setter(struct di_object *o, struct di_object *sig) {
+	if (di_member_clone(o, di_signal_member_of("triggered"), sig) != 0) {
+		return;
+	}
+	struct di_periodic *p = (void *)o;
+	auto roots = di_get_roots();
+	DI_CHECK_OK(di_callr(roots, "__add_anonymous", p->root_handle, o));
+	di_object_upgrade_deai(o);
+}
+
+static void di_periodic_signal_deleter(struct di_object *o) {
+	di_remove_member_raw(o,
+	                     di_string_borrow_literal(di_signal_member_of("triggered")));
+
+	struct di_periodic *p = (void *)o;
+	auto roots = di_get_roots();
+	di_call(roots, "__remove_anonymous", p->root_handle);
+	di_object_downgrade_deai(o);
+	p->root_handle = 0;
+}
+
 /// Periodic timer event
 ///
 /// EXPORT: event.periodic(interval: :float, offset: :float), deai.builtin.event:Periodic
@@ -374,16 +400,19 @@ static struct di_object *
 di_create_periodic(struct di_module *evm, double interval, double offset) {
 	auto ret = di_new_object_with_type(struct di_periodic);
 	di_set_type((void *)ret, "deai.builtin.event:Periodic");
-	auto di_obj = di_module_get_deai(evm);
+	di_object_with_cleanup di_obj = di_module_get_deai(evm);
 
 	ret->dtor = (void *)periodic_dtor;
 	di_method(ret, "set", periodic_set, double, double);
 	ev_periodic_init(&ret->pt, di_periodic_callback, offset, interval, NULL);
+	di_signal_setter_deleter(ret, "triggered", di_periodic_signal_setter,
+	                         di_periodic_signal_deleter);
 
 	auto di = (struct deai *)di_obj;
 	ev_periodic_start(di->loop, &ret->pt);
 
-	di_member(ret, DEAI_MEMBER_NAME_RAW, di_obj);
+	auto weak_di = di_weakly_ref_object(di_obj);
+	di_member(ret, DEAI_MEMBER_NAME_RAW, weak_di);
 	return (void *)ret;
 }
 

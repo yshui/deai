@@ -51,9 +51,11 @@ table.insert(listen_handles, di.event:timer(0.2):on("elapsed", function()
 
     table.insert(listen_handles, o.randr:on("view-change", function()
         print("view-change")
+        view_changed = true
     end))
     table.insert(listen_handles, o.randr:on("output-change", function()
         print("output-change")
+        output_changed = true
     end))
 
     print("Modes:")
