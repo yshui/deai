@@ -257,7 +257,8 @@ static struct di_variant di_dbus_object_getter(di_dbus_object *dobj, struct di_s
 	}
 
 	const char *dot = memrchr(method.data, '.', method.length);
-	char *ifc, *m;
+	with_cleanup_t(char) ifc;
+	with_cleanup_t(char) m;
 	struct di_object *ret = NULL;
 	if (dot) {
 		const char *dot2 = memchr(method.data, '.', method.length);
