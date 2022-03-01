@@ -264,8 +264,12 @@ static void di_timer_again(struct di_timer *obj) {
 	}
 
 	auto di = (struct deai *)di_obj;
-	ev_timer_again(di->loop, &obj->evt);
-	di_object_upgrade_deai((struct di_object *)obj);
+	if (obj->evt.repeat == 0) {
+		ev_timer_set(&obj->evt, 0.0, 0.0);
+		ev_timer_start(di->loop, &obj->evt);
+	} else {
+		ev_timer_again(di->loop, &obj->evt);
+	}
 }
 
 /// Timer timeout
@@ -315,6 +319,9 @@ static void di_timer_delete_signal(struct di_object *o) {
 /// - timeout timeout in seconds
 ///
 /// Create a timer that emits a signal after timeout is reached.
+///
+/// Note if a timer with listeners exists, then deai will be kept alive, even when the
+/// timer has elapsed. So you should deregister the handler if you want deai to exit.
 static struct di_object *di_create_timer(struct di_object *obj, double timeout) {
 	struct di_module *em = (void *)obj;
 	auto ret = di_new_object_with_type(struct di_timer);
