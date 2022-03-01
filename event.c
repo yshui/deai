@@ -299,8 +299,9 @@ static void di_timer_delete_signal(struct di_object *o) {
 
 	auto t = (struct di_timer *)o;
 	auto roots = di_get_roots();
-	DI_CHECK_OK(di_call(roots, "__remove_anonymous", t->root_handle));
 
+	// Ignore error because roots might have been removed by di:exit
+	di_call(roots, "__remove_anonymous", t->root_handle);
 	di_object_downgrade_deai(o);
 }
 
