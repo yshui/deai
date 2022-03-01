@@ -30,18 +30,6 @@ struct di_listener {
 	struct list_head siblings;
 };
 
-/// A pending value
-///
-/// TYPE: deai:Promise
-///
-/// This encapsulates a pending value. Once this value become available, a "resolved"
-/// signal will be emitted with the value. Each promise should resolve only once ever.
-///
-/// SIGNAL: deai:Promise.resolved(result) The promise was resolved
-struct di_promise {
-	struct di_object;
-};
-
 static const struct di_object_internal dead_weakly_referenced_object = {
     .ref_count = 0,
     .weak_ref_count = 1,        // Keep this object from being freed
@@ -307,6 +295,9 @@ bool di_check_type(struct di_object *o, const char *tyname) {
 thread_local struct list_head all_objects;
 struct di_ref_tracked_object *ref_tracked;
 #endif
+
+/// Objects that has been unreferenced since last mark and sweep.
+thread_local struct list_head unrefed_objects;
 
 struct di_object *di_new_object(size_t sz, size_t alignment) {
 	if (sz < sizeof(struct di_object)) {

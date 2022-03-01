@@ -332,11 +332,14 @@ static struct di_object *di_create_timer(struct di_object *obj, double timeout) 
 	di_method(ret, "__set_timeout", di_timer_set, double);
 	di_signal_setter_deleter(ret, "elapsed", di_timer_add_signal, di_timer_delete_signal);
 
-	ev_init(&ret->evt, di_timer_callback);
-	ret->evt.repeat = timeout;
+	ev_timer_init(&ret->evt, di_timer_callback, 0.0, timeout);
 
 	auto di = (struct deai *)di_obj;
-	ev_timer_again(di->loop, &ret->evt);
+	if (timeout != 0.0) {
+		ev_timer_again(di->loop, &ret->evt);
+	} else {
+		ev_timer_start(di->loop, &ret->evt);
+	}
 
 	// Started timers have strong references to di
 	// Stopped ones have weak ones
@@ -437,6 +440,216 @@ static void di_prepare(EV_P_ ev_prepare *w, int revents) {
 	di_emit(dep->evm, "prepare");
 }
 
+/// A pending value
+///
+/// TYPE: deai:Promise
+///
+/// This encapsulates a pending value. Once this value become available, a "resolved"
+/// signal will be emitted with the value. Each promise should resolve only once ever.
+///
+/// SIGNAL: deai:Promise.resolved(result) The promise was resolved
+struct di_promise {
+	struct di_object;
+};
+
+struct di_object *di_promise_then(struct di_object *promise, struct di_object *handler);
+void di_resolve_promise(struct di_promise *promise, struct di_variant var);
+static void di_promise_then_impl(struct di_promise *promise, struct di_promise *then_promise,
+                                 struct di_object *handler);
+
+int di_promise_dispatch(struct di_object *prepare_handler, di_type_t *rt,
+                        union di_value *r, struct di_tuple args) {
+	di_object_with_cleanup promise_;
+	if (di_get(prepare_handler, "promise", promise_) != 0) {
+		return 0;
+	}
+
+	struct di_promise *promise = (void *)promise_;
+	struct di_variant resolved;
+	uint64_t nhandlers;
+	DI_CHECK_OK(di_get(promise, "___resolved", resolved));
+	DI_CHECK_OK(di_get(promise, "___n_handlers", nhandlers));
+
+	// Reset number of handlers
+	di_setx((void *)promise, di_string_borrow("___n_handlers"), DI_TYPE_UINT,
+	        (uint64_t[]){0});
+	struct di_object **handlers = tmalloc(struct di_object *, nhandlers);
+	struct di_weak_object **then_promise_weaks =
+	    tmalloc(struct di_weak_object *, nhandlers);
+
+	// Copy out all the handlers and promises in case they got overwritten by the
+	// handlers.
+	for (uint64_t i = 0; i < nhandlers; i++) {
+		{
+			char *buf;
+			struct di_string str;
+			str.length = asprintf(&buf, "___then_handler_%lu", i);
+			str.data = buf;
+			if (di_get(promise, buf, handlers[i]) == 0) {
+				di_remove_member((void *)promise, str);
+			} else {
+				handlers[i] = NULL;
+			}
+			free(buf);
+
+			str.length = asprintf(&buf, "___weak_then_promise_%lu", i);
+			str.data = buf;
+			DI_CHECK_OK(di_get(promise, buf, then_promise_weaks[i]));
+			di_remove_member((void *)promise, str);
+			free(buf);
+		}
+	}
+
+	for (uint64_t i = 0; i < nhandlers; i++) {
+		union di_value return_value;
+		di_type_t return_type;
+		di_promise_with_cleanup then_promise =
+		    (void *)di_upgrade_weak_ref(then_promise_weaks[i]);
+		di_drop_weak_ref(&then_promise_weaks[i]);
+		int ret = 0;
+		if (handlers[i]) {
+			ret = di_call_object(handlers[i], &return_type, &return_value,
+			                     DI_TYPE_VARIANT, resolved, DI_LAST_TYPE);
+			di_unref_object(handlers[i]);
+			handlers[i] = NULL;
+		} else {
+			// If there is no handler, we simply copy the value
+			di_copy_value(resolved.type, &return_value, resolved.value);
+			return_type = resolved.type;
+		}
+		if (ret != 0) {
+			return_value.object = di_new_error("Failed to call function in "
+			                                   "promise then");
+			return_type = DI_TYPE_OBJECT;
+		}
+		if (then_promise) {
+			if (return_type == DI_TYPE_OBJECT &&
+			    strcmp(di_get_type(return_value.object), "deai:Promise") == 0) {
+				di_promise_then_impl((void *)return_value.object,
+				                     then_promise, NULL);
+			} else {
+				di_resolve_promise(
+				    then_promise, (struct di_variant){.type = return_type,
+				                                      .value = &return_value});
+			}
+		}
+		di_free_value(return_type, &return_value);
+	}
+	free(handlers);
+	free(then_promise_weaks);
+	di_free_value(DI_TYPE_VARIANT, (void *)&resolved);
+	// Stop listening for the signal
+	di_remove_member((void *)promise, di_string_borrow("___auto_listen_handle"));
+	return 0;
+}
+
+/// Create a new promise object
+///
+/// EXPORT: event.new_promise(), deai:Promise
+struct di_object *di_new_promise(struct di_object *event_module) {
+	struct di_promise *ret = di_new_object_with_type(struct di_promise);
+	auto weak_event = di_weakly_ref_object(event_module);
+	di_set_type((void *)ret, "deai:Promise");
+	di_member(ret, "___weak_event_module", weak_event);
+	di_setx((void *)ret, di_string_borrow("___n_handlers"), DI_TYPE_UINT, (uint64_t[]){0});
+	di_method(ret, "then", di_promise_then, struct di_object *);
+	// "then" is a keyword in lua
+	di_method(ret, "then_", di_promise_then, struct di_object *);
+	di_method(ret, "resolve", di_resolve_promise, struct di_variant);
+	return (void *)ret;
+}
+
+static void di_promise_start_dispatch(struct di_promise *promise) {
+	if (di_lookup((void *)promise, di_string_borrow("___auto_listen_handle"))) {
+		// Already started dispatch
+		return;
+	}
+
+	di_object_with_cleanup handler = di_new_object_with_type(struct di_object);
+	di_weak_object_with_cleanup weak_event = NULL;
+	DI_CHECK_OK(di_get(promise, "___weak_event_module", weak_event));
+	di_object_with_cleanup event_module = di_upgrade_weak_ref(weak_event);
+	if (event_module == NULL) {
+		return;
+	}
+
+	// Need to be weak here, because otherwise there will be a cycle: handler ->
+	// promise -> listen_handle -> handler
+	di_member_clone(handler, "promise", (struct di_object *)promise);
+	di_set_object_call(handler, di_promise_dispatch);
+
+	// Use a 0 second timer because prepare isn't guaranteed to be called if
+	// epoll blocks.
+	di_object_with_cleanup timer = NULL;
+	if (di_callr(event_module, "timer", timer, 0.0) != 0) {
+		return;
+	}
+	
+	di_object_with_cleanup listen_handle = di_listen_to(timer, di_string_borrow("elapsed"), handler);
+	struct di_object *autolh = NULL;
+	DI_CHECK_OK(di_callr(listen_handle, "auto_stop", autolh));
+	di_member(promise, "___auto_listen_handle", autolh);
+}
+
+static void di_promise_then_impl(struct di_promise *promise, struct di_promise *then_promise,
+                                 struct di_object *handler) {
+	uint64_t nhandlers;
+	DI_CHECK_OK(di_get(promise, "___n_handlers", nhandlers));
+	char *buf;
+	if (handler) {
+		asprintf(&buf, "___then_handler_%lu", nhandlers);
+		di_member_clone(promise, buf, handler);
+		free(buf);
+	}
+	auto then_promise_weak = di_weakly_ref_object((void *)then_promise);
+	asprintf(&buf, "___weak_then_promise_%lu", nhandlers);
+	di_member(promise, buf, then_promise_weak);
+	free(buf);
+
+	nhandlers += 1;
+	di_setx((void *)promise, di_string_borrow("___n_handlers"), DI_TYPE_UINT, &nhandlers);
+
+	di_member_clone(then_promise, "__source_promise", (struct di_object *)promise);
+	if (di_lookup((void *)promise, di_string_borrow("___resolved"))) {
+		di_promise_start_dispatch(promise);
+	}
+}
+
+/// Chain computation to a promise
+///
+/// EXPORT: deai:Promise.then(handler: :object), deai:Promise
+///
+/// Register a handler to be called after `promise` resolves, the handler will be called
+/// with the resolved value as argument.
+///
+/// Returns a promise that will be resolved after handler returns. If handler returns
+/// another promise, then returned promise will be resolved after that promises resolves,
+/// otherwise return promise will resolve to the value returned by the handler.
+///
+/// Note the handler will always be called after being registered, whether the
+/// promise returned by this function is freed or not.
+///
+/// (this function is called "then_" in lua, since "then" is a keyword)
+struct di_object *di_promise_then(struct di_object *promise, struct di_object *handler) {
+	di_weak_object_with_cleanup weak_event = NULL;
+	if (di_get(promise, "___weak_event_module", weak_event) != 0) {
+		return di_new_error("Event module member not found");
+	}
+	di_object_with_cleanup event_module = di_upgrade_weak_ref(weak_event);
+	if (event_module == NULL) {
+		return di_new_error("deai shutting down?");
+	}
+
+	struct di_object *ret = di_new_promise(event_module);
+	di_promise_then_impl((void *)promise, (void *)ret, handler);
+	return ret;
+}
+
+void di_resolve_promise(struct di_promise *promise, struct di_variant var) {
+	di_member_clone(promise, "___resolved", var);
+	di_promise_start_dispatch(promise);
+}
+
 /// Core events
 ///
 /// EXPORT: event, deai:module
@@ -449,6 +662,7 @@ void di_init_event(struct deai *di) {
 	di_method(em, "fdevent", di_create_ioev, int);
 	di_method(em, "timer", di_create_timer, double);
 	di_method(em, "periodic", di_create_periodic, double, double);
+	di_method(em, "new_promise", di_new_promise);
 
 	auto dep = tmalloc(struct di_prepare, 1);
 	dep->evm = em;
