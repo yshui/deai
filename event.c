@@ -446,9 +446,8 @@ int di_promise_dispatch(struct di_object *prepare_handler, di_type_t *rt,
 	// Reset number of handlers
 	di_setx((void *)promise, di_string_borrow("___n_handlers"), DI_TYPE_UINT,
 	        (uint64_t[]){0});
-	struct di_object **handlers = tmalloc(struct di_object *, nhandlers);
-	struct di_weak_object **then_promise_weaks =
-	    tmalloc(struct di_weak_object *, nhandlers);
+	auto handlers = tmalloc(struct di_object *, nhandlers);
+	auto then_promises = tmalloc(struct di_object *, nhandlers);
 
 	// Copy out all the handlers and promises in case they got overwritten by the
 	// handlers.
@@ -465,9 +464,9 @@ int di_promise_dispatch(struct di_object *prepare_handler, di_type_t *rt,
 			}
 			free(buf);
 
-			str.length = asprintf(&buf, "___weak_then_promise_%lu", i);
+			str.length = asprintf(&buf, "___then_promise_%lu", i);
 			str.data = buf;
-			DI_CHECK_OK(di_get(promise, buf, then_promise_weaks[i]));
+			DI_CHECK_OK(di_get(promise, buf, then_promises[i]));
 			di_remove_member((void *)promise, str);
 			free(buf);
 		}
@@ -476,9 +475,6 @@ int di_promise_dispatch(struct di_object *prepare_handler, di_type_t *rt,
 	for (uint64_t i = 0; i < nhandlers; i++) {
 		union di_value return_value;
 		di_type_t return_type;
-		di_promise_with_cleanup then_promise =
-		    (void *)di_upgrade_weak_ref(then_promise_weaks[i]);
-		di_drop_weak_ref(&then_promise_weaks[i]);
 		int ret = 0;
 		if (handlers[i]) {
 			ret = di_call_object(handlers[i], &return_type, &return_value,
@@ -495,21 +491,20 @@ int di_promise_dispatch(struct di_object *prepare_handler, di_type_t *rt,
 			                                   "promise then");
 			return_type = DI_TYPE_OBJECT;
 		}
-		if (then_promise) {
-			if (return_type == DI_TYPE_OBJECT &&
-			    strcmp(di_get_type(return_value.object), "deai:Promise") == 0) {
-				di_promise_then_impl((void *)return_value.object,
-				                     then_promise, NULL);
-			} else {
-				di_resolve_promise(
-				    then_promise, (struct di_variant){.type = return_type,
-				                                      .value = &return_value});
-			}
+		if (return_type == DI_TYPE_OBJECT &&
+		    strcmp(di_get_type(return_value.object), "deai:Promise") == 0) {
+			di_promise_then_impl((void *)return_value.object,
+			                     (void *)then_promises[i], NULL);
+		} else {
+			di_resolve_promise(
+			    (void *)then_promises[i],
+			    (struct di_variant){.type = return_type, .value = &return_value});
 		}
+		di_unref_object((void *)then_promises[i]);
 		di_free_value(return_type, &return_value);
 	}
 	free(handlers);
-	free(then_promise_weaks);
+	free(then_promises);
 	di_free_value(DI_TYPE_VARIANT, (void *)&resolved);
 	// Stop listening for the signal
 	di_remove_member((void *)promise, di_string_borrow("___auto_listen_handle"));
@@ -557,8 +552,9 @@ static void di_promise_start_dispatch(struct di_promise *promise) {
 	if (di_callr(event_module, "timer", timer, 0.0) != 0) {
 		return;
 	}
-	
-	di_object_with_cleanup listen_handle = di_listen_to(timer, di_string_borrow("elapsed"), handler);
+
+	di_object_with_cleanup listen_handle =
+	    di_listen_to(timer, di_string_borrow("elapsed"), handler);
 	struct di_object *autolh = NULL;
 	DI_CHECK_OK(di_callr(listen_handle, "auto_stop", autolh));
 	di_member(promise, "___auto_listen_handle", autolh);
@@ -574,15 +570,13 @@ static void di_promise_then_impl(struct di_promise *promise, struct di_promise *
 		di_member_clone(promise, buf, handler);
 		free(buf);
 	}
-	auto then_promise_weak = di_weakly_ref_object((void *)then_promise);
-	asprintf(&buf, "___weak_then_promise_%lu", nhandlers);
-	di_member(promise, buf, then_promise_weak);
+	asprintf(&buf, "___then_promise_%lu", nhandlers);
+	di_member_clone(promise, buf, (struct di_object *)then_promise);
 	free(buf);
 
 	nhandlers += 1;
 	di_setx((void *)promise, di_string_borrow("___n_handlers"), DI_TYPE_UINT, &nhandlers);
 
-	di_member_clone(then_promise, "__source_promise", (struct di_object *)promise);
 	if (di_lookup((void *)promise, di_string_borrow("___resolved"))) {
 		di_promise_start_dispatch(promise);
 	}
