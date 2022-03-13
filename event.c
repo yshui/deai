@@ -612,6 +612,81 @@ struct di_object *di_promise_then(struct di_object *promise, struct di_object *h
 	return ret;
 }
 
+static void di_promise_collect_handler(int index, struct di_object *storage,
+                                       struct di_object *then_promise, struct di_variant var) {
+	di_string_with_cleanup key = di_string_printf("%d", index);
+	DI_CHECK_OK(di_add_member_clone(storage, key, DI_TYPE_VARIANT, &var));
+
+	int left;
+	DI_CHECK_OK(di_get(storage, "left", left));
+	left -= 1;
+	DI_CHECK_OK(di_setx(storage, di_string_borrow_literal("left"), DI_TYPE_NINT, &left));
+
+	if (left == 0) {
+		int total;
+		DI_CHECK_OK(di_get(storage, "total", total));
+		di_tuple_with_cleanup results = {
+		    .length = total, .elements = tmalloc(struct di_variant, total)};
+		for (int i = 0; i < total; i++) {
+			di_string_with_cleanup key = di_string_printf("%d", i);
+			union di_value tmp;
+			DI_CHECK_OK(di_getxt(storage, key, DI_TYPE_VARIANT, &tmp));
+			results.elements[i] = tmp.variant;
+		}
+		di_call(then_promise, "resolve", results);
+	}
+}
+
+/// Create a promise that resolves when all given promises resolve
+struct di_object *di_collect_promises(struct di_object *event_module, struct di_array promises) {
+	if (promises.elem_type != DI_TYPE_OBJECT) {
+		return di_new_error("promises must all be objects");
+	}
+	struct di_object **arr = promises.arr;
+	for (int i = 0; i < promises.length; i++) {
+		if (!di_check_type(arr[i], "deai:Promise")) {
+			return di_new_error("not all objects are promise");
+		}
+	}
+	auto ret = di_new_promise(event_module);
+	di_object_with_cleanup storage = di_new_object_with_type(struct di_object);
+	int cnt = 0;
+	for (int i = 0; i < promises.length; i++) {
+		di_object_with_cleanup handler = (void *)di_closure(
+		    di_promise_collect_handler, (cnt, storage, ret), struct di_variant);
+		if (di_call(arr[i], "then", handler) == 0) {
+			cnt += 1;
+		}
+	}
+	DI_CHECK_OK(di_setx(storage, di_string_borrow_literal("left"), DI_TYPE_NINT, &cnt));
+	DI_CHECK_OK(di_setx(storage, di_string_borrow_literal("total"), DI_TYPE_NINT, &cnt));
+	return ret;
+}
+
+static void di_any_promise_handler(struct di_object *then, struct di_variant var) {
+	di_call(then, "resolve", var);
+}
+
+/// Create a promise that resolves when any of given promises resolve
+struct di_object *di_any_promise(struct di_object *event_module, struct di_array promises) {
+	if (promises.elem_type != DI_TYPE_OBJECT) {
+		return di_new_error("promises must all be objects");
+	}
+	struct di_object **arr = promises.arr;
+	for (int i = 0; i < promises.length; i++) {
+		if (!di_check_type(arr[i], "deai:Promise")) {
+			return di_new_error("not all objects are promise");
+		}
+	}
+	auto ret = di_new_promise(event_module);
+	for (int i = 0; i < promises.length; i++) {
+		di_object_with_cleanup handler =
+		    (void *)di_closure(di_any_promise_handler, (ret), struct di_variant);
+		di_call(arr[i], "then", handler);
+	}
+	return ret;
+}
+
 void di_resolve_promise(struct di_promise *promise, struct di_variant var) {
 	di_member_clone(promise, "___resolved", var);
 	di_promise_start_dispatch(promise);
@@ -630,6 +705,8 @@ void di_init_event(struct deai *di) {
 	di_method(em, "timer", di_create_timer, double);
 	di_method(em, "periodic", di_create_periodic, double, double);
 	di_method(em, "new_promise", di_new_promise);
+	di_method(em, "collect_promises", di_collect_promises, struct di_array);
+	di_method(em, "any_promise", di_any_promise, struct di_array);
 
 	auto dep = tmalloc(struct di_prepare, 1);
 	dep->evm = em;
