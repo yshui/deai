@@ -18,6 +18,7 @@ test_cases = [
   'proctitle.lua',
   'unittests.lua',
   'promise.lua',
+  'async.lua',
 ]
 foreach t : test_cases
   test(t, deai_exe, args:

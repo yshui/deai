@@ -3,6 +3,14 @@ di.os.env.DBUS_SESSION_BUS_ADDRESS = nil
 di.os.env.DISPLAY = nil
 --di.log.log_level = "debug"
 
+function signal_promise(obj, signal)
+    local promise = di.event:new_promise()
+    obj:once(signal, function(v)
+        promise:resolve(v)
+    end)
+    return promise
+end
+
 local dbusl = di.spawn:run({"dbus-daemon", "--print-address=1", "--print-pid=2", "--session", "--fork"}, false)
 local outlh
 outlh = dbusl:on("stdout_line", function(l)
@@ -23,64 +31,56 @@ errlh = dbusl:on("stderr_line", function(l)
     errlh:stop()
     di.os.env.DBUS_SESSION_BUS_PID = l
 end)
-local total_request = 0
 local b
 function with_error(pending)
     if pending.errmsg then
-        print("ASDF", pending.errmsg)
         di:exit(1)
     end
-    local errlh, replylh
-    replylh = pending:once("reply", function(r)
-        errlh:stop()
-        total_request = total_request - 1
-        print("Reply:", r)
+    reply_promise = signal_promise(pending, "reply"):then_(function(r)
+        assert(false)
+        print(r)
+        return r
     end)
-    errlh = pending:once("error", function(e)
-        replylh:stop()
-        total_request = total_request - 1
-        print(e)
+    error_promise = signal_promise(pending, "error"):then_(function(r)
+        return "Error: "..r
     end)
+    return di.event:any_promises({reply_promise, error_promise})
 end
 function call_with_error(o, name, ...)
     t = o[name](o, ...)
-    with_error(t)
+    return with_error(t)
 end
 
 function call_with_signature_and_error(o, name, sig, ...)
     t = o[name]:call_with_signature(o, sig, ...)
-    with_error(t)
+    return with_error(t)
 end
 
 dbusl:once("exit", function()
     b = di.dbus.session_bus
     if b.errmsg then
-        print("ASDF2", b.errmsg)
         di:exit(1)
     end
     b = nil
     b = di.dbus.session_bus
     local o = b:get("org.freedesktop.DBus", "/org/freedesktop/DBus")
-    o:Introspect():once("reply", function(s)
-        print(s)
-    end)
-    o:ListNames():once("reply", function(s)
-        for _, i in pairs(s) do
-            print(i)
-        end
-    end)
-    o:GetAllMatchRules():once("reply", function(s)
-        print(s)
-    end)
 
     -- Use non-existent method to test message serialization
-    total_request = 6
-    call_with_error(o, "org.dummy.Dummy", {1,2,3})
-    call_with_error(o, "org.dummy.Dummy", {"asdf","qwer"})
-    call_with_error(o, "org.dummy.Dummy", 1)
-    call_with_error(o, "org.dummy.Dummy", "asdf")
-    call_with_signature_and_error(o, "org.dummy.Dummy", "iii", 1,2,3)
-    call_with_signature_and_error(o, "org.dummy.Dummy", "av", {1,2,3})
+    di.event:collect_promises({
+        signal_promise(o:Introspect(), "reply"),
+        signal_promise(o:ListNames(), "reply"),
+        signal_promise(o:GetAllMatchRules(), "reply"),
+        call_with_error(o, "org.dummy.Dummy", {1,2,3}),
+        call_with_error(o, "org.dummy.Dummy", {"asdf","qwer"}),
+        call_with_error(o, "org.dummy.Dummy", 1),
+        call_with_error(o, "org.dummy.Dummy", "asdf"),
+        call_with_signature_and_error(o, "org.dummy.Dummy", "iii", 1,2,3),
+        call_with_signature_and_error(o, "org.dummy.Dummy", "av", {1,2,3}),
+    }):then_(function(results)
+        for i, v in pairs(results) do
+            print(i, v)
+        end
+    end)
     o = nil
     collectgarbage("collect")
 end)
