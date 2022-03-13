@@ -25,7 +25,8 @@ struct di_ioev {
 struct di_timer {
 	struct di_object_internal;
 	ev_timer evt;
-	uint64_t root_handle;
+	double at;
+	bool spent;
 };
 
 struct di_periodic {
@@ -50,25 +51,6 @@ static void di_ioev_callback(EV_P_ ev_io *w, int revents) {
 	if (revents & EV_WRITE) {
 		di_emit(ev, "write");
 	}
-}
-
-/// SIGNAL: deai.builtin.event:Timer.elapsed(now: :float) Timeout was reached
-static void di_timer_callback(EV_P_ ev_timer *t, int revents) {
-	auto d = container_of(t, struct di_timer, evt);
-	// Keep timer alive during emission
-	di_object_with_cleanup unused obj = di_ref_object((struct di_object *)d);
-
-	double now = ev_now(EV_A);
-	di_object_with_cleanup di_obj = di_object_get_deai_strong((struct di_object *)d);
-	DI_CHECK(di_obj);
-
-	auto di = (struct deai *)di_obj;
-	ev_timer_stop(di->loop, t);
-	di_emit(d, "elapsed", now);
-
-	// This object won't generate further event until the user calls `again`
-	// So drop the strong __deai reference
-	di_object_downgrade_deai((struct di_object *)d);
 }
 
 /// SIGNAL: deai.builtin.event:Periodic.triggered(now: :float) Timeout was reached
@@ -235,68 +217,6 @@ static struct di_object *di_create_ioev(struct di_object *obj, int fd) {
 	return (void *)ret;
 }
 
-/// Stop the timer
-///
-/// EXPORT: deai.builtin.event:Timer.stop(), :void
-static void di_timer_stop(struct di_object *obj) {
-	struct di_timer *ev = (void *)obj;
-	di_object_with_cleanup di_obj = di_object_get_deai_strong(obj);
-	if (di_obj == NULL) {
-		// this means the timer was already stopped, so it doesn't hold a strong
-		// deai object reference
-		DI_ASSERT(!ev_is_active(&ev->evt));
-		return;
-	}
-
-	auto di = (struct deai *)di_obj;
-	ev_timer_stop(di->loop, &ev->evt);
-	di_object_downgrade_deai(obj);
-}
-
-/// Re-arm the timer
-///
-/// EXPORT: deai.builtin.event:Timer.again(), :void
-static void di_timer_again(struct di_timer *obj) {
-	auto di_obj = di_object_get_deai_weak((struct di_object *)obj);
-	if (di_obj == NULL) {
-		// deai is shutting down
-		return;
-	}
-
-	auto di = (struct deai *)di_obj;
-	if (obj->evt.repeat == 0) {
-		ev_timer_set(&obj->evt, 0.0, 0.0);
-		ev_timer_start(di->loop, &obj->evt);
-	} else {
-		ev_timer_again(di->loop, &obj->evt);
-	}
-}
-
-/// Timer timeout
-///
-/// EXPORT: deai.builtin.event:Timer.timeout, :float
-///
-/// Write-only property to update the timer's timeout. Timer will be re-armed after the
-/// update.
-static void di_timer_set(struct di_timer *obj, double t) {
-	di_timer_stop((struct di_object *)obj);
-	obj->evt.repeat = t;
-	di_timer_again(obj);
-}
-
-static void di_timer_add_signal(struct di_object *o, struct di_object *sig) {
-	if (di_member_clone(o, "__signal_elapsed", sig) != 0) {
-		return;
-	}
-
-	auto t = (struct di_timer *)o;
-	di_object_upgrade_deai(o);
-
-	// Add ourselve to GC root
-	auto roots = di_get_roots();
-	DI_CHECK_OK(di_callr(roots, "__add_anonymous", t->root_handle, o));
-}
-
 static void di_timer_delete_signal(struct di_object *o) {
 	if (di_remove_member_raw(o, di_string_borrow("__signal_elapsed")) != 0) {
 		return;
@@ -306,8 +226,63 @@ static void di_timer_delete_signal(struct di_object *o) {
 	auto roots = di_get_roots();
 
 	// Ignore error because roots might have been removed by di:exit
-	di_call(roots, "__remove_anonymous", t->root_handle);
+	di_string_with_cleanup timer_key = di_string_printf("___timer_%p", o);
+	di_call(roots, "remove", timer_key);
+
+	di_object_with_cleanup di_obj = di_object_get_deai_strong(o);
+	auto di = (struct deai *)di_obj;
+	ev_timer_stop(di->loop, &t->evt);
 	di_object_downgrade_deai(o);
+}
+
+static void di_timer_add_signal(struct di_object *o, struct di_object *sig) {
+	auto t = (struct di_timer *)o;
+	if (t->spent) {
+		return;
+	}
+
+	di_object_with_cleanup di_obj = di_object_get_deai_weak(o);
+	if (di_obj == NULL) {
+		return;
+	}
+
+	if (di_member_clone(o, "__signal_elapsed", sig) != 0) {
+		return;
+	}
+
+	di_object_upgrade_deai(o);
+
+	// Add ourselve to GC root
+	auto roots = di_get_roots();
+	di_string_with_cleanup timer_key = di_string_printf("___timer_%p", o);
+	if (di_call(roots, "add", timer_key, o) != 0) {
+		// Could happen if di:exit is called
+		di_timer_delete_signal(o);
+	}
+	auto di = (struct deai *)di_obj;
+
+	// Recalculate timeout
+	double after = t->at - ev_now(di->loop);
+	ev_timer_set(&t->evt, after, 0.0);
+	ev_timer_start(di->loop, &t->evt);
+}
+
+/// SIGNAL: deai.builtin.event:Timer.elapsed(now: :float) Timeout was reached
+static void di_timer_callback(EV_P_ ev_timer *t, int revents) {
+	auto d = container_of(t, struct di_timer, evt);
+	// Keep timer alive during emission
+	di_object_with_cleanup unused obj = di_ref_object((struct di_object *)d);
+
+	double now = ev_now(EV_A);
+	di_object_with_cleanup di_obj = di_object_get_deai_strong((struct di_object *)d);
+	DI_CHECK(di_obj);
+
+	auto di = (struct deai *)di_obj;
+	ev_timer_stop(di->loop, t);
+	d->spent = true;
+	di_emit(d, "elapsed", now);
+
+	di_timer_delete_signal((void *)d);
 }
 
 /// Timer events
@@ -318,10 +293,9 @@ static void di_timer_delete_signal(struct di_object *o) {
 ///
 /// - timeout timeout in seconds
 ///
-/// Create a timer that emits a signal after timeout is reached.
-///
-/// Note if a timer with listeners exists, then deai will be kept alive, even when the
-/// timer has elapsed. So you should deregister the handler if you want deai to exit.
+/// Create a timer that emits a signal after timeout is reached. Note that signals will
+/// only be emitted if listeners exist. If no listeners existed during the timeout window,
+/// the singal will be emitted when the first listener is attached.
 static struct di_object *di_create_timer(struct di_object *obj, double timeout) {
 	struct di_module *em = (void *)obj;
 	auto ret = di_new_object_with_type(struct di_timer);
@@ -331,22 +305,14 @@ static struct di_object *di_create_timer(struct di_object *obj, double timeout) 
 		return di_new_error("deai is shutting down...");
 	}
 
-	ret->dtor = di_timer_stop;
-	di_method(ret, "again", di_timer_again);
-	di_method(ret, "stop", di_timer_stop);
+	auto di = (struct deai *)di_obj;
 
-	// Set the timeout and restart the timer
-	di_method(ret, "__set_timeout", di_timer_set, double);
+	ret->spent = false;
+	ret->dtor = di_timer_delete_signal;
 	di_signal_setter_deleter(ret, "elapsed", di_timer_add_signal, di_timer_delete_signal);
 
-	ev_timer_init(&ret->evt, di_timer_callback, 0.0, timeout);
-
-	auto di = (struct deai *)di_obj;
-	if (timeout != 0.0) {
-		ev_timer_again(di->loop, &ret->evt);
-	} else {
-		ev_timer_start(di->loop, &ret->evt);
-	}
+	ret->at = ev_now(di->loop) + timeout;
+	ev_timer_init(&ret->evt, di_timer_callback, timeout, 0.0);
 
 	// Started timers have strong references to di
 	// Stopped ones have weak ones
