@@ -688,6 +688,10 @@ struct di_object *di_any_promise(struct di_object *event_module, struct di_array
 }
 
 void di_resolve_promise(struct di_promise *promise, struct di_variant var) {
+	if (di_has_member(promise, "___resolved")) {
+		// Already resolved
+		return;
+	}
 	di_member_clone(promise, "___resolved", var);
 	di_promise_start_dispatch(promise);
 }
