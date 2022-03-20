@@ -44,7 +44,7 @@ function with_error(pending)
     error_promise = signal_promise(pending, "error"):then_(function(r)
         return "Error: "..r
     end)
-    return di.event:any_promises({reply_promise, error_promise})
+    return di.event:any_promise({reply_promise, error_promise})
 end
 function call_with_error(o, name, ...)
     t = o[name](o, ...)

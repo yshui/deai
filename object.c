@@ -401,28 +401,31 @@ static void _di_finalize_object(struct di_object_internal *obj) {
 }
 
 void di_finalize_object(struct di_object *_obj) {
-	// Prevent object from being freed while we are finalizing
-	// XXX Hacky: if things are referenced properly, this shouldn't be necessary
-	di_ref_object(_obj);
 	_di_finalize_object((struct di_object_internal *)_obj);
+}
 
-	di_unref_object(_obj);
+static inline void di_decrement_weak_ref_count(struct di_object_internal *obj) {
+	obj->weak_ref_count--;
+	if (obj->weak_ref_count == 0) {
+		assert(obj->ref_count == 0);
+#ifdef TRACK_OBJECTS
+		list_del(&obj->siblings);
+#endif
+		free(obj);
+	}
 }
 
 // Try to never call destroy twice on something. Although it's fine to do so
 static void di_destroy_object(struct di_object *_obj) {
 	auto obj = (struct di_object_internal *)_obj;
+	assert(obj->ref_count == 0);
 
-	// Prevent destroy from being called while we are destroying
-	// XXX Hacky: if things are referenced properly, this shouldn't be necessary
-	di_ref_object(_obj);
 	if (obj->destroyed) {
 		di_log_va(log_module, DI_LOG_WARN, "warning: destroy object multiple times\n");
 	}
 	obj->destroyed = 1;
-
 	_di_finalize_object(obj);
-	di_unref_object(_obj);
+	di_decrement_weak_ref_count(obj);
 }
 
 #if 0
@@ -478,17 +481,6 @@ struct di_object *nullable di_upgrade_weak_ref(struct di_weak_object *weak) {
 	return NULL;
 }
 
-static inline void di_decrement_weak_ref_count(struct di_object_internal *obj) {
-	obj->weak_ref_count--;
-	if (obj->weak_ref_count == 0) {
-		assert(obj->ref_count == 0);
-#ifdef TRACK_OBJECTS
-		list_del(&obj->siblings);
-#endif
-		free(obj);
-	}
-}
-
 void di_drop_weak_ref(struct di_weak_object **weak) {
 	assert(*weak != PTR_POISON);
 	auto obj = (struct di_object_internal *)*weak;
@@ -499,6 +491,7 @@ void di_drop_weak_ref(struct di_weak_object **weak) {
 void di_unref_object(struct di_object *_obj) {
 	auto obj = (struct di_object_internal *)_obj;
 	assert(obj->ref_count > 0);
+	assert(!obj->destroyed);
 	obj->ref_count--;
 #ifdef TRACK_OBJECTS
 	struct di_ref_tracked_object *t = NULL;
@@ -510,12 +503,7 @@ void di_unref_object(struct di_object *_obj) {
 	}
 #endif
 	if (obj->ref_count == 0) {
-		if (obj->destroyed) {
-			// If we reach here, destroy must have completed
-			di_decrement_weak_ref_count(obj);
-		} else {
-			di_destroy_object(_obj);
-		}
+		di_destroy_object(_obj);
 	}
 }
 
