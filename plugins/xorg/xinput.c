@@ -41,17 +41,13 @@ struct di_xorg_xinput_device {
 #define get_mask(a, m) ((a)[(m) >> 3] & (1 << ((m)&7)))
 
 static void di_xorg_xi_start_listen_for_event(struct di_xorg_xinput *xi, int ev) {
-	di_object_with_cleanup dc_obj = NULL;
-	if (di_get(xi, XORG_CONNECTION_MEMBER, dc_obj) != 0) {
+	with_object_cleanup(di_xorg_connection) dc = NULL;
+	if (get_xorg_connection((void *)xi, &dc) != 0) {
 		return;
 	}
 
-	struct di_xorg_connection *dc = (void *)dc_obj;
-	di_mgetmi(dc->x, log);
 	if (ev > XI_LASTEVENT) {
-		if (logm) {
-			di_log_va(logm, DI_LOG_ERROR, "invalid xi event number %d", ev);
-		}
+		di_log_va(log_module, DI_LOG_ERROR, "invalid xi event number %d", ev);
 		return;
 	}
 
@@ -64,23 +60,19 @@ static void di_xorg_xi_start_listen_for_event(struct di_xorg_xinput *xi, int ev)
 	set_mask(xi->mask, ev);
 	auto cookie = xcb_input_xi_select_events_checked(dc->c, scrn->root, 1, &xi->ec);
 	auto e = xcb_request_check(dc->c, cookie);
-	if (e && logm) {
-		di_log_va(logm, DI_LOG_ERROR, "select events failed\n");
+	if (e) {
+		di_log_va(log_module, DI_LOG_ERROR, "select events failed\n");
 	}
 }
 
 static void di_xorg_xi_stop_listen_for_event(struct di_xorg_xinput *xi, int ev) {
-	di_object_with_cleanup dc_obj = NULL;
-	if (di_get(xi, XORG_CONNECTION_MEMBER, dc_obj) != 0) {
+	with_object_cleanup(di_xorg_connection) dc = NULL;
+	if (get_xorg_connection((void *)xi, &dc) != 0) {
 		return;
 	}
 
-	struct di_xorg_connection *dc = (void *)dc_obj;
-	di_mgetmi(dc->x, log);
 	if (ev > XI_LASTEVENT) {
-		if (logm) {
-			di_log_va(logm, DI_LOG_ERROR, "invalid xi event number %d", ev);
-		}
+		di_log_va(log_module, DI_LOG_ERROR, "invalid xi event number %d", ev);
 		return;
 	}
 
@@ -94,8 +86,8 @@ static void di_xorg_xi_stop_listen_for_event(struct di_xorg_xinput *xi, int ev) 
 	clear_mask(xi->mask, ev);
 	auto cookie = xcb_input_xi_select_events_checked(dc->c, scrn->root, 1, &xi->ec);
 	auto e = xcb_request_check(dc->c, cookie);
-	if (e && logm) {
-		di_log_va(logm, DI_LOG_ERROR, "select events failed\n");
+	if (e) {
+		di_log_va(log_module, DI_LOG_ERROR, "select events failed\n");
 	}
 }
 
@@ -107,14 +99,12 @@ static void unused disable_hierarchy_event(struct di_xorg_xinput *xi) {
 	di_xorg_xi_stop_listen_for_event(xi, XCB_INPUT_HIERARCHY);
 }
 
-static void di_xorg_free_xinput(struct di_xorg_ext *x) {
+static void di_xorg_free_xinput(struct di_object *x) {
 	// clear event mask when free
-	di_object_with_cleanup dc_obj = NULL;
-	if (di_get(x, XORG_CONNECTION_MEMBER, dc_obj) != 0) {
+	with_object_cleanup(di_xorg_connection) dc = NULL;
+	if (get_xorg_connection((void *)x, &dc) != 0) {
 		return;
 	}
-
-	struct di_xorg_connection *dc = (void *)dc_obj;
 
 	struct di_xorg_xinput *xi = (void *)x;
 	memset(xi->mask, 0, xi->ec.mask_len * 4);
@@ -123,10 +113,9 @@ static void di_xorg_free_xinput(struct di_xorg_ext *x) {
 
 	auto cookie = xcb_input_xi_select_events_checked(dc->c, scrn->root, 1, &xi->ec);
 
-	di_mgetmi(dc->x, log);
 	auto e = xcb_request_check(dc->c, cookie);
-	if (e && logm) {
-		di_log_va(logm, DI_LOG_ERROR, "select events failed\n");
+	if (e) {
+		di_log_va(log_module, DI_LOG_ERROR, "select events failed\n");
 	}
 }
 
@@ -159,12 +148,10 @@ xcb_input_get_device_info(xcb_connection_t *c, xcb_input_device_id_t deviceid,
 ///
 /// EXPORT: deai.plugin.xorg.xi:Device.name, :string
 static struct di_string di_xorg_xinput_get_device_name(struct di_xorg_xinput_device *dev) {
-	di_object_with_cleanup dc_obj = NULL;
-	if (di_get(dev->xi, XORG_CONNECTION_MEMBER, dc_obj) != 0) {
+	with_object_cleanup(di_xorg_connection) dc = NULL;
+	if (get_xorg_connection((void *)dev->xi, &dc) != 0) {
 		return di_string_dup("unknown");
 	}
-
-	struct di_xorg_connection *dc = (void *)dc_obj;
 
 	with_cleanup_t(xcb_input_xi_query_device_reply_t) rr;
 	auto info = xcb_input_get_device_info(dc->c, dev->deviceid, &rr);
@@ -182,12 +169,10 @@ static struct di_string di_xorg_xinput_get_device_name(struct di_xorg_xinput_dev
 /// As reported by X, possible values are: "master keyboard", "master pointer",
 /// "keyboard", "pointer", or "unknown"
 static const char *di_xorg_xinput_get_device_use(struct di_xorg_xinput_device *dev) {
-	di_object_with_cleanup dc_obj = NULL;
-	if (di_get(dev->xi, XORG_CONNECTION_MEMBER, dc_obj) != 0) {
+	with_object_cleanup(di_xorg_connection) dc = NULL;
+	if (get_xorg_connection((void *)dev->xi, &dc) != 0) {
 		return "unknown";
 	}
-
-	struct di_xorg_connection *dc = (void *)dc_obj;
 
 	with_cleanup_t(xcb_input_xi_query_device_reply_t) rr;
 	auto info = xcb_input_get_device_info(dc->c, dev->deviceid, &rr);
@@ -229,12 +214,10 @@ const char *possible_types[] = {
 ///
 /// Note all values are converted to lower case.
 static struct di_string di_xorg_xinput_get_device_type(struct di_xorg_xinput_device *dev) {
-	di_object_with_cleanup dc_obj = NULL;
-	if (di_get(dev->xi, XORG_CONNECTION_MEMBER, dc_obj) != 0) {
+	with_object_cleanup(di_xorg_connection) dc = NULL;
+	if (get_xorg_connection((struct di_xorg_ext *)dev->xi, &dc) != 0) {
 		return di_string_dup("unknown");
 	}
-
-	struct di_xorg_connection *dc = (void *)dc_obj;
 
 	with_cleanup_t(xcb_input_list_input_devices_reply_t) r =
 	    xcb_input_list_input_devices_reply(dc->c, xcb_input_list_input_devices(dc->c), NULL);
@@ -268,12 +251,10 @@ define_trivial_cleanup_t(xcb_input_xi_change_property_items_t);
 #define XI_MAX_PROPERTY_NAME_LENGTH (256)
 static void di_xorg_xinput_set_prop(struct di_xorg_xinput_device *dev,
                                     struct di_string key, struct di_variant var) {
-	di_object_with_cleanup dc_obj = NULL;
-	if (di_get(dev->xi, XORG_CONNECTION_MEMBER, dc_obj) != 0) {
+	with_object_cleanup(di_xorg_connection) dc = NULL;
+	if (get_xorg_connection((struct di_xorg_ext *)dev->xi, &dc) != 0) {
 		return;
 	}
-
-	struct di_xorg_connection *dc = (void *)dc_obj;
 
 	struct di_array arr;
 	if (var.type != DI_TYPE_ARRAY) {
@@ -284,7 +265,6 @@ static void di_xorg_xinput_set_prop(struct di_xorg_xinput_device *dev,
 		arr = var.value->array;
 	}
 
-	di_mgetmi(dc->x, log);
 	xcb_generic_error_t *e;
 	auto prop_atom = di_xorg_intern_atom(dc, key, &e);
 	if (e) {
@@ -300,15 +280,13 @@ static void di_xorg_xinput_set_prop(struct di_xorg_xinput_device *dev,
 
 	if (prop->type == XCB_ATOM_NONE) {
 		// non-existent property should be silently ignored
-		if (logm) {
-			di_log_va(logm, DI_LOG_DEBUG, "setting non-existent property: %.*s\n",
-			          (int)key.length, key.data);
-		}
+		di_log_va(log_module, DI_LOG_DEBUG, "setting non-existent property: %.*s\n",
+		          (int)key.length, key.data);
 		return;
 	}
 
 	if ((prop->type == float_atom || prop->type == XCB_ATOM_ATOM) && prop->format != 32) {
-		di_log_va(logm, DI_LOG_ERROR,
+		di_log_va(log_module, DI_LOG_ERROR,
 		          "Xorg return invalid format for float/atom type: %d\n", prop->format);
 		return;
 	}
@@ -411,13 +389,13 @@ static void di_xorg_xinput_set_prop(struct di_xorg_xinput_device *dev,
 	               prop_atom, prop->type, arr.length, item));
 
 	if (err) {
-		di_log_va(logm, DI_LOG_ERROR, "Failed to set property '%.*s'\n",
+		di_log_va(log_module, DI_LOG_ERROR, "Failed to set property '%.*s'\n",
 		          (int)key.length, key.data);
 	}
 	(void)err;
 	return;
 err:
-	di_log_va(logm, DI_LOG_ERROR,
+	di_log_va(log_module, DI_LOG_ERROR,
 	          "Try to set xinput property '%.*s' with wrong "
 	          "type of data %d\n",
 	          (int)key.length, key.data, arr.elem_type);
@@ -425,14 +403,11 @@ err:
 
 static struct di_variant
 di_xorg_xinput_get_prop(struct di_xorg_xinput_device *dev, struct di_string name_) {
-	di_object_with_cleanup dc_obj = NULL;
-	if (di_get(dev->xi, XORG_CONNECTION_MEMBER, dc_obj) != 0) {
+	with_object_cleanup(di_xorg_connection) dc = NULL;
+	if (get_xorg_connection((void *)dev->xi, &dc) != 0) {
 		return di_variant_of(di_new_error("Lost X connection"));
 	}
 
-	struct di_xorg_connection *dc = (void *)dc_obj;
-
-	di_mgetmi(dc->x, log);
 	xcb_generic_error_t *e;
 	struct di_array ret = DI_ARRAY_INIT;
 	auto prop_atom = di_xorg_intern_atom(dc, name_, &e);
@@ -471,21 +446,17 @@ di_xorg_xinput_get_prop(struct di_xorg_xinput_device *dev, struct di_string name
 	} else if (prop->type == float_atom) {
 		ret.elem_type = DI_TYPE_FLOAT;
 	} else {
-		if (logm) {
-			di_log_va(logm, DI_LOG_WARN, "Unknown property type %d\n", prop->type);
-		}
+		di_log_va(log_module, DI_LOG_WARN, "Unknown property type %d\n", prop->type);
 		return di_variant_of(di_new_error("Property has unknown type: %d", prop->type));
 	}
 
 	if (prop->format != 8 && prop->format != 16 && prop->format != 32) {
-		if (logm) {
-			di_log_va(logm, DI_LOG_WARN, "Xorg returns invalid format %d\n",
-			          prop->format);
-		}
+		di_log_va(log_module, DI_LOG_WARN, "Xorg returns invalid format %d\n",
+		          prop->format);
 		return di_variant_of(di_new_error("Property has invalid format", prop->format));
 	}
 	if ((prop->type == float_atom || prop->type == XCB_ATOM_ATOM) && prop->format != 32) {
-		di_log_va(logm, DI_LOG_WARN,
+		di_log_va(log_module, DI_LOG_WARN,
 		          "Xorg return invalid format for float/atom %d\n", prop->format);
 		return di_variant_of(di_new_error("X server is misbehaving"));
 	}
@@ -601,15 +572,13 @@ static struct di_object *di_xorg_make_object_for_devid(struct di_xorg_xinput *xi
 ///
 /// EXPORT: deai.plugin.xorg:XiExt.devices, [deai.plugin.xorg.xi:Device]
 static struct di_array di_xorg_get_all_devices(struct di_xorg_xinput *xi) {
-	di_object_with_cleanup dc_obj = NULL;
-	if (di_get(xi, XORG_CONNECTION_MEMBER, dc_obj) != 0) {
+	with_object_cleanup(di_xorg_connection) dc = NULL;
+	if (get_xorg_connection((struct di_xorg_ext *)xi, &dc) != 0) {
 		return DI_ARRAY_INIT;
 	}
 
-	struct di_xorg_connection *dc = (void *)dc_obj;
-
-	with_cleanup_t(xcb_input_xi_query_device_reply_t) r = xcb_input_xi_query_device_reply(
-	    dc->c, xcb_input_xi_query_device(dc->c, 0), NULL);
+	with_cleanup_t(xcb_input_xi_query_device_reply_t) r =
+	    xcb_input_xi_query_device_reply(dc->c, xcb_input_xi_query_device(dc->c, 0), NULL);
 	auto ri = xcb_input_xi_query_device_infos_iterator(r);
 
 	int ndev = 0;
@@ -709,11 +678,11 @@ struct di_xorg_ext *new_xinput(struct di_xorg_connection *dc) {
 	xi->opcode = r->major_opcode;
 	xi->handle_event = (void *)handle_xinput_event;
 	xi->extname = "xinput";
-	xi->free = di_xorg_free_xinput;
 
+	di_set_object_dtor((struct di_object *)xi, di_xorg_free_xinput);
+	save_xorg_connection((struct di_xorg_ext *)xi, dc);
 	free(r);
 
-	DI_CHECK_OK(di_member_clone(xi, XORG_CONNECTION_MEMBER, (struct di_object *)dc));
 	// TODO(yshui): only enable if there are listeners?
 	enable_hierarchy_event(xi);
 

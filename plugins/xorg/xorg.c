@@ -40,15 +40,8 @@ static void xorg_disconnect(struct di_xorg_connection *xc) {
 		xkb_context_unref(xc->xkb_ctx);
 	}
 
-	// free_sub might need the connection, don't disconnect now
-	struct di_xorg_ext *ext, *text;
-	HASH_ITER (hh, xc->xext, ext, text) {
-		// free the extension objects
-		di_finalize_object((void *)ext);
-	}
 	DI_CHECK(xc->c != NULL);
 	xcb_disconnect(xc->c);
-	xc->x = NULL;
 	xc->c = NULL;
 	xc->nsignals = 0;
 
@@ -84,8 +77,15 @@ static void di_xorg_ioev(struct di_object *dc_obj) {
 	while ((ev = xcb_poll_for_event(dc->c))) {
 		// handle event
 		{
-			di_string_with_cleanup event_name =
-			    di_string_printf("___raw_x_event_%d", ev->response_type);
+			di_string_with_cleanup event_name = DI_STRING_INIT;
+			if (ev->response_type == XCB_GE_GENERIC) {
+				auto gev = (xcb_ge_generic_event_t *)ev;
+				event_name =
+				    di_string_printf("___raw_x_event_ge_%d", gev->event_type);
+			} else {
+				event_name =
+				    di_string_printf("___raw_x_event_%d", ev->response_type);
+			}
 			union di_value tmp;
 			tmp.pointer = ev;
 			di_emitn((void *)dc, event_name,
@@ -149,7 +149,6 @@ const struct di_string *di_xorg_get_atom_name(struct di_xorg_connection *xc, xcb
 
 xcb_atom_t di_xorg_intern_atom(struct di_xorg_connection *xc, struct di_string name,
                                xcb_generic_error_t **e) {
-	di_mgetm(xc->x, log, 0);
 	struct di_atom_entry *ae = NULL;
 	*e = NULL;
 
@@ -161,7 +160,7 @@ xcb_atom_t di_xorg_intern_atom(struct di_xorg_connection *xc, struct di_string n
 	auto r = xcb_intern_atom_reply(
 	    xc->c, xcb_intern_atom(xc->c, 0, name.length, name.data), e);
 	if (!r) {
-		di_log_va(logm, DI_LOG_ERROR, "Cannot intern atom");
+		di_log_va(log_module, DI_LOG_ERROR, "Cannot intern atom");
 		return 0;
 	}
 
@@ -387,9 +386,9 @@ static void set_keymap(struct di_xorg_connection *xc, struct di_object *o) {
 	di_string_with_cleanup layout = DI_STRING_INIT, model = DI_STRING_INIT,
 	                       variant = DI_STRING_INIT, options = DI_STRING_INIT;
 
-	di_mgetmi(xc->x, log);
 	if (!o || di_get(o, "layout", layout)) {
-		di_log_va(logm, DI_LOG_ERROR, "Invalid keymap object, key \"layout\" is not set");
+		di_log_va(log_module, DI_LOG_ERROR,
+		          "Invalid keymap object, key \"layout\" is not set");
 		return;
 	}
 
@@ -415,7 +414,7 @@ static void set_keymap(struct di_xorg_connection *xc, struct di_object *o) {
 	xcb_keysym_t *keysyms = NULL;
 
 	if (xkb_keymap_num_layouts(map) != 1) {
-		di_log_va(logm, DI_LOG_ERROR,
+		di_log_va(log_module, DI_LOG_ERROR,
 		          "Using multiple layout at the same time is not currently "
 		          "supported.");
 		goto out;
@@ -448,7 +447,7 @@ static void set_keymap(struct di_xorg_connection *xc, struct di_object *o) {
 			const xkb_keysym_t *sym;
 			int nsyms = xkb_keymap_key_get_syms_by_level(map, i, 0, j, &sym);
 			if (nsyms > 1) {
-				di_log_va(logm, DI_LOG_WARN,
+				di_log_va(log_module, DI_LOG_WARN,
 				          "Multiple keysyms per level is not "
 				          "supported");
 				continue;
@@ -467,7 +466,7 @@ static void set_keymap(struct di_xorg_connection *xc, struct di_object *o) {
 	                                      xc->c, (max_keycode - min_keycode + 1),
 	                                      min_keycode, keysym_per_keycode, keysyms));
 	if (r) {
-		di_log_va(logm, DI_LOG_ERROR, "Failed to set keymap.");
+		di_log_va(log_module, DI_LOG_ERROR, "Failed to set keymap.");
 		free(r);
 	}
 
@@ -480,7 +479,7 @@ static void set_keymap(struct di_xorg_connection *xc, struct di_object *o) {
 		                             modifiers.keycodes),
 		    NULL);
 		if (!r2 || r2->status == XCB_MAPPING_STATUS_FAILURE) {
-			di_log_va(logm, DI_LOG_ERROR,
+			di_log_va(log_module, DI_LOG_ERROR,
 			          "Failed to set modifiers, your keymap will be "
 			          "broken.");
 			free(r2);
@@ -644,7 +643,6 @@ static struct di_object *di_xorg_connect_to(struct di_xorg *x, struct di_string 
 	di_method(dc, "__set_keymap", set_keymap, struct di_object *);
 	di_method(dc, "disconnect", di_finalize_object);
 
-	dc->x = x;
 	dc->xkb_ctx = xkb_context_new(XKB_CONTEXT_NO_FLAGS);
 
 	return (void *)dc;

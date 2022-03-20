@@ -7,6 +7,7 @@
 #pragma once
 
 #include <deai/deai.h>
+#include <deai/helper.h>
 
 #include <xcb/xcb.h>
 #include <xkbcommon/xkbcommon.h>
@@ -21,14 +22,12 @@ struct di_xorg_ext;
 
 struct di_xorg_connection {
 	struct di_object;
-	struct di_xorg *x;
 	xcb_connection_t *c;
 	int dflt_scrn;
 	int nsignals;
 	struct di_xorg_ext *xext;
 
 	struct xkb_context *xkb_ctx;
-
 	struct di_atom_entry *a_byatom, *a_byname;
 };
 
@@ -39,8 +38,6 @@ struct di_xorg_ext {
 	int nsignals;
 
 	uint8_t opcode;
-
-	void (*free)(struct di_xorg_ext *);
 
 	// ret code: 0 = success, -1 = error, 1 = next
 	int (*handle_event)(struct di_xorg_ext *, xcb_generic_event_t *ev);
@@ -78,6 +75,19 @@ static inline bool unused xorg_has_extension(xcb_connection_t *c, const char *na
 	return false;
 }
 
+#define XORG_CONNECTION_MEMBER "___xorg_connection"
+static inline int unused get_xorg_connection(struct di_xorg_ext *ext,
+                                             struct di_xorg_connection **dc) {
+	return di_get(ext, XORG_CONNECTION_MEMBER, *(struct di_object **)dc);
+}
+
+static inline void unused save_xorg_connection(struct di_xorg_ext *ext,
+                                               struct di_xorg_connection *c) {
+	DI_CHECK_OK(di_member_clone(ext, XORG_CONNECTION_MEMBER, (struct di_object *)c));
+}
+
+define_object_cleanup(di_xorg_connection);
+
 const struct di_string *di_xorg_get_atom_name(struct di_xorg_connection *xc, xcb_atom_t atom);
 xcb_atom_t di_xorg_intern_atom(struct di_xorg_connection *xc, struct di_string name,
                                xcb_generic_error_t **e);
@@ -91,5 +101,3 @@ void di_xorg_ext_signal_setter(const char *signal, struct di_object *obj, struct
 /// Decrement the signal count and stop fdevent when necessary
 void di_xorg_del_signal(struct di_xorg_connection *);
 void di_xorg_ext_signal_deleter(const char *signal, struct di_object *obj);
-
-#define XORG_CONNECTION_MEMBER "___xorg_connection"

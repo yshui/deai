@@ -29,7 +29,6 @@ struct keybinding {
 	xcb_keysym_t keysym;        // really needed?
 	xcb_keycode_t *keycodes;
 	uint16_t modifiers;
-	struct xorg_key *k;
 	struct list_head siblings;
 	bool replay;
 };
@@ -56,17 +55,20 @@ static int name_to_mod(struct di_string keyname) {
 }
 
 static void ungrab(struct keybinding *kb) {
-	di_object_with_cleanup dc_obj = NULL;
-	if (di_get(kb->k, XORG_CONNECTION_MEMBER, dc_obj) != 0) {
+	di_object_with_cleanup key = NULL;
+	DI_CHECK_OK(di_get(kb, "___xorg_key_ext", key));
+	with_object_cleanup(di_xorg_connection) dc = NULL;
+	if (get_xorg_connection((void *)key, &dc) != 0) {
 		return;
 	}
-	struct di_xorg_connection *dc = (void *)dc_obj;
-	// Check if we already disconnected from X
-	if (dc != NULL && dc->c) {
-		auto s = screen_of_display(dc->c, dc->dflt_scrn);
-		for (int i = 0; kb->keycodes[i] != XCB_NO_SYMBOL; i++) {
-			xcb_ungrab_key(dc->c, kb->keycodes[i], s->root, kb->modifiers);
-		}
+	if (dc->c == NULL) {
+		return;
+	}
+
+	DI_CHECK(dc != NULL);
+	auto s = screen_of_display(dc->c, dc->dflt_scrn);
+	for (int i = 0; kb->keycodes[i] != XCB_NO_SYMBOL; i++) {
+		xcb_ungrab_key(dc->c, kb->keycodes[i], s->root, kb->modifiers);
 	}
 }
 
@@ -103,23 +105,23 @@ static void binding_dtor(struct keybinding *kb) {
 	ungrab(kb);
 	free(kb->keycodes);
 	list_del(&kb->siblings);
-	di_unref_object((void *)kb->k);
-	kb->k = NULL;
 }
 
 static int refresh_binding(struct keybinding *kb) {
-	di_object_with_cleanup dc_obj = NULL;
-	if (di_get(kb->k, XORG_CONNECTION_MEMBER, dc_obj) != 0) {
+	di_object_with_cleanup key_obj = NULL;
+	DI_CHECK_OK(di_get(kb, "___xorg_key_ext", key_obj));
+	auto key = (struct xorg_key *)key_obj;
+	with_object_cleanup(di_xorg_connection) dc = NULL;
+	if (get_xorg_connection((void *)key, &dc) != 0) {
 		return -1;
 	}
-	struct di_xorg_connection *dc = (void *)dc_obj;
 	if (kb->keycodes) {
 		ungrab(kb);
 		free(kb->keycodes);
 		kb->keycodes = NULL;
 	}
 
-	auto kc = xcb_key_symbols_get_keycode(kb->k->keysyms, kb->keysym);
+	auto kc = xcb_key_symbols_get_keycode(key->keysyms, kb->keysym);
 	if (kc == NULL) {
 		return -1;
 	}
@@ -133,14 +135,10 @@ static int refresh_binding(struct keybinding *kb) {
 		                                kb->keycodes[i], XCB_GRAB_MODE_ASYNC,
 		                                XCB_GRAB_MODE_SYNC));
 		if (err) {
-			di_mgetmi(dc->x, log);
-			if (logm) {
-				char *description = describe_keybinding(kb);
-				di_log_va(logm, DI_LOG_ERROR,
-				          "Cannot grab %#x, for keybinding %s\n",
-				          kb->keycodes[i], description);
-				free(description);
-			}
+			char *description = describe_keybinding(kb);
+			di_log_va(log_module, DI_LOG_ERROR, "Cannot grab %#x, for keybinding %s\n",
+			          kb->keycodes[i], description);
+			free(description);
 			free(err);
 		}
 	}
@@ -161,18 +159,22 @@ keybinding_new_signal(const char *signal, struct di_object *obj, struct di_objec
 
 	bool success = true;
 	struct keybinding *kb = (void *)obj;
+	struct xorg_key *key = NULL;
 	di_string_with_cleanup keybinding_key = DI_STRING_INIT;
+	di_object_with_cleanup key_obj = NULL;
 	if (refresh_binding(kb) != 0) {
 		goto early_err;
 	}
-	kb->k->nsignals += 1;
-	if (kb->k->nsignals == 1) {
-		success = key_register_listener(kb->k);
+	DI_CHECK_OK(di_get(kb, "___xorg_key_ext", key_obj));
+	key = (void *)key_obj;
+	key->nsignals += 1;
+	if (key->nsignals == 1) {
+		success = key_register_listener(key);
 	}
 
 	// Keep ourself alive
 	keybinding_key = di_string_printf("___keybinding_%p", obj);
-	success = di_add_member_clone((void *)kb->k, keybinding_key, DI_TYPE_OBJECT, &obj) == 0;
+	success = di_add_member_clone(key_obj, keybinding_key, DI_TYPE_OBJECT, &obj) == 0;
 	if (success) {
 		return;
 	}
@@ -191,14 +193,17 @@ static void keybinding_del_signal(const char *signal, struct di_object *obj) {
 	}
 	struct keybinding *kb = (void *)obj;
 	ungrab(kb);
-	kb->k->nsignals -= 1;
-	if (kb->k->nsignals == 0) {
-		key_deregister_listener(kb->k);
+	di_object_with_cleanup key_obj = NULL;
+	DI_CHECK_OK(di_get(kb, "___xorg_key_ext", key_obj));
+	auto key = (struct xorg_key *)key_obj;
+	key->nsignals -= 1;
+	if (key->nsignals == 0) {
+		key_deregister_listener(key);
 	}
 
 	// Stop keeping ourself alive
 	di_string_with_cleanup keybinding_key = di_string_printf("___keybinding_%p", obj);
-	di_remove_member_raw((void *)kb->k, keybinding_key);
+	di_remove_member_raw(key_obj, keybinding_key);
 }
 /// Add a new key binding
 ///
@@ -245,15 +250,15 @@ new_binding(struct xorg_key *k, struct di_array modifiers, struct di_string key,
 	kb->modifiers = mod;
 	kb->keysym = ks;
 	di_set_object_dtor((void *)kb, (void *)binding_dtor);
-	kb->k = k;
 	kb->replay = replay;
-	di_ref_object((void *)k);
 	list_add(&kb->siblings, &k->bindings);
 
 	di_signal_setter_deleter_with_signal_name(kb, "pressed", keybinding_new_signal,
 	                                          keybinding_del_signal);
 	di_signal_setter_deleter_with_signal_name(kb, "released", keybinding_new_signal,
 	                                          keybinding_del_signal);
+
+	di_member_clone(kb, "___xorg_key_ext", (struct di_object *)k);
 
 	int ret = refresh_binding(kb);
 	if (ret != 0) {
@@ -264,7 +269,8 @@ new_binding(struct xorg_key *k, struct di_array modifiers, struct di_string key,
 	return (void *)kb;
 }
 
-static void free_key(struct xorg_key *k) {
+static void free_key(struct di_object *k_obj) {
+	auto k = (struct xorg_key *)k_obj;
 	xcb_key_symbols_free(k->keysyms);
 	struct keybinding *kb, *nkb;
 	list_for_each_entry_safe (kb, nkb, &k->bindings, siblings) {
@@ -295,11 +301,10 @@ uint16_t mod_from_keycode(struct di_xorg_connection *dc, xcb_keycode_t kc) {
 ///
 /// SIGNAL: deai.plugin.xorg.key:Binding.released() key binding is released
 static void handle_key(struct di_xorg_ext *ext, xcb_generic_event_t *ev) {
-	di_object_with_cleanup dc_obj = NULL;
-	if (di_get(ext, XORG_CONNECTION_MEMBER, dc_obj) != 0) {
+	with_object_cleanup(di_xorg_connection) dc = NULL;
+	if (get_xorg_connection(ext, &dc) != 0) {
 		return;
 	}
-	struct di_xorg_connection *dc = (void *)dc_obj;
 	xcb_keycode_t kc;
 	uint16_t mod;
 	const char *event;
@@ -416,7 +421,7 @@ struct di_xorg_ext *new_key(struct di_xorg_connection *dc) {
 	k->keysyms = xcb_key_symbols_alloc(dc->c);
 
 	INIT_LIST_HEAD(&k->bindings);
-	DI_CHECK_OK(di_member_clone(k, XORG_CONNECTION_MEMBER, (struct di_object *)dc));
+	save_xorg_connection((struct di_xorg_ext *)k, dc);
 	di_method(k, "new", new_binding, struct di_array, struct di_string, bool);
 	di_set_object_dtor((void *)k, (void *)free_key);
 	return (void *)k;
