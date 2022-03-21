@@ -132,7 +132,9 @@ static void child_destroy(struct di_object *obj) {
 			string_buf_clear(c->output_buf[i]);
 			free(c->output_buf[i]);
 		}
-		close(c->fds[i]);
+		if (c->fds[i] != -1) {
+			close(c->fds[i]);
+		}
 	}
 }
 

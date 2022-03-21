@@ -92,8 +92,9 @@ static int di_file_ioev(struct di_weak_object *weak) {
 		struct di_file_watch_entry *we = NULL;
 		HASH_FIND_INT(fw->bywd, &ev->wd, we);
 		if (!we) {
-			// ???
-			continue;
+			// This might happen if the user removed a watch with lingering
+			// evetns.
+			goto next;
 		}
 #define emit(m, name)                                                                    \
 	do {                                                                             \
@@ -118,6 +119,7 @@ static int di_file_ioev(struct di_weak_object *weak) {
 			di_emit(fw, "moved-to", we->fname, path, ev->cookie);
 		}
 #undef emit
+next:
 		off += sizeof(struct inotify_event) + ev->len;
 		ev = (void *)(evbuf + off);
 	}
