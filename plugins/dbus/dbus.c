@@ -881,17 +881,17 @@ static struct di_object *di_dbus_get_session_bus(struct di_object *o) {
 #ifdef UNITTESTS
 static void di_dbus_unit_tests(struct di_object *unused obj) {
 	auto signature = "a(io)i";
-	auto ret = parse_dbus_signature(signature);
+	auto ret = parse_dbus_signature(di_string_borrow(signature));
 	DI_CHECK(ret.nchild == 2);
-	DI_CHECK(ret.length == strlen(signature));
-	DI_CHECK(ret.child[0].length == 5);
+	DI_CHECK(ret.current.length == strlen(signature));
+	DI_CHECK(ret.child[0].current.length == 5);
 	DI_CHECK(ret.child[0].nchild == 1);
-	DI_CHECK(ret.child[0].child[0].length == 4);
+	DI_CHECK(ret.child[0].child[0].current.length == 4);
 	DI_CHECK(ret.child[0].child[0].nchild == 2);
 	free_dbus_signature(ret);
 
 	signature = "(iii)";
-	ret = parse_dbus_signature(signature);
+	ret = parse_dbus_signature(di_string_borrow(signature));
 	DI_CHECK(ret.nchild == 1);
 	DI_CHECK(ret.child[0].nchild == 3);
 	free_dbus_signature(ret);
@@ -927,7 +927,7 @@ static void di_dbus_unit_tests(struct di_object *unused obj) {
 	};
 	DBusMessageIter it;
 	dbus_message_iter_init_append(msg, &it);
-	DI_CHECK(dbus_serialize_struct(&it, t, "ai") == 0);
+	DI_CHECK(dbus_serialize_struct(&it, t, di_string_borrow_literal("ai")) == 0);
 	dbus_message_unref(msg);
 }
 #endif
