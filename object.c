@@ -1055,6 +1055,18 @@ static void di_dump_array(struct di_array arr, int depth) {
 	}
 	di_log_va(log_module, DI_LOG_DEBUG, "\t%s]", prefix);
 }
+static void di_dump_type_content(di_type_t type, union di_value *value) {
+	if (type == DI_TYPE_OBJECT) {
+		auto obj_internal = (struct di_object_internal *)value->object;
+		obj_internal->excess_ref_count--;
+	} else if (type == DI_TYPE_ARRAY) {
+		di_dump_array(value->array, 0);
+	} else if (type == DI_TYPE_TUPLE) {
+		di_dump_tuple(value->tuple, 0);
+	} else if (type == DI_TYPE_VARIANT) {
+		di_dump_type_content(value->variant.type, value->variant.value);
+	}
+}
 static void di_dump_object(struct di_object_internal *obj) {
 	di_log_va(log_module, DI_LOG_DEBUG,
 	          "%p, ref count: %lu strong %lu weak (live: %d), type: %s\n", obj,
@@ -1065,15 +1077,7 @@ static void di_dump_object(struct di_object_internal *obj) {
 		          (int)m->name.length, m->name.data, di_type_to_string(m->type),
 		          value_string);
 		free(value_string);
-		if (m->type == DI_TYPE_OBJECT) {
-			union di_value *val = m->data;
-			auto obj_internal = (struct di_object_internal *)val->object;
-			obj_internal->excess_ref_count--;
-		} else if (m->type == DI_TYPE_ARRAY) {
-			di_dump_array(m->data->array, 0);
-		} else if (m->type == DI_TYPE_TUPLE) {
-			di_dump_tuple(m->data->tuple, 0);
-		}
+		di_dump_type_content(m->type, m->data);
 	}
 }
 void di_dump_objects(void) {
