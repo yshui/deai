@@ -244,15 +244,13 @@ static void di_child_start_output_listener(struct di_object *p, int id) {
 	DI_CHECK_OK(di_callr(event_module, "fdevent", fdevent, c->fds[id]));
 
 	di_object_with_cleanup closure = (void *)di_closure(output_cb, (p, id));
-	di_object_with_cleanup listen_handle =
-	    di_listen_to(fdevent, di_string_borrow("read"), closure);
+	auto listen_handle = di_listen_to(fdevent, di_string_borrow("read"), closure);
 
-	struct di_object *autohandle;
-	DI_CHECK_OK(di_callr(listen_handle, "auto_stop", autohandle));
+	DI_CHECK_OK(di_call(listen_handle, "auto_stop", true));
 
 	di_string_with_cleanup listen_handle_key =
 	    di_string_printf("__listen_handle_for_output_%d", id);
-	di_add_member_move(p, listen_handle_key, (di_type_t[]){DI_TYPE_OBJECT}, &autohandle);
+	di_add_member_move(p, listen_handle_key, (di_type_t[]){DI_TYPE_OBJECT}, &listen_handle);
 	c->output_buf[id] = string_buf_new();
 }
 

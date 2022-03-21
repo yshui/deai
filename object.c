@@ -818,24 +818,22 @@ static void di_listen_handle_stop(struct di_object *nonnull obj) {
 	}
 }
 
-static void di_listen_handle_auto_stop_stop(struct di_object *obj) {
-	DI_CHECK(di_check_type(obj, "deai:AutoStopListenHandle"));
-	di_object_with_cleanup listen_handle;
-	DI_CHECK_OK(di_get(obj, "listen_handle", listen_handle));
-	if (di_call(listen_handle, "stop") != 0) {
-		di_log_va(log_module, DI_LOG_ERROR, "Failed to call \"stop\" on listen handle");
+static void di_listen_handle_dtor(struct di_object *obj) {
+	bool stop_on_drop;
+	if (di_get(obj, "stop_on_drop", stop_on_drop) != 0) {
+		stop_on_drop = false;
+	}
+	if (stop_on_drop) {
+		di_listen_handle_stop(obj);
 	}
 }
 
-/// An object that stops a listen handle when dropped
+/// Set whether listener should be stopped when the handle is dropped.
 ///
-/// EXPORT: deai:ListenHandle.auto_stop(), deai:AutoStopListenHandle
-static struct di_object *di_listen_handle_auto_stop(struct di_object *obj) {
-	auto ret = di_new_object_with_type(struct di_object);
-	DI_CHECK_OK(di_set_type(ret, "deai:AutoStopListenHandle"));
-	di_set_object_dtor(ret, di_listen_handle_auto_stop_stop);
-	DI_CHECK_OK(di_member_clone(ret, "listen_handle", obj));
-	return ret;
+/// EXPORT: deai:ListenHandle.auto_stop(stop: :bool), :void
+static void di_listen_handle_auto_stop(struct di_object *obj, int stop_) {
+	bool stop = stop_ != 0;
+	di_setx(obj, di_string_borrow_literal("stop_on_drop"), DI_TYPE_BOOL, &stop);
 }
 
 int di_rename_signal_member_raw(struct di_object *obj, struct di_string old_member_name,
@@ -981,7 +979,9 @@ di_listen_to(struct di_object *_obj, struct di_string name, struct di_object *h)
 	di_member(listen_handle, "weak_signal", weak_sig);
 	di_member(listen_handle, "weak_handler", weak_handler);
 	di_method(listen_handle, "stop", di_listen_handle_stop);
-	di_method(listen_handle, "auto_stop", di_listen_handle_auto_stop);
+	di_method(listen_handle, "auto_stop", di_listen_handle_auto_stop, int);
+
+	di_set_object_dtor((void *)listen_handle, di_listen_handle_dtor);
 
 	return (struct di_object *)listen_handle;
 }

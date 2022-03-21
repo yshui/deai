@@ -555,11 +555,10 @@ static void di_promise_start_dispatch(struct di_promise *promise) {
 		return;
 	}
 
-	di_object_with_cleanup listen_handle =
+	auto listen_handle =
 	    di_listen_to(timer, di_string_borrow("elapsed"), handler);
-	struct di_object *autolh = NULL;
-	DI_CHECK_OK(di_callr(listen_handle, "auto_stop", autolh));
-	di_member(promise, "___auto_listen_handle", autolh);
+	DI_CHECK_OK(di_call(listen_handle, "auto_stop", true));
+	di_member(promise, "___auto_listen_handle", listen_handle);
 }
 
 static void di_promise_then_impl(struct di_promise *promise, struct di_promise *then_promise,

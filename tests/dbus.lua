@@ -80,8 +80,6 @@ dbusl:once("exit", function()
         for i, v in pairs(results) do
             print(i, v)
         end
-        collectgarbage()
     end)
     o = nil
-    collectgarbage("collect")
 end)

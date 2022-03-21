@@ -245,11 +245,10 @@ static void di_file_new_signal(struct di_object *fw_, struct di_string member_na
 
 		di_closure_with_cleanup cl =
 		    di_closure(di_file_ioev, ((struct di_object *)fw));
-		di_object_with_cleanup listen_handle =
+		auto listen_handle =
 		    di_listen_to(fdevent, di_string_borrow("read"), (void *)cl);
-		struct di_object *autohandle;
-		DI_CHECK_OK(di_callr(listen_handle, "auto_stop", autohandle));
-		di_member(fw, "__inotify_fd_event_read_listen_handle", autohandle);
+		DI_CHECK_OK(di_call(listen_handle, "auto_stop", true));
+		di_member(fw, "__inotify_fd_event_read_listen_handle", listen_handle);
 	}
 }
 

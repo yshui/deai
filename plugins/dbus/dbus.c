@@ -442,15 +442,14 @@ di_dbus_get_object(struct di_object *o, struct di_string bus, struct di_string o
 		di_closure_with_cleanup handler =
 		    di_closure(di_dbus_name_change_handler, (weak_object),
 		               struct di_string, struct di_string, struct di_string);
-		di_object_with_cleanup lh = di_listen_to(
+		auto lh = di_listen_to(
 		    o,
 		    di_string_borrow_literal("%" DBUS_SERVICE_DBUS "%" DBUS_PATH_DBUS
 		                             "%" DBUS_INTERFACE_DBUS ".NameOwnerChanged"),
 		    (void *)handler);
 
-		struct di_object *autolh;
-		DI_CHECK_OK(di_callr(lh, "auto_stop", autolh));
-		DI_CHECK_OK(di_member(ret, "___name_change_auto_handle", autolh));
+		DI_CHECK_OK(di_call(lh, "auto_stop", true));
+		DI_CHECK_OK(di_member(ret, "___name_change_auto_handle", lh));
 	}
 
 	auto serial = di_dbus_send_message(
@@ -473,15 +472,14 @@ di_dbus_get_object(struct di_object *o, struct di_string bus, struct di_string o
 	}
 
 	{
-		struct di_object *autolh;
 		di_closure_with_cleanup set_owner = di_closure(
 		    di_dbus_object_set_owner, ((struct di_object *)ret), struct di_string);
 		di_string_with_cleanup reply_signal_name =
 		    di_string_printf("reply_for_request_%ld", serial);
-		di_object_with_cleanup lh2 =
+		auto lh2 =
 		    di_listen_to(o, reply_signal_name, (void *)set_owner);
-		DI_CHECK_OK(di_callr(lh2, "auto_stop", autolh));
-		DI_CHECK_OK(di_member(ret, "___get_name_owner_reply_auto_handle", autolh));
+		DI_CHECK_OK(di_call(lh2, "auto_stop", true));
+		DI_CHECK_OK(di_member(ret, "___get_name_owner_reply_auto_handle", lh2));
 	}
 	di_method(ret, "__get", di_dbus_object_getter, struct di_string);
 	di_method(ret, "__set", di_dbus_object_new_signal, struct di_string, struct di_object *);
@@ -546,12 +544,11 @@ static void di_dbus_shutdown(di_dbus_connection *conn) {
 	di_set_object_dtor((void *)shutdown, di_dbus_shutdown_part2);
 	di_set_object_call((void *)shutdown, di_dbus_drop_root);
 
-	di_object_with_cleanup listen_handle =
+	auto listen_handle =
 	    di_listen_to(eventm, di_string_borrow("prepare"), (struct di_object *)shutdown);
 
-	struct di_object *autol;
-	DI_CHECK_OK(di_callr(listen_handle, "auto_stop", autol));
-	DI_CHECK_OK(di_member(shutdown, "___listen_handle", autol));
+	DI_CHECK_OK(di_call(listen_handle, "auto_stop", true));
+	DI_CHECK_OK(di_member(shutdown, "___listen_handle", listen_handle));
 	di_unref_object((void *)shutdown);
 
 	conn->conn = NULL;
@@ -561,13 +558,12 @@ static void dbus_add_signal_handler_for(struct di_object *ioev, DBusWatch *w,
                                         di_dbus_connection *oc, const char *signal, int event) {
 	di_object_with_cleanup handler =
 	    (void *)di_closure(ioev_callback, ((struct di_object *)oc, (void *)w, event));
-	di_object_with_cleanup l = di_listen_to(ioev, di_string_borrow(signal), handler);
-	struct di_object *autol;
-	DI_CHECK_OK(di_callr(l, "auto_stop", autol));
+	auto l = di_listen_to(ioev, di_string_borrow(signal), handler);
+	DI_CHECK_OK(di_call(l, "auto_stop", true));
 
 	with_cleanup_t(char) listen_handle_name;
 	asprintf(&listen_handle_name, "__dbus_ioev_%s_listen_handle_for_watch_%p", signal, w);
-	DI_CHECK_OK(di_member(oc, listen_handle_name, autol));
+	DI_CHECK_OK(di_member(oc, listen_handle_name, l));
 }
 
 static bool dbus_toggle_watch_impl(DBusWatch *w, void *ud, bool enabled) {

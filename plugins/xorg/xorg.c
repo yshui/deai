@@ -520,12 +520,11 @@ void di_xorg_add_signal(struct di_xorg_connection *xc) {
 	di_object_with_cleanup xcb_fd_event = NULL;
 	DI_CHECK_OK(di_callr(eventm, "fdevent", xcb_fd_event, xcb_get_file_descriptor(xc->c)));
 	di_closure_with_cleanup cl = di_closure(di_xorg_ioev, ((struct di_object *)xc));
-	di_object_with_cleanup lh =
+	auto lh =
 	    di_listen_to(xcb_fd_event, di_string_borrow("read"), (void *)cl);
 
-	struct di_object *autol;
-	DI_CHECK_OK(di_callr(lh, "auto_stop", autol));
-	di_member(xc, "__xcb_fd_event_read_listen_handle", autol);
+	DI_CHECK_OK(di_call(lh, "auto_stop", true));
+	di_member(xc, "__xcb_fd_event_read_listen_handle", lh);
 }
 
 void di_xorg_del_signal(struct di_xorg_connection *xc) {

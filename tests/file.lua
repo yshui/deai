@@ -18,7 +18,9 @@ events = {"create", "access", "attrib", "close-write", "close-nowrite",
 
 listen_handles = {}
 for _, i in pairs(events) do
-    table.insert(listen_handles, w:on(i, sigh(i)):auto_stop())
+    handle = w:on(i, sigh(i))
+    handle:auto_stop(1)
+    table.insert(listen_handles, handle)
 end
 
 fname = "./testdir/testfile"

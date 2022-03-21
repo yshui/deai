@@ -390,13 +390,12 @@ bool key_register_listener(struct xorg_key *k) {
 	for (int i = 0; i < ARRAY_SIZE(OPCODES); i++) {
 		di_string_with_cleanup signal =
 		    di_string_printf("___raw_x_event_%d", OPCODES[i]);
-		di_object_with_cleanup lh = di_listen_to(dc, signal, handler);
-		struct di_object *autolh = NULL;
+		auto lh = di_listen_to(dc, signal, handler);
 		di_string_with_cleanup autolh_key =
 		    di_string_printf("___auto_handle_for_%d", OPCODES[i]);
-		DI_CHECK_OK(di_callr(lh, "auto_stop", autolh));
+		DI_CHECK_OK(di_call(lh, "auto_stop", true));
 		DI_CHECK_OK(di_add_member_move((void *)k, autolh_key,
-		                               (di_type_t[]){DI_TYPE_OBJECT}, &autolh));
+		                               (di_type_t[]){DI_TYPE_OBJECT}, &lh));
 	}
 	return true;
 }
