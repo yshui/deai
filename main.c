@@ -720,7 +720,7 @@ int main(int argc, char *argv[]) {
 	di_unref_object((void *)p);
 
 	bool has_cycle;
-	if (di_mark_and_sweep(&has_cycle) || has_cycle) {
+	if (di_mark_and_sweep(&has_cycle)) {
 		di_dump_objects();
 #ifdef UNITTESTS
 		abort();
