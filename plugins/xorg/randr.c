@@ -516,6 +516,10 @@ static inline void rr_select_input(struct di_xorg_randr *rr, uint16_t mask) {
 		return;
 	}
 
+	if (dc->c == NULL) {
+		return;
+	}
+
 	auto scrn = screen_of_display(dc->c, dc->dflt_scrn);
 	auto e = xcb_request_check(dc->c, xcb_randr_select_input(dc->c, scrn->root, mask));
 

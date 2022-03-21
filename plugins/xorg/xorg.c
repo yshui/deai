@@ -229,7 +229,7 @@ static struct di_variant di_xorg_get_ext(struct di_xorg_connection *xc, struct d
 	if (weak_ext) {
 		auto ext = di_upgrade_weak_ref(weak_ext);
 		if (ext != NULL) {
-			return di_variant_of(di_upgrade_weak_ref(weak_ext));
+			return di_variant_of(ext);
 		}
 		di_remove_member_raw((void *)xc, ext_member);
 	}
