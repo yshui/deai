@@ -37,7 +37,7 @@ a2 = a:then_(function(a) return a+10 end)
 b = di.event:new_promise()
 c = di.event:any_promise({a2,b})
 c:then_(function(t)
-    if t ~= 5 then
+    if t ~= 15 then
         di:exit(1)
     end
     print(t)
