@@ -106,6 +106,10 @@ static void di_xorg_free_xinput(struct di_object *x) {
 		return;
 	}
 
+	if (dc->c == NULL) {
+		return;
+	}
+
 	struct di_xorg_xinput *xi = (void *)x;
 	memset(xi->mask, 0, xi->ec.mask_len * 4);
 	auto scrn = screen_of_display(dc->c, dc->dflt_scrn);

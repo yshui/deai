@@ -103,10 +103,11 @@ static void di_xorg_ioev(struct di_object *dc_obj) {
 			// Only strongly referenced ext have signal listerners.
 			di_string_with_cleanup ext_key =
 			    di_string_printf("___strong_x_ext_%s", xext_reg[i].name);
-			struct di_xorg_ext *ext;
-			if (di_getxt(dc_obj, ext_key, DI_TYPE_OBJECT, (void *)&ext) != 0) {
+			di_object_with_cleanup ext_obj = NULL;
+			if (di_getxt(dc_obj, ext_key, DI_TYPE_OBJECT, (void *)&ext_obj) != 0) {
 				continue;
 			}
+			struct di_xorg_ext *ext = (void *)ext_obj;
 			if (ext->handle_event == NULL) {
 				continue;
 			}
