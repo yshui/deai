@@ -719,6 +719,7 @@ int main(int argc, char *argv[]) {
 	// (4) Start mainloop
 	di_unref_object((void *)p);
 
+	di_collect_garbage();
 	bool has_cycle;
 	if (di_mark_and_sweep(&has_cycle)) {
 		di_dump_objects();

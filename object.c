@@ -297,7 +297,8 @@ struct di_ref_tracked_object *ref_tracked;
 #endif
 
 /// Objects that has been unreferenced since last mark and sweep.
-thread_local struct list_head unrefed_objects;
+thread_local struct list_head unreferred_objects;
+thread_local bool collecting_garbage = false;
 
 struct di_object *di_new_object(size_t sz, size_t alignment) {
 	if (sz < sizeof(struct di_object)) {
@@ -322,6 +323,7 @@ struct di_object *di_new_object(size_t sz, size_t alignment) {
 #ifdef TRACK_OBJECTS
 	list_add(&obj->siblings, &all_objects);
 #endif
+	INIT_LIST_HEAD(&obj->unreferred_siblings);
 
 	return (struct di_object *)obj;
 }
@@ -503,7 +505,15 @@ void di_unref_object(struct di_object *_obj) {
 	}
 #endif
 	if (obj->ref_count == 0) {
+		list_del_init(&obj->unreferred_siblings);
 		di_destroy_object(_obj);
+	} else if (!collecting_garbage) {
+		if (list_empty(&obj->unreferred_siblings)) {
+			if (unreferred_objects.next == NULL) {
+				INIT_LIST_HEAD(&unreferred_objects);
+			}
+			list_add(&obj->unreferred_siblings, &unreferred_objects);
+		}
 	}
 }
 
@@ -999,6 +1009,125 @@ struct di_object *di_get_roots(void) {
 	return (struct di_object *)roots;
 }
 
+static void di_scan_type(di_type_t, union di_value *, int (*)(struct di_object_internal *, int),
+                         int, void (*)(struct di_object_internal *));
+static void di_scan_member(struct di_object_internal *obj,
+                           int (*pre)(struct di_object_internal *, int), int state,
+                           void (*post)(struct di_object_internal *)) {
+	struct di_member *m, *tmpm;
+	HASH_ITER (hh, obj->members, m, tmpm) {
+		di_scan_type(m->type, m->data, pre, state, post);
+	}
+}
+static void di_scan_type(di_type_t type, union di_value *value,
+                         int (*pre)(struct di_object_internal *, int), int state,
+                         void (*post)(struct di_object_internal *)) {
+	if (type == DI_TYPE_OBJECT) {
+		auto obj = (struct di_object_internal *)value->object;
+		int next_state = 0;
+		if (pre) {
+			next_state = pre(obj, state);
+		}
+		if (next_state >= 0) {
+			di_scan_member(obj, pre, next_state, post);
+			if (post) {
+				post(obj);
+			}
+		}
+	} else if (type == DI_TYPE_ARRAY) {
+		if (value->array.length == 0) {
+			// elem_type could be an invalid type
+			return;
+		}
+		auto step = di_sizeof_type(value->array.elem_type);
+		for (int i = 0; i < value->array.length; i++) {
+			di_scan_type(value->array.elem_type, value->array.arr + step * i,
+			             pre, state, post);
+		}
+	} else if (type == DI_TYPE_TUPLE) {
+		for (int i = 0; i < value->tuple.length; i++) {
+			di_scan_type(value->tuple.elements[i].type,
+			             value->tuple.elements[i].value, pre, state, post);
+		}
+	} else if (type == DI_TYPE_VARIANT) {
+		di_scan_type(value->variant.type, value->variant.value, pre, state, post);
+	}
+}
+
+static int di_collect_garbage_mark(struct di_object_internal *o, int _ unused) {
+	// fprintf(stderr, "\tmark %p %s %lu/%lu\n", o, di_get_type((void *)o), o->ref_count_scan, o->ref_count);
+	o->ref_count_scan += 1;
+	if (o->mark == 1) {
+		return -1;
+	}
+	o->mark = 1;
+	return 0;
+}
+static int di_collect_garbage_scan(struct di_object_internal *o, int revive) {
+	assert(o->ref_count_scan <= o->ref_count);
+	if (revive || o->ref_count_scan != o->ref_count) {
+		if (o->mark == 0) {
+			return -1;
+		}
+		// fprintf(stderr, "\treviving %p\n", o);
+		o->ref_count_scan = 0;
+		o->mark = 0;
+		return 1;
+	}
+	if (o->mark == 2 || o->mark == 0) {
+		return -1;
+	}
+	o->mark = 2;
+	// all references to `o` are internal, so this object can be collected.
+	// fprintf(stderr, "\tcollecting %p, %lu/%lu %s\n", o, o->ref_count_scan,
+	//		o->ref_count, di_get_type((void *)o));
+	return 0;
+}
+static int di_collect_garbage_collect_pre(struct di_object_internal *o, int _ unused) {
+	if (o->mark == 0 || o->mark == 3) {
+		return -1;
+	}
+	// Make sure objects will not be finalized before we manually finalize them.
+	di_ref_object((void *)o);
+	o->mark = 3;
+	return 0;
+}
+static void di_collect_garbage_collect_post(struct di_object_internal *o) {
+	if (o->mark == 3) {
+		_di_finalize_object(o);
+		di_unref_object((void *)o);
+	}
+}
+/// Collect garbage in cyclic references
+void di_collect_garbage(void) {
+	collecting_garbage = true;
+	struct di_object_internal *i, *ni;
+	list_for_each_entry_safe (i, ni, &unreferred_objects, unreferred_siblings) {
+		// fprintf(stderr, "unref root: %p %lu/%lu %d, %s\n", i, i->ref_count_scan,
+		//         i->ref_count, i->mark, di_get_type((void *)i));
+		if (i->mark != 1) {
+			di_scan_type(DI_TYPE_OBJECT, (void *)&i, di_collect_garbage_mark, 0, NULL);
+			// unreferred_objects list doesn't constitute as a reference.
+			i->ref_count_scan -= 1;
+		} else {
+			// this node is reachable from another root, it doesn't need to be
+			// a root
+			list_del_init(&i->unreferred_siblings);
+		}
+	}
+	list_for_each_entry (i, &unreferred_objects, unreferred_siblings) {
+		// fprintf(stderr, "unref root: %p %lu/%lu %d, %s\n", i, i->ref_count_scan,
+		//         i->ref_count, i->mark, di_get_type((void *)i));
+		di_scan_type(DI_TYPE_OBJECT, (void *)&i, di_collect_garbage_scan, 0, NULL);
+	}
+	list_for_each_entry_safe (i, ni, &unreferred_objects, unreferred_siblings) {
+		list_del_init(&i->unreferred_siblings);
+		di_scan_type(DI_TYPE_OBJECT, (void *)&i, di_collect_garbage_collect_pre,
+		             0, di_collect_garbage_collect_post);
+	}
+	collecting_garbage = false;
+}
+
 #ifdef TRACK_OBJECTS
 void di_track_object_ref(struct di_object *unused obj, void *pointer) {
 	auto t = tmalloc(struct di_ref_tracked_object, 1);
@@ -1025,7 +1154,7 @@ static void di_dump_tuple(struct di_tuple t, int depth) {
 		di_log_va(log_module, DI_LOG_DEBUG, "\t%s  %s: %s,", prefix,
 		          di_type_to_string(t.elements[i].type), value_string);
 		if (t.elements[i].type == DI_TYPE_OBJECT) {
-			((struct di_object_internal *)t.elements[i].value->object)->excess_ref_count--;
+			((struct di_object_internal *)t.elements[i].value->object)->ref_count_scan--;
 		} else if (t.elements[i].type == DI_TYPE_ARRAY) {
 			di_dump_array(t.elements[i].value->array, depth + 1);
 		} else if (t.elements[i].type == DI_TYPE_TUPLE) {
@@ -1046,7 +1175,7 @@ static void di_dump_array(struct di_array arr, int depth) {
 		with_cleanup_t(char) value_string = di_value_to_string(arr.elem_type, curr);
 		di_log_va(log_module, DI_LOG_DEBUG, "\t%s  %s,", prefix, value_string);
 		if (arr.elem_type == DI_TYPE_OBJECT) {
-			((struct di_object_internal *)curr)->excess_ref_count--;
+			((struct di_object_internal *)curr)->ref_count_scan--;
 		} else if (arr.elem_type == DI_TYPE_ARRAY) {
 			di_dump_array(*(struct di_array *)curr, depth + 1);
 		} else if (arr.elem_type == DI_TYPE_TUPLE) {
@@ -1058,7 +1187,7 @@ static void di_dump_array(struct di_array arr, int depth) {
 static void di_dump_type_content(di_type_t type, union di_value *value) {
 	if (type == DI_TYPE_OBJECT) {
 		auto obj_internal = (struct di_object_internal *)value->object;
-		obj_internal->excess_ref_count--;
+		obj_internal->ref_count_scan--;
 	} else if (type == DI_TYPE_ARRAY) {
 		di_dump_array(value->array, 0);
 	} else if (type == DI_TYPE_TUPLE) {
@@ -1071,7 +1200,8 @@ static void di_dump_object(struct di_object_internal *obj) {
 	di_log_va(log_module, DI_LOG_DEBUG,
 	          "%p, ref count: %lu strong %lu weak (live: %d), type: %s\n", obj,
 	          obj->ref_count, obj->weak_ref_count, obj->mark, di_get_type((void *)obj));
-	for (struct di_member *m = obj->members; m != NULL; m = m->hh.next) {
+	struct di_member *m, *tmpm;
+	HASH_ITER (hh, obj->members, m, tmpm) {
 		char *value_string = di_value_to_string(m->type, m->data);
 		di_log_va(log_module, DI_LOG_DEBUG, "\tmember: %.*s, type: %s (%s)",
 		          (int)m->name.length, m->name.data, di_type_to_string(m->type),
@@ -1083,27 +1213,28 @@ static void di_dump_object(struct di_object_internal *obj) {
 void di_dump_objects(void) {
 	struct di_object_internal *i;
 	list_for_each_entry (i, &all_objects, siblings) {
-		i->excess_ref_count = i->ref_count;
+		i->ref_count_scan = i->ref_count;
 	}
 
 	list_for_each_entry (i, &all_objects, siblings) { di_dump_object(i); }
 
 	// Account for references from the roots
 	if (roots != NULL) {
-		roots->excess_ref_count--;
+		roots->ref_count_scan--;
 		for (auto root = roots->anonymous_roots; root; root = root->hh.next) {
 			auto obj_internal = (struct di_object_internal *)root->obj;
-			obj_internal->excess_ref_count--;
+			obj_internal->ref_count_scan--;
 		}
 	}
 
 	list_for_each_entry (i, &all_objects, siblings) {
 		const char *color = "";
-		if (i->excess_ref_count > 0) {
+		if (i->ref_count_scan > 0) {
 			color = "\033[31;1m";
 		}
 		di_log_va(log_module, DI_LOG_DEBUG, "%s%p, excess_ref_count: %lu/%lu\033[0m\n",
-		          color, i, i->excess_ref_count, i->ref_count);
+		          color, i, i->ref_count_scan, i->ref_count);
+		i->ref_count_scan = 0;
 	}
 }
 
@@ -1142,7 +1273,8 @@ static void *di_mark_and_sweep_dfs(struct di_object_internal *o, bool *has_cycle
 
 	o->mark = 1;
 	void *cycle_return = NULL;
-	for (auto i = o->members; i != NULL; i = i->hh.next) {
+	struct di_member *i, *tmpi;
+	HASH_ITER (hh, o->members, i, tmpi) {
 		if (i->type == DI_TYPE_OBJECT) {
 			di_mark_and_sweep_detect_cycle(o, (void *)i->data->object,
 			                               has_cycle, &cycle_return);

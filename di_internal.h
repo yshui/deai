@@ -31,17 +31,20 @@ struct di_object_internal {
 
 	uint64_t ref_count;
 	uint64_t weak_ref_count;
-	uint8_t destroyed;
+	/// A temporary ref count variable used for object tracking and reference cycle
+	/// collection.
+	uint64_t ref_count_scan;
+	struct list_head unreferred_siblings;
 
 #ifdef TRACK_OBJECTS
-	char padding[62];
-	uint8_t mark;
-	uint64_t excess_ref_count;
 	struct list_head siblings;
+	char padding[46];
 #else
 	// Reserved for future use
-	char padding[87];
+	char padding[62];
 #endif
+	uint8_t mark;
+	uint8_t destroyed;
 };
 
 #ifdef TRACK_OBJECTS
@@ -169,6 +172,7 @@ static inline ffi_status unused di_ffi_prep_cif(ffi_cif *nonnull cif, unsigned i
 struct di_module *nullable di_new_module_with_size(struct deai *nonnull di, size_t size);
 
 struct di_object *nullable di_try(void (*nonnull func)(void *nullable), void *nullable args);
+void di_collect_garbage(void);
 #ifdef TRACK_OBJECTS
 void di_dump_objects(void);
 /// Returns true if leaks are found

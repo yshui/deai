@@ -398,6 +398,8 @@ struct di_prepare {
 };
 
 static void di_prepare(EV_P_ ev_prepare *w, int revents) {
+	di_collect_garbage();
+
 	bool has_cycle;
 	if (di_mark_and_sweep(&has_cycle)) {
 		di_log_va(log_module, DI_LOG_DEBUG, "Reference bug detected\n");

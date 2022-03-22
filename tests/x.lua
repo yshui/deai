@@ -5,7 +5,6 @@ di.os.env.DISPLAY=":1"
 
 local listen_handles = {}
 table.insert(listen_handles, di.event:timer(0.2):on("elapsed", function()
-    collectgarbage("collect")
 
     -- wait a awhile for Xvfb to start
     o = di.xorg:connect()
@@ -79,7 +78,6 @@ table.insert(listen_handles, di.event:timer(0.2):on("elapsed", function()
     di.spawn:run({"xrandr", "--output", "screen", "--off"}, true)
 
     table.insert(listen_handles, di.event:timer(1):on("elapsed", function()
-        collectgarbage("collect")
         devs = xi.devices
         for _, d in pairs(devs) do
             print(string.format("device: %s %s %s %d", d.type, d.use, d.name, d.id))
