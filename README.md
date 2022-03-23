@@ -32,18 +32,17 @@ There are also a few examples given here. If you need more information, you can 
 ### Build Dependencies
 
 * libev
-* libudev
-* dbus-libs
-* xorg
+* libudev (optional, for the `udev` plugin)
+* dbus-libs (optional, for the `dbus` plugin)
+* xorg (optional, for the `xorg` plugin)
     * xcb
     * xcb-randr
     * xcb-xinput
     * xcb-xkb
     * libxkbcommon
     * xcb-util-keysyms
-* lua
-
-In the future, you will be able to build only the plugins you want.
+* lua (optional, for the `lua` plugin)
+* libinotify (optional, for the `file` plugin)
 
 ### Usage
 

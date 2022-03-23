@@ -1,9 +1,6 @@
 # include_directories('../include')
 # include_directories('..')
 # include_directories(libffi_include_dirs)
-subdir('lua')
-subdir('xorg')
-subdir('file')
-subdir('dbus')
-subdir('udev')
-subdir('evdev')
+foreach plugin: get_option('plugins')
+  subdir(plugin)
+endforeach
