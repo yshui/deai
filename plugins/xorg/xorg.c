@@ -600,6 +600,9 @@ void di_xorg_ext_signal_deleter(const char *signal, struct di_object *obj) {
 	}
 }
 
+static struct di_object *di_xorg_new_clipboard(struct di_xorg *x) {
+}
+
 /// Connect to a X server
 ///
 /// EXPORT: xorg.connect_to(display), deai.plugin.xorg:Connection
@@ -641,6 +644,7 @@ static struct di_object *di_xorg_connect_to(struct di_xorg *x, struct di_string 
 	di_method(dc, "__set_xrdb", di_xorg_set_resource, struct di_string);
 	di_method(dc, "__get_screen", get_screen);
 	di_method(dc, "__set_keymap", set_keymap, struct di_object *);
+	di_method(dc, "__get_clipboard", di_xorg_new_clipboard);
 	di_method(dc, "disconnect", di_finalize_object);
 
 	dc->xkb_ctx = xkb_context_new(XKB_CONTEXT_NO_FLAGS);

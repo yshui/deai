@@ -274,8 +274,9 @@ struct dbus_signature parse_dbus_signaure_sequence(struct di_string signature,
 		}
 		children[nchild] = parse_dbus_signature_one(signature, &next);
 		if (children[nchild].nchild < 0) {
+			auto tmp = children[nchild];
 			free(children);
-			return children[nchild];
+			return tmp;
 		}
 		length += children[nchild].current.length;
 		nchild += 1;
@@ -301,8 +302,9 @@ parse_dbus_signature_one(struct di_string signature, struct di_string *rest) {
 		auto children = tmalloc(struct dbus_signature, 1);
 		children[0] = parse_dbus_signature_one(di_suffix(signature, 1), rest);
 		if (children[0].nchild < 0) {
+			auto tmp = children[0];
 			free(children);
-			return children[0];
+			return tmp;
 		}
 		return (struct dbus_signature){
 		    .current = di_substring(signature, 0, children[0].current.length + 1),
