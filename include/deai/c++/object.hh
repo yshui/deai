@@ -928,30 +928,24 @@ auto unsafe_to_inner(const Ref<Object> &obj) -> T & {
 	                              object_allocation_info<T>::offset);
 }
 
-/// Wrap a function that takes C++ values into a function that takes deai values. Because
-/// args will go through a to_borrowed_cpp_type<to_borrowed_deai_type<T>> transformation,
-/// and have to remain passable to the original function, they have to be borrow inversible.
-template <typename R, auto func, typename... Args>
-auto wrap_cpp_function(to_borrowed_deai_type<Args>... args) -> to_owned_deai_type<R> {
-	if constexpr (deai_typeof<R>::value == c_api::di_type::NIL) {
-		// Special treatment for void
-		func(to_borrowed_cpp_value(args)...);
-	} else {
-		return to_owned_deai_value(func(to_borrowed_cpp_value(args)...));
-	}
-}
-
 template <typename... Captures>
 struct make_wrapper {
 private:
 	template <typename R, typename... Args>
 	struct factory {
-		template <auto func>
-		struct inner {
-			// Seems to be a clang bug here, have to have this extra layer of
-			// struct.
-			static constexpr auto wrapper = &wrap_cpp_function<R, func, Args...>;
-		};
+		/// Wrap a function that takes C++ values into a function that takes deai values. Because
+		/// args will go through a to_borrowed_cpp_type<to_borrowed_deai_type<T>> transformation,
+		/// and have to remain passable to the original function, they have to be borrow inversible.
+		template <R (*func)(Args...)>
+		static auto wrapper_impl(to_borrowed_deai_type<Args>... args)
+		    -> to_owned_deai_type<R> {
+			if constexpr (deai_typeof<R>::value == c_api::di_type::NIL) {
+				// Special treatment for void
+				func(to_borrowed_cpp_value(args)...);
+			} else {
+				return to_owned_deai_value(func(to_borrowed_cpp_value(args)...));
+			}
+		}
 		static constexpr c_api::di_type return_type = deai_typeof<R>::value;
 		static constexpr auto nargs = sizeof...(Args);
 		static constexpr auto arg_types = get_deai_types<Args...>();
@@ -963,21 +957,22 @@ private:
 
 public:
 	template <auto func>
-	struct wrapper : decltype(inspect(func)) {
-		static constexpr auto value = wrapper::template inner<func>::wrapper;
-	};
+	static constexpr auto value = decltype(inspect(func))::template wrapper_impl<func>;
+
+	template <auto func>
+	struct info : decltype(inspect(func)) {};
 };
 
 /// Wrap a C++ function into a di_closure. This function can have a list of captures,
 /// which are cloned and stored inside the closure. This function must take arguments like
 /// this: func(captures..., arguments...). Either or both of them can be empty.
 ///
-/// There are also a few restriction on your function, see `wrap_cpp_function` for more.
+/// There are also a few restriction on your function, see `make_wrapper` for more.
 template <auto func, typename... Captures>
 auto to_di_closure(const Captures &...captures) -> Ref<Object> {
 	constexpr auto ncaptures = sizeof...(Captures);
-	using wrapper_info = typename make_wrapper<Captures...>::template wrapper<func>;
-	constexpr auto function = wrapper_info::value;
+	using wrapper_info = typename make_wrapper<Captures...>::template info<func>;
+	constexpr auto function = make_wrapper<Captures...>::template value<func>;
 	constexpr auto nargs = wrapper_info::nargs;
 	c_api::di_variant elements[] = {to_borrowed_deai_variant(captures)...};
 	c_api::di_tuple capture_tuple = {.length = ncaptures, .elements = elements};
@@ -996,12 +991,10 @@ private:
 	template <typename R, typename... Args>
 	struct factory {
 		template <auto func>
-		struct wrapper {
-			static auto call(c_api::di_object *obj, Args &&...args) {
-				auto &this_ = unsafe_to_inner<T>(obj);
-				return (this_.*func)(std::forward<Args>(args)...);
-			}
-		};
+		static auto wrapper_impl(c_api::di_object *obj, Args &&...args) {
+			auto &this_ = unsafe_to_inner<T>(obj);
+			return (this_.*func)(std::forward<Args>(args)...);
+		}
 	};
 
 	template <typename R, typename... Args>
@@ -1011,16 +1004,12 @@ private:
 
 public:
 	template <auto func>
-	struct inner {
-		// same clang bug as above
-		static constexpr auto wrapper =
-		    decltype(inspect(func))::template wrapper<func>::call;
-	};
+	static constexpr auto value = decltype(inspect(func))::template wrapper_impl<func>;
 };
 
 template <auto func, typename T>
 auto add_method(T &obj_impl, std::string_view name) -> void {
-	constexpr auto wrapped_func = member_function_wrapper<T>::template inner<func>::wrapper;
+	constexpr auto wrapped_func = member_function_wrapper<T>::template value<func>;
 	auto closure = to_di_closure<wrapped_func>().release();
 	auto *object_ref_raw = reinterpret_cast<c_api::di_object *>(
 	    reinterpret_cast<std::byte *>(&obj_impl) - object_allocation_info<T>::offset);
