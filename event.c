@@ -65,7 +65,7 @@ static void di_periodic_callback(EV_P_ ev_periodic *w, int revents) {
 
 /// Start the event source
 ///
-/// EXPORT: deai.builtin.event:IoEv.start(), :void
+/// EXPORT: deai.builtin.event:IoEv.start(): :void
 static void di_start_ioev(struct di_ioev *ev) {
 	if (ev->running) {
 		return;
@@ -92,7 +92,7 @@ static void di_start_ioev(struct di_ioev *ev) {
 
 /// Stop the event source
 ///
-/// EXPORT: deai.builtin.event:IoEv.stop(), :void
+/// EXPORT: deai.builtin.event:IoEv.stop(): :void
 static void di_stop_ioev(struct di_ioev *ev) {
 	if (!ev->running) {
 		return;
@@ -119,7 +119,7 @@ static void di_stop_ioev(struct di_ioev *ev) {
 
 /// Change monitored file descriptor events
 ///
-/// EXPORT: deai.builtin.event:IoEv.modify(flag: :integer), :void
+/// EXPORT: deai.builtin.event:IoEv.modify(flag: :integer): :void
 static void di_modify_ioev(struct di_ioev *ioev, unsigned int flags) {
 #ifdef ev_io_modify
 	ev_io_modify(&ioev->evh, flags);
@@ -185,7 +185,7 @@ static void di_ioev_dtor(struct di_object *obj) {
 
 /// File descriptor events
 ///
-/// EXPORT: event.fdevent(fd: :integer, flag: :integer), deai.builtin.event:IoEv
+/// EXPORT: event.fdevent(fd: :integer, flag: :integer): deai.builtin.event:IoEv
 ///
 /// Arguments:
 ///
@@ -287,7 +287,7 @@ static void di_timer_callback(EV_P_ ev_timer *t, int revents) {
 
 /// Timer events
 ///
-/// EXPORT: event.timer(timeout: :float), deai.builtin.event:Timer
+/// EXPORT: event.timer(timeout: :float): deai.builtin.event:Timer
 ///
 /// Arguments:
 ///
@@ -333,7 +333,7 @@ static void periodic_dtor(struct di_periodic *p) {
 
 /// Update timer interval and offset
 ///
-/// EXPORT: deai.builtin.event:Periodic.set(interval: :float, offset: :float), :void
+/// EXPORT: deai.builtin.event:Periodic.set(interval: :float, offset: :float): :void
 ///
 /// Timer will be reset after update.
 static void periodic_set(struct di_periodic *p, double interval, double offset) {
@@ -368,7 +368,7 @@ static void di_periodic_signal_deleter(struct di_object *o) {
 
 /// Periodic timer event
 ///
-/// EXPORT: event.periodic(interval: :float, offset: :float), deai.builtin.event:Periodic
+/// EXPORT: event.periodic(interval: :float, offset: :float): deai.builtin.event:Periodic
 ///
 /// A timer that first fire after :code:`offset` seconds, then every :code:`interval`
 /// seconds.
@@ -421,8 +421,6 @@ static void di_prepare(EV_P_ ev_prepare *w, int revents) {
 ///
 /// This encapsulates a pending value. Once this value become available, a "resolved"
 /// signal will be emitted with the value. Each promise should resolve only once ever.
-///
-/// SIGNAL: deai:Promise.resolved(result) The promise was resolved
 struct di_promise {
 	struct di_object;
 };
@@ -432,7 +430,7 @@ void di_resolve_promise(struct di_promise *promise, struct di_variant var);
 static void di_promise_then_impl(struct di_promise *promise, struct di_promise *then_promise,
                                  struct di_object *handler);
 
-int di_promise_dispatch(struct di_object *prepare_handler, di_type_t *rt,
+static int di_promise_dispatch(struct di_object *prepare_handler, di_type_t *rt,
                         union di_value *r, struct di_tuple args) {
 	di_object_with_cleanup promise_;
 	if (di_get(prepare_handler, "promise", promise_) != 0) {
@@ -515,7 +513,7 @@ int di_promise_dispatch(struct di_object *prepare_handler, di_type_t *rt,
 
 /// Create a new promise object
 ///
-/// EXPORT: event.new_promise(), deai:Promise
+/// EXPORT: event.new_promise(): deai:Promise
 struct di_object *di_new_promise(struct di_object *event_module) {
 	struct di_promise *ret = di_new_object_with_type(struct di_promise);
 	auto weak_event = di_weakly_ref_object(event_module);
@@ -585,7 +583,7 @@ static void di_promise_then_impl(struct di_promise *promise, struct di_promise *
 
 /// Chain computation to a promise
 ///
-/// EXPORT: deai:Promise.then(handler: :object), deai:Promise
+/// EXPORT: deai:Promise.then(handler: :object): deai:Promise
 ///
 /// Register a handler to be called after `promise` resolves, the handler will be called
 /// with the resolved value as argument.
@@ -597,7 +595,7 @@ static void di_promise_then_impl(struct di_promise *promise, struct di_promise *
 /// Note the handler will always be called after being registered, whether the
 /// promise returned by this function is freed or not.
 ///
-/// (this function is called "then_" in lua, since "then" is a keyword)
+/// (this function is called "then\_" in lua, since "then" is a keyword)
 struct di_object *di_promise_then(struct di_object *promise, struct di_object *handler) {
 	di_weak_object_with_cleanup weak_event = NULL;
 	if (di_get(promise, "___weak_event_module", weak_event) != 0) {
@@ -639,6 +637,8 @@ static void di_promise_collect_handler(int index, struct di_object *storage,
 }
 
 /// Create a promise that resolves when all given promises resolve
+///
+/// EXPORT: event.collect_promises(promises: [deai:Promise]): deai:Promise
 struct di_object *di_collect_promises(struct di_object *event_module, struct di_array promises) {
 	if (promises.elem_type != DI_TYPE_OBJECT) {
 		return di_new_error("promises must all be objects");
@@ -669,6 +669,8 @@ static void di_any_promise_handler(struct di_object *then, struct di_variant var
 }
 
 /// Create a promise that resolves when any of given promises resolve
+///
+/// EXPORT: event.any_promise(promises: [deai:Promise]): deai:Promise
 struct di_object *di_any_promise(struct di_object *event_module, struct di_array promises) {
 	if (promises.elem_type != DI_TYPE_OBJECT) {
 		return di_new_error("promises must all be objects");
@@ -699,7 +701,7 @@ void di_resolve_promise(struct di_promise *promise, struct di_variant var) {
 
 /// Core events
 ///
-/// EXPORT: event, deai:module
+/// EXPORT: event: deai:module
 ///
 /// Fundament event sources exposed by deai. This is the building blocks of other event
 /// sources.

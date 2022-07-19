@@ -207,7 +207,7 @@ static void keybinding_del_signal(const char *signal, struct di_object *obj) {
 }
 /// Add a new key binding
 ///
-/// EXPORT: deai.plugin.xorg:Key.new(modifiers, key, replay), deai.plugin.xorg.key:Binding
+/// EXPORT: deai.plugin.xorg:Key.new(modifiers, key, replay): deai.plugin.xorg.key:Binding
 ///
 /// Create a new event source that emits a signal when a given key binding is pressed or
 /// released.
@@ -410,7 +410,7 @@ void key_deregister_listener(struct xorg_key *k) {
 
 /// Key bindings
 ///
-/// EXPORT: deai.plugin.xorg:Connection.key, deai.plugin.xorg:Key
+/// EXPORT: deai.plugin.xorg:Connection.key: deai.plugin.xorg:Key
 ///
 /// Manage keyboard short cuts.
 struct di_xorg_ext *new_key(struct di_xorg_connection *dc) {

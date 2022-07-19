@@ -53,7 +53,7 @@ static void load_plugin_impl(struct deai *p, char *sopath) {
 
 /// Load a single plugin
 ///
-/// EXPORT: load_plugin(file: :string), :void
+/// EXPORT: load_plugin(file: :string): :void
 static void load_plugin(struct deai *p, struct di_string sopath) {
 	if (!sopath.data) {
 		return;
@@ -111,7 +111,7 @@ static int load_plugin_from_dir_impl(struct deai *di, const char *path) {
 
 /// Load plugins from a directory
 ///
-/// EXPORT: load_plugin_from_dir(path: :string), :integer
+/// EXPORT: load_plugin_from_dir(path: :string): :integer
 static int load_plugin_from_dir(struct deai *p, struct di_string path) {
 	if (!path.data) {
 		return -1;
@@ -126,7 +126,7 @@ static int load_plugin_from_dir(struct deai *p, struct di_string path) {
 
 /// Change working directory
 ///
-/// EXPORT: chdir(dir: :string), :integer
+/// EXPORT: chdir(dir: :string): :integer
 int di_chdir(struct di_object *p, struct di_string dir) {
 	if (!dir.data) {
 		return -EINVAL;
@@ -306,7 +306,7 @@ void di_dtor(struct deai *di) {
 
 /// Exit deai
 ///
-/// EXPORT: exit(exit_code: :integer), :void
+/// EXPORT: exit(exit_code: :integer): :void
 ///
 /// Instruct deai to exit. deai won't exit immediately when the function is called, it
 /// will exit next time the control returns to the mainloop. (e.g. after your script
@@ -319,7 +319,7 @@ void di_prepare_exit(struct deai *di, int ec) {
 
 /// Exit deai
 ///
-/// EXPORT: quit(), :void
+/// EXPORT: quit(): :void
 ///
 /// Equivalent to :code:`exit(0)`
 void di_prepare_quit(struct deai *di) {
@@ -412,7 +412,7 @@ int di_register_module(struct deai *p, struct di_string name, struct di_module *
 
 /// Register a module
 ///
-/// EXPORT: register_module(name: :string, module: deai:module), :integer
+/// EXPORT: register_module(name: :string, module: deai:module): :integer
 static int
 di_register_module_method(struct deai *p, struct di_string name, struct di_module *m) {
 	// Don't consumer the ref, because it breaks the usual method call sementics
@@ -421,7 +421,7 @@ di_register_module_method(struct deai *p, struct di_string name, struct di_modul
 
 /// Execute another binary
 ///
-/// EXPORT: exec(argv: [:string]), :integer
+/// EXPORT: exec(argv: [:string]): :integer
 ///
 /// This call replaces the current process by running another binary. One use case for
 /// this is to restart deai.

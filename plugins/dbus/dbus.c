@@ -201,7 +201,7 @@ call_dbus_method(struct di_object *m, di_type_t *rt, union di_value *ret, struct
 
 /// Call the dbus method with a signature
 ///
-/// EXPORT: deai.plugin.dbus:DBusMethod.call_with_signature(dbus_object, signature, ...),
+/// EXPORT: deai.plugin.dbus:DBusMethod.call_with_signature(dbus_object, signature, ...):
 /// deai.plugin.dbus:DBusPendingReply
 ///
 /// Arguments:
@@ -353,8 +353,7 @@ static void di_dbus_name_change_handler(struct di_weak_object *wo, struct di_str
 
 /// Send a message to dbus
 ///
-/// EXPORT: dbus.session_bus.send(type, bus, object_path, interface, method, signature,
-/// args), :integer
+/// EXPORT: dbus.session_bus.send(type, bus, object_path, interface, method, signature, args): :integer
 ///
 /// Arguments:
 ///
@@ -406,7 +405,7 @@ static void di_dbus_object_set_owner(struct di_object *o, struct di_string owner
 
 /// Get a DBus object
 ///
-/// EXPORT: dbus.session_bus.get(destionation: :string, object_path: :string), deai.plugin.dbus:DBusObject
+/// EXPORT: dbus.session_bus.get(destionation: :string, object_path: :string): deai.plugin.dbus:DBusObject
 ///
 /// (Note: getting properties are not implemented yet, but you can call
 /// org.freedesktop.DBus.Properties.Get manually)
@@ -835,7 +834,7 @@ static void di_dbus_del_signal(di_dbus_connection *c, struct di_string member_na
 
 /// DBus session bus
 ///
-/// EXPORT: dbus.session_bus, deai.plugin.dbus:DBusConnection
+/// EXPORT: dbus.session_bus: deai.plugin.dbus:DBusConnection
 ///
 /// A connection to the DBus session bus.
 static struct di_object *di_dbus_get_session_bus(struct di_object *o) {
@@ -930,7 +929,7 @@ static void di_dbus_unit_tests(struct di_object *unused obj) {
 
 /// D-Bus
 ///
-/// EXPORT: dbus, deai:module
+/// EXPORT: dbus: deai:module
 ///
 /// **D-Bus types**
 ///

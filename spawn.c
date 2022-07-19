@@ -146,14 +146,14 @@ static void output_cb(struct di_object *obj, int id) {
 
 /// Pid of the child process
 ///
-/// EXPORT: deai.builtin.spawn:ChildProcess.pid, :integer
+/// EXPORT: deai.builtin.spawn:ChildProcess.pid: :integer
 static uint64_t get_child_pid(struct child *c) {
 	return (uint64_t)c->pid;
 }
 
 /// Send signal to child process
 ///
-/// EXPORT: deai.builtin.spawn:ChildProcess.kill(signal: :integer), :void
+/// EXPORT: deai.builtin.spawn:ChildProcess.kill(signal: :integer): :void
 static void kill_child(struct child *c, int sig) {
 	kill(c->pid, sig);
 }
@@ -314,7 +314,7 @@ static void di_child_process_delete_stderr_signal(struct di_object *obj) {
 
 /// Start a child process
 ///
-/// EXPORT: spawn.run(argv, ignore_output: :bool), deai.builtin.spawn:ChildProcess
+/// EXPORT: spawn.run(argv, ignore_output: :bool): deai.builtin.spawn:ChildProcess
 ///
 /// Arguments:
 ///
@@ -405,7 +405,7 @@ struct di_object *di_spawn_run(struct di_spawn *p, struct di_array argv, bool ig
 
 /// Spawn child processes
 ///
-/// EXPORT: spawn, deai:module
+/// EXPORT: spawn: deai:module
 void di_init_spawn(struct deai *di) {
 	// Become subreaper
 #ifdef __FreeBSD__

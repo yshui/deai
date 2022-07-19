@@ -798,7 +798,7 @@ struct di_listen_handle {
 
 /// Stop the handler
 ///
-/// EXPORT: deai:ListenHandle.stop(), :void
+/// EXPORT: deai:ListenHandle.stop(): :void
 ///
 /// After calling this the signal handler will stop from being called.
 static void di_listen_handle_stop(struct di_object *nonnull obj) {
@@ -830,7 +830,7 @@ static void di_listen_handle_dtor(struct di_object *obj) {
 
 /// Set whether listener should be stopped when the handle is dropped.
 ///
-/// EXPORT: deai:ListenHandle.auto_stop(stop: :bool), :void
+/// EXPORT: deai:ListenHandle.auto_stop(stop: :bool): :void
 static void di_listen_handle_auto_stop(struct di_object *obj, int stop_) {
 	bool stop = stop_ != 0;
 	di_setx(obj, di_string_borrow_literal("stop_on_drop"), DI_TYPE_BOOL, &stop);

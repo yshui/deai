@@ -444,7 +444,7 @@ mod parsers {
     pub(crate) fn export_line(s: &str) -> IResult<&str, Entry> {
         preceded(
             tuple((tag("EXPORT:"), space0)),
-            tuple((terminated(declaration, tag2(",")), alt((array_type, base_type)))),
+            tuple((terminated(declaration, tag2(":")), alt((array_type, base_type)))),
         )(s)
         .map(|(i, ((path, params), o2))| {
             (i, Entry { path, params, ty: Some(o2), doc: None, children: Default::default() })
@@ -590,7 +590,6 @@ impl Docs {
     }
     fn handle_comment(&mut self, comment: &Comment) {
         let ret = self.handle_comment_inner(comment);
-        log::debug!("{:?}", ret);
         if let Err(e) = ret {
             self.has_error = true;
             log::error!("{}", e);
@@ -831,17 +830,9 @@ impl Docs {
                             .references
                             .iter()
                             .map(|ref_| match ref_ {
-                                a @ Access::Ancestry { .. } => self
-                                    .with_entry(&a.parent().unwrap(), |e| match e {
-                                        Either::Left(e) => format!(
-                                            ":lua:meth:`{} <{}.{}>`",
-                                            a,
-                                            e.ty.as_ref().unwrap().rst_display(),
-                                            a.base_name()
-                                        ),
-                                        _ => panic!(),
-                                    })
-                                    .unwrap(),
+                                a @ Access::Ancestry { .. } => {
+                                    format!(":lua:meth:`{a} <{a}>`", a = a)
+                                }
                                 Access::Member { ty, member } => format!(
                                     ":lua:attr:`{}.{member} <{}.{member}>`",
                                     ty.simple_display(),

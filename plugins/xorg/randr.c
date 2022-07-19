@@ -40,26 +40,26 @@ struct di_xorg_output_info {
 	struct di_object;
 	/// Width in millimeters
 	///
-	/// EXPORT: deai.plugin.xorg.randr:OutputInfo.mm_width, :unsigned
+	/// EXPORT: deai.plugin.xorg.randr:OutputInfo.mm_width: :unsigned
 	unsigned int mm_width;
 	/// Height in millimeters
 	///
-	/// EXPORT: deai.plugin.xorg.randr:OutputInfo.mm_height, :unsigned
+	/// EXPORT: deai.plugin.xorg.randr:OutputInfo.mm_height: :unsigned
 	unsigned int mm_height;
 	/// Connection
 	///
-	/// EXPORT: deai.plugin.xorg.randr:OutputInfo.connection, :integer
+	/// EXPORT: deai.plugin.xorg.randr:OutputInfo.connection: :integer
 	///
 	/// `Possible values
 	/// <https://gitlab.freedesktop.org/xorg/proto/xorgproto/-/blob/09602b2/randrproto.txt#L2505-2510>`_
 	int connection;
 	/// Subpixel order
 	///
-	/// EXPORT: deai.plugin.xorg.randr:OutputInfo.subpixel_order, :integer
+	/// EXPORT: deai.plugin.xorg.randr:OutputInfo.subpixel_order: :integer
 	int subpixel_order;
 	/// Name
 	///
-	/// EXPORT: deai.plugin.xorg.randr:OutputInfo.name, :string
+	/// EXPORT: deai.plugin.xorg.randr:OutputInfo.name: :string
 	const char *name;
 };
 
@@ -81,44 +81,44 @@ struct di_xorg_mode {
 
 	/// Mode id
 	///
-	/// EXPORT: deai.plugin.xorg.randr:Mode.id, :unsigned
+	/// EXPORT: deai.plugin.xorg.randr:Mode.id: :unsigned
 	unsigned int id;
 	/// Width
 	///
-	/// EXPORT: deai.plugin.xorg.randr:Mode.width, :unsigned
+	/// EXPORT: deai.plugin.xorg.randr:Mode.width: :unsigned
 	unsigned int width;
 	/// Height
 	///
-	/// EXPORT: deai.plugin.xorg.randr:Mode.height, :unsigned
+	/// EXPORT: deai.plugin.xorg.randr:Mode.height: :unsigned
 	unsigned int height;
 };
 
 /// TYPE: deai.plugin.xorg.randr:ViewConfig
 struct di_xorg_view_config {
 	struct di_object;
-	/// EXPORT: deai.plugin.xorg.randr:ViewConfig.x, :integer
+	/// EXPORT: deai.plugin.xorg.randr:ViewConfig.x: :integer
 	///
 	/// X offset
 	///
-	/// EXPORT: deai.plugin.xorg.randr:ViewConfig.y, :integer
+	/// EXPORT: deai.plugin.xorg.randr:ViewConfig.y: :integer
 	///
 	/// Y offset
 	int64_t x, y;
-	/// EXPORT: deai.plugin.xorg.randr:ViewConfig.width, :integer
+	/// EXPORT: deai.plugin.xorg.randr:ViewConfig.width: :integer
 	///
 	/// Width
 	///
-	/// EXPORT: deai.plugin.xorg.randr:ViewConfig.height, :integer
+	/// EXPORT: deai.plugin.xorg.randr:ViewConfig.height: :integer
 	///
 	/// Height
 	uint64_t width, height;
-	/// EXPORT: deai.plugin.xorg.randr:ViewConfig.rotation, :unsigned
+	/// EXPORT: deai.plugin.xorg.randr:ViewConfig.rotation: :unsigned
 	///
 	/// Rotation
 	///
 	/// 0, 1, 2, 3 means rotating 0, 90, 180, 270 degrees respectively.
 	///
-	/// EXPORT: deai.plugin.xorg.randr:ViewConfig.reflection, :unsigned
+	/// EXPORT: deai.plugin.xorg.randr:ViewConfig.reflection: :unsigned
 	///
 	/// Reflection
 	///
@@ -143,7 +143,7 @@ static void free_output_info(struct di_object *o) {
 
 /// Output info
 ///
-/// EXPORT: deai.plugin.xorg.randr:Output.info, deai.plugin.xorg.randr:OutputInfo
+/// EXPORT: deai.plugin.xorg.randr:Output.info: deai.plugin.xorg.randr:OutputInfo
 static struct di_object *get_output_info(struct di_xorg_output *o) {
 	with_object_cleanup(di_xorg_connection) dc = NULL;
 	if (get_xorg_connection((struct di_xorg_ext *)o->rr, &dc) != 0) {
@@ -179,7 +179,7 @@ static struct di_object *get_output_info(struct di_xorg_output *o) {
 
 /// Output view
 ///
-/// EXPORT: deai.plugin.xorg.randr:Output.view, deai.plugin.xorg.randr:View
+/// EXPORT: deai.plugin.xorg.randr:Output.view: deai.plugin.xorg.randr:View
 ///
 /// A "view" is the portion of the overall Xorg screen that's displayed on this output.
 static struct di_object *get_output_view(struct di_xorg_output *o) {
@@ -198,7 +198,7 @@ static struct di_object *get_output_view(struct di_xorg_output *o) {
 
 /// View config
 ///
-/// EXPORT: deai.plugin.xorg.randr:View.config, deai.plugin.xorg.randr:ViewConfig
+/// EXPORT: deai.plugin.xorg.randr:View.config: deai.plugin.xorg.randr:ViewConfig
 ///
 /// The size, offset, and rotation settings of this view. This is read/write so you can,
 /// say, change your screen resolution by changing the view config.
@@ -323,7 +323,7 @@ retry:
 
 /// Backlight level
 ///
-/// EXPORT: deai.plugin.xorg.randr:Output.backlight, :integer
+/// EXPORT: deai.plugin.xorg.randr:Output.backlight: :integer
 ///
 /// Read/write property for getting/setting the screen backlight level. Check
 /// :lua:attr:`max_backlight` for the largest possible level.
@@ -375,7 +375,7 @@ static void set_output_backlight(struct di_xorg_output *o, int bkl) {
 
 /// Max possible backlight level
 ///
-/// EXPORT: deai.plugin.xorg.randr:Output.max_backlight, :integer
+/// EXPORT: deai.plugin.xorg.randr:Output.max_backlight: :integer
 static int get_output_max_backlight(struct di_xorg_output *o) {
 	with_object_cleanup(di_xorg_connection) dc = NULL;
 	if (get_xorg_connection((struct di_xorg_ext *)o->rr, &dc) != 0) {
@@ -430,7 +430,7 @@ make_object_for_output(struct di_xorg_randr *rr, xcb_randr_output_t oid) {
 
 /// View outputs
 ///
-/// EXPORT: deai.plugin.xorg.randr:View.outputs, [deai.plugin.xorg.randr:Output]
+/// EXPORT: deai.plugin.xorg.randr:View.outputs: [deai.plugin.xorg.randr:Output]
 ///
 /// A list of outputs that is connected to this view.
 static struct di_array get_view_outputs(struct di_xorg_view *v) {
@@ -572,7 +572,7 @@ static void disable_randr_event(struct di_xorg_randr *rr, uint16_t mask) {
 
 /// Outputs
 ///
-/// EXPORT: deai.plugin.xorg:RandrExt.outputs, [deai.plugin.xorg.randr:Output]
+/// EXPORT: deai.plugin.xorg:RandrExt.outputs: [deai.plugin.xorg.randr:Output]
 ///
 /// Generally, outputs are what we would call monitors.
 static struct di_array rr_outputs(struct di_xorg_randr *rr) {
@@ -621,7 +621,7 @@ make_object_for_modes(struct di_xorg_randr *rr, xcb_randr_mode_info_t *m) {
 
 /// Available modes from RandR
 ///
-/// EXPORT: deai.plugin.xorg:RandrExt.modes, [deai.plugin.xorg.randr:Mode]
+/// EXPORT: deai.plugin.xorg:RandrExt.modes: [deai.plugin.xorg.randr:Mode]
 static struct di_array rr_modes(struct di_xorg_randr *rr) {
 	struct di_array ret = DI_ARRAY_INIT;
 	with_object_cleanup(di_xorg_connection) dc = NULL;
@@ -660,7 +660,7 @@ static void free_randr(struct di_object *x) {
 
 /// RandR extension
 ///
-/// EXPORT: deai.plugin.xorg:Connection.randr, deai.plugin.xorg:RandrExt
+/// EXPORT: deai.plugin.xorg:Connection.randr: deai.plugin.xorg:RandrExt
 struct di_xorg_ext *new_randr(struct di_xorg_connection *dc) {
 	char *extname = "RANDR";
 	if (!xorg_has_extension(dc->c, extname)) {

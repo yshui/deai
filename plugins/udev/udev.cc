@@ -67,7 +67,7 @@ struct DeviceProperties {
 
 /// udev device properties
 ///
-/// EXPORT: deai.plugin.udev:Device.properties, deai.plugin.udev:DeviceProperties
+/// EXPORT: deai.plugin.udev:Device.properties: deai.plugin.udev:DeviceProperties
 ///
 /// A proxy object for udev device properties. Property names are the same ones you can
 /// see from running :code:`udevadm info`.
@@ -98,7 +98,7 @@ public:
 	static constexpr const char *type [[maybe_unused]] = "deai.plugin.udev:Module";
 	/// Create a device object from a device node
 	///
-	/// EXPORT: udev.device_from_dev_node(path: :string), deai.plugin.udev:Device
+	/// EXPORT: udev.device_from_dev_node(path: :string): deai.plugin.udev:Device
 	auto device_from_dev_node(std::string_view dev_node) -> Ref<Object> {
 		auto context = get_or_create_context();
 		auto &context_inner = util::unsafe_to_inner<Context>(context);
@@ -118,7 +118,7 @@ public:
 
 /// udev
 ///
-/// EXPORT: udev, deai:module
+/// EXPORT: udev: deai:module
 ///
 /// Interface to the udev Linux subsystem. This is very much work in progress.
 auto di_new_udev(::deai::Ref<::deai::Core> &di) {

@@ -128,7 +128,7 @@ next:
 
 /// Add a file
 ///
-/// EXPORT: deai.plugin.file:Watch.add_one(path: :string), :integer
+/// EXPORT: deai.plugin.file:Watch.add_one(path: :string): :integer
 ///
 /// Add a single new file to a watch, returns 0 if successful.
 static int di_file_add_watch(struct di_file_watch *fw, struct di_string path) {
@@ -153,7 +153,7 @@ static int di_file_add_watch(struct di_file_watch *fw, struct di_string path) {
 
 /// Add files
 ///
-/// EXPORT: deai.plugin.file:Watch.add(paths: [:string]), :integer
+/// EXPORT: deai.plugin.file:Watch.add(paths: [:string]): :integer
 ///
 /// Add new files to a watch, returns 0 if successful.
 static int di_file_add_many_watch(struct di_file_watch *fw, struct di_array paths) {
@@ -186,7 +186,7 @@ static int di_file_add_many_watch(struct di_file_watch *fw, struct di_array path
 
 /// Remove a file
 ///
-/// EXPORT: deai.plugin.file:Watch.remove(path: :string), :integer
+/// EXPORT: deai.plugin.file:Watch.remove(path: :string): :integer
 ///
 /// Returns 0 if successful. If the file is not in the watch, return :code:`-ENOENT`.
 static int di_file_rm_watch(struct di_file_watch *fw, struct di_string path) {
@@ -274,7 +274,7 @@ static void di_file_delete_signal(struct di_object *fw_, struct di_string member
 
 /// Create a new file watch
 ///
-/// EXPORT: file.watch(paths), deai.plugin.file:Watch
+/// EXPORT: file.watch(paths): deai.plugin.file:Watch
 ///
 /// The returned watch is set to monitor a given set of file from the start. But this set
 /// can be changed later.
@@ -317,7 +317,7 @@ static struct di_object *di_file_new_watch(struct di_module *f, struct di_array 
 
 /// File events
 ///
-/// EXPORT: file, deai:module
+/// EXPORT: file: deai:module
 ///
 /// This module allows you to create event sources for monitoring file changes.
 static struct di_module *di_new_file(struct deai *di) {

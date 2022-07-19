@@ -150,7 +150,7 @@ xcb_input_get_device_info(xcb_connection_t *c, xcb_input_device_id_t deviceid,
 
 /// Name of the device
 ///
-/// EXPORT: deai.plugin.xorg.xi:Device.name, :string
+/// EXPORT: deai.plugin.xorg.xi:Device.name: :string
 static struct di_string di_xorg_xinput_get_device_name(struct di_xorg_xinput_device *dev) {
 	with_object_cleanup(di_xorg_connection) dc = NULL;
 	if (get_xorg_connection((void *)dev->xi, &dc) != 0) {
@@ -168,7 +168,7 @@ static struct di_string di_xorg_xinput_get_device_name(struct di_xorg_xinput_dev
 
 /// Use of the device
 ///
-/// EXPORT: deai.plugin.xorg.xi:Device.use, :string
+/// EXPORT: deai.plugin.xorg.xi:Device.use: :string
 ///
 /// As reported by X, possible values are: "master keyboard", "master pointer",
 /// "keyboard", "pointer", or "unknown"
@@ -211,7 +211,7 @@ const char *possible_types[] = {
 
 /// Type of the device
 ///
-/// EXPORT: deai.plugin.xorg.xi:Device.type, :string
+/// EXPORT: deai.plugin.xorg.xi:Device.type: :string
 ///
 /// As reported by X, `possible values
 /// <https://gitlab.freedesktop.org/xorg/proto/xorgproto/-/blob/09602b2/specs/XIproto.txt#L361-380>`_.
@@ -521,7 +521,7 @@ di_xorg_xinput_get_prop(struct di_xorg_xinput_device *dev, struct di_string name
 
 /// Property of the device
 ///
-/// EXPORT: deai.plugin.xorg.xi:Device.props, :object
+/// EXPORT: deai.plugin.xorg.xi:Device.props: :object
 ///
 /// This is a proxy object that allows you to get and set properties of a X device.
 /// Accessing members of this object will read from device property, writing to members of
@@ -574,7 +574,7 @@ static struct di_object *di_xorg_make_object_for_devid(struct di_xorg_xinput *xi
 
 /// All XInput devices
 ///
-/// EXPORT: deai.plugin.xorg:XiExt.devices, [deai.plugin.xorg.xi:Device]
+/// EXPORT: deai.plugin.xorg:XiExt.devices: [deai.plugin.xorg.xi:Device]
 static struct di_array di_xorg_get_all_devices(struct di_xorg_xinput *xi) {
 	with_object_cleanup(di_xorg_connection) dc = NULL;
 	if (get_xorg_connection((struct di_xorg_ext *)xi, &dc) != 0) {
@@ -662,7 +662,7 @@ static int handle_xinput_event(struct di_xorg_xinput *xi, xcb_generic_event_t *e
 
 /// XInput extension
 ///
-/// EXPORT: deai.plugin.xorg:Connection.xinput, deai.plugin.xorg:XiExt
+/// EXPORT: deai.plugin.xorg:Connection.xinput: deai.plugin.xorg:XiExt
 struct di_xorg_ext *new_xinput(struct di_xorg_connection *dc) {
 	char *extname = "XInputExtension";
 	if (!xorg_has_extension(dc->c, extname)) {

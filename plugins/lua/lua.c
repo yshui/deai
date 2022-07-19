@@ -590,7 +590,7 @@ define_object_cleanup(di_lua_state);
 
 /// Load a lua script
 ///
-/// EXPORT: lua.load_script(path: :string), deai.plugin.lua:LuaScript
+/// EXPORT: lua.load_script(path: :string): deai.plugin.lua:LuaScript
 ///
 /// Arguments:
 ///
@@ -921,7 +921,7 @@ struct di_signal_handler_wrapper {
 
 static int call_lua_signal_handler_once(struct di_object *obj, di_type_t *rt,
                                         union di_value *ret, struct di_tuple t);
-/// EXPORT: deai.plugin.lua:Proxy.on(signal: :string, callback), deai:ListenHandle
+/// EXPORT: deai.plugin.lua:Proxy.on(signal: :string, callback): deai:ListenHandle
 ///
 /// Listen for signals
 ///
@@ -930,7 +930,7 @@ static int call_lua_signal_handler_once(struct di_object *obj, di_type_t *rt,
 ///
 /// If the handle is garbage collected, the listener will be left running forever.
 ///
-/// EXPORT: deai.plugin.lua:Proxy.once(signal: :string, callback), deai:ListenHandle
+/// EXPORT: deai.plugin.lua:Proxy.once(signal: :string, callback): deai:ListenHandle
 ///
 /// Listen for signals only once
 ///
@@ -1269,7 +1269,7 @@ static int di_lua_meta_newindex(lua_State *L) {
 
 /// Lua scripting
 ///
-/// EXPORT: lua, deai:module
+/// EXPORT: lua: deai:module
 ///
 /// **Accessing deai modules**
 ///

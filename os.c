@@ -57,11 +57,11 @@ static const char *di_get_hostname(struct deai *p) {
 	return strdup(buf.nodename);
 }
 
-/// EXPORT: os, deai:module
+/// EXPORT: os: deai:module
 ///
 /// OS environment
 ///
-/// EXPORT: os.env, deai.builtin.os:Env
+/// EXPORT: os.env: deai.builtin.os:Env
 ///
 /// Environment variables
 ///

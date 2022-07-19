@@ -121,7 +121,7 @@ static void file_target_dtor(struct log_file *lf) {
 
 /// Log target for file
 ///
-/// EXPORT: log.file_target(filename: :string, overwrite: :bool), deai.builtin.log:FileTarget
+/// EXPORT: log.file_target(filename: :string, overwrite: :bool): deai.builtin.log:FileTarget
 ///
 /// Create a log target that writes to a file.
 static struct di_object *
@@ -156,7 +156,7 @@ file_target(struct di_log *l, struct di_string filename, bool overwrite) {
 
 /// Log target for stderr
 ///
-/// EXPORT: log.stderr_target(), deai.builtin.log:StderrTarget
+/// EXPORT: log.stderr_target(): deai.builtin.log:StderrTarget
 ///
 /// Create a log target that writes to stderr.
 static struct di_object *stderr_target(struct di_log *unused l) {
@@ -204,7 +204,7 @@ int di_log_va(struct di_object *o, int log_level, const char *fmt, ...) {
 
 /// Log level
 ///
-/// EXPORT: log.log_level, :string
+/// EXPORT: log.log_level: :string
 ///
 /// Read/write property for log level. Possible values are: "error", "warn", "info", "debug"
 static const char *get_log_level(struct di_log *l) {
@@ -230,14 +230,14 @@ struct di_object *log_module = NULL;
 void log_dtor(struct di_object *unused _) {
 	log_module = NULL;
 }
-/// EXPORT: log, deai:module
+/// EXPORT: log: deai:module
 ///
 /// Logging
 ///
 /// This module can also be called like a method, it takes 2 arguments, the log level and
 /// the log string, and log them to the log target.
 ///
-/// EXPORT: log.log_target, :object
+/// EXPORT: log.log_target: :object
 ///
 /// Log target
 ///
