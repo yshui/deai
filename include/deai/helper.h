@@ -135,7 +135,7 @@ di_redirect_signal(struct di_object *nonnull us, struct di_weak_object *nonnull 
 	                  di_tuple caps, VA_ARGS_LENGTH(__VA_ARGS__),                         \
 	                  (di_type_t[]){LIST_APPLY(di_typeid, SEP_COMMA, __VA_ARGS__)})
 
-#define _di_getm(di_expr, modn, on_err)                                                  \
+#define di_getm(di_expr, modn, on_err)                                                  \
 	object_cleanup struct di_object *modn##m = NULL;                                 \
 	do {                                                                             \
 		int rc = 0;                                                              \
@@ -152,9 +152,9 @@ di_redirect_signal(struct di_object *nonnull us, struct di_weak_object *nonnull 
 	} while (0)
 
 #define di_mgetm(mod, modn, on_err)                                                      \
-	_di_getm(di_module_get_deai((struct di_module *)(mod)), modn, return (on_err))
+	di_getm(di_module_get_deai((struct di_module *)(mod)), modn, return (on_err))
 #define di_mgetmi(mod, modn)                                                             \
-	_di_getm(di_module_get_deai((struct di_module *)(mod)), modn, break)
+	di_getm(di_module_get_deai((struct di_module *)(mod)), modn, break)
 
 // call but ignore return
 #define di_call(o, name, ...)                                                            \

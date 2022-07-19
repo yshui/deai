@@ -2,6 +2,7 @@
 #include <stdio.h>
 
 #include <deai/builtins/event.h>
+#include <deai/builtins/log.h>
 #include <deai/deai.h>
 #include <deai/helper.h>
 #include <dbus/dbus.h>
@@ -139,6 +140,8 @@ dbus_call_method(di_dbus_object *dobj, struct di_string iface, struct di_string 
 		return di_new_error("DBus connection gone");
 	}
 
+	di_getm(di_object_get_deai_strong(conn), event, di_new_error(""));
+
 	int64_t serial;
 	int rc;
 	if ((rc = di_callr(conn, "send", serial, di_string_borrow_literal("method"),
@@ -147,15 +150,12 @@ dbus_call_method(di_dbus_object *dobj, struct di_string iface, struct di_string 
 		return di_new_error("Failed to send %d %d", serial, rc);
 	}
 
-	auto p = di_new_object_with_type(struct di_object);
-	di_set_type(p, "deai.plugin.dbus:DBusPendingReply");
+	auto promise = di_new_promise(eventm);
+	di_string_with_cleanup promise_name =
+	    di_string_printf("promise_for_request_%ld", serial);
+	di_add_member_clonev(conn, promise_name, DI_TYPE_OBJECT, promise);
 
-	/// Forward signals from connection
-	di_string_with_cleanup reply_source = di_string_printf("reply_for_request_%ld", serial);
-	di_string_with_cleanup error_source = di_string_printf("error_for_request_%ld", serial);
-	di_redirect_signal(p, weak_conn, di_string_borrow_literal("reply"), reply_source);
-	di_redirect_signal(p, weak_conn, di_string_borrow_literal("error"), error_source);
-	return p;
+	return promise;
 }
 
 static void di_free_dbus_object(struct di_object *o) {
@@ -395,12 +395,31 @@ static int64_t di_dbus_send_message(struct di_object *o, struct di_string type,
 	return serial;
 }
 
-static void di_dbus_object_set_owner(struct di_object *o, struct di_string owner) {
+static void di_dbus_object_set_owner(struct di_object *o, struct di_tuple data) {
+	if (data.length != 2 || data.elements[0].type != DI_TYPE_BOOL ||
+	    data.elements[1].type != DI_TYPE_TUPLE) {
+		// Promise resolved with the wrong type
+		return;
+	}
+	auto payload = data.elements[1].value->tuple;
+	if (data.elements[0].value->bool_) {
+		// Is error
+		if (payload.length >= 1 && payload.elements[0].type == DI_TYPE_STRING) {
+			auto msg = payload.elements[0].value->string;
+			di_log_va(log_module, DI_LOG_ERROR, "GetNameOwner failed %.*s",
+			          (int)msg.length, msg.data);
+		}
+		return;
+	}
+	if (payload.length != 1 || payload.elements[0].type != DI_TYPE_STRING) {
+		di_log_va(log_module, DI_LOG_ERROR, "GetNameOwner returned wrong type");
+		return;
+	}
 	if (di_has_member(o, "___bus_owner")) {
 		// We could've gotten a name change signal before GetNameOwner returned.
 		return;
 	}
-	DI_CHECK_OK(di_member_clone(o, "___bus_owner", owner));
+	DI_CHECK_OK(di_member_clone(o, "___bus_owner", payload.elements[0].value->string));
 }
 
 /// Get a DBus object
@@ -421,6 +440,8 @@ static void di_dbus_object_set_owner(struct di_object *o, struct di_string owner
 /// For how DBus types map to deai type, see :lua:mod:`dbus` for more details.
 static struct di_object *
 di_dbus_get_object(struct di_object *o, struct di_string bus, struct di_string obj) {
+	di_getm(di_object_get_deai_strong(o), event, di_new_error(""));
+
 	auto ret = di_new_object_with_type(di_dbus_object);
 	di_set_type((struct di_object *)ret, "deai.plugin.dbus:DBusObject");
 
@@ -472,13 +493,12 @@ di_dbus_get_object(struct di_object *o, struct di_string bus, struct di_string o
 
 	{
 		di_closure_with_cleanup set_owner = di_closure(
-		    di_dbus_object_set_owner, ((struct di_object *)ret), struct di_string);
-		di_string_with_cleanup reply_signal_name =
-		    di_string_printf("reply_for_request_%ld", serial);
-		auto lh2 =
-		    di_listen_to(o, reply_signal_name, (void *)set_owner);
-		DI_CHECK_OK(di_call(lh2, "auto_stop", true));
-		DI_CHECK_OK(di_member(ret, "___get_name_owner_reply_auto_handle", lh2));
+		    di_dbus_object_set_owner, ((struct di_object *)ret), struct di_tuple);
+		di_string_with_cleanup promise_name =
+		    di_string_printf("promise_for_request_%ld", serial);
+		auto promise = di_new_promise(eventm);
+		di_promise_then(promise, (void *)set_owner);
+		di_add_member_move(o, promise_name, (di_type_t[]){DI_TYPE_OBJECT}, &promise);
 	}
 	di_method(ret, "__get", di_dbus_object_getter, struct di_string);
 	di_method(ret, "__set", di_dbus_object_new_signal, struct di_string, struct di_object *);
@@ -723,21 +743,15 @@ static DBusHandlerResult dbus_filter(DBusConnection *conn, DBusMessage *msg, voi
 
 	if (type == DBUS_MESSAGE_TYPE_ERROR || type == DBUS_MESSAGE_TYPE_METHOD_RETURN) {
 		auto serial = dbus_message_get_reply_serial(msg);
-		di_string_with_cleanup sig = DI_STRING_INIT;
-		if (type == DBUS_MESSAGE_TYPE_ERROR) {
-			sig = di_string_printf("error_for_request_%u", serial);
-		} else {
-			sig = di_string_printf("reply_for_request_%u", serial);
+		di_string_with_cleanup promise_name =
+		    di_string_printf("promise_for_request_%u", serial);
+		bool is_error = (type == DBUS_MESSAGE_TYPE_ERROR);
+		di_object_with_cleanup promise = NULL;
+		if (di_getxt(ud, promise_name, DI_TYPE_OBJECT, (union di_value *)&promise) == 0) {
+			auto packed_args = di_tuple(is_error, t);
+			di_resolve_promise((void *)promise, di_variant(packed_args));
+			di_remove_member(obj, promise_name);
 		}
-		di_emitn(ud, sig, t);
-		// Remove the signal objects so the listener won't be confused if the
-		// serial got reused. Same for the other one
-		di_string_with_cleanup error_sig_member =
-		    di_string_printf("__signal_error_for_request_%u", serial);
-		di_string_with_cleanup reply_sig_member =
-		    di_string_printf("__signal_reply_for_request_%u", serial);
-		di_remove_member(obj, reply_sig_member);
-		di_remove_member(obj, error_sig_member);
 		return DBUS_HANDLER_RESULT_HANDLED;
 	}
 
@@ -859,6 +873,7 @@ static struct di_object *di_dbus_get_session_bus(struct di_object *o) {
 	di_set_type((struct di_object *)ret, "deai.plugin.dbus:DBusConnection");
 
 	ret->conn = conn;
+	// TODO(yshui): keep deai alive only when there are listeners or pending replies.
 	di_member(ret, DEAI_MEMBER_NAME_RAW, di);
 
 	di_method(ret, "send", di_dbus_send_message, struct di_string, struct di_string,

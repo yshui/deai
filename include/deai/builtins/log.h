@@ -20,3 +20,5 @@ enum di_log_level {
 PUBLIC_DEAI_API __attribute__((format(printf, 3, 4))) int
 di_log_va(struct di_object *nonnull o, int log_level, const char *nonnull fmt, ...);
 PUBLIC_DEAI_API int di_set_log_level(struct di_object *nonnull o, int log_level);
+
+PUBLIC_DEAI_API extern struct di_object *nullable log_module;
