@@ -233,7 +233,7 @@ union di_value {
 };
 
 /// Return the roots registry. ref/unref-ing the roots are not needed
-PUBLIC_DEAI_API struct di_object *di_get_roots(void);
+PUBLIC_DEAI_API struct di_object *nonnull di_get_roots(void);
 
 /// Fetch member object `name` from object `o`, then call the member object with `args`.
 ///
@@ -407,7 +407,7 @@ PUBLIC_DEAI_API void frees(malloc, 1) di_unref_object(struct di_object *nonnull)
 PUBLIC_DEAI_API void di_set_object_dtor(struct di_object *nonnull, di_dtor_fn_t nullable);
 PUBLIC_DEAI_API void di_set_object_call(struct di_object *nonnull, di_call_fn_t nullable);
 PUBLIC_DEAI_API bool di_is_object_callable(struct di_object *nonnull);
-PUBLIC_DEAI_API struct di_array di_get_all_member_names_raw(struct di_object *obj_);
+PUBLIC_DEAI_API struct di_array di_get_all_member_names_raw(struct di_object *nonnull obj_);
 
 PUBLIC_DEAI_API void di_free_tuple(struct di_tuple);
 PUBLIC_DEAI_API void di_free_array(struct di_array);
@@ -425,7 +425,7 @@ PUBLIC_DEAI_API void di_copy_value(di_type_t t, void *nullable dst, const void *
 /// start with "__signal_", getter/setter/deleters are not used. This takes care of
 /// updating the metadata fields in the signal object
 PUBLIC_DEAI_API int
-di_rename_signal_member_raw(struct di_object *obj, struct di_string old_member_name,
+di_rename_signal_member_raw(struct di_object *nonnull obj, struct di_string old_member_name,
                             struct di_string new_member_name);
 
 /// Duplicate null terminated string `str` into a di_string
@@ -474,7 +474,8 @@ static inline bool unused di_string_to_chars(struct di_string str, char *nonnull
 /// Split `str` at the first appearence of `sep`, returns if `sep` is found. If `sep` is
 /// not found, `head` and `rest` will not be touched
 static inline bool unused di_string_split_once(struct di_string str, char sep,
-                                               struct di_string *head, struct di_string *rest) {
+                                               struct di_string *nonnull head,
+                                               struct di_string *nonnull rest) {
 	const char *pos = (const char *)memchr(str.data, sep, str.length);
 	if (pos == NULL) {
 		return false;
@@ -507,7 +508,7 @@ static inline struct di_string unused di_string_tolower(struct di_string str) {
 	return (struct di_string){.data = ret, .length = str.length};
 }
 
-static inline unused bool di_string_starts_with(struct di_string str, const char *pat) {
+static inline unused bool di_string_starts_with(struct di_string str, const char *nonnull pat) {
 	size_t len = strlen(pat);
 	if (str.length < len || strncmp(str.data, pat, len) != 0) {
 		return false;
@@ -531,14 +532,14 @@ static inline unused struct di_string di_string_concat(struct di_string a, struc
 	return ret;
 }
 
-static inline struct di_string unused di_string_vprintf(const char *fmt, va_list args) {
+static inline struct di_string unused di_string_vprintf(const char *nonnull fmt, va_list args) {
 	struct di_string ret;
 	ret.length = vasprintf((char **)&ret.data, fmt, args);        // minus the null byte
 	return ret;
 }
 
-static inline struct di_string
-    unused __attribute__((format(printf, 1, 2))) di_string_printf(const char *fmt, ...) {
+static inline struct di_string unused __attribute__((format(printf, 1, 2)))
+di_string_printf(const char *nonnull fmt, ...) {
 	struct di_string ret;
 	va_list args;
 	va_start(args, fmt);

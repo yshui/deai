@@ -20,16 +20,17 @@
 #define CONCAT(a, b) CONCAT1(a, b)
 
 /// Create a setter that, when called, sets member `theirs` of `them` instead
-PUBLIC_DEAI_API struct di_object *
-di_redirected_setter(struct di_weak_object *them, struct di_string theirs);
+PUBLIC_DEAI_API struct di_object *nonnull
+di_redirected_setter(struct di_weak_object *nonnull them, struct di_string theirs);
 /// Create a getter that, when called, returns member `theirs` from `them`
-PUBLIC_DEAI_API struct di_object *
-di_redirected_getter(struct di_weak_object *them, struct di_string theirs);
+PUBLIC_DEAI_API struct di_object *nonnull
+di_redirected_getter(struct di_weak_object *nonnull them, struct di_string theirs);
 /// Redirect listeners of `ours` on `us` to `theirs` on `them`. Whenever handlers are
 /// registered for `ours` on `us`, they will be redirected to `theirs` on `them` instead,
 /// by adding a getter/setter for __signal_<ours> on `us`.
-PUBLIC_DEAI_API int di_redirect_signal(struct di_object *us, struct di_weak_object *them,
-                       struct di_string ours, struct di_string theirs);
+PUBLIC_DEAI_API int
+di_redirect_signal(struct di_object *nonnull us, struct di_weak_object *nonnull them,
+                   struct di_string ours, struct di_string theirs);
 
 #define DTOR(o) ((struct di_object *)(o))->dtor
 
@@ -357,7 +358,7 @@ static inline unused const char *nonnull di_type_to_string(di_type_t type) {
 	unreachable();
 }
 
-static inline unused char *di_value_to_string(di_type_t type, union di_value *value) {
+static inline unused char *nonnull di_value_to_string(di_type_t type, union di_value *nonnull value) {
 	char *buf = NULL;
 	switch (type) {
 	case DI_TYPE_OBJECT:
@@ -479,7 +480,7 @@ static inline struct di_variant unused di_variant_of_impl(di_type_t type,
 	return ret;
 }
 
-static inline union di_value as_di_value(di_type_t type, void *value) {
+static inline union di_value as_di_value(di_type_t type, void *nonnull value) {
 	union di_value ret;
 	memcpy(&ret, value, di_sizeof_type(type));
 	return ret;

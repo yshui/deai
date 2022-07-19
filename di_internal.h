@@ -64,7 +64,7 @@ struct di_roots {
 };
 
 struct di_ref_tracked_object {
-	void *ptr;
+	void *nonnull ptr;
 	UT_hash_handle hh;
 };
 
@@ -91,7 +91,7 @@ struct di_module {
 	UT_hash_handle hh;
 };
 
-extern struct di_roots *roots;
+extern struct di_roots *nonnull roots;
 
 static ffi_type ffi_type_di_array = {
     .size = 0,
@@ -182,10 +182,11 @@ void __attribute__((noinline)) print_stack_trace(int skip, int limit);
 #else
 static inline void di_dump_objects(void) {
 }
-static inline bool di_mark_and_sweep(bool *has_cycle) {
+static inline bool di_mark_and_sweep(bool *nonnull has_cycle) {
 	*has_cycle = false;
 	return false;
 }
-static inline void di_track_object_ref(struct di_object *unused a, void *unused b) {
+static inline void
+di_track_object_ref(struct di_object *unused nonnull a, void *unused nonnull b) {
 }
 #endif
