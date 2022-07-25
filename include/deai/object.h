@@ -429,7 +429,7 @@ di_rename_signal_member_raw(struct di_object *nonnull obj, struct di_string old_
                             struct di_string new_member_name);
 
 /// Duplicate null terminated string `str` into a di_string
-static inline struct di_string unused di_string_dup(const char *nonnull str) {
+static inline struct di_string unused di_string_dup(const char *nullable str) {
 	return (struct di_string){
 	    .data = str != NULL ? strdup(str) : NULL,
 	    .length = str != NULL ? strlen(str) : 0,

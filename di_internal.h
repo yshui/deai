@@ -91,7 +91,7 @@ struct di_module {
 	UT_hash_handle hh;
 };
 
-extern struct di_roots *nonnull roots;
+extern struct di_roots *nullable roots;
 
 static ffi_type ffi_type_di_array = {
     .size = 0,
@@ -176,8 +176,8 @@ void di_collect_garbage(void);
 #ifdef TRACK_OBJECTS
 void di_dump_objects(void);
 /// Returns true if leaks are found
-bool di_mark_and_sweep(bool *has_cycle);
-void di_track_object_ref(struct di_object *, void *);
+bool di_mark_and_sweep(bool *nonnull has_cycle);
+void di_track_object_ref(struct di_object *nonnull, void *nonnull);
 void __attribute__((noinline)) print_stack_trace(int skip, int limit);
 #else
 static inline void di_dump_objects(void) {

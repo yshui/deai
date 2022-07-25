@@ -541,8 +541,6 @@ static void di_promise_start_dispatch(struct di_promise *promise) {
 		return;
 	}
 
-	// Need to be weak here, because otherwise there will be a cycle: handler ->
-	// promise -> listen_handle -> handler
 	di_member_clone(handler, "promise", (struct di_object *)promise);
 	di_set_object_call(handler, di_promise_dispatch);
 

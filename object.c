@@ -1216,7 +1216,9 @@ void di_dump_objects(void) {
 		i->ref_count_scan = i->ref_count;
 	}
 
-	list_for_each_entry (i, &all_objects, siblings) { di_dump_object(i); }
+	list_for_each_entry (i, &all_objects, siblings) {
+		di_dump_object(i);
+	}
 
 	// Account for references from the roots
 	if (roots != NULL) {
@@ -1306,7 +1308,9 @@ bool di_mark_and_sweep(bool *has_cycle) {
 	*has_cycle = false;
 
 	struct di_object_internal *i;
-	list_for_each_entry (i, &all_objects, siblings) { i->mark = 0; }
+	list_for_each_entry (i, &all_objects, siblings) {
+		i->mark = 0;
+	}
 	di_mark_and_sweep_dfs((struct di_object_internal *)roots, has_cycle);
 	for (auto root = roots->anonymous_roots; root != NULL; root = root->hh.next) {
 		di_mark_and_sweep_dfs((struct di_object_internal *)root->obj, has_cycle);

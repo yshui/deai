@@ -704,6 +704,9 @@ struct WeakRef : public WeakRefBase {
 /// A reference to the generic di_object. Inherit this class to define references to more
 /// specific objects. You should define a `type` for the type name in the derived class.
 /// Optionally you can also define "create", if your object can be created directly.
+///
+/// This is to create C++ wrappers of di_object that were not defined in C++, if the
+/// di_object already originated from C++, there is no need to use this.
 template <typename T>
 struct Ref<T, std::enable_if_t<std::is_base_of_v<Object, T>, void>> {
 protected:
