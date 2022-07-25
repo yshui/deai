@@ -207,10 +207,12 @@ static void lua_ref_dtor(struct di_lua_ref *t) {
 	di_object_with_cleanup script_obj = NULL;
 	di_object_with_cleanup state_obj = NULL;
 	DI_CHECK_OK(di_get(t, "___di_lua_script", script_obj));
-	DI_CHECK_OK(di_get(script_obj, "___di_lua_state", state_obj));
-
-	auto state = (struct di_lua_state *)state_obj;
-	luaL_unref(state->L, LUA_REGISTRYINDEX, t->tref);
+	if (di_get(script_obj, "___di_lua_state", state_obj) == 0) {
+		// The script object might already be finalized if we are part of
+		// a reference cycle.
+		auto state = (struct di_lua_state *)state_obj;
+		luaL_unref(state->L, LUA_REGISTRYINDEX, t->tref);
+	}
 }
 
 static int di_lua_type_to_di(lua_State *L, int i, di_type_t *t, union di_value *ret);
