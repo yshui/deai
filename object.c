@@ -261,11 +261,10 @@ int di_getx(struct di_object *o, struct di_string prop, di_type_t *type, union d
 		if (rc != 0) {                                                           \
 			return rc;                                                       \
 		}                                                                        \
-		bool cloned = false;                                                     \
-		rc = di_type_conversion(rt, &ret2, rtype, ret, false, &cloned);          \
+		rc = di_type_conversion(rt, &ret2, rtype, ret, false);                   \
 		/* Free the original if it is cloned while being converted, or     */    \
 		/* conversion failed in which case we don't need the value anymore */    \
-		if (cloned || rc != 0) {                                                 \
+		if (rc != 0) {                                                           \
 			di_free_value(rt, &ret2);                                        \
 		}                                                                        \
 		return rc;                                                               \

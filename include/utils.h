@@ -161,19 +161,22 @@ static inline bool is_integer(di_type_t t) {
 	return t == DI_TYPE_INT || t == DI_TYPE_NINT || t == DI_TYPE_UINT || t == DI_TYPE_NUINT;
 }
 
-/// Convert value `inp` to type `outty`. `*outp != inp` if and only if a conversion
-/// happened. And if a conversion did happen, it's safe to free the original value.
+/// Convert value `inp` of type `inty` to type `outty`. The conversion operates in 2 mode:
+///
+///   If `inp`'s value is owned, it will be destructed during conversion, the ownership
+///   will be transferred to `outp`. There is no need to free `inp` afterwards, but `outp`
+///   is expected to be freed by the caller.
+///
+///   If `inp`'s value is not borrowed, the conversion will not touch `inp`, and `outp`
+///   will borrow the value in `inp`. `outp` must not be freed afterwards.
 ///
 /// @param[in] borrowing Whether the `inp` value is owned or borrowed. Some conversion can
 //                       not be performed if the caller owns the value, as that would
 //                       cause memory leakage. If `inp` is borrowed, `outp` must also be
 //                       borrowed downstream as well.
-/// @param[out] cloned If false, value in `outp` is borrowed from `inp`. otherwise the
-///                    value is cloned. always false in case of an error
-static inline int unused di_type_conversion(di_type_t inty, const union di_value *inp,
+static inline int unused di_type_conversion(di_type_t inty, union di_value *inp,
                                             di_type_t outty, union di_value *outp,
-                                            bool borrowing, bool *cloned) {
-	*cloned = false;
+                                            bool borrowing) {
 	if (inty == outty) {
 		memcpy(outp, inp, di_sizeof_type(inty));
 		return 0;
@@ -181,9 +184,7 @@ static inline int unused di_type_conversion(di_type_t inty, const union di_value
 
 	if (outty == DI_TYPE_VARIANT) {
 		outp->variant.type = inty;
-		outp->variant.value = malloc(di_sizeof_type(inty));
-		di_copy_value(inty, outp->variant.value, inp);
-		*cloned = true;
+		outp->variant.value = inp;
 		return 0;
 	}
 
@@ -200,18 +201,26 @@ static inline int unused di_type_conversion(di_type_t inty, const union di_value
 			    .data = strdup(inp->string_literal),
 			    .length = strlen(inp->string_literal),
 			};
-			*cloned = true;
 		}
 		return 0;
 	}
 
 	if (outty == DI_TYPE_NIL) {
+		if (!borrowing) {
+			di_free_value(inty, inp);
+		}
 		return 0;
 	}
 
 	if (inty == DI_TYPE_VARIANT) {
-		return di_type_conversion(inp->variant.type, inp->variant.value, outty,
-		                          outp, borrowing, cloned);
+		int ret = di_type_conversion(inp->variant.type, inp->variant.value, outty,
+		                          outp, borrowing);
+		if (ret != 0) {
+			return ret;
+		}
+		if (!borrowing) {
+			free(inp->variant.value);
+		}
 	}
 
 	if (is_integer(inty)) {

@@ -60,7 +60,6 @@ static int _di_typed_trampoline(ffi_cif *cif, void (*fn)(void), void *ret, const
 	memset(xargs + args0.length, 0, sizeof(void *) * args.length);
 
 	int rc = 0;
-	size_t last_arg_processed = 0;
 	for (int i = args0.length; i < args0.length + args.length; i++) {
 		// Type check and implicit conversion
 		// conversion between all types of integers are allowed
@@ -68,7 +67,7 @@ static int _di_typed_trampoline(ffi_cif *cif, void (*fn)(void), void *ret, const
 		xargs[i] = alloca(di_sizeof_type(fnats[i - args0.length]));
 		rc = di_type_conversion(vars[i - args0.length].type,
 		                        vars[i - args0.length].value, fnats[i - args0.length],
-		                        xargs[i], true, &args_cloned[i - args0.length]);
+		                        xargs[i], true);
 		if (rc != 0) {
 			if (vars[i - args0.length].type == DI_TYPE_NIL) {
 				switch (fnats[i - args0.length]) {
@@ -111,18 +110,15 @@ static int _di_typed_trampoline(ffi_cif *cif, void (*fn)(void), void *ret, const
 				case DI_TYPE_STRING:
 				case DI_TYPE_STRING_LITERAL:
 				default:
-					last_arg_processed = i;
-					goto out;
+					return rc;
 				}
 			} else {
 				// Conversion failed
-				last_arg_processed = i;
-				goto out;
+				return rc;
 			}
 		}
 	}
 
-	last_arg_processed = args0.length + args.length;
 	struct ffi_call_args ffi_args = {
 	    .cif = cif,
 	    .fn = fn,
@@ -140,14 +136,6 @@ static int _di_typed_trampoline(ffi_cif *cif, void (*fn)(void), void *ret, const
 		di_free_string(err);
 		di_unref_object(errobj);
 	}
-
-out:
-	for (int i = args0.length; i < last_arg_processed; i++) {
-		if (args_cloned[i - args0.length]) {
-			di_free_value(fnats[i - args0.length], xargs[i]);
-		}
-	}
-
 	return rc;
 }
 

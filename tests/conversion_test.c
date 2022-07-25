@@ -24,10 +24,8 @@ DEAI_PLUGIN_ENTRY_POINT(di) {
 	                           DI_TYPE_STRING_LITERAL, "a string", DI_LAST_TYPE));
 
 	// Test owned string literal -> string
-	bool cloned;
 	val.string_literal = "test";
-	di_type_conversion(DI_TYPE_STRING_LITERAL, &val, DI_TYPE_STRING, &val2, false, &cloned);
-	DI_CHECK(cloned);
+	di_type_conversion(DI_TYPE_STRING_LITERAL, &val, DI_TYPE_STRING, &val2, false);
 	di_free_string(val2.string);
 
 	// Test borrowed string literal -> string
