@@ -721,7 +721,6 @@ di_dbus_get_object(struct di_object *o, struct di_string bus, struct di_string o
 	}
 	ret = di_new_object_with_type(struct di_object);
 	di_set_type(ret, "deai.plugin.dbus:DBusObject");
-	di_add_member_clonev(object_cache, bus, DI_TYPE_OBJECT, ret);
 
 	// don't need to be strong as DBusObject will add signal handlers on the
 	// connection object, which should keep it alive.
