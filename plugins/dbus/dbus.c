@@ -369,7 +369,8 @@ static struct di_variant di_dbus_object_getter(di_dbus_object *dobj, struct di_s
 		struct di_variant ret = DI_VARIANT_INIT;
 		ret.value = tmalloc(union di_value, 1);
 		if (di_rawgetx((void *)dobj, method, &ret.type, ret.value) != 0) {
-			ret.type = DI_LAST_TYPE;
+			free(ret.value);
+			return (struct di_variant){.type = DI_LAST_TYPE, .value = NULL};
 		}
 		return ret;
 	}
@@ -640,7 +641,8 @@ static void di_dbus_name_changed(struct di_object *conn, struct di_string well_k
 		di_log_va(log_module, DI_LOG_DEBUG, "dbus: name %.*s unowned",
 		          (int)well_known.length, well_known.data);
 		di_remove_member_raw(directory, di_string_borrow_literal("___owner"));
-		di_remove_member_raw(directory, di_string_borrow_literal("___owner_name"));
+		di_remove_member_raw(directory,
+		                     di_string_borrow_literal("___owner_name"));
 	}
 }
 
