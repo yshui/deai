@@ -221,6 +221,7 @@ static inline int unused di_type_conversion(di_type_t inty, union di_value *inp,
 		if (!borrowing) {
 			free(inp->variant.value);
 		}
+		return 0;
 	}
 
 	if (is_integer(inty)) {
