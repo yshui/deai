@@ -1086,7 +1086,15 @@ static int di_collect_garbage_mark(struct di_object_internal *o, int _ unused) {
 	return 0;
 }
 static int di_collect_garbage_scan(struct di_object_internal *o, int revive) {
-	assert(o->ref_count_scan <= o->ref_count);
+	if (o->ref_count_scan > o->ref_count) {
+		di_log_va(log_module, DI_LOG_ERROR,
+		          "Object %p %s %lu/%lu reference count is too low", o,
+		          di_get_type((void *)o), o->ref_count_scan, o->ref_count);
+#ifdef TRACK_OBJECTS
+		di_dump_objects();
+#endif
+		assert(false);
+	}
 	if (revive || o->ref_count_scan != o->ref_count) {
 		if (o->mark == 0) {
 			return -1;
