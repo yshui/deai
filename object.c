@@ -197,24 +197,27 @@ int di_rawgetx(struct di_object *o, struct di_string prop, di_type_t *type, unio
 	return 0;
 }
 
-// Recusively unpack a variant until it only contains something that's not a variant
-static void di_flatten_variant(struct di_variant *var) {
-	// `var` might be overwritten by changing `ret`, so keep a copy first
-	if (var->type == DI_TYPE_VARIANT) {
-		assert(&var->value->variant != var);
-		di_flatten_variant(&var->value->variant);
-		union di_value *inner = var->value;
-		if (inner) {
-			var->type = inner->variant.type;
-			var->value = inner->variant.value;
-			free(inner);
-		}
-	}
-}
-
 /// A di_call_fn_t that does nothing.
 int di_noop(struct di_object *o, di_type_t *rt, union di_value *r, struct di_tuple args) {
 	return 0;
+}
+
+/// Decide if `val` contains DI_LAST_TYPE, and if so, free `val`.
+/// Ordinary `di_free_value` cannot free value of DI_LAST_TYPE, this function should only
+/// be used when calling getter functions.
+static bool di_free_last_type(di_type_t type, union di_value *val) {
+	bool ret = false;
+	if (type == DI_LAST_TYPE) {
+		return true;
+	}
+	if (type == DI_TYPE_VARIANT) {
+		// In case of a variant, we need to check the inner type.
+		 ret = di_free_last_type(val->variant.type, val->variant.value);
+		 if (ret) {
+			 free(val->variant.value);
+		 }
+	}
+	return ret;
 }
 
 int di_getx(struct di_object *o, struct di_string prop, di_type_t *type, union di_value *ret) {
@@ -231,23 +234,8 @@ int di_getx(struct di_object *o, struct di_string prop, di_type_t *type, union d
 		return rc;
 	}
 
-	if (*type == DI_LAST_TYPE) {
+	if (di_free_last_type(*type, ret)) {
 		return -ENOENT;
-	}
-
-	if (*type == DI_TYPE_VARIANT) {
-		struct di_variant *var = &ret->variant;
-		di_flatten_variant(var);
-		if (var->type == DI_LAST_TYPE) {
-			return -ENOENT;
-		}
-		*type = var->type;
-
-		if (var->value != NULL) {
-			union di_value *tmp = var->value;
-			memcpy(ret, var->value, di_sizeof_type(var->type));
-			free(tmp);
-		}
 	}
 	return 0;
 }
