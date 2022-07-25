@@ -172,7 +172,8 @@ int di_setx(struct di_object *o, struct di_string prop, di_type_t type, const vo
 	return di_add_member_clone(o, prop, type, val);
 }
 
-int di_rawgetx(struct di_object *o, struct di_string prop, di_type_t *type, union di_value *ret) {
+int di_refrawgetx(struct di_object *o, struct di_string prop, di_type_t *type,
+                  union di_value **ret) {
 	auto m = di_lookup(o, prop);
 
 	// nil type is treated as non-existent
@@ -180,9 +181,19 @@ int di_rawgetx(struct di_object *o, struct di_string prop, di_type_t *type, unio
 		return -ENOENT;
 	}
 
-	*type = m->type;
 	assert(di_sizeof_type(m->type) != 0);
-	di_copy_value(m->type, ret, m->data);
+	*type = m->type;
+	*ret = m->data;
+	return 0;
+}
+
+int di_rawgetx(struct di_object *o, struct di_string prop, di_type_t *type, union di_value *ret) {
+	union di_value *tmp = NULL;
+	int rc = di_refrawgetx(o, prop, type, &tmp);
+	if (rc != 0) {
+		return rc;
+	}
+	di_copy_value(*type, ret, tmp);
 	return 0;
 }
 
@@ -641,6 +652,17 @@ struct di_array di_get_all_member_names_raw(struct di_object *obj_) {
 	}
 	assert(cnt == ret.length);
 	return ret;
+}
+
+bool di_foreach_member_raw(struct di_object *obj_, di_member_cb cb, void *user_data) {
+	auto obj = (struct di_object_internal *)obj_;
+	struct di_member *i, *ni;
+	HASH_ITER (hh, obj->members, i, ni) {
+		if (cb(i->name, i->type, i->data, user_data)) {
+			return true;
+		}
+	}
+	return false;
 }
 
 void di_set_object_dtor(struct di_object *nonnull obj, di_dtor_fn_t nullable dtor) {

@@ -481,6 +481,24 @@ static inline struct di_variant unused di_variant_of_impl(di_type_t type,
 	return ret;
 }
 
+/// Get the `prop` member of object `o`. If this member is a weak reference, try upgrading
+/// it. If upgrading fails, remove `prop` from `o` and return NULL, otherwise return the
+/// upgraded reference,  If the member is not a weak reference, return NULL.
+///
+/// Getting and removing and done without going through getter or deleter.
+static inline struct di_object *nullable unused di_get_object_via_weak(struct di_object *nonnull o,
+                                                                       struct di_string prop) {
+	di_weak_object_with_cleanup weak = NULL;
+	struct di_object *object = NULL;
+	if (di_rawgetxt(o, prop, DI_TYPE_WEAK_OBJECT, (void *)&weak) == 0) {
+		object = di_upgrade_weak_ref(weak);
+		if (object == NULL) {
+			di_remove_member_raw(o, prop);
+		}
+	}
+	return object;
+}
+
 static inline union di_value as_di_value(di_type_t type, void *nonnull value) {
 	union di_value ret;
 	memcpy(&ret, value, di_sizeof_type(type));
@@ -505,3 +523,13 @@ static inline union di_value as_di_value(di_type_t type, void *nonnull value) {
 /// Variant of the bottom type. Meaning this variant "doesn't exist", used to indicate
 /// a property doesn't exist by generic getters.
 static const struct di_variant DI_BOTTOM_VARIANT = (struct di_variant){NULL, DI_LAST_TYPE};
+
+/// Shortcut for calling di_remove_member_raw then di_add_member_clone
+static inline unused int di_rawsetx(struct di_object *nonnull o, struct di_string prop,
+                                    di_type_t type, const void *nonnull value) {
+	int ret = di_remove_member_raw(o, prop);
+	if (ret != 0 && ret != -ENOENT) {
+		return ret;
+	}
+	return di_add_member_clone(o, prop, type, value);
+}

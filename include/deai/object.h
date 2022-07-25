@@ -268,6 +268,19 @@ di_callx(struct di_object *nonnull o, struct di_string name, di_type_t *nonnull 
 PUBLIC_DEAI_API int di_setx(struct di_object *nonnull o, struct di_string prop,
                             di_type_t type, const void *nullable val);
 
+/// Fetch reference to a member with name `prop` from an object `o`, without calling the
+/// getter functions. The caller can change the value of the member via the reference.
+/// Such uate will not involve the setter functions.
+///
+/// # Errors
+///
+/// * ENOENT: member `prop` not found.
+///
+/// @param[out] type Type of the value
+/// @param[out] ret Reference to the value.
+/// @return 0 for success, or an error code.
+int di_refrawgetx(struct di_object *nonnull o, struct di_string prop,
+                  di_type_t *nonnull type, union di_value *nullable *nonnull ret);
 /// Fetch a member with name `prop` from an object `o`, without calling the getter
 /// functions. The value is cloned, then returned.
 ///
@@ -408,6 +421,10 @@ PUBLIC_DEAI_API void di_set_object_dtor(struct di_object *nonnull, di_dtor_fn_t 
 PUBLIC_DEAI_API void di_set_object_call(struct di_object *nonnull, di_call_fn_t nullable);
 PUBLIC_DEAI_API bool di_is_object_callable(struct di_object *nonnull);
 PUBLIC_DEAI_API struct di_array di_get_all_member_names_raw(struct di_object *nonnull obj_);
+typedef bool (*nonnull di_member_cb)(struct di_string name, di_type_t,
+                             union di_value *nonnull value, void *nullable data);
+PUBLIC_DEAI_API bool di_foreach_member_raw(struct di_object *nonnull obj_,
+                                           di_member_cb cb, void *nullable user_data);
 
 PUBLIC_DEAI_API void di_free_tuple(struct di_tuple);
 PUBLIC_DEAI_API void di_free_array(struct di_array);
