@@ -398,8 +398,6 @@ struct di_prepare {
 };
 
 static void di_prepare(EV_P_ ev_prepare *w, int revents) {
-	di_collect_garbage();
-
 	bool has_cycle;
 	if (di_mark_and_sweep(&has_cycle)) {
 		di_log_va(log_module, DI_LOG_DEBUG, "Reference bug detected\n");
@@ -408,6 +406,8 @@ static void di_prepare(EV_P_ ev_prepare *w, int revents) {
 		abort();
 #endif
 	}
+
+	di_collect_garbage();
 
 	struct di_prepare *dep = (void *)w;
 	// Keep event module alive during emission
