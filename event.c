@@ -17,20 +17,20 @@
 #include "utils.h"
 
 struct di_ioev {
-	struct di_object_internal;
+	di_object_internal;
 	ev_io evh;
 	bool running;
 };
 
 struct di_timer {
-	struct di_object_internal;
+	di_object_internal;
 	ev_timer evt;
 	double at;
 	bool spent;
 };
 
 struct di_periodic {
-	struct di_object_internal;
+	di_object_internal;
 	ev_periodic pt;
 	uint64_t root_handle;
 };
@@ -44,7 +44,7 @@ struct di_periodic {
 static void di_ioev_callback(EV_P_ ev_io *w, int revents) {
 	auto ev = container_of(w, struct di_ioev, evh);
 	// Keep ev alive during emission
-	scoped_di_object unused *obj = di_ref_object((struct di_object *)ev);
+	scoped_di_object unused *obj = di_ref_object((di_object *)ev);
 	if (revents & EV_READ) {
 		di_emit(ev, "read");
 	}
@@ -57,7 +57,7 @@ static void di_ioev_callback(EV_P_ ev_io *w, int revents) {
 static void di_periodic_callback(EV_P_ ev_periodic *w, int revents) {
 	auto p = container_of(w, struct di_periodic, pt);
 	// Keep timer alive during emission
-	scoped_di_object unused *obj = di_ref_object((struct di_object *)p);
+	scoped_di_object unused *obj = di_ref_object((di_object *)p);
 
 	double now = ev_now(EV_A);
 	di_emit(p, "triggered", now);
@@ -87,7 +87,7 @@ static void di_start_ioev(struct di_ioev *ev) {
 	// Add event source to roots when it's running
 	auto roots = di_get_roots();
 	scoped_di_string root_key = di_string_printf("fdevent_for_%d", ev->evh.fd);
-	DI_CHECK_OK(di_call(roots, "add", root_key, (struct di_object *)ev));
+	DI_CHECK_OK(di_call(roots, "add", root_key, (di_object *)ev));
 }
 
 /// Stop the event source
@@ -133,7 +133,7 @@ static void di_modify_ioev(struct di_ioev *ioev, unsigned int flags) {
 	}
 }
 
-static void di_enable_read(struct di_object *obj, struct di_object *sig) {
+static void di_enable_read(di_object *obj, di_object *sig) {
 	if (di_member_clone(obj, "__signal_read", sig) != 0) {
 		return;
 	}
@@ -144,7 +144,7 @@ static void di_enable_read(struct di_object *obj, struct di_object *sig) {
 	di_modify_ioev(ioev, flags);
 }
 
-static void di_enable_write(struct di_object *obj, struct di_object *sig) {
+static void di_enable_write(di_object *obj, di_object *sig) {
 	if (di_member_clone(obj, "__signal_write", sig) != 0) {
 		return;
 	}
@@ -155,7 +155,7 @@ static void di_enable_write(struct di_object *obj, struct di_object *sig) {
 	di_modify_ioev(ioev, flags);
 }
 
-static void di_disable_read(struct di_object *obj) {
+static void di_disable_read(di_object *obj) {
 	if (di_remove_member_raw(obj, di_string_borrow("__signal_read")) != 0) {
 		return;
 	}
@@ -165,7 +165,7 @@ static void di_disable_read(struct di_object *obj) {
 	di_modify_ioev(ioev, flags);
 }
 
-static void di_disable_write(struct di_object *obj) {
+static void di_disable_write(di_object *obj) {
 	if (di_remove_member_raw(obj, di_string_borrow("__signal_write")) != 0) {
 		return;
 	}
@@ -175,7 +175,7 @@ static void di_disable_write(struct di_object *obj) {
 	di_modify_ioev(ioev, flags);
 }
 
-static void di_ioev_dtor(struct di_object *obj) {
+static void di_ioev_dtor(di_object *obj) {
 	// Normally the ev_io won't be running, but if someone removed us from the roots,
 	// e.g. by calling di:exit(), then ev_io could be running.
 	// Removing the signal objects should be enough to stop it.
@@ -193,7 +193,7 @@ static void di_ioev_dtor(struct di_object *obj) {
 ///        writability.
 ///
 /// Wait for a file descriptor to be readable/writable.
-static struct di_object *di_create_ioev(struct di_object *obj, int fd) {
+static di_object *di_create_ioev(di_object *obj, int fd) {
 	struct di_module *em = (void *)obj;
 	auto ret = di_new_object_with_type(struct di_ioev);
 	di_set_type((void *)ret, "deai.builtin.event:IoEv");
@@ -217,7 +217,7 @@ static struct di_object *di_create_ioev(struct di_object *obj, int fd) {
 	return (void *)ret;
 }
 
-static void di_timer_delete_signal(struct di_object *o) {
+static void di_timer_delete_signal(di_object *o) {
 	if (di_remove_member_raw(o, di_string_borrow("__signal_elapsed")) != 0) {
 		return;
 	}
@@ -235,7 +235,7 @@ static void di_timer_delete_signal(struct di_object *o) {
 	di_object_downgrade_deai(o);
 }
 
-static void di_timer_add_signal(struct di_object *o, struct di_object *sig) {
+static void di_timer_add_signal(di_object *o, di_object *sig) {
 	auto t = (struct di_timer *)o;
 	if (t->spent) {
 		return;
@@ -271,10 +271,10 @@ static void di_timer_add_signal(struct di_object *o, struct di_object *sig) {
 static void di_timer_callback(EV_P_ ev_timer *t, int revents) {
 	auto d = container_of(t, struct di_timer, evt);
 	// Keep timer alive during emission
-	scoped_di_object unused *obj = di_ref_object((struct di_object *)d);
+	scoped_di_object unused *obj = di_ref_object((di_object *)d);
 
 	double now = ev_now(EV_A);
-	scoped_di_object *di_obj = di_object_get_deai_strong((struct di_object *)d);
+	scoped_di_object *di_obj = di_object_get_deai_strong((di_object *)d);
 	DI_CHECK(di_obj);
 
 	auto di = (struct deai *)di_obj;
@@ -296,7 +296,7 @@ static void di_timer_callback(EV_P_ ev_timer *t, int revents) {
 /// Create a timer that emits a signal after timeout is reached. Note that signals will
 /// only be emitted if listeners exist. If no listeners existed during the timeout window,
 /// the singal will be emitted when the first listener is attached.
-static struct di_object *di_create_timer(struct di_object *obj, double timeout) {
+static di_object *di_create_timer(di_object *obj, double timeout) {
 	struct di_module *em = (void *)obj;
 	auto ret = di_new_object_with_type(struct di_timer);
 	di_set_type((void *)ret, "deai.builtin.event:Timer");
@@ -318,7 +318,7 @@ static struct di_object *di_create_timer(struct di_object *obj, double timeout) 
 	// Stopped ones have weak ones
 	auto weak_di = di_weakly_ref_object(di_obj);
 	di_member(ret, DEAI_MEMBER_NAME_RAW, weak_di);
-	return (struct di_object *)ret;
+	return (di_object *)ret;
 }
 
 static void periodic_dtor(struct di_periodic *p) {
@@ -326,7 +326,7 @@ static void periodic_dtor(struct di_periodic *p) {
 		return;
 	}
 
-	scoped_di_object *di_obj = di_object_get_deai_strong((struct di_object *)p);
+	scoped_di_object *di_obj = di_object_get_deai_strong((di_object *)p);
 	auto di = (struct deai *)di_obj;
 	ev_periodic_stop(di->loop, &p->pt);
 }
@@ -337,7 +337,7 @@ static void periodic_dtor(struct di_periodic *p) {
 ///
 /// Timer will be reset after update.
 static void periodic_set(struct di_periodic *p, double interval, double offset) {
-	scoped_di_object *di_obj = di_object_get_deai_strong((struct di_object *)p);
+	scoped_di_object *di_obj = di_object_get_deai_strong((di_object *)p);
 	DI_CHECK(di_obj != NULL);
 	ev_periodic_set(&p->pt, offset, interval, NULL);
 
@@ -345,7 +345,7 @@ static void periodic_set(struct di_periodic *p, double interval, double offset) 
 	ev_periodic_again(di->loop, &p->pt);
 }
 
-static void di_periodic_signal_setter(struct di_object *o, struct di_object *sig) {
+static void di_periodic_signal_setter(di_object *o, di_object *sig) {
 	if (di_member_clone(o, di_signal_member_of("triggered"), sig) != 0) {
 		return;
 	}
@@ -355,7 +355,7 @@ static void di_periodic_signal_setter(struct di_object *o, struct di_object *sig
 	di_object_upgrade_deai(o);
 }
 
-static void di_periodic_signal_deleter(struct di_object *o) {
+static void di_periodic_signal_deleter(di_object *o) {
 	di_remove_member_raw(o,
 	                     di_string_borrow_literal(di_signal_member_of("triggered")));
 
@@ -372,7 +372,7 @@ static void di_periodic_signal_deleter(struct di_object *o) {
 ///
 /// A timer that first fire after :code:`offset` seconds, then every :code:`interval`
 /// seconds.
-static struct di_object *
+static di_object *
 di_create_periodic(struct di_module *evm, double interval, double offset) {
 	auto ret = di_new_object_with_type(struct di_periodic);
 	di_set_type((void *)ret, "deai.builtin.event:Periodic");
@@ -411,7 +411,7 @@ static void di_prepare(EV_P_ ev_prepare *w, int revents) {
 
 	struct di_prepare *dep = (void *)w;
 	// Keep event module alive during emission
-	scoped_di_object unused *obj = di_ref_object((struct di_object *)dep->evm);
+	scoped_di_object unused *obj = di_ref_object((di_object *)dep->evm);
 	di_emit(dep->evm, "prepare");
 }
 
@@ -422,16 +422,16 @@ static void di_prepare(EV_P_ ev_prepare *w, int revents) {
 /// This encapsulates a pending value. Once this value become available, a "resolved"
 /// signal will be emitted with the value. Each promise should resolve only once ever.
 struct di_promise {
-	struct di_object;
+	di_object;
 };
 
-struct di_object *di_promise_then(struct di_object *promise, struct di_object *handler);
+di_object *di_promise_then(di_object *promise, di_object *handler);
 void di_resolve_promise(struct di_promise *promise, struct di_variant var);
 static void di_promise_then_impl(struct di_promise *promise, struct di_promise *then_promise,
-                                 struct di_object *handler);
+                                 di_object *handler);
 
-static int di_promise_dispatch(struct di_object *prepare_handler, di_type *rt,
-                        union di_value *r, struct di_tuple args) {
+static int di_promise_dispatch(di_object *prepare_handler, di_type *rt,
+                        di_value *r, di_tuple args) {
 	scoped_di_object *promise_;
 	if (di_get(prepare_handler, "promise", promise_) != 0) {
 		return 0;
@@ -446,15 +446,15 @@ static int di_promise_dispatch(struct di_object *prepare_handler, di_type *rt,
 	// Reset number of handlers
 	di_setx((void *)promise, di_string_borrow("___n_handlers"), DI_TYPE_UINT,
 	        (uint64_t[]){0});
-	auto handlers = tmalloc(struct di_object *, nhandlers);
-	auto then_promises = tmalloc(struct di_object *, nhandlers);
+	auto handlers = tmalloc(di_object *, nhandlers);
+	auto then_promises = tmalloc(di_object *, nhandlers);
 
 	// Copy out all the handlers and promises in case they got overwritten by the
 	// handlers.
 	for (uint64_t i = 0; i < nhandlers; i++) {
 		{
 			char *buf;
-			struct di_string str;
+			di_string str;
 			str.length = asprintf(&buf, "___then_handler_%lu", i);
 			str.data = buf;
 			if (di_get(promise, buf, handlers[i]) == 0) {
@@ -473,7 +473,7 @@ static int di_promise_dispatch(struct di_object *prepare_handler, di_type *rt,
 	}
 
 	for (uint64_t i = 0; i < nhandlers; i++) {
-		union di_value return_value;
+		di_value return_value;
 		di_type return_type;
 		int ret = 0;
 		if (handlers[i]) {
@@ -514,15 +514,15 @@ static int di_promise_dispatch(struct di_object *prepare_handler, di_type *rt,
 /// Create a new promise object
 ///
 /// EXPORT: event.new_promise(): deai:Promise
-struct di_object *di_new_promise(struct di_object *event_module) {
+di_object *di_new_promise(di_object *event_module) {
 	struct di_promise *ret = di_new_object_with_type(struct di_promise);
 	auto weak_event = di_weakly_ref_object(event_module);
 	di_set_type((void *)ret, "deai:Promise");
 	di_member(ret, "___weak_event_module", weak_event);
 	di_setx((void *)ret, di_string_borrow("___n_handlers"), DI_TYPE_UINT, (uint64_t[]){0});
-	di_method(ret, "then", di_promise_then, struct di_object *);
+	di_method(ret, "then", di_promise_then, di_object *);
 	// "then" is a keyword in lua
-	di_method(ret, "then_", di_promise_then, struct di_object *);
+	di_method(ret, "then_", di_promise_then, di_object *);
 	di_method(ret, "resolve", di_resolve_promise, struct di_variant);
 	return (void *)ret;
 }
@@ -533,7 +533,7 @@ static void di_promise_start_dispatch(struct di_promise *promise) {
 		return;
 	}
 
-	scoped_di_object *handler = di_new_object_with_type(struct di_object);
+	scoped_di_object *handler = di_new_object_with_type(di_object);
 	scoped_di_weak_object *weak_event = NULL;
 	DI_CHECK_OK(di_get(promise, "___weak_event_module", weak_event));
 	scoped_di_object *event_module = di_upgrade_weak_ref(weak_event);
@@ -541,7 +541,7 @@ static void di_promise_start_dispatch(struct di_promise *promise) {
 		return;
 	}
 
-	di_member_clone(handler, "promise", (struct di_object *)promise);
+	di_member_clone(handler, "promise", (di_object *)promise);
 	di_set_object_call(handler, di_promise_dispatch);
 
 	// Use a 0 second timer because prepare isn't guaranteed to be called if
@@ -558,7 +558,7 @@ static void di_promise_start_dispatch(struct di_promise *promise) {
 }
 
 static void di_promise_then_impl(struct di_promise *promise, struct di_promise *then_promise,
-                                 struct di_object *handler) {
+                                 di_object *handler) {
 	uint64_t nhandlers;
 	DI_CHECK_OK(di_get(promise, "___n_handlers", nhandlers));
 	char *buf;
@@ -568,7 +568,7 @@ static void di_promise_then_impl(struct di_promise *promise, struct di_promise *
 		free(buf);
 	}
 	asprintf(&buf, "___then_promise_%lu", nhandlers);
-	di_member_clone(promise, buf, (struct di_object *)then_promise);
+	di_member_clone(promise, buf, (di_object *)then_promise);
 	free(buf);
 
 	nhandlers += 1;
@@ -594,7 +594,7 @@ static void di_promise_then_impl(struct di_promise *promise, struct di_promise *
 /// promise returned by this function is freed or not.
 ///
 /// (this function is called "then\_" in lua, since "then" is a keyword)
-struct di_object *di_promise_then(struct di_object *promise, struct di_object *handler) {
+di_object *di_promise_then(di_object *promise, di_object *handler) {
 	scoped_di_weak_object *weak_event = NULL;
 	if (di_get(promise, "___weak_event_module", weak_event) != 0) {
 		return di_new_error("Event module member not found");
@@ -609,8 +609,8 @@ struct di_object *di_promise_then(struct di_object *promise, struct di_object *h
 	return ret;
 }
 
-static void di_promise_collect_handler(int index, struct di_object *storage,
-                                       struct di_object *then_promise, struct di_variant var) {
+static void di_promise_collect_handler(int index, di_object *storage,
+                                       di_object *then_promise, struct di_variant var) {
 	scoped_di_string key = di_string_printf("%d", index);
 	DI_CHECK_OK(di_add_member_clone(storage, key, DI_TYPE_VARIANT, &var));
 
@@ -626,7 +626,7 @@ static void di_promise_collect_handler(int index, struct di_object *storage,
 		    .length = total, .elements = tmalloc(struct di_variant, total)};
 		for (int i = 0; i < total; i++) {
 			scoped_di_string key = di_string_printf("%d", i);
-			union di_value tmp;
+			di_value tmp;
 			DI_CHECK_OK(di_getxt(storage, key, DI_TYPE_VARIANT, &tmp));
 			results.elements[i] = tmp.variant;
 		}
@@ -637,18 +637,18 @@ static void di_promise_collect_handler(int index, struct di_object *storage,
 /// Create a promise that resolves when all given promises resolve
 ///
 /// EXPORT: event.collect_promises(promises: [deai:Promise]): deai:Promise
-struct di_object *di_collect_promises(struct di_object *event_module, struct di_array promises) {
+di_object *di_collect_promises(di_object *event_module, di_array promises) {
 	if (promises.elem_type != DI_TYPE_OBJECT) {
 		return di_new_error("promises must all be objects");
 	}
-	struct di_object **arr = promises.arr;
+	di_object **arr = promises.arr;
 	for (int i = 0; i < promises.length; i++) {
 		if (!di_check_type(arr[i], "deai:Promise")) {
 			return di_new_error("not all objects are promise");
 		}
 	}
 	auto ret = di_new_promise(event_module);
-	scoped_di_object *storage = di_new_object_with_type(struct di_object);
+	scoped_di_object *storage = di_new_object_with_type(di_object);
 	int cnt = 0;
 	for (int i = 0; i < promises.length; i++) {
 		scoped_di_object *handler = (void *)di_closure(
@@ -662,18 +662,18 @@ struct di_object *di_collect_promises(struct di_object *event_module, struct di_
 	return ret;
 }
 
-static void di_any_promise_handler(struct di_object *then, struct di_variant var) {
+static void di_any_promise_handler(di_object *then, struct di_variant var) {
 	di_call(then, "resolve", var);
 }
 
 /// Create a promise that resolves when any of given promises resolve
 ///
 /// EXPORT: event.any_promise(promises: [deai:Promise]): deai:Promise
-struct di_object *di_any_promise(struct di_object *event_module, struct di_array promises) {
+di_object *di_any_promise(di_object *event_module, di_array promises) {
 	if (promises.elem_type != DI_TYPE_OBJECT) {
 		return di_new_error("promises must all be objects");
 	}
-	struct di_object **arr = promises.arr;
+	di_object **arr = promises.arr;
 	for (int i = 0; i < promises.length; i++) {
 		if (!di_check_type(arr[i], "deai:Promise")) {
 			return di_new_error("not all objects are promise");
@@ -710,8 +710,8 @@ void di_init_event(struct deai *di) {
 	di_method(em, "timer", di_create_timer, double);
 	di_method(em, "periodic", di_create_periodic, double, double);
 	di_method(em, "new_promise", di_new_promise);
-	di_method(em, "collect_promises", di_collect_promises, struct di_array);
-	di_method(em, "any_promise", di_any_promise, struct di_array);
+	di_method(em, "collect_promises", di_collect_promises, di_array);
+	di_method(em, "any_promise", di_any_promise, di_array);
 
 	auto dep = tmalloc(struct di_prepare, 1);
 	dep->evm = em;

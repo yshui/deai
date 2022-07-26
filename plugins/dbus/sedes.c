@@ -54,7 +54,7 @@ static di_type dbus_type_to_di(int type) {
 		break
 
 static void
-dbus_deserialize_basic(DBusMessageIter *i, union di_value *retp, di_type *otype, int type) {
+dbus_deserialize_basic(DBusMessageIter *i, di_value *retp, di_type *otype, int type) {
 	switch (type) {
 		DESERIAL(DBUS_TYPE_BOOLEAN, dbus_bool_t, bool_);
 		DESERIAL(DBUS_TYPE_INT16, dbus_int16_t, int_);
@@ -84,9 +84,9 @@ static void dbus_deserialize_one(DBusMessageIter *i, void *retp, di_type *otype,
 // Deserialize an array. `i' is the iterator, already recursed into the array
 // `type' is the array element type
 static void
-dbus_deserialize_array(DBusMessageIter *i, struct di_array *retp, int type, int length) {
+dbus_deserialize_array(DBusMessageIter *i, di_array *retp, int type, int length) {
 	if (dbus_type_is_fixed(type)) {
-		struct di_array ret;
+		di_array ret;
 		int length;
 		dbus_message_iter_get_fixed_array(i, &ret.arr, &length);
 		ret.length = length;
@@ -94,7 +94,7 @@ dbus_deserialize_array(DBusMessageIter *i, struct di_array *retp, int type, int 
 		return;
 	}
 
-	struct di_array ret;
+	di_array ret;
 	ret.elem_type = dbus_type_to_di(type);
 
 	size_t esize = di_sizeof_type(ret.elem_type);
@@ -114,7 +114,7 @@ dbus_deserialize_array(DBusMessageIter *i, struct di_array *retp, int type, int 
 
 /// Deserialize a dbus struct to a di_tuple
 void dbus_deserialize_struct(DBusMessageIter *i, void *retp) {
-	struct di_tuple t = DI_TUPLE_INIT;
+	di_tuple t = DI_TUPLE_INIT;
 	DBusMessageIter tmpi = *i;
 	while (dbus_message_iter_get_arg_type(&tmpi) != DBUS_TYPE_INVALID) {
 		dbus_message_iter_next(&tmpi);
@@ -140,13 +140,13 @@ void dbus_deserialize_struct(DBusMessageIter *i, void *retp) {
 		assert(rtype == t.elements[x].type);
 		dbus_message_iter_next(i);
 	}
-	*(struct di_tuple *)retp = t;
+	*(di_tuple *)retp = t;
 }
 
 static void dbus_deserialize_dict(DBusMessageIter *i, void *retp, int length) {
-	auto o = di_new_object_with_type(struct di_object);
+	auto o = di_new_object_with_type(di_object);
 	for (int x = 0; x < length; x++) {
-		struct di_tuple t;
+		di_tuple t;
 		DBusMessageIter i2;
 		dbus_message_iter_recurse(i, &i2);
 		dbus_deserialize_struct(&i2, &t);
@@ -157,7 +157,7 @@ static void dbus_deserialize_dict(DBusMessageIter *i, void *retp, int length) {
 		di_free_tuple(t);
 		dbus_message_iter_next(i);
 	}
-	*(struct di_object **)retp = o;
+	*(di_object **)retp = o;
 }
 
 static void dbus_deserialize_one(DBusMessageIter *i, void *retp, di_type *otype, int type) {
@@ -199,7 +199,7 @@ static void dbus_deserialize_one(DBusMessageIter *i, void *retp, di_type *otype,
 		if (type2 == DBUS_TYPE_INVALID) {
 			// I think this means the array is empty, dbus doc is a bit vague
 			// on this
-			*(struct di_array *)retp = DI_ARRAY_INIT;
+			*(di_array *)retp = DI_ARRAY_INIT;
 			return;
 		}
 		return dbus_deserialize_array(&i2, retp, type2,
@@ -326,7 +326,7 @@ static int dbus_serialize_with_signature(DBusMessageIter *i, struct di_variant v
 		if (var.type != DI_TYPE_ARRAY) {
 			return -EINVAL;
 		}
-		struct di_array arr = var.value->array;
+		di_array arr = var.value->array;
 		int atype = di_type_to_dbus_basic(arr.elem_type);
 
 		assert(si.nchild == 1);
@@ -373,7 +373,7 @@ static int dbus_serialize_with_signature(DBusMessageIter *i, struct di_variant v
 			return -ENOMEM;
 		}
 		if (var.type == DI_TYPE_ARRAY) {
-			struct di_array arr = var.value->array;
+			di_array arr = var.value->array;
 			if (si.nchild != arr.length) {
 				return -EINVAL;
 			}
@@ -387,7 +387,7 @@ static int dbus_serialize_with_signature(DBusMessageIter *i, struct di_variant v
 			return dbus_message_iter_close_container(i, &i2) ? 0 : -ENOMEM;
 		}
 		if (var.type == DI_TYPE_TUPLE) {
-			struct di_tuple t = var.value->tuple;
+			di_tuple t = var.value->tuple;
 			if (si.nchild != t.length) {
 				return -EINVAL;
 			}
@@ -404,7 +404,7 @@ static int dbus_serialize_with_signature(DBusMessageIter *i, struct di_variant v
 	return -EINVAL;
 }
 
-int dbus_serialize_struct(DBusMessageIter *it, struct di_tuple t, struct di_string signature) {
+int dbus_serialize_struct(DBusMessageIter *it, di_tuple t, di_string signature) {
 	auto var = di_variant_of(t);
 	struct dbus_signature sig;
 	int ret = 0;

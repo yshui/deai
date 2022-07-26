@@ -52,7 +52,7 @@
 /// ## Examples:
 ///
 /// ```c
-/// int fun(struct di_array arr) {
+/// int fun(di_array arr) {
 ///     ((int *)arr.arr)[0] = 1; // reflected
 ///     arr.arr = realloc(arr.arr, 20); // not reflected
 ///     ((int *)arr.arr)[0] = 1; // not reflected
@@ -121,9 +121,9 @@ typedef enum di_type {
 	// immutable utf-8 string), which is not allocated on stack
 	// C type: const char *
 	DI_TYPE_NAME(STRING_LITERAL),
-	// an array. all elements in the array have the same type. see `struct di_array`
+	// an array. all elements in the array have the same type. see `di_array`
 	// for more info.
-	// C type: struct di_array
+	// C type: di_array
 	DI_TYPE_NAME(ARRAY),
 	// a tuple. a collection of variable number of elements), each with its own type.
 	// C type: di_tuple
@@ -161,9 +161,8 @@ typedef struct di_variant di_variant;
 /// This encapsulates a pending value. Once this value become available, a "resolved"
 /// signal will be emitted with the value. Each promise should resolve only once ever.
 typedef struct di_promise di_promise;
-typedef union di_value di_value_t;
-typedef int (*di_call_fn)(di_object *nonnull, di_type *nonnull rt,
-                          union di_value *nonnull ret, di_tuple);
+typedef union di_value di_value;
+typedef int (*di_call_fn)(di_object *nonnull, di_type *nonnull rt, di_value *nonnull ret, di_tuple);
 typedef void (*di_dtor_fn)(di_object *nonnull);
 typedef struct di_signal di_signal_t;
 typedef struct di_listener di_listener_t;
@@ -171,7 +170,6 @@ typedef struct di_callable di_callable_t;
 typedef struct di_member di_member_t;
 typedef struct di_module di_module_t;
 typedef struct di_weak_object di_weak_object;
-typedef union di_value di_value;
 
 struct di_object {
 	// NOLINTNEXTLINE(readability-magic-numbers)
@@ -290,10 +288,10 @@ int di_refrawgetx(di_object *nonnull o, di_string prop, di_type *nonnull type,
 /// * ENOENT: member `prop` not found.
 ///
 /// @param[out] type Type of the value
-/// @param[out] ret The value, MUST BE a pointer to a full `union di_value`
+/// @param[out] ret The value, MUST BE a pointer to a full `di_value`
 /// @return 0 for success, or an error code.
 PUBLIC_DEAI_API int di_rawgetx(di_object *nonnull o, di_string prop,
-                               di_type *nonnull type, union di_value *nonnull ret);
+                               di_type *nonnull type, di_value *nonnull ret);
 
 /// Like `di_rawgetx`, but tries to do automatic type conversion to the desired type `type`.
 ///
@@ -415,7 +413,7 @@ PUBLIC_DEAI_API void frees(malloc, 1) di_unref_object(di_object *nonnull);
 PUBLIC_DEAI_API void di_set_object_dtor(di_object *nonnull, di_dtor_fn nullable);
 PUBLIC_DEAI_API void di_set_object_call(di_object *nonnull, di_call_fn nullable);
 PUBLIC_DEAI_API bool di_is_object_callable(di_object *nonnull);
-PUBLIC_DEAI_API struct di_array di_get_all_member_names_raw(di_object *nonnull obj_);
+PUBLIC_DEAI_API di_array di_get_all_member_names_raw(di_object *nonnull obj_);
 typedef bool (*nonnull di_member_cb)(di_string name, di_type, di_value *nonnull value,
                                      void *nullable data);
 PUBLIC_DEAI_API bool
@@ -615,7 +613,7 @@ static inline unused size_t di_sizeof_type(di_type t) {
 	case DI_TYPE_NAME(FLOAT):
 		return sizeof(double);
 	case DI_TYPE_NAME(ARRAY):
-		return sizeof(struct di_array);
+		return sizeof(di_array);
 	case DI_TYPE_NAME(TUPLE):
 		return sizeof(di_tuple);
 	case DI_TYPE_NAME(VARIANT):
@@ -645,7 +643,7 @@ static inline unused size_t di_sizeof_type(di_type t) {
 // http://www.open-std.org/jtc1/sc22/wg14/www/docs/n1930.htm
 #define di_typeid(x)                                                                     \
 	_Generic((x*)0, \
-	struct di_array *: DI_TYPE_ARRAY, \
+	di_array *: DI_TYPE_ARRAY, \
 	di_tuple *: DI_TYPE_TUPLE, \
 	di_variant *: DI_TYPE_VARIANT, \
 	int *: DI_TYPE_NINT, \
@@ -687,12 +685,12 @@ static inline unused size_t di_sizeof_type(di_type t) {
 		*retv = v;                                                               \
 	} while (0);
 
-#define define_object_cleanup(object_type)                                                     \
+#define define_object_cleanup(object_type)                                                      \
 	static inline void unused di_free_##object_type##pp(object_type *nullable *nonnull p) { \
-		if (*p) {                                                                      \
-			di_unref_object((di_object *)*p);                                      \
-		}                                                                              \
-		*p = NULL;                                                                     \
+		if (*p) {                                                                       \
+			di_unref_object((di_object *)*p);                                       \
+		}                                                                               \
+		*p = NULL;                                                                      \
 	}
 #define scopedp(t) with_cleanup(di_free_##t##pp) t
 #define scoped(t) with_cleanup(di_free_##t##p) t

@@ -12,11 +12,11 @@
 
 #include "di_internal.h"
 #include "utils.h"
-struct di_object *di_new_error(const char *fmt, ...) {
+di_object *di_new_error(const char *fmt, ...) {
 	va_list ap;
 	va_start(ap, fmt);
 
-	struct di_string errmsg;
+	di_string errmsg;
 	int ret = vasprintf((char **)&errmsg.data, fmt, ap);
 	if (ret < 0) {
 		errmsg = di_string_dup(fmt);
@@ -24,15 +24,15 @@ struct di_object *di_new_error(const char *fmt, ...) {
 		errmsg.length = strlen(errmsg.data);
 	}
 
-	auto err = di_new_object_with_type(struct di_object);
+	auto err = di_new_object_with_type(di_object);
 	di_set_type(err, "deai:Error");
 
 	di_member(err, "errmsg", errmsg);
 	return err;
 }
 
-static int di_redirected_getter_imp(struct di_object *getter, di_type *rt,
-                                    union di_value *r, struct di_tuple args) {
+static int di_redirected_getter_imp(di_object *getter, di_type *rt,
+                                    di_value *r, di_tuple args) {
 	// argument should be one object "self".
 	if (args.length != 1) {
 		return -EINVAL;
@@ -54,8 +54,8 @@ static int di_redirected_getter_imp(struct di_object *getter, di_type *rt,
 }
 
 /// Create a getter that, when called, returns member `theirs` from `them`
-struct di_object *di_redirected_getter(struct di_weak_object *them, struct di_string theirs) {
-	auto ret = di_new_object_with_type(struct di_object);
+di_object *di_redirected_getter(struct di_weak_object *them, di_string theirs) {
+	auto ret = di_new_object_with_type(di_object);
 	DI_CHECK_OK(di_member_clone(ret, "them", them));
 	DI_CHECK_OK(di_member_clone(ret, "theirs", theirs));
 	di_set_object_call(ret, di_redirected_getter_imp);
@@ -63,8 +63,8 @@ struct di_object *di_redirected_getter(struct di_weak_object *them, struct di_st
 	return ret;
 }
 
-static int di_redirected_setter_imp(struct di_object *setter, di_type *rt,
-                                    union di_value *r, struct di_tuple args) {
+static int di_redirected_setter_imp(di_object *setter, di_type *rt,
+                                    di_value *r, di_tuple args) {
 	if (args.length != 2) {
 		return -EINVAL;
 	}
@@ -83,8 +83,8 @@ static int di_redirected_setter_imp(struct di_object *setter, di_type *rt,
 	return di_setx(them_obj, theirs, args.elements[1].type, args.elements[1].value);
 }
 /// Create a setter that, when called, sets member `theirs` of `them` instead
-struct di_object *di_redirected_setter(struct di_weak_object *them, struct di_string theirs) {
-	auto ret = di_new_object_with_type(struct di_object);
+di_object *di_redirected_setter(struct di_weak_object *them, di_string theirs) {
+	auto ret = di_new_object_with_type(di_object);
 	DI_CHECK_OK(di_member_clone(ret, "them", them));
 	DI_CHECK_OK(di_member_clone(ret, "theirs", theirs));
 	di_set_object_call(ret, di_redirected_setter_imp);
@@ -92,8 +92,8 @@ struct di_object *di_redirected_setter(struct di_weak_object *them, struct di_st
 	return ret;
 }
 
-static int di_redirected_signal_setter_imp(struct di_object *setter, di_type *rt,
-                                           union di_value *r, struct di_tuple args) {
+static int di_redirected_signal_setter_imp(di_object *setter, di_type *rt,
+                                           di_value *r, di_tuple args) {
 	if (args.length != 2) {
 		return -EINVAL;
 	}
@@ -117,7 +117,7 @@ static int di_redirected_signal_setter_imp(struct di_object *setter, di_type *rt
 		return rc;
 	}
 
-	struct di_object *sig = args.elements[1].value->object;
+	di_object *sig = args.elements[1].value->object;
 	rc = di_setx(sig, di_string_borrow_literal("weak_source"), DI_TYPE_WEAK_OBJECT, &them);
 	if (rc != 0) {
 		return rc;
@@ -126,9 +126,9 @@ static int di_redirected_signal_setter_imp(struct di_object *setter, di_type *rt
 }
 /// Create a setter that, when called, sets member `theirs` of `them` instead. Specialized
 /// for setting signal objects, meaning it will update the signal metadata too.
-struct di_object *
-di_redirected_signal_setter(struct di_weak_object *them, struct di_string theirs) {
-	auto ret = di_new_object_with_type(struct di_object);
+di_object *
+di_redirected_signal_setter(struct di_weak_object *them, di_string theirs) {
+	auto ret = di_new_object_with_type(di_object);
 	DI_CHECK_OK(di_member_clone(ret, "them", them));
 	DI_CHECK_OK(di_member_clone(ret, "theirs", theirs));
 	di_set_object_call(ret, di_redirected_signal_setter_imp);
@@ -139,8 +139,8 @@ di_redirected_signal_setter(struct di_weak_object *them, struct di_string theirs
 /// Redirect listener of `ours` on `us` to `theirs` on `them`. Whenever handlers are
 /// registered for `ours` on `us`, they will be redirected to `theirs` on `them` instead,
 /// by adding a getter/setter for __signal_<ours> on `us`.
-int di_redirect_signal(struct di_object *us, struct di_weak_object *them,
-                       struct di_string ours, struct di_string theirs) {
+int di_redirect_signal(di_object *us, struct di_weak_object *them,
+                       di_string ours, di_string theirs) {
 	scoped_di_string sig_theirs =
 	    di_string_printf("__signal_%.*s", (int)theirs.length, theirs.data);
 

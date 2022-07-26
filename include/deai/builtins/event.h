@@ -9,10 +9,10 @@
 
 struct di_promise;
 PUBLIC_DEAI_API void di_resolve_promise(struct di_promise *, struct di_variant);
-PUBLIC_DEAI_API struct di_object *
-di_any_promise(struct di_object *event_module, struct di_array promises);
-PUBLIC_DEAI_API struct di_object *
-di_collect_promises(struct di_object *event_module, struct di_array promises);
-PUBLIC_DEAI_API struct di_object *
-di_promise_then(struct di_object *promise, struct di_object *handler);
-PUBLIC_DEAI_API struct di_object *di_new_promise(struct di_object *event_module);
+PUBLIC_DEAI_API di_object *
+di_any_promise(di_object *event_module, di_array promises);
+PUBLIC_DEAI_API di_object *
+di_collect_promises(di_object *event_module, di_array promises);
+PUBLIC_DEAI_API di_object *
+di_promise_then(di_object *promise, di_object *handler);
+PUBLIC_DEAI_API di_object *di_new_promise(di_object *event_module);

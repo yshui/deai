@@ -8,19 +8,19 @@
 static void takes_string(const char *str unused) {
 }
 
-static struct di_string takes_string_and_return(struct di_string str) {
+static di_string takes_string_and_return(di_string str) {
 	// We only borrows str, so to return an owned value, we need to copy it
 	return di_clone_string(str);
 }
 
 DEAI_PLUGIN_ENTRY_POINT(di) {
 	scoped_di_closure *test1 = di_closure(takes_string, (), const char *);
-	scoped_di_closure *test2 = di_closure(takes_string_and_return, (), struct di_string);
+	scoped_di_closure *test2 = di_closure(takes_string_and_return, (), di_string);
 
 	di_type retty;
-	union di_value val, val2;
+	di_value val, val2;
 	// Test string_literal -> string_literal
-	DI_CHECK_OK(di_call_object((struct di_object *)test1, &retty, &val,
+	DI_CHECK_OK(di_call_object((di_object *)test1, &retty, &val,
 	                           DI_TYPE_STRING_LITERAL, "a string", DI_LAST_TYPE));
 
 	// Test owned string literal -> string
@@ -29,7 +29,7 @@ DEAI_PLUGIN_ENTRY_POINT(di) {
 	di_free_string(val2.string);
 
 	// Test borrowed string literal -> string
-	DI_CHECK_OK(di_call_object((struct di_object *)test2, &retty, &val,
+	DI_CHECK_OK(di_call_object((di_object *)test2, &retty, &val,
 	                           DI_TYPE_STRING_LITERAL, "string literal", DI_LAST_TYPE));
 	DI_CHECK(retty == DI_TYPE_STRING);
 	di_free_string(val.string);

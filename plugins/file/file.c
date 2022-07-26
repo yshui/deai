@@ -22,7 +22,7 @@ struct di_file_watch_entry {
 };
 
 typedef struct di_file_watch {
-	struct di_object;
+	di_object;
 	int fd;
 	int nsignals;
 
@@ -131,7 +131,7 @@ next:
 /// EXPORT: deai.plugin.file:Watch.add_one(path: :string): :integer
 ///
 /// Add a single new file to a watch, returns 0 if successful.
-static int di_file_add_watch(struct di_file_watch *fw, struct di_string path) {
+static int di_file_add_watch(struct di_file_watch *fw, di_string path) {
 	if (!path.data) {
 		return -EINVAL;
 	}
@@ -156,7 +156,7 @@ static int di_file_add_watch(struct di_file_watch *fw, struct di_string path) {
 /// EXPORT: deai.plugin.file:Watch.add(paths: [:string]): :integer
 ///
 /// Add new files to a watch, returns 0 if successful.
-static int di_file_add_many_watch(struct di_file_watch *fw, struct di_array paths) {
+static int di_file_add_many_watch(struct di_file_watch *fw, di_array paths) {
 	if (paths.length == 0) {
 		return 0;
 	}
@@ -165,7 +165,7 @@ static int di_file_add_many_watch(struct di_file_watch *fw, struct di_array path
 	}
 	int ret = 0;
 	if (paths.elem_type == DI_TYPE_STRING) {
-		struct di_string *arr = paths.arr;
+		di_string *arr = paths.arr;
 		for (int i = 0; i < paths.length; i++) {
 			ret = di_file_add_watch(fw, arr[i]);
 			if (ret != 0) {
@@ -189,7 +189,7 @@ static int di_file_add_many_watch(struct di_file_watch *fw, struct di_array path
 /// EXPORT: deai.plugin.file:Watch.remove(path: :string): :integer
 ///
 /// Returns 0 if successful. If the file is not in the watch, return :code:`-ENOENT`.
-static int di_file_rm_watch(struct di_file_watch *fw, struct di_string path) {
+static int di_file_rm_watch(struct di_file_watch *fw, di_string path) {
 	if (!path.data) {
 		return -EINVAL;
 	}
@@ -220,8 +220,8 @@ static void stop_file_watcher(struct di_file_watch *fw) {
 	}
 }
 
-static void di_file_new_signal(struct di_object *fw_, struct di_string member_name,
-                               struct di_object *sig) {
+static void di_file_new_signal(di_object *fw_, di_string member_name,
+                               di_object *sig) {
 	if (!di_string_starts_with(member_name, "__signal_")) {
 		return;
 	}
@@ -246,7 +246,7 @@ static void di_file_new_signal(struct di_object *fw_, struct di_string member_na
 		DI_CHECK_OK(di_callr(event_module, "fdevent", fdevent, fw->fd));
 
 		scoped_di_closure *cl =
-		    di_closure(di_file_ioev, ((struct di_object *)fw));
+		    di_closure(di_file_ioev, ((di_object *)fw));
 		auto listen_handle =
 		    di_listen_to(fdevent, di_string_borrow("read"), (void *)cl);
 		DI_CHECK_OK(di_call(listen_handle, "auto_stop", true));
@@ -254,7 +254,7 @@ static void di_file_new_signal(struct di_object *fw_, struct di_string member_na
 	}
 }
 
-static void di_file_delete_signal(struct di_object *fw_, struct di_string member_name) {
+static void di_file_delete_signal(di_object *fw_, di_string member_name) {
 	if (!di_string_starts_with(member_name, "__signal_")) {
 		return;
 	}
@@ -282,7 +282,7 @@ static void di_file_delete_signal(struct di_object *fw_, struct di_string member
 /// Arguments:
 ///
 /// - paths([:string]) an array of paths to watch
-static struct di_object *di_file_new_watch(struct di_module *f, struct di_array paths) {
+static di_object *di_file_new_watch(struct di_module *f, di_array paths) {
 	if (paths.length > 0 && paths.elem_type != DI_TYPE_STRING &&
 	    paths.elem_type != DI_TYPE_STRING_LITERAL) {
 		return di_new_error("Argument needs to be an array of strings");
@@ -298,18 +298,18 @@ static struct di_object *di_file_new_watch(struct di_module *f, struct di_array 
 	fw->fd = ifd;
 	di_set_object_dtor((void *)fw, (void *)stop_file_watcher);
 
-	di_method(fw, "add", di_file_add_many_watch, struct di_array);
-	di_method(fw, "add_one", di_file_add_watch, struct di_string);
-	di_method(fw, "remove", di_file_rm_watch, struct di_string);
-	di_method(fw, "__set", di_file_new_signal, struct di_string, struct di_object *);
-	di_method(fw, "__delete", di_file_delete_signal, struct di_string);
+	di_method(fw, "add", di_file_add_many_watch, di_array);
+	di_method(fw, "add_one", di_file_add_watch, di_string);
+	di_method(fw, "remove", di_file_rm_watch, di_string);
+	di_method(fw, "__set", di_file_new_signal, di_string, di_object *);
+	di_method(fw, "__delete", di_file_delete_signal, di_string);
 	di_mgetm(f, event, di_new_error("Can't find event module"));
 
 	auto weak_eventm = di_weakly_ref_object(eventm);
 	di_member(fw, "__weak_event_module", weak_eventm);
 
 	if (di_file_add_many_watch(fw, paths) != 0) {
-		di_unref_object((struct di_object *)fw);
+		di_unref_object((di_object *)fw);
 		return di_new_error("Failed to add watches");
 	}
 	return (void *)fw;
@@ -322,7 +322,7 @@ static struct di_object *di_file_new_watch(struct di_module *f, struct di_array 
 /// This module allows you to create event sources for monitoring file changes.
 static struct di_module *di_new_file(struct deai *di) {
 	auto fm = di_new_module(di);
-	di_method(fm, "watch", di_file_new_watch, struct di_array);
+	di_method(fm, "watch", di_file_new_watch, di_array);
 	return fm;
 }
 DEAI_PLUGIN_ENTRY_POINT(di) {

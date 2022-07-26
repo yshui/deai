@@ -5,7 +5,7 @@
 #include "common.h"
 
 DEAI_PLUGIN_ENTRY_POINT(di) {
-	auto object = di_new_object_with_type(struct di_object);
+	auto object = di_new_object_with_type(di_object);
 	auto roots = di_get_roots();
 	DI_CHECK(roots);
 

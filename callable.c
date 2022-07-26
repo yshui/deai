@@ -14,7 +14,7 @@
 #include "utils.h"
 
 struct di_closure {
-	struct di_object_internal;
+	di_object_internal;
 	void (*nonnull fn)(void);
 
 	/// Number of actual arguments
@@ -28,7 +28,7 @@ struct di_closure {
 	di_type atypes[];
 };
 
-static_assert(sizeof(union di_value) >= sizeof(ffi_arg), "ffi_arg is too big");
+static_assert(sizeof(di_value) >= sizeof(ffi_arg), "ffi_arg is too big");
 
 struct ffi_call_args {
 	ffi_cif *cif;
@@ -43,14 +43,14 @@ static void di_call_ffi_call(void *args_) {
 }
 
 static int _di_typed_trampoline(ffi_cif *cif, void (*fn)(void), void *ret, const di_type *fnats,
-                                struct di_tuple args0, struct di_tuple args) {
+                                di_tuple args0, di_tuple args) {
 	assert(args.length == 0 || args.elements != NULL);
 	assert(args0.length == 0 || args0.elements != NULL);
 	assert(args.length >= 0 && args0.length >= 0);
 	assert(args.length + args0.length <= MAX_NARGS);
 
 	struct di_variant *vars = args.elements;
-	union di_value **xargs = alloca((args0.length + args.length) * sizeof(void *));
+	di_value **xargs = alloca((args0.length + args.length) * sizeof(void *));
 	bool *args_cloned = alloca(args.length * sizeof(bool));
 	if (args0.elements != 0) {
 		for (int i = 0; i < args0.length; i++) {
@@ -74,7 +74,7 @@ static int _di_typed_trampoline(ffi_cif *cif, void (*fn)(void), void *ret, const
 				case DI_TYPE_OBJECT:
 					rc = 0;
 					xargs[i]->object =
-					    di_new_object_with_type(struct di_object);
+					    di_new_object_with_type(di_object);
 					args_cloned[i - args0.length] = true;
 					break;
 				case DI_TYPE_WEAK_OBJECT:
@@ -87,11 +87,11 @@ static int _di_typed_trampoline(ffi_cif *cif, void (*fn)(void), void *ret, const
 					break;
 				case DI_TYPE_ARRAY:
 					xargs[i]->array =
-					    (struct di_array){0, NULL, DI_TYPE_ANY};
+					    (di_array){0, NULL, DI_TYPE_ANY};
 					rc = 0;
 					break;
 				case DI_TYPE_TUPLE:
-					xargs[i]->tuple = (struct di_tuple){0, NULL};
+					xargs[i]->tuple = (di_tuple){0, NULL};
 					rc = 0;
 					break;
 				case DI_TYPE_ANY:
@@ -126,12 +126,12 @@ static int _di_typed_trampoline(ffi_cif *cif, void (*fn)(void), void *ret, const
 	    .xargs = (void *)xargs,
 	};
 
-	struct di_object *errobj = di_try(di_call_ffi_call, &ffi_args);
+	di_object *errobj = di_try(di_call_ffi_call, &ffi_args);
 	if (errobj != NULL) {
 		fprintf(stderr, "Caught error from di closure, it says:\n");
-		struct di_string err;
+		di_string err;
 		di_getxt(errobj, di_string_borrow("errmsg"), DI_TYPE_STRING,
-		         (union di_value *)&err);
+		         (di_value *)&err);
 		fprintf(stderr, "%.*s\n", (int)err.length, err.data);
 		di_free_string(err);
 		di_unref_object(errobj);
@@ -139,8 +139,8 @@ static int _di_typed_trampoline(ffi_cif *cif, void (*fn)(void), void *ret, const
 	return rc;
 }
 
-static int closure_trampoline(struct di_object *o, di_type *rtype, union di_value *ret,
-                              struct di_tuple t) {
+static int closure_trampoline(di_object *o, di_type *rtype, di_value *ret,
+                              di_tuple t) {
 	if (!di_check_type(o, "deai:closure")) {
 		return -EINVAL;
 	}
@@ -152,7 +152,7 @@ static int closure_trampoline(struct di_object *o, di_type *rtype, union di_valu
 
 	*rtype = cl->rtype;
 
-	struct di_tuple captures;
+	di_tuple captures;
 	DI_CHECK_OK(di_get(o, "captures", captures));
 	int rc =
 	    _di_typed_trampoline(&cl->cif, cl->fn, ret, cl->atypes + cl->nargs0, captures, t);
@@ -160,14 +160,14 @@ static int closure_trampoline(struct di_object *o, di_type *rtype, union di_valu
 	return rc;
 }
 
-static void free_closure(struct di_object *o) {
+static void free_closure(di_object *o) {
 	assert(di_check_type(o, "deai:closure"));
 
 	struct di_closure *cl = (void *)o;
 	free(cl->cif.arg_types);
 }
 
-struct di_closure *di_create_closure(void (*fn)(void), di_type rtype, struct di_tuple captures,
+struct di_closure *di_create_closure(void (*fn)(void), di_type rtype, di_tuple captures,
                                      int nargs, const di_type *arg_types) {
 	if (nargs < 0 || captures.length + nargs > MAX_NARGS) {
 		return ERR_PTR(-E2BIG);
@@ -217,7 +217,7 @@ struct di_closure *di_create_closure(void (*fn)(void), di_type rtype, struct di_
 	return cl;
 }
 
-int di_add_method(struct di_object *o, struct di_string name, void (*fn)(void),
+int di_add_method(di_object *o, di_string name, void (*fn)(void),
                   di_type rtype, int nargs, ...) {
 	if (nargs < 0 || nargs + 1 > MAX_NARGS) {
 		return -EINVAL;
@@ -241,14 +241,14 @@ int di_add_method(struct di_object *o, struct di_string name, void (*fn)(void),
 }
 
 // va_args version of di_call_callable
-int di_call_objectv(struct di_object *_obj, di_type *rtype, union di_value *ret, va_list ap) {
-	auto obj = (struct di_object_internal *)_obj;
+int di_call_objectv(di_object *_obj, di_type *rtype, di_value *ret, va_list ap) {
+	auto obj = (di_object_internal *)_obj;
 	if (!obj->call) {
 		return -EINVAL;
 	}
 
 	va_list ap2;
-	struct di_tuple tu = DI_TUPLE_INIT;
+	di_tuple tu = DI_TUPLE_INIT;
 
 	va_copy(ap2, ap);
 	di_type t = va_arg(ap, di_type);
@@ -277,13 +277,13 @@ int di_call_objectv(struct di_object *_obj, di_type *rtype, union di_value *ret,
 }
 
 struct di_field_getter {
-	struct di_object_internal;
+	di_object_internal;
 	di_type type;
 	ptrdiff_t offset;
 };
 
-static int di_field_getter_call(struct di_object *getter, di_type *rtype,
-                                union di_value *ret, struct di_tuple args) {
+static int di_field_getter_call(di_object *getter, di_type *rtype,
+                                di_value *ret, di_tuple args) {
 	DI_CHECK(di_check_type(getter, "deai:FieldGetter"));
 
 	if (args.elements[0].type != DI_TYPE_OBJECT) {
@@ -299,9 +299,9 @@ static int di_field_getter_call(struct di_object *getter, di_type *rtype,
 	return 0;
 }
 
-struct di_object *di_new_field_getter(di_type type, ptrdiff_t offset) {
+di_object *di_new_field_getter(di_type type, ptrdiff_t offset) {
 	auto ret = di_new_object_with_type(struct di_field_getter);
-	auto obj = (struct di_object *)ret;
+	auto obj = (di_object *)ret;
 	ret->offset = offset;
 	ret->type = type;
 	ret->call = di_field_getter_call;
@@ -309,15 +309,15 @@ struct di_object *di_new_field_getter(di_type type, ptrdiff_t offset) {
 	return obj;
 }
 
-int di_call_object(struct di_object *o, di_type *rtype, union di_value *ret, ...) {
+int di_call_object(di_object *o, di_type *rtype, di_value *ret, ...) {
 	va_list ap;
 
 	va_start(ap, ret);
 	return di_call_objectv(o, rtype, ret, ap);
 }
 
-int di_call_objectt(struct di_object *obj, di_type *rt, union di_value *ret,
-                    struct di_tuple args) {
-	auto internal = (struct di_object_internal *)obj;
+int di_call_objectt(di_object *obj, di_type *rt, di_value *ret,
+                    di_tuple args) {
+	auto internal = (di_object_internal *)obj;
 	return internal->call(obj, rt, ret, args);
 }

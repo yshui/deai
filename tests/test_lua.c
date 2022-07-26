@@ -5,17 +5,17 @@
 #include "common.h"
 
 /// Convenient method to create an empty di_object
-static struct di_object *create_di_object(struct di_object *unused _) {
-	auto obj = di_new_object_with_type(struct di_object);
+static di_object *create_di_object(di_object *unused _) {
+	auto obj = di_new_object_with_type(di_object);
 	di_set_type(obj, "deai.test:TestObject");
 	return obj;
 }
 
 DEAI_PLUGIN_ENTRY_POINT(di) {
-	di_remove_member_raw((struct di_object *)di, di_string_borrow("lua"));
-	di_remove_member_raw((struct di_object *)di, di_string_borrow("xorg"));
-	di_remove_member_raw((struct di_object *)di, di_string_borrow("file"));
-	di_remove_member_raw((struct di_object *)di, di_string_borrow("dbus"));
+	di_remove_member_raw((di_object *)di, di_string_borrow("lua"));
+	di_remove_member_raw((di_object *)di, di_string_borrow("xorg"));
+	di_remove_member_raw((di_object *)di, di_string_borrow("file"));
+	di_remove_member_raw((di_object *)di, di_string_borrow("dbus"));
 	di_call(di, "load_plugin", (const char *)"./plugins/lua/di_lua.so");
 	di_call(di, "load_plugin", (const char *)"./plugins/xorg/di_xorg.so");
 	di_call(di, "load_plugin", (const char *)"./plugins/file/di_file.so");
@@ -26,7 +26,7 @@ DEAI_PLUGIN_ENTRY_POINT(di) {
 
 	di_method(di, "create_di_object", create_di_object);
 
-	struct di_array dargv;
+	di_array dargv;
 	di_get(di, "argv", dargv);
 
 	const char **argv = dargv.arr;
@@ -36,7 +36,7 @@ DEAI_PLUGIN_ENTRY_POINT(di) {
 				scoped_di_object *o = NULL;
 				DI_CHECK_OK(di_callr(luam, "load_script", o, di_string_borrow(argv[i + 1])));
 
-				struct di_string errmsg;
+				di_string errmsg;
 				if (di_get(o, "errmsg", errmsg) == 0) {
 					fprintf(stderr, "Failed to load script %.*s\n",
 					        (int)errmsg.length, errmsg.data);

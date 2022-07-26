@@ -139,8 +139,8 @@ static inline int is_unsigned(di_type type) {
 		return 2;
 	}
 }
-static inline int integer_conversion(di_type inty, const union di_value *restrict inp,
-                                     di_type outty, union di_value *restrict outp) {
+static inline int integer_conversion(di_type inty, const di_value *restrict inp,
+                                     di_type outty, di_value *restrict outp) {
 	int input_unsigned = is_unsigned(inty), output_unsigned = is_unsigned(outty);
 	int8_t input_bits = di_sizeof_type(inty) * 8, output_bits = di_sizeof_type(outty) * 8;
 	if (input_unsigned == 2 || output_unsigned == 2) {
@@ -174,8 +174,8 @@ static inline bool is_integer(di_type t) {
 //                       not be performed if the caller owns the value, as that would
 //                       cause memory leakage. If `inp` is borrowed, `outp` must also be
 //                       borrowed downstream as well.
-static inline int unused di_type_conversion(di_type inty, union di_value *inp,
-                                            di_type outty, union di_value *outp,
+static inline int unused di_type_conversion(di_type inty, di_value *inp,
+                                            di_type outty, di_value *outp,
                                             bool borrowing) {
 	if (inty == outty) {
 		memcpy(outp, inp, di_sizeof_type(inty));
@@ -190,14 +190,14 @@ static inline int unused di_type_conversion(di_type inty, union di_value *inp,
 
 	if (inty == DI_TYPE_STRING_LITERAL && outty == DI_TYPE_STRING) {
 		if (borrowing) {
-			outp->string = (struct di_string){
+			outp->string = (di_string){
 			    .data = inp->string_literal,
 			    .length = strlen(inp->string_literal),
 			};
 		} else {
 			// If downstream expect an owned string, they will try to
 			// free it, so we have to cloned the string literal
-			outp->string = (struct di_string){
+			outp->string = (di_string){
 			    .data = strdup(inp->string_literal),
 			    .length = strlen(inp->string_literal),
 			};
@@ -230,7 +230,7 @@ static inline int unused di_type_conversion(di_type inty, union di_value *inp,
 		}
 		if (outty == DI_TYPE_FLOAT) {
 #define convert_case(srcfield)                                                           \
-	case di_typeof(((union di_value *)0)->srcfield):                                 \
+	case di_typeof(((di_value *)0)->srcfield):                                 \
 		outp->float_ = (double)inp->srcfield;                                    \
 		break;
 			switch (inty) {
@@ -266,7 +266,7 @@ static inline int unused di_type_conversion(di_type inty, union di_value *inp,
 /// Fetch a value based on di_type from va_arg, and put it into `buf` if `buf` is
 /// not NULL. This function only borrows the value, without cloning it.
 static inline void unused va_arg_with_di_type(va_list ap, di_type t, void *buf) {
-	union di_value v;
+	di_value v;
 
 	switch (t) {
 	case DI_TYPE_STRING_LITERAL:
@@ -276,7 +276,7 @@ static inline void unused va_arg_with_di_type(va_list ap, di_type t, void *buf) 
 		v.pointer = va_arg(ap, void *);
 		break;
 	case DI_TYPE_STRING:
-		v.string = va_arg(ap, struct di_string);
+		v.string = va_arg(ap, di_string);
 		break;
 	case DI_TYPE_NINT:
 		v.nint = va_arg(ap, int);
@@ -298,13 +298,13 @@ static inline void unused va_arg_with_di_type(va_list ap, di_type t, void *buf) 
 		v.bool_ = va_arg(ap, int);
 		break;
 	case DI_TYPE_ARRAY:
-		v.array = va_arg(ap, struct di_array);
+		v.array = va_arg(ap, di_array);
 		break;
 	case DI_TYPE_VARIANT:
 		v.variant = va_arg(ap, struct di_variant);
 		break;
 	case DI_TYPE_TUPLE:
-		v.tuple = va_arg(ap, struct di_tuple);
+		v.tuple = va_arg(ap, di_tuple);
 		break;
 	case DI_TYPE_NIL:
 	case DI_TYPE_ANY:

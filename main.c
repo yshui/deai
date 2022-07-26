@@ -54,7 +54,7 @@ static void load_plugin_impl(struct deai *p, char *sopath) {
 /// Load a single plugin
 ///
 /// EXPORT: load_plugin(file: :string): :void
-static void load_plugin(struct deai *p, struct di_string sopath) {
+static void load_plugin(struct deai *p, di_string sopath) {
 	if (!sopath.data) {
 		return;
 	}
@@ -112,7 +112,7 @@ static int load_plugin_from_dir_impl(struct deai *di, const char *path) {
 /// Load plugins from a directory
 ///
 /// EXPORT: load_plugin_from_dir(path: :string): :integer
-static int load_plugin_from_dir(struct deai *p, struct di_string path) {
+static int load_plugin_from_dir(struct deai *p, di_string path) {
 	if (!path.data) {
 		return -1;
 	}
@@ -127,7 +127,7 @@ static int load_plugin_from_dir(struct deai *p, struct di_string path) {
 /// Change working directory
 ///
 /// EXPORT: chdir(dir: :string): :integer
-int di_chdir(struct di_object *p, struct di_string dir) {
+int di_chdir(di_object *p, di_string dir) {
 	if (!dir.data) {
 		return -EINVAL;
 	}
@@ -314,7 +314,7 @@ void di_dtor(struct deai *di) {
 void di_prepare_exit(struct deai *di, int ec) {
 	*di->exit_code = ec;
 	// Drop all the roots, this should stop the program
-	di_finalize_object((struct di_object *)roots);
+	di_finalize_object((di_object *)roots);
 }
 
 /// Exit deai
@@ -371,7 +371,7 @@ static void setproctitle_init(int argc, char **argv, struct deai *p) {
 		environ[i] += proctitle_offset;
 	}
 }
-static void di_set_pr_name(struct deai *p, struct di_string name) {
+static void di_set_pr_name(struct deai *p, di_string name) {
 	if (name.data) {
 		memset((char *)p->proctitle, 0, p->proctitle_end - p->proctitle);
 		auto nlen = name.length;
@@ -390,8 +390,8 @@ static void setproctitle_init(int argc, char **argv, struct deai *p) {
 }
 #endif
 
-static struct di_array di_get_argv(struct deai *p) {
-	struct di_array ret;
+static di_array di_get_argv(struct deai *p) {
+	di_array ret;
 	ret.length = p->argc;
 	ret.elem_type = DI_TYPE_STRING_LITERAL;
 	ret.arr = calloc(p->argc, sizeof(void *));
@@ -404,7 +404,7 @@ static struct di_array di_get_argv(struct deai *p) {
 	return ret;
 }
 
-int di_register_module(struct deai *p, struct di_string name, struct di_module **m) {
+int di_register_module(struct deai *p, di_string name, struct di_module **m) {
 	int ret =
 	    di_add_member_move((void *)p, name, (di_type[]){DI_TYPE_OBJECT}, (void **)m);
 	return ret;
@@ -414,7 +414,7 @@ int di_register_module(struct deai *p, struct di_string name, struct di_module *
 ///
 /// EXPORT: register_module(name: :string, module: deai:module): :integer
 static int
-di_register_module_method(struct deai *p, struct di_string name, struct di_module *m) {
+di_register_module_method(struct deai *p, di_string name, struct di_module *m) {
 	// Don't consumer the ref, because it breaks the usual method call sementics
 	return di_add_member_clonev((void *)p, name, DI_TYPE_OBJECT, m);
 }
@@ -425,9 +425,9 @@ di_register_module_method(struct deai *p, struct di_string name, struct di_modul
 ///
 /// This call replaces the current process by running another binary. One use case for
 /// this is to restart deai.
-int di_exec(struct deai *p, struct di_array argv) {
+int di_exec(struct deai *p, di_array argv) {
 	char **nargv = tmalloc(char *, argv.length + 1);
-	struct di_string *strings = argv.arr;
+	di_string *strings = argv.arr;
 	for (int i = 0; i < argv.length; i++) {
 		nargv[i] = di_string_to_chars_alloc(strings[i]);
 	}
@@ -449,7 +449,7 @@ void di_terminate(struct deai *p) {
 }
 
 /// Add an named object as a root to keep it alive
-static bool di_add_root(struct di_object *di, struct di_string key, struct di_object *obj) {
+static bool di_add_root(di_object *di, di_string key, di_object *obj) {
 	char *buf;
 	asprintf(&buf, "__root_%.*s", (int)key.length, key.data);
 	int rc = di_add_member_clonev(di, di_string_borrow(buf), DI_TYPE_OBJECT, obj);
@@ -458,7 +458,7 @@ static bool di_add_root(struct di_object *di, struct di_string key, struct di_ob
 }
 
 /// Remove an named root from roots
-static bool di_remove_root(struct di_object *di, struct di_string key) {
+static bool di_remove_root(di_object *di, di_string key) {
 	char *buf;
 	asprintf(&buf, "__root_%.*s", (int)key.length, key.data);
 	int rc = di_remove_member_raw(di, di_string_borrow(buf));
@@ -467,10 +467,10 @@ static bool di_remove_root(struct di_object *di, struct di_string key) {
 }
 
 /// Remove all named roots
-static void di_clear_roots(struct di_object *di_) {
+static void di_clear_roots(di_object *di_) {
 	static const char *const root_prefix = "__root_";
 	const size_t root_prefix_len = strlen(root_prefix);
-	auto di = (struct di_object_internal *)di_;
+	auto di = (di_object_internal *)di_;
 	struct di_member *i, *tmp;
 	HASH_ITER (hh, di->members, i, tmp) {
 		if (i->name.length < root_prefix_len) {
@@ -485,7 +485,7 @@ static void di_clear_roots(struct di_object *di_) {
 /// Add an unnamed root. Unlike the named roots, these roots don't need a unique name,
 /// but the caller instead needs to keep a handle to the root in order to remove it.
 /// The returned handle is guaranteed to be greater than 0
-static uint64_t di_add_anonymous_root(struct di_object *obj, struct di_object *root) {
+static uint64_t di_add_anonymous_root(di_object *obj, di_object *root) {
 	auto roots = (struct di_roots *)obj;
 	DI_CHECK(roots->next_anonymous_root_id != 0, "anonymous root id overflown");
 
@@ -498,7 +498,7 @@ static uint64_t di_add_anonymous_root(struct di_object *obj, struct di_object *r
 }
 
 /// Remove an unnamed root.
-static void di_remove_anonymous_root(struct di_object *obj, uint64_t root_handle) {
+static void di_remove_anonymous_root(di_object *obj, uint64_t root_handle) {
 	auto roots = (struct di_roots *)obj;
 	struct di_anonymous_root *aroot = NULL;
 	HASH_FIND(hh, roots->anonymous_roots, &root_handle, sizeof(root_handle), aroot);
@@ -509,7 +509,7 @@ static void di_remove_anonymous_root(struct di_object *obj, uint64_t root_handle
 	}
 }
 
-static void di_roots_dtor(struct di_object *obj) {
+static void di_roots_dtor(di_object *obj) {
 	// Drop all the anonymous roots
 	auto roots = (struct di_roots *)obj;
 	struct di_anonymous_root *i, *tmp;
@@ -518,7 +518,7 @@ static void di_roots_dtor(struct di_object *obj) {
 	// cause another anonymous root to be removed anywhere on the list, HASH_ITER is
 	// not enough to handle this scenario.
 	auto total_roots = HASH_COUNT(roots->anonymous_roots);
-	auto objects_to_free = tmalloc(struct di_object *, total_roots);
+	auto objects_to_free = tmalloc(di_object *, total_roots);
 	size_t index = 0;
 	HASH_ITER (hh, roots->anonymous_roots, i, tmp) {
 		HASH_DEL(roots->anonymous_roots, i);
@@ -533,11 +533,11 @@ static void di_roots_dtor(struct di_object *obj) {
 	free(objects_to_free);
 }
 
-static struct di_object *di_roots_getter(struct di_object *unused di) {
+static di_object *di_roots_getter(di_object *unused di) {
 	// If roots is gotten via a deai getter, we need to respect the getter semantics
 	// and increment the refcount, even though normally this is not needed.
-	di_ref_object((struct di_object *)roots);
-	return (struct di_object *)roots;
+	di_ref_object((di_object *)roots);
+	return (di_object *)roots;
 }
 
 int main(int argc, char *argv[]) {
@@ -545,17 +545,17 @@ int main(int argc, char *argv[]) {
 	INIT_LIST_HEAD(&all_objects);
 #endif
 	auto p = di_new_object_with_type(struct deai);
-	di_set_type((struct di_object *)p, "deai:Core");
+	di_set_type((di_object *)p, "deai:Core");
 
 	roots = di_new_object_with_type(struct di_roots);
-	di_set_type((struct di_object *)roots, "deai:Roots");
-	DI_CHECK_OK(di_method(roots, "add", di_add_root, struct di_string, struct di_object *));
-	DI_CHECK_OK(di_method(roots, "remove", di_remove_root, struct di_string));
+	di_set_type((di_object *)roots, "deai:Roots");
+	DI_CHECK_OK(di_method(roots, "add", di_add_root, di_string, di_object *));
+	DI_CHECK_OK(di_method(roots, "remove", di_remove_root, di_string));
 	DI_CHECK_OK(di_method(roots, "clear", di_clear_roots));
 	DI_CHECK_OK(di_method(roots, "__add_anonymous", di_add_anonymous_root,
-	                      struct di_object *));
+	                      di_object *));
 	DI_CHECK_OK(di_method(roots, "__remove_anonymous", di_remove_anonymous_root, uint64_t));
-	di_set_object_dtor((struct di_object *)roots, di_roots_dtor);
+	di_set_object_dtor((di_object *)roots, di_roots_dtor);
 	roots->next_anonymous_root_id = 1;
 
 	// exit_code and quit cannot be owned by struct deai, because they are read
@@ -581,23 +581,23 @@ int main(int argc, char *argv[]) {
 		exit(1);
 	}
 
-	DI_CHECK_OK(di_method(p, "load_plugin_from_dir", load_plugin_from_dir, struct di_string));
-	DI_CHECK_OK(di_method(p, "load_plugin", load_plugin, struct di_string));
+	DI_CHECK_OK(di_method(p, "load_plugin_from_dir", load_plugin_from_dir, di_string));
+	DI_CHECK_OK(di_method(p, "load_plugin", load_plugin, di_string));
 	DI_CHECK_OK(di_method(p, "register_module", di_register_module_method,
-	                      struct di_string, struct di_object *));
-	DI_CHECK_OK(di_method(p, "chdir", di_chdir, struct di_string));
-	DI_CHECK_OK(di_method(p, "exec", di_exec, struct di_array));
+	                      di_string, di_object *));
+	DI_CHECK_OK(di_method(p, "chdir", di_chdir, di_string));
+	DI_CHECK_OK(di_method(p, "exec", di_exec, di_array));
 
 	DI_CHECK_OK(di_method(p, "quit", di_prepare_quit));
 	DI_CHECK_OK(di_method(p, "exit", di_prepare_exit, int));
 	DI_CHECK_OK(di_method(p, "terminate", di_terminate));
 #ifdef HAVE_SETPROCTITLE
-	DI_CHECK_OK(di_method(p, "__set_proctitle", di_set_pr_name, struct di_string));
+	DI_CHECK_OK(di_method(p, "__set_proctitle", di_set_pr_name, di_string));
 #endif
-	auto closure = (struct di_object *)di_closure(di_dump_objects, ());
+	auto closure = (di_object *)di_closure(di_dump_objects, ());
 	di_member(p, "dump_objects", closure);
 
-	DI_CHECK_OK(di_method(p, "track_object_ref", di_track_object_ref, struct di_object *));
+	DI_CHECK_OK(di_method(p, "track_object_ref", di_track_object_ref, di_object *));
 
 	DI_CHECK_OK(di_method(p, "__get_roots", di_roots_getter));
 	DI_CHECK_OK(di_method(p, "__get_argv", di_get_argv));
@@ -672,7 +672,7 @@ int main(int argc, char *argv[]) {
 		        DI_PLUGIN_INSTALL_DIR);
 	}
 
-	struct di_object *mod = NULL;
+	di_object *mod = NULL;
 	if (modname) {
 		ret = di_get(p, modname, mod);
 		if (ret != 0) {
@@ -680,14 +680,14 @@ int main(int argc, char *argv[]) {
 			exit(EXIT_FAILURE);
 		}
 	} else {
-		mod = di_ref_object((struct di_object *)p);
+		mod = di_ref_object((di_object *)p);
 	}
 
 	di_type rt;
-	union di_value retd;
+	di_value retd;
 	bool called;
 	ret = di_rawcallxn(mod, di_string_borrow(method), &rt, &retd,
-	                   (struct di_tuple){nargs, di_args}, &called);
+	                   (di_tuple){nargs, di_args}, &called);
 	if (ret != 0) {
 		fprintf(stderr, "Failed to call \"%s.%s\"\n", modname ? modname : "", method);
 		exit_code = EXIT_FAILURE;
@@ -695,7 +695,7 @@ int main(int argc, char *argv[]) {
 	}
 
 	if (rt == DI_TYPE_OBJECT) {
-		struct di_string errmsg;
+		di_string errmsg;
 		if (di_get(retd.object, "errmsg", errmsg) == 0) {
 			fprintf(stderr, "The function you called returned an error message:\n%.*s\n",
 			        (int)errmsg.length, errmsg.data);
@@ -710,7 +710,7 @@ int main(int argc, char *argv[]) {
 	free(modname);
 
 	for (int i = 0; i < nargs; i++) {
-		di_free_value(DI_TYPE_VARIANT, (union di_value *)&di_args[i]);
+		di_free_value(DI_TYPE_VARIANT, (di_value *)&di_args[i]);
 	}
 	free(di_args);
 
@@ -731,7 +731,7 @@ int main(int argc, char *argv[]) {
 		ev_run(p->loop, 0);
 	}
 
-	di_unref_object((struct di_object *)roots);
+	di_unref_object((di_object *)roots);
 	// Set to NULL so the leak checker can catch leaks
 	roots = NULL;
 

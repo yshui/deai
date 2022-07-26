@@ -24,7 +24,7 @@ struct di_log {
 	int log_level;
 };
 
-static int level_lookup(struct di_string l) {
+static int level_lookup(di_string l) {
 	if (strncasecmp(l.data, "error", l.length) == 0) {
 		return DI_LOG_ERROR;
 	}
@@ -57,7 +57,7 @@ static const char *level_tostring(int log_level) {
 }
 
 // Function exposed via di_object to be used by any plugins
-static int di_log(struct di_object *o, di_type *rt, union di_value *ret, struct di_tuple t) {
+static int di_log(di_object *o, di_type *rt, di_value *ret, di_tuple t) {
 	if (t.length != 3) {
 		return -EINVAL;
 	}
@@ -66,7 +66,7 @@ static int di_log(struct di_object *o, di_type *rt, union di_value *ret, struct 
 		return -EINVAL;
 	}
 
-	struct di_string log_level, str;
+	di_string log_level, str;
 	if (t.elements[1].type == DI_TYPE_STRING) {
 		log_level = t.elements[1].value->string;
 	} else {
@@ -101,11 +101,11 @@ static int di_log(struct di_object *o, di_type *rt, union di_value *ret, struct 
 }
 
 struct log_file {
-	struct di_object_internal;
+	di_object_internal;
 	FILE *f;
 };
 
-static int file_target_write(struct log_file *lf, struct di_string log) {
+static int file_target_write(struct log_file *lf, di_string log) {
 	auto rc = fwrite(log.data, 1, log.length, lf->f);
 	if (log.data[log.length - 1] != '\n') {
 		fputs("\n", lf->f);
@@ -124,8 +124,8 @@ static void file_target_dtor(struct log_file *lf) {
 /// EXPORT: log.file_target(filename: :string, overwrite: :bool): deai.builtin.log:FileTarget
 ///
 /// Create a log target that writes to a file.
-static struct di_object *
-file_target(struct di_log *l, struct di_string filename, bool overwrite) {
+static di_object *
+file_target(struct di_log *l, di_string filename, bool overwrite) {
 	char filename_str[PATH_MAX];
 	if (!di_string_to_chars(filename, filename_str, sizeof(filename_str))) {
 		return di_new_error("Filename too long for file target");
@@ -147,10 +147,10 @@ file_target(struct di_log *l, struct di_string filename, bool overwrite) {
 		return di_new_error("Can't set cloexec");
 	}
 	auto lf = di_new_object_with_type(struct log_file);
-	di_set_type((struct di_object *)lf, "deai.builtin.log:FileTarget");
+	di_set_type((di_object *)lf, "deai.builtin.log:FileTarget");
 	lf->f = f;
 	lf->dtor = (void *)file_target_dtor;
-	di_method(lf, "write", file_target_write, struct di_string);
+	di_method(lf, "write", file_target_write, di_string);
 	return (void *)lf;
 }
 
@@ -159,18 +159,18 @@ file_target(struct di_log *l, struct di_string filename, bool overwrite) {
 /// EXPORT: log.stderr_target(): deai.builtin.log:StderrTarget
 ///
 /// Create a log target that writes to stderr.
-static struct di_object *stderr_target(struct di_log *unused l) {
+static di_object *stderr_target(struct di_log *unused l) {
 	auto ls = di_new_object_with_type(struct log_file);
-	di_set_type((struct di_object *)ls, "deai.builtin.log:StderrTarget");
+	di_set_type((di_object *)ls, "deai.builtin.log:StderrTarget");
 	ls->f = stderr;
 	ls->dtor = NULL;
-	di_method(ls, "write", file_target_write, struct di_string);
+	di_method(ls, "write", file_target_write, di_string);
 	return (void *)ls;
 }
 
 int saved_log_level = DI_LOG_WARN;
 // Public API to be used by C plugins
-int di_log_va(struct di_object *o, int log_level, const char *fmt, ...) {
+int di_log_va(di_object *o, int log_level, const char *fmt, ...) {
 	va_list ap;
 	va_start(ap, fmt);
 	int ret = 0;
@@ -189,7 +189,7 @@ int di_log_va(struct di_object *o, int log_level, const char *fmt, ...) {
 	} else {
 		scoped_di_string log = di_string_vprintf(fmt, ap);
 		di_type return_type;
-		union di_value return_value;
+		di_value return_value;
 		const char *level_string = level_tostring(log_level);
 		di_call_object(o, &return_type, &return_value, DI_TYPE_OBJECT, o,
 		               DI_TYPE_STRING_LITERAL, level_string, DI_TYPE_STRING, log,
@@ -211,7 +211,7 @@ static const char *get_log_level(struct di_log *l) {
 	return strdup(level_tostring(l->log_level));
 }
 
-int di_set_log_level(struct di_object *o, int log_level) {
+int di_set_log_level(di_object *o, int log_level) {
 	if (log_level > DI_LOG_DEBUG) {
 		return -1;
 	}
@@ -221,13 +221,13 @@ int di_set_log_level(struct di_object *o, int log_level) {
 	return 0;
 }
 
-static int set_log_level(struct di_log *l, struct di_string ll) {
+static int set_log_level(struct di_log *l, di_string ll) {
 	int nll = level_lookup(ll);
 	return di_set_log_level((void *)l, nll);
 }
 
-struct di_object *log_module = NULL;
-void log_dtor(struct di_object *unused _) {
+di_object *log_module = NULL;
+void log_dtor(di_object *unused _) {
 	log_module = NULL;
 }
 /// EXPORT: log: deai:module
@@ -250,22 +250,22 @@ void di_init_log(struct deai *di) {
 	if (!lm) {
 		return;
 	}
-	di_set_type((struct di_object *)lm, "deai.builtin:LogModule");
+	di_set_type((di_object *)lm, "deai.builtin:LogModule");
 
 	struct di_log *l = (void *)lm;
 	l->log_level = DI_LOG_WARN;
 
 	auto dtgt = stderr_target(l);
 
-	di_add_member_move((struct di_object *)l, di_string_borrow("log_target"),
+	di_add_member_move((di_object *)l, di_string_borrow("log_target"),
 	                   (di_type[]){DI_TYPE_OBJECT}, &dtgt);
-	((struct di_object_internal *)l)->call = di_log;
-	di_method(l, "file_target", file_target, struct di_string, bool);
+	((di_object_internal *)l)->call = di_log;
+	di_method(l, "file_target", file_target, di_string, bool);
 	di_method(l, "stderr_target", stderr_target);
 	di_getter(l, log_level, get_log_level);
-	di_setter(l, log_level, set_log_level, struct di_string);
+	di_setter(l, log_level, set_log_level, di_string);
 	di_set_object_dtor((void *)l, log_dtor);
 
-	log_module = (struct di_object *)lm;
+	log_module = (di_object *)lm;
 	di_register_module(di, di_string_borrow("log"), &lm);
 }

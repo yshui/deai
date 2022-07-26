@@ -151,7 +151,7 @@ xcb_input_get_device_info(xcb_connection_t *c, xcb_input_device_id_t deviceid,
 /// Name of the device
 ///
 /// EXPORT: deai.plugin.xorg.xi:Device.name: :string
-static struct di_string di_xorg_xinput_get_device_name(struct di_xorg_xinput_device *dev) {
+static di_string di_xorg_xinput_get_device_name(struct di_xorg_xinput_device *dev) {
 	scopedp(di_xorg_connection) *dc = NULL;
 	if (get_xorg_connection((void *)dev->xi, &dc) != 0) {
 		return di_string_dup("unknown");
@@ -217,7 +217,7 @@ const char *possible_types[] = {
 /// <https://gitlab.freedesktop.org/xorg/proto/xorgproto/-/blob/09602b2/specs/XIproto.txt#L361-380>`_.
 ///
 /// Note all values are converted to lower case.
-static struct di_string di_xorg_xinput_get_device_type(struct di_xorg_xinput_device *dev) {
+static di_string di_xorg_xinput_get_device_type(struct di_xorg_xinput_device *dev) {
 	scopedp(di_xorg_connection) *dc = NULL;
 	if (get_xorg_connection((struct di_xorg_ext *)dev->xi, &dc) != 0) {
 		return di_string_dup("unknown");
@@ -254,13 +254,13 @@ define_trivial_cleanup(xcb_input_xi_change_property_items_t);
 /// Arbitrary length limit for the property names
 #define XI_MAX_PROPERTY_NAME_LENGTH (256)
 static void di_xorg_xinput_set_prop(struct di_xorg_xinput_device *dev,
-                                    struct di_string key, struct di_variant var) {
+                                    di_string key, struct di_variant var) {
 	scopedp(di_xorg_connection) *dc = NULL;
 	if (get_xorg_connection((struct di_xorg_ext *)dev->xi, &dc) != 0) {
 		return;
 	}
 
-	struct di_array arr;
+	di_array arr;
 	if (var.type != DI_TYPE_ARRAY) {
 		arr.elem_type = var.type;
 		arr.arr = var.value;
@@ -303,7 +303,7 @@ static void di_xorg_xinput_set_prop(struct di_xorg_xinput_device *dev,
 		int64_t i64;
 		float f;
 		void *dst = data + step * i;
-		union di_value *src = arr.arr + di_sizeof_type(arr.elem_type) * i;
+		di_value *src = arr.arr + di_sizeof_type(arr.elem_type) * i;
 
 		switch (arr.elem_type) {
 		case DI_TYPE_INT:
@@ -406,14 +406,14 @@ err:
 }
 
 static struct di_variant
-di_xorg_xinput_get_prop(struct di_xorg_xinput_device *dev, struct di_string name_) {
+di_xorg_xinput_get_prop(struct di_xorg_xinput_device *dev, di_string name_) {
 	scopedp(di_xorg_connection) *dc = NULL;
 	if (get_xorg_connection((void *)dev->xi, &dc) != 0) {
 		return di_variant_of(di_new_error("Lost X connection"));
 	}
 
 	xcb_generic_error_t *e;
-	struct di_array ret = DI_ARRAY_INIT;
+	di_array ret = DI_ARRAY_INIT;
 	auto prop_atom = di_xorg_intern_atom(dc, name_, &e);
 
 	if (e) {
@@ -494,7 +494,7 @@ di_xorg_xinput_get_prop(struct di_xorg_xinput_device *dev, struct di_string name
 				unreachable();
 			}
 		} else if (ret.elem_type == DI_TYPE_STRING) {
-			struct di_string *tmp = curr;
+			di_string *tmp = curr;
 			DI_ASSERT(prop->type == XCB_ATOM_ATOM);
 			auto atom = di_xorg_get_atom_name(dc, read(32));
 			if (atom == NULL) {
@@ -539,8 +539,8 @@ static di_object *di_xorg_xinput_props(struct di_xorg_xinput_device *dev) {
 	obj->deviceid = dev->deviceid;
 	obj->xi = dev->xi;
 
-	di_method(obj, "__get", di_xorg_xinput_get_prop, struct di_string);
-	di_method(obj, "__set", di_xorg_xinput_set_prop, struct di_string, struct di_variant);
+	di_method(obj, "__get", di_xorg_xinput_get_prop, di_string);
+	di_method(obj, "__set", di_xorg_xinput_set_prop, di_string, struct di_variant);
 	return (void *)obj;
 }
 
@@ -575,7 +575,7 @@ static di_object *di_xorg_make_object_for_devid(struct di_xorg_xinput *xi, int d
 /// All XInput devices
 ///
 /// EXPORT: deai.plugin.xorg:XiExt.devices: [deai.plugin.xorg.xi:Device]
-static struct di_array di_xorg_get_all_devices(struct di_xorg_xinput *xi) {
+static di_array di_xorg_get_all_devices(struct di_xorg_xinput *xi) {
 	scopedp(di_xorg_connection) *dc = NULL;
 	if (get_xorg_connection((struct di_xorg_ext *)xi, &dc) != 0) {
 		return DI_ARRAY_INIT;
@@ -590,7 +590,7 @@ static struct di_array di_xorg_get_all_devices(struct di_xorg_xinput *xi) {
 		ndev++;
 	}
 
-	struct di_array ret;
+	di_array ret;
 	ret.length = ndev;
 	ret.elem_type = DI_TYPE_OBJECT;
 	if (ndev) {

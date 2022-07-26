@@ -433,8 +433,8 @@ make_object_for_output(struct di_xorg_randr *rr, xcb_randr_output_t oid) {
 /// EXPORT: deai.plugin.xorg.randr:View.outputs: [deai.plugin.xorg.randr:Output]
 ///
 /// A list of outputs that is connected to this view.
-static struct di_array get_view_outputs(struct di_xorg_view *v) {
-	struct di_array ret = DI_ARRAY_INIT;
+static di_array get_view_outputs(struct di_xorg_view *v) {
+	di_array ret = DI_ARRAY_INIT;
 	scopedp(di_xorg_connection) *dc = NULL;
 	if (get_xorg_connection((struct di_xorg_ext *)v->rr, &dc) != 0) {
 		return ret;
@@ -575,8 +575,8 @@ static void disable_randr_event(struct di_xorg_randr *rr, uint16_t mask) {
 /// EXPORT: deai.plugin.xorg:RandrExt.outputs: [deai.plugin.xorg.randr:Output]
 ///
 /// Generally, outputs are what we would call monitors.
-static struct di_array rr_outputs(struct di_xorg_randr *rr) {
-	struct di_array ret = DI_ARRAY_INIT;
+static di_array rr_outputs(struct di_xorg_randr *rr) {
+	di_array ret = DI_ARRAY_INIT;
 	scopedp(di_xorg_connection) *dc = NULL;
 	if (get_xorg_connection((struct di_xorg_ext *)rr, &dc) != 0) {
 		return ret;
@@ -622,8 +622,8 @@ make_object_for_modes(struct di_xorg_randr *rr, xcb_randr_mode_info_t *m) {
 /// Available modes from RandR
 ///
 /// EXPORT: deai.plugin.xorg:RandrExt.modes: [deai.plugin.xorg.randr:Mode]
-static struct di_array rr_modes(struct di_xorg_randr *rr) {
-	struct di_array ret = DI_ARRAY_INIT;
+static di_array rr_modes(struct di_xorg_randr *rr) {
+	di_array ret = DI_ARRAY_INIT;
 	scopedp(di_xorg_connection) *dc = NULL;
 	if (get_xorg_connection((struct di_xorg_ext *)rr, &dc) != 0) {
 		return ret;
@@ -645,7 +645,7 @@ static struct di_array rr_modes(struct di_xorg_randr *rr) {
 	ret.elem_type = DI_TYPE_OBJECT;
 
 	auto mi = xcb_randr_get_screen_resources_current_modes_iterator(sr);
-	di_object **arr = ret.arr = tmalloc(struct di_object *, ret.length);
+	di_object **arr = ret.arr = tmalloc(di_object *, ret.length);
 	for (int i = 0; mi.rem; xcb_randr_mode_info_next(&mi), i++) {
 		arr[i] = make_object_for_modes(rr, mi.data);
 	}

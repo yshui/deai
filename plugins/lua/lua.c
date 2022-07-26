@@ -86,7 +86,7 @@ typedef struct di_lua_state {
 	// and access in lua again as module.
 	//
 	// lua_state -> di_module/di_lua_ref -> lua_script -> lua_state
-	struct di_object;
+	di_object;
 	lua_State *L;
 
 	// Object tracking in di_lua:
@@ -113,12 +113,12 @@ typedef struct di_lua_state {
 } di_lua_state;
 
 struct di_lua_ref {
-	struct di_object;
+	di_object;
 	int tref;
 };
 
 typedef struct di_lua_script {
-	struct di_object;
+	di_object;
 	char *path;
 } di_lua_script;
 
@@ -215,7 +215,7 @@ static void lua_ref_dtor(struct di_lua_ref *t) {
 	}
 }
 
-static int di_lua_type_to_di(lua_State *L, int i, di_type *t, union di_value *ret);
+static int di_lua_type_to_di(lua_State *L, int i, di_type *t, di_value *ret);
 
 static inline int di_lua_type_to_di_variant(lua_State *L, int i, struct di_variant *var) {
 	int rc = di_lua_type_to_di(L, i, &var->type, NULL);
@@ -229,7 +229,7 @@ static inline int di_lua_type_to_di_variant(lua_State *L, int i, struct di_varia
 }
 
 static int
-di_lua_di_getter(struct di_object *m, di_type *rt, union di_value *ret, struct di_tuple tu) {
+di_lua_di_getter(di_object *m, di_type *rt, di_value *ret, di_tuple tu) {
 	if (tu.length != 2) {
 		return -EINVAL;
 	}
@@ -288,16 +288,16 @@ static struct di_lua_ref *lua_type_to_di_object(lua_State *L, int i, void *call)
 	lua_pop(L, 1);        // pop the script object
 
 	auto o = di_new_object_with_type(struct di_lua_ref);
-	di_set_type((struct di_object *)o, "deai.plugin.lua:LuaRef");
+	di_set_type((di_object *)o, "deai.plugin.lua:LuaRef");
 	o->tref = luaL_ref(L, LUA_REGISTRYINDEX);        // this pops the table from
 	                                                 // stack, we need to put it back
-	di_member_clone(o, "___di_lua_script", (struct di_object *)s);
+	di_member_clone(o, "___di_lua_script", (di_object *)s);
 
 	// Restore the value onto the stack
 	lua_pushinteger(L, o->tref);
 	lua_rawget(L, LUA_REGISTRYINDEX);
 
-	auto getter = di_new_object_with_type(struct di_object);
+	auto getter = di_new_object_with_type(di_object);
 	di_set_object_call((void *)getter, di_lua_di_getter);
 	di_add_member_move((void *)o, di_string_borrow("__get"),
 	                   (di_type[]){DI_TYPE_OBJECT}, (void **)&getter);
@@ -308,7 +308,7 @@ static struct di_lua_ref *lua_type_to_di_object(lua_State *L, int i, void *call)
 	return o;
 }
 
-static int di_lua_method_handler_impl(lua_State *L, const char *name, struct di_object *m) {
+static int di_lua_method_handler_impl(lua_State *L, const char *name, di_object *m) {
 	if (!di_is_object_callable(m)) {
 		return luaL_error(L, "Object %s is not callable\n", name);
 	}
@@ -339,7 +339,7 @@ static int di_lua_method_handler_impl(lua_State *L, const char *name, struct di_
 }
 
 static int di_lua_method_handler(lua_State *L) {
-	struct di_object *m = lua_touserdata(L, lua_upvalueindex(1));
+	di_object *m = lua_touserdata(L, lua_upvalueindex(1));
 	const char *name = lua_tostring(L, lua_upvalueindex(2));
 	return di_lua_method_handler_impl(L, name, m);
 }
@@ -385,7 +385,7 @@ static bool luaL_weakref_get(lua_State *L, int index, int r) {
 
 static int di_lua_gc(lua_State *L) {
 	void **optr = di_lua_checkproxy(L, 1);
-	struct di_object *o = *optr;
+	di_object *o = *optr;
 	struct di_lua_state *s;
 
 	di_lua_get_state(L, s);
@@ -499,7 +499,7 @@ di_lua_pushproxy(lua_State *L, const char *name, void *o, const luaL_Reg *reg, b
 /// deduplication of objects, and keeping track of object references.
 ///
 /// This function consume the reference to `obj`
-static void di_lua_pushobject(lua_State *L, const char *name, struct di_object *obj) {
+static void di_lua_pushobject(lua_State *L, const char *name, di_object *obj) {
 	struct di_lua_state *s;
 	di_lua_get_state(L, s);
 
@@ -550,12 +550,12 @@ static void lua_state_dtor(struct di_lua_state *obj) {
 
 static di_lua_state *lua_new_state(struct di_module *m) {
 	auto L = di_new_object_with_type(struct di_lua_state);
-	di_set_type((struct di_object *)L, "deai.plugin.lua:LuaState");
+	di_set_type((di_object *)L, "deai.plugin.lua:LuaState");
 	L->L = luaL_newstate();
 	di_set_object_dtor((void *)L, (void *)lua_state_dtor);
 	luaL_openlibs(L->L);
 
-	struct di_object *di = (void *)di_module_get_deai(m);
+	di_object *di = (void *)di_module_get_deai(m);
 	di_lua_pushproxy(L->L, "di", di, di_lua_di_methods, false);
 	lua_setglobal(L->L, "di");
 
@@ -576,7 +576,7 @@ static di_lua_state *lua_new_state(struct di_module *m) {
 	lua_setglobal(L->L, "os");
 	lua_pop(L->L, 1);
 
-	auto Lo = di_weakly_ref_object((struct di_object *)L);
+	auto Lo = di_weakly_ref_object((di_object *)L);
 	di_member(m, "__lua_state", Lo);
 
 	// Store the state object in the lua registry
@@ -599,7 +599,7 @@ define_object_cleanup(di_lua_state);
 /// - path path to the script
 ///
 /// Load and execute a lua script. Returns a handle to the script.
-static struct di_object *di_lua_load_script(struct di_object *obj, struct di_string path_) {
+static di_object *di_lua_load_script(di_object *obj, di_string path_) {
 	/**
 	 * Reference count scheme for di_lua_script:
 	 *
@@ -617,7 +617,7 @@ static struct di_object *di_lua_load_script(struct di_object *obj, struct di_str
 
 	char *path = di_string_to_chars_alloc(path_);
 	scopedp(di_lua_script) *s = di_new_object_with_type(struct di_lua_script);
-	di_set_type((struct di_object *)s, "deai.plugin.lua:LuaScript");
+	di_set_type((di_object *)s, "deai.plugin.lua:LuaScript");
 	di_set_object_dtor((void *)s, (void *)di_lua_free_script);
 
 	struct di_module *m = (void *)obj;
@@ -634,7 +634,7 @@ static struct di_object *di_lua_load_script(struct di_object *obj, struct di_str
 
 		if (L == NULL) {
 			// __lua_state not found, or lua_state has been dropped
-			di_remove_member_raw((struct di_object *)m,
+			di_remove_member_raw((di_object *)m,
 			                     di_string_borrow("__lua_state"));
 			L = lua_new_state(m);
 		}
@@ -656,7 +656,7 @@ static struct di_object *di_lua_load_script(struct di_object *obj, struct di_str
 	}
 
 	s->path = path;
-	di_member_clone(s, "___di_lua_state", (struct di_object *)L);
+	di_member_clone(s, "___di_lua_state", (di_object *)L);
 
 	int ret;
 	// load_script might be called by lua script,
@@ -678,11 +678,11 @@ static struct di_object *di_lua_load_script(struct di_object *obj, struct di_str
 		lua_pop(L->L, 2);
 		return di_new_error("%s", err);
 	}
-	return di_ref_object((struct di_object *)s);
+	return di_ref_object((di_object *)s);
 }
 
 static int di_lua_table_to_array(lua_State *L, int index, int nelem, di_type elemt,
-                                 struct di_array *ret) {
+                                 di_array *ret) {
 	ret->elem_type = elemt;
 
 	size_t sz = di_sizeof_type(elemt);
@@ -693,7 +693,7 @@ static int di_lua_table_to_array(lua_State *L, int index, int nelem, di_type ele
 		di_type t;
 		lua_rawgeti(L, index, i);
 
-		union di_value retd;
+		di_value retd;
 		di_lua_type_to_di(L, -1, &t, &retd);
 		lua_pop(L, 1);
 		if (t != elemt) {
@@ -732,7 +732,7 @@ static bool di_lua_checkarray(lua_State *L, int index, int *nelem, di_type *elem
 	lua_rawgeti(L, index, i++);
 
 	// get the type of the first element
-	union di_value ret;
+	di_value ret;
 	di_lua_type_to_di(L, -1, elemt, &ret);
 	di_free_value(*elemt, &ret);
 	// Pop 2 value, top of stack is the key
@@ -778,8 +778,8 @@ static bool di_lua_checkarray(lua_State *L, int index, int *nelem, di_type *elem
 	return true;
 }
 
-static int call_lua_function(struct di_lua_ref *ref, di_type *rt, union di_value *ret,
-                             struct di_tuple t) {
+static int call_lua_function(struct di_lua_ref *ref, di_type *rt, di_value *ret,
+                             di_tuple t) {
 	scoped_di_object *script_obj = NULL;
 	DI_CHECK_OK(di_get(ref, "___di_lua_script", script_obj));
 
@@ -822,7 +822,7 @@ static int call_lua_function(struct di_lua_ref *ref, di_type *rt, union di_value
 /// Convert lua value at index `i` to a deai value.
 /// The value is not popped. If `ret` is NULL, the value is not returned, but the type
 /// will always be returned
-static int di_lua_type_to_di(lua_State *L, int i, di_type *t, union di_value *ret) {
+static int di_lua_type_to_di(lua_State *L, int i, di_type *t, di_value *ret) {
 #define ret_arg(i, field, gfn)                                                           \
 	do {                                                                             \
 		*t = di_typeof(ret->field);                                              \
@@ -832,10 +832,10 @@ static int di_lua_type_to_di(lua_State *L, int i, di_type *t, union di_value *re
 		return 0;                                                                \
 	} while (0)
 #define tostringdup(L, i) strdup(lua_tostring(L, i))
-#define todiobj(L, i) (struct di_object *)lua_type_to_di_object(L, i, call_lua_function)
+#define todiobj(L, i) (di_object *)lua_type_to_di_object(L, i, call_lua_function)
 #define toobjref(L, i)                                                                   \
 	({                                                                               \
-		struct di_object *x = *(void **)lua_touserdata(L, i);                    \
+		di_object *x = *(void **)lua_touserdata(L, i);                    \
 		di_ref_object(x);                                                        \
 		x;                                                                       \
 	})
@@ -917,12 +917,12 @@ struct di_lua_listen_handle_proxy {
 };
 
 struct di_signal_handler_wrapper {
-	struct di_object;
+	di_object;
 	struct di_lua_listen_handle_proxy *listen_handle;
 };
 
-static int call_lua_signal_handler_once(struct di_object *obj, di_type *rt,
-                                        union di_value *ret, struct di_tuple t);
+static int call_lua_signal_handler_once(di_object *obj, di_type *rt,
+                                        di_value *ret, di_tuple t);
 /// EXPORT: deai.plugin.lua:Proxy.on(signal: :string, callback): deai:ListenHandle
 ///
 /// Listen for signals
@@ -941,35 +941,35 @@ static int call_lua_signal_handler_once(struct di_object *obj, di_type *rt,
 static int di_lua_add_listener(lua_State *L) {
 	// Stack: [ object, string, lua closure ]
 	bool once = lua_toboolean(L, lua_upvalueindex(1));
-	struct di_object *o = *di_lua_checkproxy(L, 1);
+	di_object *o = *di_lua_checkproxy(L, 1);
 
 	if (lua_gettop(L) != 3) {
 		return luaL_error(L, "'on' takes 3 arguments");
 	}
 
-	struct di_string signame;
+	di_string signame;
 	signame.data = luaL_checklstring(L, 2, &signame.length);
 	if (lua_type(L, -1) != LUA_TFUNCTION) {
 		return luaL_argerror(L, 3, "not a function");
 	}
 
-	auto handler = (struct di_object *)lua_type_to_di_object(L, -1, call_lua_function);
+	auto handler = (di_object *)lua_type_to_di_object(L, -1, call_lua_function);
 
 	if (once) {
 		auto wrapped_handler =
 		    di_new_object_with_type2(struct di_signal_handler_wrapper,
 		                             "deai.plugin.lua:OnceSignalHandler");
-		di_set_object_call((struct di_object *)wrapped_handler,
+		di_set_object_call((di_object *)wrapped_handler,
 		                   call_lua_signal_handler_once);
 		di_member(wrapped_handler, "wrapped", handler);
-		handler = (struct di_object *)wrapped_handler;
+		handler = (di_object *)wrapped_handler;
 	}
 
 	auto listen_handle = di_listen_to(o, signame, (void *)handler);
 	if (once) {
 		di_member_clone(handler, "listen_handle", listen_handle);
 	}
-	di_unref_object((struct di_object *)handler);
+	di_unref_object((di_object *)handler);
 
 	if (di_check_type(listen_handle, "deai:Error")) {
 		scoped_di_string errmsg;
@@ -1006,8 +1006,8 @@ static int di_lua_pushvariant(lua_State *L, const char *name, struct di_variant 
 	int b;
 	lua_Integer i;
 	lua_Number n;
-	struct di_array *arr;
-	struct di_tuple *tuple;
+	di_array *arr;
+	di_tuple *tuple;
 	struct di_weak_object *weak;
 	int step;
 	switch (var.type) {
@@ -1088,12 +1088,12 @@ pushnumber:
 
 // Stack: [ object, string (signal name), arguments... ]
 int di_lua_emit_signal(lua_State *L) {
-	struct di_object *o = *di_lua_checkproxy(L, 1);
+	di_object *o = *di_lua_checkproxy(L, 1);
 	const char *signame = luaL_checkstring(L, 2);
 	int top = lua_gettop(L);
 	int rc = 0;
 
-	struct di_tuple t;
+	di_tuple t;
 	t.elements = tmalloc(struct di_variant, top - 2);
 	t.length = top - 2;
 
@@ -1119,7 +1119,7 @@ err:
 
 static int di_lua_upgrade_weak_ref(lua_State *L) {
 	struct di_weak_object *weak = *di_lua_checkproxy(L, 1);
-	struct di_object *strong = di_upgrade_weak_ref(weak);
+	di_object *strong = di_upgrade_weak_ref(weak);
 	if (strong == NULL) {
 		return 0;
 	}
@@ -1130,8 +1130,8 @@ static int di_lua_upgrade_weak_ref(lua_State *L) {
 
 // Stack: [ object ]
 static int di_lua_weak_ref(lua_State *L) {
-	struct di_object *strong = *di_lua_checkproxy(L, 1);
-	union di_value weak = {.weak_object = di_weakly_ref_object(strong)};
+	di_object *strong = *di_lua_checkproxy(L, 1);
+	di_value weak = {.weak_object = di_weakly_ref_object(strong)};
 	int nret = di_lua_pushvariant(
 	    L, NULL, (struct di_variant){.type = DI_TYPE_WEAK_OBJECT, .value = &weak});
 	di_drop_weak_ref(&weak.weak_object);
@@ -1157,8 +1157,8 @@ static int di_lua_meta_index_for_weak_object(lua_State *L) {
 	return 0;
 }
 
-static int call_lua_signal_handler_once(struct di_object *obj, di_type *rt,
-                                        union di_value *ret, struct di_tuple t) {
+static int call_lua_signal_handler_once(di_object *obj, di_type *rt,
+                                        di_value *ret, di_tuple t) {
 	scoped_di_object *handler = NULL;
 	scoped_di_object *listen_handle = NULL;
 	DI_CHECK_OK(di_get(obj, "wrapped", handler));
@@ -1194,7 +1194,7 @@ static int di_lua_meta_index(lua_State *L) {
 	}
 
 	const char *key = luaL_checklstring(L, 2, NULL);
-	struct di_object *ud = *di_lua_checkproxy(L, 1);
+	di_object *ud = *di_lua_checkproxy(L, 1);
 
 	// Handle the special methods
 	if (strcmp(key, "on") == 0) {
@@ -1217,7 +1217,7 @@ static int di_lua_meta_index(lua_State *L) {
 	}
 
 	di_type rt;
-	union di_value ret;
+	di_value ret;
 	int rc = di_getx(ud, di_string_borrow(key), &rt, &ret);
 	if (rc != 0) {
 		lua_pushnil(L);
@@ -1239,12 +1239,12 @@ static int di_lua_meta_newindex(lua_State *L) {
 		return luaL_error(L, "wrong number of arguments to __newindex");
 	}
 
-	struct di_object *ud = *di_lua_checkproxy(L, 1);
-	struct di_string key;
+	di_object *ud = *di_lua_checkproxy(L, 1);
+	di_string key;
 	key.data = luaL_checklstring(L, 2, &key.length);
 	di_type vt;
 
-	union di_value val;
+	di_value val;
 	int rc = di_lua_type_to_di(L, 3, &vt, &val);
 	if (rc != 0) {
 		return luaL_error(L, "unhandled lua type");
@@ -1304,7 +1304,7 @@ static int di_lua_meta_newindex(lua_State *L) {
 static struct di_module *di_new_lua(struct deai *di) {
 	auto m = di_new_module(di);
 
-	di_method(m, "load_script", di_lua_load_script, struct di_string);
+	di_method(m, "load_script", di_lua_load_script, di_string);
 	return m;
 }
 DEAI_PLUGIN_ENTRY_POINT(di) {

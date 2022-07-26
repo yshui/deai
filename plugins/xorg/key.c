@@ -37,7 +37,7 @@ static const char *const modifier_names[] = {
     "shift", "lock", "control", "mod1", "mod2", "mod3", "mod4", "mod5",
 };
 
-static int name_to_mod(struct di_string keyname) {
+static int name_to_mod(di_string keyname) {
 	for (int i = 0, mask = 1; i < ARRAY_SIZE(modifier_names); i++, mask *= 2) {
 		if (strncasecmp(keyname.data, modifier_names[i], keyname.length) == 0) {
 			return mask;
@@ -147,7 +147,7 @@ static int refresh_binding(struct keybinding *kb) {
 static bool key_register_listener(struct xorg_key *k);
 static void key_deregister_listener(struct xorg_key *k);
 static void
-keybinding_new_signal(const char *signal, di_object *obj, struct di_object *sig) {
+keybinding_new_signal(const char *signal, di_object *obj, di_object *sig) {
 	bool had_signal = di_has_member(obj, "__signal_pressed") ||
 	                  di_has_member(obj, "__signal_released");
 	if (di_add_member_clone(obj, di_string_borrow(signal), DI_TYPE_OBJECT, &sig) != 0) {
@@ -220,7 +220,7 @@ static void keybinding_del_signal(const char *signal, di_object *obj) {
 ///                 press.
 /// - key(:string)
 di_object *
-new_binding(struct xorg_key *k, struct di_array modifiers, struct di_string key, bool replay) {
+new_binding(struct xorg_key *k, di_array modifiers, di_string key, bool replay) {
 	scoped_di_object *dc_obj = NULL;
 	if (di_get(k, XORG_CONNECTION_MEMBER, dc_obj) != 0) {
 		return di_new_error("Connection died");
@@ -237,7 +237,7 @@ new_binding(struct xorg_key *k, struct di_array modifiers, struct di_string key,
 	}
 
 	int mod = 0;
-	struct di_string *arr = modifiers.arr;
+	di_string *arr = modifiers.arr;
 	for (int i = 0; i < modifiers.length; i++) {
 		int tmp = name_to_mod(arr[i]);
 		if (tmp == XCB_NO_SYMBOL) {
@@ -421,7 +421,7 @@ struct di_xorg_ext *new_key(di_xorg_connection *dc) {
 
 	INIT_LIST_HEAD(&k->bindings);
 	save_xorg_connection((struct di_xorg_ext *)k, dc);
-	di_method(k, "new", new_binding, struct di_array, struct di_string, bool);
+	di_method(k, "new", new_binding, di_array, di_string, bool);
 	di_set_object_dtor((void *)k, (void *)free_key);
 	return (void *)k;
 }

@@ -17,13 +17,13 @@
 #include "uthash.h"
 
 struct di_member {
-	struct di_string name;
-	union di_value *nonnull data;
+	di_string name;
+	di_value *nonnull data;
 	di_type type;
 	UT_hash_handle hh;
 };
 
-struct di_object_internal {
+typedef struct di_object_internal {
 	struct di_member *nullable members;
 
 	di_dtor_fn nullable dtor;
@@ -45,20 +45,20 @@ struct di_object_internal {
 #endif
 	uint8_t mark;
 	uint8_t destroyed;
-};
+} di_object_internal;
 
 #ifdef TRACK_OBJECTS
 extern thread_local struct list_head all_objects;
 #endif
 
 struct di_anonymous_root {
-	struct di_object *nonnull obj;
+	di_object *nonnull obj;
 	uint64_t id;
 	UT_hash_handle hh;
 };
 
 struct di_roots {
-	struct di_object_internal;
+	di_object_internal;
 	uint64_t next_anonymous_root_id;
 	struct di_anonymous_root *nullable anonymous_roots;
 };
@@ -69,7 +69,7 @@ struct di_ref_tracked_object {
 };
 
 struct deai {
-	struct di_object_internal;
+	di_object_internal;
 	struct ev_loop *nonnull loop;
 
 	int argc;
@@ -87,7 +87,7 @@ struct deai {
 };
 
 struct di_module {
-	struct di_object;
+	di_object;
 	UT_hash_handle hh;
 };
 
@@ -171,13 +171,13 @@ static inline ffi_status unused di_ffi_prep_cif(ffi_cif *nonnull cif, unsigned i
 
 struct di_module *nullable di_new_module_with_size(struct deai *nonnull di, size_t size);
 
-struct di_object *nullable di_try(void (*nonnull func)(void *nullable), void *nullable args);
+di_object *nullable di_try(void (*nonnull func)(void *nullable), void *nullable args);
 void di_collect_garbage(void);
 #ifdef TRACK_OBJECTS
 void di_dump_objects(void);
 /// Returns true if leaks are found
 bool di_mark_and_sweep(bool *nonnull has_cycle);
-void di_track_object_ref(struct di_object *nonnull, void *nonnull);
+void di_track_object_ref(di_object *nonnull, void *nonnull);
 void __attribute__((noinline)) print_stack_trace(int skip, int limit);
 #else
 static inline void di_dump_objects(void) {
@@ -187,6 +187,6 @@ static inline bool di_mark_and_sweep(bool *nonnull has_cycle) {
 	return false;
 }
 static inline void
-di_track_object_ref(struct di_object *unused nonnull a, void *unused nonnull b) {
+di_track_object_ref(di_object *unused nonnull a, void *unused nonnull b) {
 }
 #endif

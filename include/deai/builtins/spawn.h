@@ -6,7 +6,7 @@
 
 #pragma once
 
-#include <deai/object.h>
+#include "../object.h"
 
 struct di_spawn;
 
@@ -18,5 +18,5 @@ struct di_spawn;
  * @param[in] ignore_output If true, the stdout and stderr will be redirected to
  *            /dev/null
  */
-struct di_object *
-di_spawn_run(struct di_spawn *p, struct di_array argv, bool ignore_output);
+di_object *
+di_spawn_run(struct di_spawn *p, di_array argv, bool ignore_output);

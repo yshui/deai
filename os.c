@@ -13,7 +13,7 @@
 
 #include "os.h"
 
-static struct di_variant di_env_get(struct di_module *m, struct di_string name_) {
+static struct di_variant di_env_get(struct di_module *m, di_string name_) {
 	struct di_variant ret = {
 	    .type = DI_LAST_TYPE,
 	    .value = NULL,
@@ -32,7 +32,7 @@ static struct di_variant di_env_get(struct di_module *m, struct di_string name_)
 	return ret;
 }
 
-static void di_env_set(struct di_module *m, struct di_string key_, struct di_string val_) {
+static void di_env_set(struct di_module *m, di_string key_, di_string val_) {
 	if (!key_.data || !val_.data) {
 		return;
 	}
@@ -41,7 +41,7 @@ static void di_env_set(struct di_module *m, struct di_string key_, struct di_str
 	setenv(key, val, 1);
 }
 
-static void di_env_unset(struct di_module *m, struct di_string key_) {
+static void di_env_unset(struct di_module *m, di_string key_) {
 	if (!key_.data) {
 		return;
 	}
@@ -71,12 +71,12 @@ static const char *di_get_hostname(struct deai *p) {
 void di_init_os(struct deai *di) {
 	struct di_module *m = di_new_module(di);
 
-	struct di_object *o = di_new_object_with_type(struct di_object);
+	di_object *o = di_new_object_with_type(di_object);
 	di_set_type(o, "deai.builtin.os:Env");
 
-	di_method(o, "__get", di_env_get, struct di_string);
-	di_method(o, "__set", di_env_set, struct di_string, struct di_string);
-	di_method(o, "__delete", di_env_unset, struct di_string);
+	di_method(o, "__get", di_env_get, di_string);
+	di_method(o, "__set", di_env_set, di_string, di_string);
+	di_method(o, "__delete", di_env_unset, di_string);
 
 	di_member(m, "env", o);
 

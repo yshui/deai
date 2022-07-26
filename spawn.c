@@ -34,7 +34,7 @@
 /// * stdout_line(line: string) a line has been written to stdout by the child
 /// * exit(exit_code, signal) the child process has exited
 struct child {
-	struct di_object;
+	di_object;
 	pid_t pid;
 
 	ev_child w;
@@ -98,7 +98,7 @@ static const char *const SIGNAL_NAME[] = {"stdout_line", "stderr_line"};
 static void sigchld_handler(EV_P_ ev_child *w, int revents) {
 	struct child *c = container_of(w, struct child, w);
 	// Keep child process object alive when emitting
-	scoped_di_object unused *obj = di_ref_object((struct di_object *)c);
+	scoped_di_object unused *obj = di_ref_object((di_object *)c);
 
 	int sig = 0;
 	if (WIFSIGNALED(w->rstatus)) {
@@ -125,7 +125,7 @@ static void sigchld_handler(EV_P_ ev_child *w, int revents) {
 	di_remove_member((void *)c, di_string_borrow("__signal_exit"));
 }
 
-static void child_destroy(struct di_object *obj) {
+static void child_destroy(di_object *obj) {
 	auto c = (struct child *)obj;
 	for (int i = 0; i < 2; i++) {
 		if (c->output_buf[i]) {
@@ -138,7 +138,7 @@ static void child_destroy(struct di_object *obj) {
 	}
 }
 
-static void output_cb(struct di_object *obj, int id) {
+static void output_cb(di_object *obj, int id) {
 	auto c = (struct child *)obj;
 	assert(c->output_buf[id]);
 	output_handler(c, c->fds[id], id, SIGNAL_NAME[id]);
@@ -158,7 +158,7 @@ static void kill_child(struct child *c, int sig) {
 	kill(c->pid, sig);
 }
 
-static struct di_object *di_setup_fds(bool ignore_output, int *opfds, int *epfds, int *ifd) {
+static di_object *di_setup_fds(bool ignore_output, int *opfds, int *epfds, int *ifd) {
 	opfds[0] = opfds[1] = -1;
 	epfds[0] = epfds[1] = -1;
 	*ifd = -1;
@@ -207,7 +207,7 @@ static struct di_object *di_setup_fds(bool ignore_output, int *opfds, int *epfds
 	return ret;
 }
 
-static void di_child_process_new_exit_signal(struct di_object *p, struct di_object *sig) {
+static void di_child_process_new_exit_signal(di_object *p, di_object *sig) {
 	if (di_member_clone(p, "__signal_exit", sig) != 0) {
 		return;
 	}
@@ -231,7 +231,7 @@ static void di_child_process_new_exit_signal(struct di_object *p, struct di_obje
 	DI_CHECK_OK(di_call(roots, "add", child_root_key, p));
 }
 
-static void di_child_start_output_listener(struct di_object *p, int id) {
+static void di_child_start_output_listener(di_object *p, int id) {
 	scoped_di_object *di_obj = di_object_get_deai_weak(p);
 	if (di_obj == NULL) {
 		return;
@@ -256,26 +256,26 @@ static void di_child_start_output_listener(struct di_object *p, int id) {
 	c->output_buf[id] = string_buf_new();
 }
 
-static void di_child_process_new_stdout_signal(struct di_object *p, struct di_object *sig) {
+static void di_child_process_new_stdout_signal(di_object *p, di_object *sig) {
 	if (di_member_clone(p, "__signal_stdout_line", sig) != 0) {
 		return;
 	}
 	di_child_start_output_listener(p, 0);
 }
 
-static void di_child_process_new_stderr_signal(struct di_object *p, struct di_object *sig) {
+static void di_child_process_new_stderr_signal(di_object *p, di_object *sig) {
 	if (di_member_clone(p, "__signal_stderr_line", sig) != 0) {
 		return;
 	}
 	di_child_start_output_listener(p, 1);
 }
 
-static void di_child_process_delete_exit_signal(struct di_object *obj) {
+static void di_child_process_delete_exit_signal(di_object *obj) {
 	if (di_remove_member_raw(obj, di_string_borrow("__signal_exit")) != 0) {
 		return;
 	}
 	auto c = (struct child *)obj;
-	scoped_di_object *di_obj = di_object_get_deai_strong((struct di_object *)c);
+	scoped_di_object *di_obj = di_object_get_deai_strong((di_object *)c);
 
 	auto di = (struct deai *)di_obj;
 	EV_P = di->loop;
@@ -289,7 +289,7 @@ static void di_child_process_delete_exit_signal(struct di_object *obj) {
 	di_object_downgrade_deai((void *)c);
 }
 
-static void di_child_process_stop_output_listener(struct di_object *obj, int id) {
+static void di_child_process_stop_output_listener(di_object *obj, int id) {
 	scoped_di_string listen_handle_key =
 	    di_string_printf("__listen_handle_for_output_%d", id);
 	DI_CHECK_OK(di_remove_member_raw(obj, listen_handle_key));
@@ -300,13 +300,13 @@ static void di_child_process_stop_output_listener(struct di_object *obj, int id)
 	c->output_buf[id] = NULL;
 }
 
-static void di_child_process_delete_stdout_signal(struct di_object *obj) {
+static void di_child_process_delete_stdout_signal(di_object *obj) {
 	if (di_remove_member_raw(obj, di_string_borrow("__signal_stdout_line")) == 0) {
 		di_child_process_stop_output_listener(obj, 0);
 	}
 }
 
-static void di_child_process_delete_stderr_signal(struct di_object *obj) {
+static void di_child_process_delete_stderr_signal(di_object *obj) {
 	if (di_remove_member_raw(obj, di_string_borrow("__signal_stderr_line")) == 0) {
 		di_child_process_stop_output_listener(obj, 1);
 	}
@@ -324,7 +324,7 @@ static void di_child_process_delete_stderr_signal(struct di_object *obj) {
 ///                 avoid the program's output from being blocked.
 ///
 /// Returns an object representing the child process.
-struct di_object *di_spawn_run(struct di_spawn *p, struct di_array argv, bool ignore_output) {
+di_object *di_spawn_run(struct di_spawn *p, di_array argv, bool ignore_output) {
 	if (argv.elem_type != DI_TYPE_STRING) {
 		return di_new_error("Invalid argv type");
 	}
@@ -340,7 +340,7 @@ struct di_object *di_spawn_run(struct di_spawn *p, struct di_array argv, bool ig
 	}
 
 	char **nargv = tmalloc(char *, argv.length + 1);
-	struct di_string *strings = argv.arr;
+	di_string *strings = argv.arr;
 	for (int i = 0; i < argv.length; i++) {
 		nargv[i] = di_string_to_chars_alloc(strings[i]);
 	}
@@ -379,16 +379,16 @@ struct di_object *di_spawn_run(struct di_spawn *p, struct di_array argv, bool ig
 	}
 
 	auto cp = di_new_object_with_type(struct child);
-	di_set_type((struct di_object *)cp, "deai.builtin.spawn:ChildProcess");
-	di_set_object_dtor((struct di_object *)cp, child_destroy);
+	di_set_type((di_object *)cp, "deai.builtin.spawn:ChildProcess");
+	di_set_object_dtor((di_object *)cp, child_destroy);
 	di_method(cp, "__get_pid", get_child_pid);
 	di_method(cp, "kill", kill_child, int);
 	di_method(cp, "__set___signal_exit", di_child_process_new_exit_signal,
-	          struct di_object *);
+	          di_object *);
 	di_method(cp, "__set___signal_stdout_line", di_child_process_new_stdout_signal,
-	          struct di_object *);
+	          di_object *);
 	di_method(cp, "__set___signal_stderr_line", di_child_process_new_stderr_signal,
-	          struct di_object *);
+	          di_object *);
 	di_method(cp, "__delete___signal_exit", di_child_process_delete_exit_signal);
 	di_method(cp, "__delete___signal_stdout_line", di_child_process_delete_stdout_signal);
 	di_method(cp, "__delete___signal_stderr_line", di_child_process_delete_stderr_signal);
@@ -418,7 +418,7 @@ void di_init_spawn(struct deai *di) {
 	}
 
 	auto m = di_new_module_with_size(di, sizeof(struct di_spawn));
-	di_method(m, "run", di_spawn_run, struct di_array, bool);
+	di_method(m, "run", di_spawn_run, di_array, bool);
 
 	di_register_module(di, di_string_borrow("spawn"), &m);
 }

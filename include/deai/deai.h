@@ -39,7 +39,7 @@ static inline bool IS_ERR_OR_NULL(const void *ptr) {
 	return unlikely(!ptr) || IS_ERR_VALUE((unsigned long)ptr);
 }
 
-static inline struct di_object *unused
+static inline di_object *unused
 di_new_object_with_type_name(size_t size, size_t alignment, const char *type) {
 	__auto_type ret = di_new_object(size, alignment);
 	di_set_type(ret, type);
@@ -49,7 +49,7 @@ di_new_object_with_type_name(size_t size, size_t alignment, const char *type) {
 typedef void (*init_fn_t)(struct deai *);
 
 PUBLIC_DEAI_API struct di_module *di_new_module(struct deai *);
-PUBLIC_DEAI_API int di_register_module(struct deai *, struct di_string, struct di_module **);
+PUBLIC_DEAI_API int di_register_module(struct deai *, di_string, struct di_module **);
 
 #define di_new_object_with_type(type) (type *)di_new_object(sizeof(type), alignof(type))
 #define di_new_object_with_type2(type, di_type)                                          \
