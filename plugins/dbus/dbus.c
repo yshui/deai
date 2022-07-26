@@ -159,12 +159,12 @@ static void ioev_callback(struct di_object *conn, void *ptr, int event) {
 
 static void dbus_add_signal_handler_for(struct di_object *ioev, DBusWatch *w,
                                         di_dbus_connection *oc, const char *signal, int event) {
-	di_object_with_cleanup handler =
+	scoped_di_object *handler =
 	    (void *)di_closure(ioev_callback, ((struct di_object *)oc, (void *)w, event));
 	auto l = di_listen_to(ioev, di_string_borrow(signal), handler);
 	DI_CHECK_OK(di_call(l, "auto_stop", true));
 
-	with_cleanup_t(char) listen_handle_name;
+	scopedp(char) *listen_handle_name;
 	asprintf(&listen_handle_name, "__dbus_ioev_%s_listen_handle_for_watch_%p", signal, w);
 	DI_CHECK_OK(di_member(oc, listen_handle_name, l));
 }
@@ -175,13 +175,13 @@ static bool dbus_toggle_watch_impl(DBusWatch *w, void *ud, bool enabled) {
 	if (!enabled) {
 		// Remove the listen handles: they are auto stop handles so this is enough
 		if (flags & DBUS_WATCH_READABLE) {
-			with_cleanup_t(char) listen_handle_name;
+			scopedp(char) *listen_handle_name;
 			asprintf(&listen_handle_name,
 			         "__dbus_ioev_read_listen_handle_for_watch_%p", w);
 			di_remove_member_raw((void *)oc, di_string_borrow(listen_handle_name));
 		}
 		if (flags & DBUS_WATCH_WRITABLE) {
-			with_cleanup_t(char) listen_handle_name;
+			scopedp(char) *listen_handle_name;
 			asprintf(&listen_handle_name,
 			         "__dbus_ioev_write_listen_handle_for_"
 			         "watch_%p",
@@ -190,9 +190,9 @@ static bool dbus_toggle_watch_impl(DBusWatch *w, void *ud, bool enabled) {
 		}
 	} else {
 		// Add signal listeners, this automatically starts the fdevent.
-		di_object_with_cleanup eventm = NULL;
-		di_object_with_cleanup di = di_object_get_deai_strong((struct di_object *)oc);
-		di_object_with_cleanup ioev = NULL;
+		scoped_di_object *eventm = NULL;
+		scoped_di_object *di = di_object_get_deai_strong((struct di_object *)oc);
+		scoped_di_object *ioev = NULL;
 		if (di_get(di, "event", eventm) != 0) {
 			return false;
 		}
@@ -215,9 +215,9 @@ static void dbus_toggle_watch(DBusWatch *w, void *ud) {
 
 static unsigned int dbus_add_watch(DBusWatch *w, void *ud) {
 	di_dbus_connection *oc = ud;
-	di_object_with_cleanup ioev = NULL;
+	scoped_di_object *ioev = NULL;
 	/*fprintf(stderr, "w %p, flags: %d, fd: %d\n", w, flags, fd);*/
-	with_cleanup_t(char) ioev_name;
+	scopedp(char) *ioev_name;
 	asprintf(&ioev_name, "__dbus_ioev_for_watch_%p", w);
 
 	if (di_get(oc, ioev_name, ioev) == 0) {
@@ -266,7 +266,7 @@ static struct di_object *
 dbus_call_method(di_dbus_object *dobj, struct di_string iface, struct di_string method,
                  struct di_string signature, struct di_tuple t) {
 
-	di_object_with_cleanup conn = NULL;
+	scoped_di_object *conn = NULL;
 	if (di_get(dobj, "___deai_dbus_connection", conn) != 0) {
 		return di_new_error("DBus connection gone");
 	}
@@ -275,7 +275,7 @@ dbus_call_method(di_dbus_object *dobj, struct di_string iface, struct di_string 
 
 	int64_t serial;
 	int rc;
-	di_string_with_cleanup bus = DI_STRING_INIT, path = DI_STRING_INIT;
+	scoped_di_string bus = DI_STRING_INIT, path = DI_STRING_INIT;
 	DI_CHECK_OK(di_get(dobj, "___bus_name", bus));
 	DI_CHECK_OK(di_get(dobj, "___object_path", path));
 	if ((rc = di_callr(conn, "send", serial, di_string_borrow_literal("method"), bus,
@@ -285,7 +285,7 @@ dbus_call_method(di_dbus_object *dobj, struct di_string iface, struct di_string 
 	}
 
 	auto promise = di_new_promise(eventm);
-	di_string_with_cleanup promise_name =
+	scoped_di_string promise_name =
 	    di_string_printf("promise_for_request_%ld", serial);
 	di_add_member_clonev(conn, promise_name, DI_TYPE_OBJECT, promise);
 	di_dbus_nsignal_inc((void *)conn);
@@ -309,7 +309,7 @@ static void di_dbus_free_method(struct di_object *o) {
 }
 
 static int
-call_dbus_method(struct di_object *m, di_type_t *rt, union di_value *ret, struct di_tuple t) {
+call_dbus_method(struct di_object *m, di_type *rt, union di_value *ret, struct di_tuple t) {
 	// The first argument is the dbus object
 	if (t.length < 1 || t.elements[0].type != DI_TYPE_OBJECT) {
 		return -EINVAL;
@@ -340,7 +340,7 @@ call_dbus_method(struct di_object *m, di_type_t *rt, union di_value *ret, struct
 /// Since there is multiple possible ways to serialize a deai value to dbus, sometimes
 /// deai can get it wrong and not create the desired dbus types. This method accepts an
 /// explicit dbus type signature and tries to match that.
-static int call_dbus_method_with_signature(struct di_object *m, di_type_t *rt,
+static int call_dbus_method_with_signature(struct di_object *m, di_type *rt,
                                            union di_value *ret, struct di_tuple t) {
 	*rt = DI_TYPE_OBJECT;
 	if (t.length < 3 || t.elements[0].type != DI_TYPE_OBJECT ||
@@ -376,8 +376,8 @@ static struct di_variant di_dbus_object_getter(di_dbus_object *dobj, struct di_s
 	}
 
 	const char *dot = memrchr(method.data, '.', method.length);
-	with_cleanup_t(char) ifc;
-	with_cleanup_t(char) m;
+	scopedp(char) *ifc;
+	scopedp(char) *m;
 	struct di_object *ret = NULL;
 	if (dot) {
 		const char *dot2 = memchr(method.data, '.', method.length);
@@ -410,7 +410,7 @@ static struct di_variant di_dbus_object_getter(di_dbus_object *dobj, struct di_s
 	auto cwm = di_new_object_with_type(struct di_object);
 	di_set_object_call(cwm, call_dbus_method_with_signature);
 	di_add_member_move((void *)ret, di_string_borrow("call_with_signature"),
-	                   (di_type_t[]){DI_TYPE_OBJECT}, &cwm);
+	                   (di_type[]){DI_TYPE_OBJECT}, &cwm);
 out:
 	union di_value *value = tmalloc(union di_value, 1);
 	value->object = ret;
@@ -445,7 +445,7 @@ static void di_dbus_object_new_signal(di_dbus_object *dobj, struct di_string mem
 		return;
 	}
 
-	di_string_with_cleanup path = DI_STRING_INIT;
+	scoped_di_string path = DI_STRING_INIT;
 	DI_CHECK_OK(di_get(dobj, "___object_path", path));
 	struct di_string interface = DI_STRING_INIT;
 	struct di_string member = DI_STRING_INIT;
@@ -453,7 +453,7 @@ static void di_dbus_object_new_signal(di_dbus_object *dobj, struct di_string mem
 		member = signal_name;
 	}
 
-	di_object_with_cleanup conn = NULL;
+	scoped_di_object *conn = NULL;
 	if (di_get(dobj, "___deai_dbus_connection", conn) != 0) {
 		return;
 	}
@@ -473,7 +473,7 @@ static void di_dbus_object_new_signal(di_dbus_object *dobj, struct di_string mem
 	// Keep this object alive as long as there is a signal listener, by storing a
 	// strong reference in the connection object. The connection object will
 	// be kept alive by the listener to the ioev object.
-	di_string_with_cleanup keep_alive_name = di_string_printf(
+	scoped_di_string keep_alive_name = di_string_printf(
 	    "___keep_alive_%p_%.*s", dobj, (int)signal_name.length, signal_name.data);
 	DI_CHECK_OK(di_add_member_clonev((void *)conn, keep_alive_name, DI_TYPE_OBJECT, dobj));
 }
@@ -488,7 +488,7 @@ static void di_dbus_object_del_signal(di_dbus_object *obj, struct di_string memb
 		return;
 	}
 
-	di_object_with_cleanup conn = NULL;
+	scoped_di_object *conn = NULL;
 	if (di_get(obj, "___deai_dbus_connection", conn) != 0) {
 		return;
 	}
@@ -503,7 +503,7 @@ static void di_dbus_object_del_signal(di_dbus_object *obj, struct di_string memb
 		return;
 	}
 
-	di_string_with_cleanup path = DI_STRING_INIT;
+	scoped_di_string path = DI_STRING_INIT;
 	DI_CHECK_OK(di_get(obj, "___object_path", path));
 	struct di_string interface = DI_STRING_INIT;
 	struct di_string member = DI_STRING_INIT;
@@ -517,7 +517,7 @@ static void di_dbus_object_del_signal(di_dbus_object *obj, struct di_string memb
 
 	di_dbus_nsignal_dec(c);
 	/// Stop keeping this object alive
-	di_string_with_cleanup keep_alive_name = di_string_printf(
+	scoped_di_string keep_alive_name = di_string_printf(
 	    "___keep_alive_%p_%.*s", obj, (int)signal_name.length, signal_name.data);
 	DI_CHECK_OK(di_remove_member_raw((void *)conn, keep_alive_name));
 }
@@ -536,10 +536,10 @@ static int64_t di_dbus_send_message(struct di_object *o, struct di_string type,
                                     struct di_string iface_, struct di_string method_,
                                     struct di_string signature, struct di_tuple args) {
 	DBusMessage *msg = NULL;
-	with_cleanup_t(char) bus = di_string_to_chars_alloc(bus_);
-	with_cleanup_t(char) objpath = di_string_to_chars_alloc(objpath_);
-	with_cleanup_t(char) method = di_string_to_chars_alloc(method_);
-	with_cleanup_t(char) iface = di_string_to_chars_alloc(iface_);
+	scopedp(char) *bus = di_string_to_chars_alloc(bus_);
+	scopedp(char) *objpath = di_string_to_chars_alloc(objpath_);
+	scopedp(char) *method = di_string_to_chars_alloc(method_);
+	scopedp(char) *iface = di_string_to_chars_alloc(iface_);
 
 	if (di_string_eq(type, di_string_borrow_literal("method"))) {
 		msg = dbus_message_new_method_call(bus, objpath, iface, method);
@@ -577,24 +577,24 @@ static void di_dbus_name_changed(struct di_object *conn, struct di_string well_k
 	}
 	if (old_owner.length != 0) {
 		// We know the old_owner, so remove the old record of the well-known name
-		di_string_with_cleanup peer_object_name =
+		scoped_di_string peer_object_name =
 		    di_string_printf("peer_%.*s", (int)old_owner.length, old_owner.data);
-		di_object_with_cleanup peer = di_get_object_via_weak(conn, peer_object_name);
+		scoped_di_object *peer = di_get_object_via_weak(conn, peer_object_name);
 		if (peer != NULL) {
 			di_remove_member_raw(peer, well_known);
 		}
 	}
 	// Get the object cache directory for the well_known name.
-	di_string_with_cleanup directory_name =
+	scoped_di_string directory_name =
 	    di_string_printf("object_cache_%.*s", (int)well_known.length, well_known.data);
-	di_object_with_cleanup directory = di_get_object_via_weak(conn, directory_name);
+	scoped_di_object *directory = di_get_object_via_weak(conn, directory_name);
 	if (directory == NULL) {
 		// We don't have any object cache for this well-known name, we don't care
 		// about its owner.
 		return;
 	}
 
-	di_string_with_cleanup recorded_owner_name = DI_STRING_INIT;
+	scoped_di_string recorded_owner_name = DI_STRING_INIT;
 	if (di_get(directory, "___owner", recorded_owner_name) == 0 &&
 	    old_owner.length != 0 && !di_string_eq(old_owner, recorded_owner_name)) {
 		// The old_owner we got is different from the recorded owner. This can happen if some
@@ -621,20 +621,20 @@ static void di_dbus_name_changed(struct di_object *conn, struct di_string well_k
 	if (new_owner.length > 0) {
 		DI_CHECK_OK(di_rawsetx(directory, di_string_borrow_literal("___owner_name"),
 		                       DI_TYPE_STRING, (void *)&new_owner));
-		di_string_with_cleanup peer_object_name =
+		scoped_di_string peer_object_name =
 		    di_string_printf("peer_%.*s", (int)new_owner.length, new_owner.data);
-		di_object_with_cleanup peer = di_get_object_via_weak(conn, peer_object_name);
+		scoped_di_object *peer = di_get_object_via_weak(conn, peer_object_name);
 		if (peer == NULL) {
 			peer = di_new_object_with_type(struct di_object);
 
-			di_weak_object_with_cleanup weak_peer = di_weakly_ref_object(peer);
+			scoped_di_weak_object *weak_peer = di_weakly_ref_object(peer);
 			DI_CHECK_OK(di_add_member_clonev(conn, peer_object_name,
 			                                 DI_TYPE_WEAK_OBJECT, weak_peer));
 		}
 		DI_CHECK_OK(di_rawsetx(directory, di_string_borrow_literal("___owner"),
 		                       DI_TYPE_OBJECT, (void *)&peer));
 
-		di_weak_object_with_cleanup weak_directory = di_weakly_ref_object(directory);
+		scoped_di_weak_object *weak_directory = di_weakly_ref_object(directory);
 		DI_CHECK_OK(di_rawsetx(peer, well_known, DI_TYPE_WEAK_OBJECT,
 		                       (void *)&weak_directory));
 	} else {
@@ -667,16 +667,16 @@ static void di_dbus_object_set_owner(struct di_object *o, struct di_tuple data) 
 		return;
 	}
 
-	di_object_with_cleanup conn = NULL;
+	scoped_di_object *conn = NULL;
 	DI_CHECK_OK(di_get(o, "___deai_dbus_connection", conn));
 
-	di_object_with_cleanup object_cache = NULL;
+	scoped_di_object *object_cache = NULL;
 	DI_CHECK_OK(di_get(o, "___object_cache", object_cache));
 
-	di_string_with_cleanup bus_name = DI_STRING_INIT;
+	scoped_di_string bus_name = DI_STRING_INIT;
 	DI_CHECK_OK(di_get(object_cache, "___bus_name", bus_name));
 
-	di_string_with_cleanup owner = DI_STRING_INIT;
+	scoped_di_string owner = DI_STRING_INIT;
 	di_get(object_cache, "___owner_name", owner);
 	di_dbus_name_changed(conn, bus_name, owner, payload.elements[0].value->string);
 }
@@ -701,10 +701,10 @@ static struct di_object *
 di_dbus_get_object(struct di_object *o, struct di_string bus, struct di_string obj) {
 	di_getm(di_object_get_deai_strong(o), event, di_new_error(""));
 
-	di_string_with_cleanup object_cache_name =
+	scoped_di_string object_cache_name =
 	    di_string_printf("object_cache_%.*s", (int)bus.length, bus.data);
 
-	di_object_with_cleanup object_cache = di_get_object_via_weak(o, object_cache_name);
+	scoped_di_object *object_cache = di_get_object_via_weak(o, object_cache_name);
 	if (object_cache == NULL) {
 		object_cache = di_new_object_with_type(struct di_object);
 		DI_CHECK_OK(di_add_member_clonev(
@@ -712,7 +712,7 @@ di_dbus_get_object(struct di_object *o, struct di_string bus, struct di_string o
 
 		struct di_weak_object *weak_object_cache = di_weakly_ref_object(object_cache);
 		di_add_member_move(o, object_cache_name,
-		                   (di_type_t[]){DI_TYPE_WEAK_OBJECT}, &weak_object_cache);
+		                   (di_type[]){DI_TYPE_WEAK_OBJECT}, &weak_object_cache);
 	}
 
 	struct di_object *ret = di_get_object_via_weak(object_cache, obj);
@@ -740,10 +740,10 @@ di_dbus_get_object(struct di_object *o, struct di_string bus, struct di_string o
 	                     DI_TYPE_OBJECT, object_cache);
 
 	struct di_weak_object *weak_object = di_weakly_ref_object(ret);
-	di_add_member_move(object_cache, obj, (di_type_t[]){DI_TYPE_WEAK_OBJECT}, &weak_object);
+	di_add_member_move(object_cache, obj, (di_type[]){DI_TYPE_WEAK_OBJECT}, &weak_object);
 
 	// Do way know the owner of the well-known name yet?
-	di_string_with_cleanup owner = DI_STRING_INIT;
+	scoped_di_string owner = DI_STRING_INIT;
 	if (di_get(object_cache, "___owner", owner) != 0) {
 		auto serial = di_dbus_send_message(
 		    o, di_string_borrow_literal("method"),
@@ -766,15 +766,15 @@ di_dbus_get_object(struct di_object *o, struct di_string bus, struct di_string o
 		}
 
 		{
-			di_closure_with_cleanup set_owner =
+			scoped_di_closure *set_owner =
 			    di_closure(di_dbus_object_set_owner,
 			               ((struct di_object *)ret), struct di_tuple);
-			di_string_with_cleanup promise_name =
+			scoped_di_string promise_name =
 			    di_string_printf("promise_for_request_%ld", serial);
 			auto promise = di_new_promise(eventm);
 			// We don't care about the promise returned by `then`
 			di_unref_object(di_promise_then(promise, (void *)set_owner));
-			di_add_member_move(o, promise_name, (di_type_t[]){DI_TYPE_OBJECT},
+			di_add_member_move(o, promise_name, (di_type[]){DI_TYPE_OBJECT},
 			                   &promise);
 			di_dbus_nsignal_inc((void *)o);
 		}
@@ -795,7 +795,7 @@ static void di_dbus_shutdown_part2(struct di_object *self_) {
 	dbus_connection_unref(self->conn);
 }
 
-static int di_dbus_drop_root(struct di_object *self_, di_type_t *rtype,
+static int di_dbus_drop_root(struct di_object *self_, di_type *rtype,
                              union di_value *unused value, struct di_tuple unused args) {
 	*rtype = DI_TYPE_NIL;
 	// Remove the listen handle so self gets dropped and
@@ -815,8 +815,8 @@ static void di_dbus_shutdown(di_dbus_connection *conn) {
 		dbus_connection_remove_filter(conn->conn, dbus_filter, conn);
 	}
 
-	di_object_with_cleanup di = di_object_get_deai_strong((struct di_object *)conn);
-	di_object_with_cleanup eventm = NULL;
+	scoped_di_object *di = di_object_get_deai_strong((struct di_object *)conn);
+	scoped_di_object *eventm = NULL;
 	DI_CHECK_OK(di_get(di, "event", eventm));
 
 	// This function might be called in dbus dispatch function, closing connection in
@@ -846,11 +846,11 @@ struct di_signal_info {
 	struct di_tuple args;
 };
 static void di_emit_signal_for(struct di_object *directory, struct di_signal_info *info) {
-	di_object_with_cleanup obj = di_get_object_via_weak(directory, info->path);
+	scoped_di_object *obj = di_get_object_via_weak(directory, info->path);
 	if (obj == NULL) {
 		return;
 	}
-	di_string_with_cleanup signal_name_with_interface =
+	scoped_di_string signal_name_with_interface =
 	    di_string_printf("%.*s.%.*s", (int)info->interface.length, info->interface.data,
 	                     (int)info->member.length, info->member.data);
 	di_emitn(obj, info->member, info->args);
@@ -858,12 +858,12 @@ static void di_emit_signal_for(struct di_object *directory, struct di_signal_inf
 }
 
 static bool
-di_peer_foreach_cb(struct di_string name, di_type_t type, union di_value *value, void *ud) {
+di_peer_foreach_cb(struct di_string name, di_type type, union di_value *value, void *ud) {
 	struct di_signal_info *info = ud;
 	if (type != DI_TYPE_WEAK_OBJECT) {
 		return false;
 	}
-	di_object_with_cleanup obj = di_upgrade_weak_ref(value->weak_object);
+	scoped_di_object *obj = di_upgrade_weak_ref(value->weak_object);
 	if (obj == NULL) {
 		return false;
 	}
@@ -881,11 +881,11 @@ static DBusHandlerResult dbus_filter(DBusConnection *conn, DBusMessage *msg, voi
 	DBusMessageIter i;
 	dbus_message_iter_init(msg, &i);
 
-	di_tuple_with_cleanup t;
+	scoped_di_tuple t;
 	dbus_deserialize_struct(&i, &t);
 
 	// Prevent connection object from dying during signal emission
-	di_object_with_cleanup obj = di_ref_object(ud);
+	scoped_di_object *obj = di_ref_object(ud);
 	di_dbus_connection *c = (void *)obj;
 
 	if (type == DBUS_MESSAGE_TYPE_SIGNAL) {
@@ -922,18 +922,18 @@ static DBusHandlerResult dbus_filter(DBusConnection *conn, DBusMessage *msg, voi
 		    .args = t,
 		};
 		if (bus_name[0] == ':') {
-			di_string_with_cleanup peer_object_name =
+			scoped_di_string peer_object_name =
 			    di_string_printf("peer_%s", bus_name);
-			di_object_with_cleanup peer =
+			scoped_di_object *peer =
 			    di_get_object_via_weak((void *)c, peer_object_name);
 
 			if (peer != NULL) {
 				di_foreach_member_raw(peer, di_peer_foreach_cb, &info);
 			}
 		} else {
-			di_string_with_cleanup directory_name =
+			scoped_di_string directory_name =
 			    di_string_printf("object_cache_%s", bus_name);
-			di_object_with_cleanup directory =
+			scoped_di_object *directory =
 			    di_get_object_via_weak((void *)c, directory_name);
 			if (directory) {
 				di_emit_signal_for(directory, &info);
@@ -942,10 +942,10 @@ static DBusHandlerResult dbus_filter(DBusConnection *conn, DBusMessage *msg, voi
 		return DBUS_HANDLER_RESULT_HANDLED;
 	} else if (type == DBUS_MESSAGE_TYPE_ERROR || type == DBUS_MESSAGE_TYPE_METHOD_RETURN) {
 		auto serial = dbus_message_get_reply_serial(msg);
-		di_string_with_cleanup promise_name =
+		scoped_di_string promise_name =
 		    di_string_printf("promise_for_request_%u", serial);
 		bool is_error = (type == DBUS_MESSAGE_TYPE_ERROR);
-		di_object_with_cleanup promise = NULL;
+		scoped_di_object *promise = NULL;
 		if (di_getxt(ud, promise_name, DI_TYPE_OBJECT, (union di_value *)&promise) == 0) {
 			auto packed_args = di_tuple(is_error, t);
 			di_resolve_promise((void *)promise, di_variant(packed_args));

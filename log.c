@@ -57,7 +57,7 @@ static const char *level_tostring(int log_level) {
 }
 
 // Function exposed via di_object to be used by any plugins
-static int di_log(struct di_object *o, di_type_t *rt, union di_value *ret, struct di_tuple t) {
+static int di_log(struct di_object *o, di_type *rt, union di_value *ret, struct di_tuple t) {
 	if (t.length != 3) {
 		return -EINVAL;
 	}
@@ -84,7 +84,7 @@ static int di_log(struct di_object *o, di_type_t *rt, union di_value *ret, struc
 		return 0;
 	}
 
-	with_object_cleanup(di_object) ltgt = NULL;
+	scoped_di_object *ltgt = NULL;
 	if (di_get(l, "log_target", ltgt) != 0) {
 		ret->nint = 0;
 		return 0;
@@ -187,8 +187,8 @@ int di_log_va(struct di_object *o, int log_level, const char *fmt, ...) {
 			ret = fprintf(stderr, "%s\n", buf);
 		}
 	} else {
-		di_string_with_cleanup log = di_string_vprintf(fmt, ap);
-		di_type_t return_type;
+		scoped_di_string log = di_string_vprintf(fmt, ap);
+		di_type return_type;
 		union di_value return_value;
 		const char *level_string = level_tostring(log_level);
 		di_call_object(o, &return_type, &return_value, DI_TYPE_OBJECT, o,
@@ -258,7 +258,7 @@ void di_init_log(struct deai *di) {
 	auto dtgt = stderr_target(l);
 
 	di_add_member_move((struct di_object *)l, di_string_borrow("log_target"),
-	                   (di_type_t[]){DI_TYPE_OBJECT}, &dtgt);
+	                   (di_type[]){DI_TYPE_OBJECT}, &dtgt);
 	((struct di_object_internal *)l)->call = di_log;
 	di_method(l, "file_target", file_target, struct di_string, bool);
 	di_method(l, "stderr_target", stderr_target);

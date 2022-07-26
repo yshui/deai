@@ -73,7 +73,7 @@ void __attribute__((noinline)) print_stack_trace(int skip, int limit) {
 		if (skip <= 0) {
 			// `ip` will normally be after the "call" instruction, so we move
 			// it back to get the line number of the call.
-			with_cleanup_t(char) detail = get_debug_info(name, (void *)(ip - 1));
+			scopedp(char) *detail = get_debug_info(name, (void *)(ip - 1));
 			if (detail != NULL) {
 				if (skipped) {
 					di_log_va(log_module, DI_LOG_DEBUG, "\t(skipped %d)\n", skipped);

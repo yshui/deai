@@ -21,13 +21,13 @@ struct di_file_watch_entry {
 	UT_hash_handle hh, hh2;
 };
 
-struct di_file_watch {
+typedef struct di_file_watch {
 	struct di_object;
 	int fd;
 	int nsignals;
 
 	struct di_file_watch_entry *byname, *bywd;
-};
+} di_file_watch;
 
 define_object_cleanup(di_file_watch);
 /// SIGNAL: deai.plugin.file:Watch.create(path: :string, file_name: :string)
@@ -76,7 +76,7 @@ define_object_cleanup(di_file_watch);
 /// - cookie unique integer associated with this move, can be used to pair this event with
 ///          a :lua:sgnl:`move-from` event.
 static int di_file_ioev(struct di_weak_object *weak) {
-	with_object_cleanup(di_file_watch) fw = (void *)di_upgrade_weak_ref(weak);
+	scopedp(di_file_watch) *fw = (void *)di_upgrade_weak_ref(weak);
 	DI_CHECK(fw != NULL, "got ioev events but the listener has died");
 
 	char evbuf[sizeof(struct inotify_event) + NAME_MAX + 1];
@@ -234,18 +234,18 @@ static void di_file_new_signal(struct di_object *fw_, struct di_string member_na
 	fw->nsignals += 1;
 	if (fw->nsignals == 1) {
 		// Start fdevent
-		di_weak_object_with_cleanup weak_eventm = NULL;
+		scoped_di_weak_object *weak_eventm = NULL;
 		DI_CHECK_OK(di_get(fw, "__weak_event_module", weak_eventm));
-		di_object_with_cleanup event_module = di_upgrade_weak_ref(weak_eventm);
+		scoped_di_object *event_module = di_upgrade_weak_ref(weak_eventm);
 		if (event_module == NULL) {
 			// Event module went away, deai is exiting?
 			return;
 		}
 
-		di_object_with_cleanup fdevent = NULL;
+		scoped_di_object *fdevent = NULL;
 		DI_CHECK_OK(di_callr(event_module, "fdevent", fdevent, fw->fd));
 
-		di_closure_with_cleanup cl =
+		scoped_di_closure *cl =
 		    di_closure(di_file_ioev, ((struct di_object *)fw));
 		auto listen_handle =
 		    di_listen_to(fdevent, di_string_borrow("read"), (void *)cl);

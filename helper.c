@@ -31,21 +31,21 @@ struct di_object *di_new_error(const char *fmt, ...) {
 	return err;
 }
 
-static int di_redirected_getter_imp(struct di_object *getter, di_type_t *rt,
+static int di_redirected_getter_imp(struct di_object *getter, di_type *rt,
                                     union di_value *r, struct di_tuple args) {
 	// argument should be one object "self".
 	if (args.length != 1) {
 		return -EINVAL;
 	}
-	di_weak_object_with_cleanup them = NULL;
-	di_string_with_cleanup theirs = DI_STRING_INIT;
+	scoped_di_weak_object *them = NULL;
+	scoped_di_string theirs = DI_STRING_INIT;
 	if (di_get(getter, "them", them) != 0) {
 		return -ENOENT;
 	}
 	if (di_get(getter, "theirs", theirs) != 0) {
 		return -ENOENT;
 	}
-	di_object_with_cleanup them_obj = di_upgrade_weak_ref(them);
+	scoped_di_object *them_obj = di_upgrade_weak_ref(them);
 	if (them_obj == NULL) {
 		return -ENOENT;
 	}
@@ -63,20 +63,20 @@ struct di_object *di_redirected_getter(struct di_weak_object *them, struct di_st
 	return ret;
 }
 
-static int di_redirected_setter_imp(struct di_object *setter, di_type_t *rt,
+static int di_redirected_setter_imp(struct di_object *setter, di_type *rt,
                                     union di_value *r, struct di_tuple args) {
 	if (args.length != 2) {
 		return -EINVAL;
 	}
-	di_weak_object_with_cleanup them = NULL;
-	di_string_with_cleanup theirs = DI_STRING_INIT;
+	scoped_di_weak_object *them = NULL;
+	scoped_di_string theirs = DI_STRING_INIT;
 	if (di_get(setter, "them", them) != 0) {
 		return -ENOENT;
 	}
 	if (di_get(setter, "theirs", theirs) != 0) {
 		return -ENOENT;
 	}
-	di_object_with_cleanup them_obj = di_upgrade_weak_ref(them);
+	scoped_di_object *them_obj = di_upgrade_weak_ref(them);
 	if (them_obj == NULL) {
 		return -ENOENT;
 	}
@@ -92,7 +92,7 @@ struct di_object *di_redirected_setter(struct di_weak_object *them, struct di_st
 	return ret;
 }
 
-static int di_redirected_signal_setter_imp(struct di_object *setter, di_type_t *rt,
+static int di_redirected_signal_setter_imp(struct di_object *setter, di_type *rt,
                                            union di_value *r, struct di_tuple args) {
 	if (args.length != 2) {
 		return -EINVAL;
@@ -100,15 +100,15 @@ static int di_redirected_signal_setter_imp(struct di_object *setter, di_type_t *
 	if (args.elements[1].type != DI_TYPE_OBJECT) {
 		return -EINVAL;
 	}
-	di_weak_object_with_cleanup them = NULL;
-	di_string_with_cleanup theirs = DI_STRING_INIT;
+	scoped_di_weak_object *them = NULL;
+	scoped_di_string theirs = DI_STRING_INIT;
 	if (di_get(setter, "them", them) != 0) {
 		return -ENOENT;
 	}
 	if (di_get(setter, "theirs", theirs) != 0) {
 		return -ENOENT;
 	}
-	di_object_with_cleanup them_obj = di_upgrade_weak_ref(them);
+	scoped_di_object *them_obj = di_upgrade_weak_ref(them);
 	if (them_obj == NULL) {
 		return -ENOENT;
 	}
@@ -141,20 +141,20 @@ di_redirected_signal_setter(struct di_weak_object *them, struct di_string theirs
 /// by adding a getter/setter for __signal_<ours> on `us`.
 int di_redirect_signal(struct di_object *us, struct di_weak_object *them,
                        struct di_string ours, struct di_string theirs) {
-	di_string_with_cleanup sig_theirs =
+	scoped_di_string sig_theirs =
 	    di_string_printf("__signal_%.*s", (int)theirs.length, theirs.data);
 
-	di_object_with_cleanup getter = di_redirected_getter(them, sig_theirs);
-	di_object_with_cleanup setter = di_redirected_signal_setter(them, sig_theirs);
-	di_string_with_cleanup get_ours =
+	scoped_di_object *getter = di_redirected_getter(them, sig_theirs);
+	scoped_di_object *setter = di_redirected_signal_setter(them, sig_theirs);
+	scoped_di_string get_ours =
 	    di_string_printf("__get___signal_%.*s", (int)ours.length, ours.data);
-	di_string_with_cleanup set_ours =
+	scoped_di_string set_ours =
 	    di_string_printf("__set___signal_%.*s", (int)ours.length, ours.data);
 
-	int rc = di_add_member_move(us, get_ours, (di_type_t[]){DI_TYPE_OBJECT}, &getter);
+	int rc = di_add_member_move(us, get_ours, (di_type[]){DI_TYPE_OBJECT}, &getter);
 	if (rc != 0) {
 		return rc;
 	}
-	rc = di_add_member_move(us, set_ours, (di_type_t[]){DI_TYPE_OBJECT}, &setter);
+	rc = di_add_member_move(us, set_ours, (di_type[]){DI_TYPE_OBJECT}, &setter);
 	return rc;
 }

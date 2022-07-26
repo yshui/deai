@@ -22,7 +22,7 @@ static struct di_variant di_env_get(struct di_module *m, struct di_string name_)
 		return ret;
 	}
 
-	with_cleanup_t(char) name = di_string_to_chars_alloc(name_);
+	scopedp(char) *name = di_string_to_chars_alloc(name_);
 	const char *str = getenv(name);
 	if (str) {
 		ret.type = DI_TYPE_STRING_LITERAL;
@@ -36,8 +36,8 @@ static void di_env_set(struct di_module *m, struct di_string key_, struct di_str
 	if (!key_.data || !val_.data) {
 		return;
 	}
-	with_cleanup_t(char) key = di_string_to_chars_alloc(key_);
-	with_cleanup_t(char) val = di_string_to_chars_alloc(val_);
+	scopedp(char) *key = di_string_to_chars_alloc(key_);
+	scopedp(char) *val = di_string_to_chars_alloc(val_);
 	setenv(key, val, 1);
 }
 
@@ -45,7 +45,7 @@ static void di_env_unset(struct di_module *m, struct di_string key_) {
 	if (!key_.data) {
 		return;
 	}
-	with_cleanup_t(char) key = di_string_to_chars_alloc(key_);
+	scopedp(char) *key = di_string_to_chars_alloc(key_);
 	unsetenv(key);
 }
 

@@ -32,8 +32,6 @@ PUBLIC_DEAI_API int
 di_redirect_signal(struct di_object *nonnull us, struct di_weak_object *nonnull them,
                    struct di_string ours, struct di_string theirs);
 
-#define DTOR(o) ((struct di_object *)(o))->dtor
-
 #define RET_IF_ERR(expr)                                                                 \
 	do {                                                                             \
 		int ret = (expr);                                                        \
@@ -123,7 +121,7 @@ di_redirect_signal(struct di_object *nonnull us, struct di_weak_object *nonnull 
 
 #define capture(...)                                                                     \
 	VA_ARGS_LENGTH(__VA_ARGS__)                                                      \
-	, (di_type_t[]){LIST_APPLY(di_typeof, SEP_COMMA, __VA_ARGS__)},                  \
+	, (di_type[]){LIST_APPLY(di_typeof, SEP_COMMA, __VA_ARGS__)},                    \
 	    (const union di_value *[]) {                                                 \
 		LIST_APPLY(addressof_di_value, SEP_COMMA, __VA_ARGS__)                   \
 	}
@@ -133,13 +131,13 @@ di_redirect_signal(struct di_object *nonnull us, struct di_weak_object *nonnull 
 #define di_closure(fn, caps, ...)                                                             \
 	di_create_closure((void *)fn, di_return_typeid(fn capture_types caps, ##__VA_ARGS__), \
 	                  di_tuple caps, VA_ARGS_LENGTH(__VA_ARGS__),                         \
-	                  (di_type_t[]){LIST_APPLY(di_typeid, SEP_COMMA, __VA_ARGS__)})
+	                  (di_type[]){LIST_APPLY(di_typeid, SEP_COMMA, __VA_ARGS__)})
 
 #define di_getm(di_expr, modn, on_err)                                                   \
-	object_cleanup struct di_object *modn##m = NULL;                                 \
+	scoped_di_object *modn##m = NULL;                                                \
 	do {                                                                             \
 		int rc = 0;                                                              \
-		di_object_with_cleanup __deai_tmp_di = (struct di_object *)(di_expr);    \
+		scoped_di_object *__deai_tmp_di = (struct di_object *)(di_expr);         \
 		if (__deai_tmp_di == NULL) {                                             \
 			on_err;                                                          \
 		}                                                                        \
@@ -161,7 +159,7 @@ di_redirect_signal(struct di_object *nonnull us, struct di_weak_object *nonnull 
 	({                                                                               \
 		int rc = 0;                                                              \
 		do {                                                                     \
-			di_type_t rtype;                                                 \
+			di_type rtype;                                                   \
 			union di_value ret;                                              \
 			bool called;                                                     \
 			rc = di_callx((struct di_object *)(o), di_string_borrow(name),   \
@@ -178,7 +176,7 @@ di_redirect_signal(struct di_object *nonnull us, struct di_weak_object *nonnull 
 	({                                                                               \
 		int __deai_callr_rc = 0;                                                 \
 		do {                                                                     \
-			di_type_t __deai_callr_rtype;                                    \
+			di_type __deai_callr_rtype;                                      \
 			union di_value __deai_callr_ret;                                 \
 			bool called;                                                     \
 			__deai_callr_rc =                                                \
@@ -212,7 +210,7 @@ di_redirect_signal(struct di_object *nonnull us, struct di_weak_object *nonnull 
 	({                                                                               \
 		int rc = 0;                                                              \
 		do {                                                                     \
-			di_type_t rt;                                                    \
+			di_type rt;                                                      \
 			void *ret;                                                       \
 			rc = c->call(c, &rt, &ret, di_tuple(__VA_ARGS__));               \
 			if (rc != 0)                                                     \
@@ -227,7 +225,7 @@ di_redirect_signal(struct di_object *nonnull us, struct di_weak_object *nonnull 
 	({                                                                               \
 		int rc = 0;                                                              \
 		do {                                                                     \
-			di_type_t rt;                                                    \
+			di_type rt;                                                      \
 			void *ret;                                                       \
 			rc = c->call(c, &rt, &ret, di_tuple(__VA_ARGS__));               \
 			if (rc != 0)                                                     \
@@ -260,7 +258,7 @@ di_redirect_signal(struct di_object *nonnull us, struct di_weak_object *nonnull 
 
 #define di_member(o, name, v)                                                            \
 	di_add_member_move((struct di_object *)(o), di_string_borrow(name),              \
-	                   (di_type_t[]){di_typeof(v)}, &(v))
+	                   (di_type[]){di_typeof(v)}, &(v))
 
 #define di_member_clone(o, name, v)                                                      \
 	di_add_member_clonev((struct di_object *)(o), di_string_borrow(name),            \
@@ -303,17 +301,17 @@ di_redirect_signal(struct di_object *nonnull us, struct di_weak_object *nonnull 
 // time metaprogramming
 #define TYPE_INIT(type)                                                                  \
 	_Generic((type *)0, \
-	struct di_array *: DI_ARRAY_INIT, \
-	struct di_tuple *: DI_TUPLE_INIT, \
-	struct di_variant *: DI_VARIANT_INIT, \
+	di_array *: DI_ARRAY_INIT, \
+	di_tuple *: DI_TUPLE_INIT, \
+	di_variant *: DI_VARIANT_INIT, \
 	int *: 0, \
 	unsigned int *: 0, \
 	int64_t *: 0, \
 	uint64_t *: 0, \
-	struct di_string *: DI_STRING_INIT, \
+	di_string *: DI_STRING_INIT, \
 	const char **: NULL, \
-	struct di_object **: NULL, \
-	struct di_weak_object **: NULL, \
+	di_object **: NULL, \
+	di_weak_object **: NULL, \
 	void **: NULL, \
 	double *: 0.0, \
 	bool *: false \
@@ -340,10 +338,10 @@ di_redirect_signal(struct di_object *nonnull us, struct di_weak_object *nonnull 
 define_object_cleanup(di_closure);
 define_object_cleanup(di_promise);
 
-#define di_closure_with_cleanup with_object_cleanup(di_closure)
-#define di_promise_with_cleanup with_object_cleanup(di_promise)
+#define scoped_di_closure scopedp(di_closure)
+#define scoped_di_promise scopedp(di_promise)
 
-static inline unused const char *nonnull di_type_to_string(di_type_t type) {
+static inline unused const char *nonnull di_type_to_string(di_type type) {
 #define TYPE_CASE(name)                                                                  \
 	case DI_TYPE_##name:                                                             \
 		return #name
@@ -358,8 +356,7 @@ static inline unused const char *nonnull di_type_to_string(di_type_t type) {
 	unreachable();
 }
 
-static inline unused char *nonnull di_value_to_string(di_type_t type,
-                                                      union di_value *nonnull value) {
+static inline unused char *nonnull di_value_to_string(di_type type, union di_value *nonnull value) {
 	char *buf = NULL;
 	switch (type) {
 	case DI_TYPE_OBJECT:
@@ -423,7 +420,7 @@ static inline unused char *nonnull di_value_to_string(di_type_t type,
 	((struct di_string){.data = DEAI_MEMBER_NAME_RAW, .length = strlen(DEAI_MEMBER_NAME_RAW)})
 
 static inline struct di_object *nullable unused di_object_get_deai_weak(struct di_object *nonnull o) {
-	di_weak_object_with_cleanup weak = NULL;
+	scoped_di_weak_object *weak = NULL;
 	di_get(o, DEAI_MEMBER_NAME_RAW, weak);
 
 	if (weak == NULL) {
@@ -440,7 +437,7 @@ static inline struct di_object *nullable unused di_object_get_deai_strong(struct
 
 /// Downgrade the __deai member from a strong reference to a weak reference
 static inline void unused di_object_downgrade_deai(struct di_object *nonnull o) {
-	di_object_with_cleanup di_obj = NULL;
+	scoped_di_object *di_obj = NULL;
 	di_get(o, DEAI_MEMBER_NAME_RAW, di_obj);
 	if (di_obj != NULL) {
 		__auto_type weak = di_weakly_ref_object(di_obj);
@@ -450,7 +447,7 @@ static inline void unused di_object_downgrade_deai(struct di_object *nonnull o) 
 }
 /// Upgrade the __deai member from a weak reference to a strong reference
 static inline void unused di_object_upgrade_deai(struct di_object *nonnull o) {
-	di_weak_object_with_cleanup di_obj = NULL;
+	scoped_di_weak_object *di_obj = NULL;
 	di_get(o, DEAI_MEMBER_NAME_RAW, di_obj);
 	if (di_obj != NULL) {
 		__auto_type strong = di_upgrade_weak_ref(di_obj);
@@ -466,7 +463,7 @@ static inline struct di_object *nullable unused di_module_get_deai(struct di_mod
 }
 
 /// Consumes a di_value and create a di_variant containing that di_value
-static inline struct di_variant unused di_variant_of_impl(di_type_t type,
+static inline struct di_variant unused di_variant_of_impl(di_type type,
                                                           union di_value *nullable val) {
 	struct di_variant ret = {
 	    .type = type,
@@ -488,7 +485,7 @@ static inline struct di_variant unused di_variant_of_impl(di_type_t type,
 /// Getting and removing and done without going through getter or deleter.
 static inline struct di_object *nullable unused di_get_object_via_weak(struct di_object *nonnull o,
                                                                        struct di_string prop) {
-	di_weak_object_with_cleanup weak = NULL;
+	scoped_di_weak_object *weak = NULL;
 	struct di_object *object = NULL;
 	if (di_rawgetxt(o, prop, DI_TYPE_WEAK_OBJECT, (void *)&weak) == 0) {
 		object = di_upgrade_weak_ref(weak);
@@ -499,7 +496,7 @@ static inline struct di_object *nullable unused di_get_object_via_weak(struct di
 	return object;
 }
 
-static inline union di_value as_di_value(di_type_t type, void *nonnull value) {
+static inline union di_value as_di_value(di_type type, void *nonnull value) {
 	union di_value ret;
 	memcpy(&ret, value, di_sizeof_type(type));
 	return ret;
@@ -526,7 +523,7 @@ static const struct di_variant DI_BOTTOM_VARIANT = (struct di_variant){NULL, DI_
 
 /// Shortcut for calling di_remove_member_raw then di_add_member_clone
 static inline unused int di_rawsetx(struct di_object *nonnull o, struct di_string prop,
-                                    di_type_t type, const void *nonnull value) {
+                                    di_type type, const void *nonnull value) {
 	int ret = di_remove_member_raw(o, prop);
 	if (ret != 0 && ret != -ENOENT) {
 		return ret;

@@ -14,10 +14,10 @@ static struct di_string takes_string_and_return(struct di_string str) {
 }
 
 DEAI_PLUGIN_ENTRY_POINT(di) {
-	di_closure_with_cleanup test1 = di_closure(takes_string, (), const char *);
-	di_closure_with_cleanup test2 = di_closure(takes_string_and_return, (), struct di_string);
+	scoped_di_closure *test1 = di_closure(takes_string, (), const char *);
+	scoped_di_closure *test2 = di_closure(takes_string_and_return, (), struct di_string);
 
-	di_type_t retty;
+	di_type retty;
 	union di_value val, val2;
 	// Test string_literal -> string_literal
 	DI_CHECK_OK(di_call_object((struct di_object *)test1, &retty, &val,

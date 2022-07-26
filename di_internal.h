@@ -19,15 +19,15 @@
 struct di_member {
 	struct di_string name;
 	union di_value *nonnull data;
-	di_type_t type;
+	di_type type;
 	UT_hash_handle hh;
 };
 
 struct di_object_internal {
 	struct di_member *nullable members;
 
-	di_dtor_fn_t nullable dtor;
-	di_call_fn_t nullable call;
+	di_dtor_fn nullable dtor;
+	di_call_fn nullable call;
 
 	uint64_t ref_count;
 	uint64_t weak_ref_count;
@@ -126,7 +126,7 @@ static_assert(sizeof(bool) == sizeof(uint8_t), "bool is not uint8_t, unsupported
 static_assert(__alignof__(bool) == __alignof__(uint8_t), "bool is not uint8_t, "
                                                          "unsupported platform");
 
-static inline ffi_type *nullable di_type_to_ffi(di_type_t in) {
+static inline ffi_type *nullable di_type_to_ffi(di_type in) {
 	ffi_type *const type_map[] = {
 	    [DI_TYPE_NIL] = &ffi_type_void,
 	    [DI_TYPE_BOOL] = &ffi_type_uint8,
@@ -151,8 +151,8 @@ static inline ffi_type *nullable di_type_to_ffi(di_type_t in) {
 }
 
 static inline ffi_status unused di_ffi_prep_cif(ffi_cif *nonnull cif, unsigned int nargs,
-                                                di_type_t rtype,
-                                                const di_type_t *nonnull atypes) {
+                                                di_type rtype,
+                                                const di_type *nonnull atypes) {
 	ffi_type *ffi_rtype = di_type_to_ffi(rtype);
 	ffi_type **ffi_atypes = NULL;
 	if (nargs) {

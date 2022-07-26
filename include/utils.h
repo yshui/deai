@@ -17,7 +17,7 @@
 #include <deai/object.h>
 #include "common.h"
 
-static inline void typed_alloc_copy(di_type_t type, const void *src, void **dest) {
+static inline void typed_alloc_copy(di_type type, const void *src, void **dest) {
 	void *ret = calloc(1, di_sizeof_type(type));
 	memcpy(ret, src, di_sizeof_type(type));
 	*dest = ret;
@@ -114,7 +114,7 @@ integer_conversion_impl(int8_t input_bits, const void *input, int8_t output_bits
 }
 /// Whether di_type is an unsigned integer type. Returns 0 if signed, 1 if unsigned, 2 if
 /// not an integer type.
-static inline int is_unsigned(di_type_t type) {
+static inline int is_unsigned(di_type type) {
 	switch (type) {
 	case DI_TYPE_INT:
 	case DI_TYPE_NINT:
@@ -139,8 +139,8 @@ static inline int is_unsigned(di_type_t type) {
 		return 2;
 	}
 }
-static inline int integer_conversion(di_type_t inty, const union di_value *restrict inp,
-                                     di_type_t outty, union di_value *restrict outp) {
+static inline int integer_conversion(di_type inty, const union di_value *restrict inp,
+                                     di_type outty, union di_value *restrict outp) {
 	int input_unsigned = is_unsigned(inty), output_unsigned = is_unsigned(outty);
 	int8_t input_bits = di_sizeof_type(inty) * 8, output_bits = di_sizeof_type(outty) * 8;
 	if (input_unsigned == 2 || output_unsigned == 2) {
@@ -157,7 +157,7 @@ static inline int integer_conversion(di_type_t inty, const union di_value *restr
 	return 0;
 }
 
-static inline bool is_integer(di_type_t t) {
+static inline bool is_integer(di_type t) {
 	return t == DI_TYPE_INT || t == DI_TYPE_NINT || t == DI_TYPE_UINT || t == DI_TYPE_NUINT;
 }
 
@@ -174,8 +174,8 @@ static inline bool is_integer(di_type_t t) {
 //                       not be performed if the caller owns the value, as that would
 //                       cause memory leakage. If `inp` is borrowed, `outp` must also be
 //                       borrowed downstream as well.
-static inline int unused di_type_conversion(di_type_t inty, union di_value *inp,
-                                            di_type_t outty, union di_value *outp,
+static inline int unused di_type_conversion(di_type inty, union di_value *inp,
+                                            di_type outty, union di_value *outp,
                                             bool borrowing) {
 	if (inty == outty) {
 		memcpy(outp, inp, di_sizeof_type(inty));
@@ -265,7 +265,7 @@ static inline int unused di_type_conversion(di_type_t inty, union di_value *inp,
 
 /// Fetch a value based on di_type from va_arg, and put it into `buf` if `buf` is
 /// not NULL. This function only borrows the value, without cloning it.
-static inline void unused va_arg_with_di_type(va_list ap, di_type_t t, void *buf) {
+static inline void unused va_arg_with_di_type(va_list ap, di_type t, void *buf) {
 	union di_value v;
 
 	switch (t) {

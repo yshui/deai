@@ -21,7 +21,7 @@ DEAI_PLUGIN_ENTRY_POINT(di) {
 	di_call(di, "load_plugin", (const char *)"./plugins/file/di_file.so");
 	di_call(di, "load_plugin", (const char *)"./plugins/dbus/di_dbus.so");
 
-	di_object_with_cleanup luam = NULL;
+	scoped_di_object *luam = NULL;
 	DI_CHECK_OK(di_get(di, "lua", luam));
 
 	di_method(di, "create_di_object", create_di_object);
@@ -33,7 +33,7 @@ DEAI_PLUGIN_ENTRY_POINT(di) {
 	for (int i = 0; i < dargv.length; i++) {
 		if (strcmp(argv[i], "--") == 0) {
 			if (i + 1 < dargv.length) {
-				di_object_with_cleanup o = NULL;
+				scoped_di_object *o = NULL;
 				DI_CHECK_OK(di_callr(luam, "load_script", o, di_string_borrow(argv[i + 1])));
 
 				struct di_string errmsg;

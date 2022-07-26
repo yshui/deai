@@ -20,7 +20,7 @@ struct di_xorg;
 struct di_atom_entry;
 struct di_xorg_ext;
 
-struct di_xorg_connection {
+typedef struct di_xorg_connection {
 	struct di_object;
 	xcb_connection_t *nullable c;
 	int dflt_scrn;
@@ -29,7 +29,7 @@ struct di_xorg_connection {
 
 	struct xkb_context *nullable xkb_ctx;
 	struct di_atom_entry *nullable a_byatom, *nullable a_byname;
-};
+} di_xorg_connection;
 
 struct di_xorg_ext {
 	struct di_object;

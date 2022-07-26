@@ -59,7 +59,7 @@ static void load_plugin(struct deai *p, struct di_string sopath) {
 		return;
 	}
 
-	with_cleanup_t(char) sopath_str = di_string_to_chars_alloc(sopath);
+	scopedp(char) *sopath_str = di_string_to_chars_alloc(sopath);
 	load_plugin_impl(p, sopath_str);
 }
 
@@ -131,7 +131,7 @@ int di_chdir(struct di_object *p, struct di_string dir) {
 	if (!dir.data) {
 		return -EINVAL;
 	}
-	with_cleanup_t(char) dir_str = di_string_to_chars_alloc(dir);
+	scopedp(char) *dir_str = di_string_to_chars_alloc(dir);
 
 	int ret = chdir(dir_str);
 	if (ret != 0) {
@@ -406,7 +406,7 @@ static struct di_array di_get_argv(struct deai *p) {
 
 int di_register_module(struct deai *p, struct di_string name, struct di_module **m) {
 	int ret =
-	    di_add_member_move((void *)p, name, (di_type_t[]){DI_TYPE_OBJECT}, (void **)m);
+	    di_add_member_move((void *)p, name, (di_type[]){DI_TYPE_OBJECT}, (void **)m);
 	return ret;
 }
 
@@ -683,7 +683,7 @@ int main(int argc, char *argv[]) {
 		mod = di_ref_object((struct di_object *)p);
 	}
 
-	di_type_t rt;
+	di_type rt;
 	union di_value retd;
 	bool called;
 	ret = di_rawcallxn(mod, di_string_borrow(method), &rt, &retd,

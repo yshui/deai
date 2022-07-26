@@ -44,7 +44,7 @@ struct di_periodic {
 static void di_ioev_callback(EV_P_ ev_io *w, int revents) {
 	auto ev = container_of(w, struct di_ioev, evh);
 	// Keep ev alive during emission
-	di_object_with_cleanup unused obj = di_ref_object((struct di_object *)ev);
+	scoped_di_object unused *obj = di_ref_object((struct di_object *)ev);
 	if (revents & EV_READ) {
 		di_emit(ev, "read");
 	}
@@ -57,7 +57,7 @@ static void di_ioev_callback(EV_P_ ev_io *w, int revents) {
 static void di_periodic_callback(EV_P_ ev_periodic *w, int revents) {
 	auto p = container_of(w, struct di_periodic, pt);
 	// Keep timer alive during emission
-	di_object_with_cleanup unused obj = di_ref_object((struct di_object *)p);
+	scoped_di_object unused *obj = di_ref_object((struct di_object *)p);
 
 	double now = ev_now(EV_A);
 	di_emit(p, "triggered", now);
@@ -71,7 +71,7 @@ static void di_start_ioev(struct di_ioev *ev) {
 		return;
 	}
 
-	di_object_with_cleanup di_obj = di_object_get_deai_weak((void *)ev);
+	scoped_di_object *di_obj = di_object_get_deai_weak((void *)ev);
 	if (di_obj == NULL) {
 		// deai is shutting down
 		return;
@@ -86,7 +86,7 @@ static void di_start_ioev(struct di_ioev *ev) {
 
 	// Add event source to roots when it's running
 	auto roots = di_get_roots();
-	di_string_with_cleanup root_key = di_string_printf("fdevent_for_%d", ev->evh.fd);
+	scoped_di_string root_key = di_string_printf("fdevent_for_%d", ev->evh.fd);
 	DI_CHECK_OK(di_call(roots, "add", root_key, (struct di_object *)ev));
 }
 
@@ -98,7 +98,7 @@ static void di_stop_ioev(struct di_ioev *ev) {
 		return;
 	}
 
-	di_object_with_cleanup di_obj = di_object_get_deai_strong((void *)ev);
+	scoped_di_object *di_obj = di_object_get_deai_strong((void *)ev);
 	if (di_obj == NULL) {
 		return;
 	}
@@ -111,7 +111,7 @@ static void di_stop_ioev(struct di_ioev *ev) {
 	di_object_downgrade_deai((void *)ev);
 
 	auto roots = di_get_roots();
-	di_string_with_cleanup root_key = di_string_printf("fdevent_for_%d", ev->evh.fd);
+	scoped_di_string root_key = di_string_printf("fdevent_for_%d", ev->evh.fd);
 
 	// Ignore error here, if someone called di:exit, we would've been removed already.
 	di_call(roots, "remove", root_key);
@@ -199,7 +199,7 @@ static struct di_object *di_create_ioev(struct di_object *obj, int fd) {
 	di_set_type((void *)ret, "deai.builtin.event:IoEv");
 	di_set_object_dtor((void *)ret, di_ioev_dtor);
 
-	di_object_with_cleanup di_obj = di_module_get_deai(em);
+	scoped_di_object *di_obj = di_module_get_deai(em);
 	if (di_obj == NULL) {
 		return di_new_error("deai is shutting down...");
 	}
@@ -226,10 +226,10 @@ static void di_timer_delete_signal(struct di_object *o) {
 	auto roots = di_get_roots();
 
 	// Ignore error because roots might have been removed by di:exit
-	di_string_with_cleanup timer_key = di_string_printf("___timer_%p", o);
+	scoped_di_string timer_key = di_string_printf("___timer_%p", o);
 	di_call(roots, "remove", timer_key);
 
-	di_object_with_cleanup di_obj = di_object_get_deai_strong(o);
+	scoped_di_object *di_obj = di_object_get_deai_strong(o);
 	auto di = (struct deai *)di_obj;
 	ev_timer_stop(di->loop, &t->evt);
 	di_object_downgrade_deai(o);
@@ -241,7 +241,7 @@ static void di_timer_add_signal(struct di_object *o, struct di_object *sig) {
 		return;
 	}
 
-	di_object_with_cleanup di_obj = di_object_get_deai_weak(o);
+	scoped_di_object *di_obj = di_object_get_deai_weak(o);
 	if (di_obj == NULL) {
 		return;
 	}
@@ -254,7 +254,7 @@ static void di_timer_add_signal(struct di_object *o, struct di_object *sig) {
 
 	// Add ourselve to GC root
 	auto roots = di_get_roots();
-	di_string_with_cleanup timer_key = di_string_printf("___timer_%p", o);
+	scoped_di_string timer_key = di_string_printf("___timer_%p", o);
 	if (di_call(roots, "add", timer_key, o) != 0) {
 		// Could happen if di:exit is called
 		di_timer_delete_signal(o);
@@ -271,10 +271,10 @@ static void di_timer_add_signal(struct di_object *o, struct di_object *sig) {
 static void di_timer_callback(EV_P_ ev_timer *t, int revents) {
 	auto d = container_of(t, struct di_timer, evt);
 	// Keep timer alive during emission
-	di_object_with_cleanup unused obj = di_ref_object((struct di_object *)d);
+	scoped_di_object unused *obj = di_ref_object((struct di_object *)d);
 
 	double now = ev_now(EV_A);
-	di_object_with_cleanup di_obj = di_object_get_deai_strong((struct di_object *)d);
+	scoped_di_object *di_obj = di_object_get_deai_strong((struct di_object *)d);
 	DI_CHECK(di_obj);
 
 	auto di = (struct deai *)di_obj;
@@ -300,7 +300,7 @@ static struct di_object *di_create_timer(struct di_object *obj, double timeout) 
 	struct di_module *em = (void *)obj;
 	auto ret = di_new_object_with_type(struct di_timer);
 	di_set_type((void *)ret, "deai.builtin.event:Timer");
-	di_object_with_cleanup di_obj = di_module_get_deai(em);
+	scoped_di_object *di_obj = di_module_get_deai(em);
 	if (di_obj == NULL) {
 		return di_new_error("deai is shutting down...");
 	}
@@ -326,7 +326,7 @@ static void periodic_dtor(struct di_periodic *p) {
 		return;
 	}
 
-	di_object_with_cleanup di_obj = di_object_get_deai_strong((struct di_object *)p);
+	scoped_di_object *di_obj = di_object_get_deai_strong((struct di_object *)p);
 	auto di = (struct deai *)di_obj;
 	ev_periodic_stop(di->loop, &p->pt);
 }
@@ -337,7 +337,7 @@ static void periodic_dtor(struct di_periodic *p) {
 ///
 /// Timer will be reset after update.
 static void periodic_set(struct di_periodic *p, double interval, double offset) {
-	di_object_with_cleanup di_obj = di_object_get_deai_strong((struct di_object *)p);
+	scoped_di_object *di_obj = di_object_get_deai_strong((struct di_object *)p);
 	DI_CHECK(di_obj != NULL);
 	ev_periodic_set(&p->pt, offset, interval, NULL);
 
@@ -376,7 +376,7 @@ static struct di_object *
 di_create_periodic(struct di_module *evm, double interval, double offset) {
 	auto ret = di_new_object_with_type(struct di_periodic);
 	di_set_type((void *)ret, "deai.builtin.event:Periodic");
-	di_object_with_cleanup di_obj = di_module_get_deai(evm);
+	scoped_di_object *di_obj = di_module_get_deai(evm);
 
 	ret->dtor = (void *)periodic_dtor;
 	di_method(ret, "set", periodic_set, double, double);
@@ -411,7 +411,7 @@ static void di_prepare(EV_P_ ev_prepare *w, int revents) {
 
 	struct di_prepare *dep = (void *)w;
 	// Keep event module alive during emission
-	di_object_with_cleanup unused obj = di_ref_object((struct di_object *)dep->evm);
+	scoped_di_object unused *obj = di_ref_object((struct di_object *)dep->evm);
 	di_emit(dep->evm, "prepare");
 }
 
@@ -430,15 +430,15 @@ void di_resolve_promise(struct di_promise *promise, struct di_variant var);
 static void di_promise_then_impl(struct di_promise *promise, struct di_promise *then_promise,
                                  struct di_object *handler);
 
-static int di_promise_dispatch(struct di_object *prepare_handler, di_type_t *rt,
+static int di_promise_dispatch(struct di_object *prepare_handler, di_type *rt,
                         union di_value *r, struct di_tuple args) {
-	di_object_with_cleanup promise_;
+	scoped_di_object *promise_;
 	if (di_get(prepare_handler, "promise", promise_) != 0) {
 		return 0;
 	}
 
-	struct di_promise *promise = (void *)promise_;
-	struct di_variant resolved;
+	di_promise *promise = (void *)promise_;
+	di_variant resolved;
 	uint64_t nhandlers;
 	DI_CHECK_OK(di_get(promise, "___resolved", resolved));
 	DI_CHECK_OK(di_get(promise, "___n_handlers", nhandlers));
@@ -474,7 +474,7 @@ static int di_promise_dispatch(struct di_object *prepare_handler, di_type_t *rt,
 
 	for (uint64_t i = 0; i < nhandlers; i++) {
 		union di_value return_value;
-		di_type_t return_type;
+		di_type return_type;
 		int ret = 0;
 		if (handlers[i]) {
 			ret = di_call_object(handlers[i], &return_type, &return_value,
@@ -533,10 +533,10 @@ static void di_promise_start_dispatch(struct di_promise *promise) {
 		return;
 	}
 
-	di_object_with_cleanup handler = di_new_object_with_type(struct di_object);
-	di_weak_object_with_cleanup weak_event = NULL;
+	scoped_di_object *handler = di_new_object_with_type(struct di_object);
+	scoped_di_weak_object *weak_event = NULL;
 	DI_CHECK_OK(di_get(promise, "___weak_event_module", weak_event));
-	di_object_with_cleanup event_module = di_upgrade_weak_ref(weak_event);
+	scoped_di_object *event_module = di_upgrade_weak_ref(weak_event);
 	if (event_module == NULL) {
 		return;
 	}
@@ -546,7 +546,7 @@ static void di_promise_start_dispatch(struct di_promise *promise) {
 
 	// Use a 0 second timer because prepare isn't guaranteed to be called if
 	// epoll blocks.
-	di_object_with_cleanup timer = NULL;
+	scoped_di_object *timer = NULL;
 	if (di_callr(event_module, "timer", timer, 0.0) != 0) {
 		return;
 	}
@@ -595,23 +595,23 @@ static void di_promise_then_impl(struct di_promise *promise, struct di_promise *
 ///
 /// (this function is called "then\_" in lua, since "then" is a keyword)
 struct di_object *di_promise_then(struct di_object *promise, struct di_object *handler) {
-	di_weak_object_with_cleanup weak_event = NULL;
+	scoped_di_weak_object *weak_event = NULL;
 	if (di_get(promise, "___weak_event_module", weak_event) != 0) {
 		return di_new_error("Event module member not found");
 	}
-	di_object_with_cleanup event_module = di_upgrade_weak_ref(weak_event);
+	scoped_di_object *event_module = di_upgrade_weak_ref(weak_event);
 	if (event_module == NULL) {
 		return di_new_error("deai shutting down?");
 	}
 
-	struct di_object *ret = di_new_promise(event_module);
+	di_object *ret = di_new_promise(event_module);
 	di_promise_then_impl((void *)promise, (void *)ret, handler);
 	return ret;
 }
 
 static void di_promise_collect_handler(int index, struct di_object *storage,
                                        struct di_object *then_promise, struct di_variant var) {
-	di_string_with_cleanup key = di_string_printf("%d", index);
+	scoped_di_string key = di_string_printf("%d", index);
 	DI_CHECK_OK(di_add_member_clone(storage, key, DI_TYPE_VARIANT, &var));
 
 	int left;
@@ -622,10 +622,10 @@ static void di_promise_collect_handler(int index, struct di_object *storage,
 	if (left == 0) {
 		int total;
 		DI_CHECK_OK(di_get(storage, "total", total));
-		di_tuple_with_cleanup results = {
+		scoped_di_tuple results = {
 		    .length = total, .elements = tmalloc(struct di_variant, total)};
 		for (int i = 0; i < total; i++) {
-			di_string_with_cleanup key = di_string_printf("%d", i);
+			scoped_di_string key = di_string_printf("%d", i);
 			union di_value tmp;
 			DI_CHECK_OK(di_getxt(storage, key, DI_TYPE_VARIANT, &tmp));
 			results.elements[i] = tmp.variant;
@@ -648,10 +648,10 @@ struct di_object *di_collect_promises(struct di_object *event_module, struct di_
 		}
 	}
 	auto ret = di_new_promise(event_module);
-	di_object_with_cleanup storage = di_new_object_with_type(struct di_object);
+	scoped_di_object *storage = di_new_object_with_type(struct di_object);
 	int cnt = 0;
 	for (int i = 0; i < promises.length; i++) {
-		di_object_with_cleanup handler = (void *)di_closure(
+		scoped_di_object *handler = (void *)di_closure(
 		    di_promise_collect_handler, (cnt, storage, ret), struct di_variant);
 		if (di_call(arr[i], "then", handler) == 0) {
 			cnt += 1;
@@ -681,7 +681,7 @@ struct di_object *di_any_promise(struct di_object *event_module, struct di_array
 	}
 	auto ret = di_new_promise(event_module);
 	for (int i = 0; i < promises.length; i++) {
-		di_object_with_cleanup handler =
+		scoped_di_object *handler =
 		    (void *)di_closure(di_any_promise_handler, (ret), struct di_variant);
 		di_call(arr[i], "then", handler);
 	}

@@ -12,7 +12,7 @@
 #include "signature.h"
 #include "utils.h"
 
-static di_type_t dbus_type_to_di(int type) {
+static di_type dbus_type_to_di(int type) {
 	switch (type) {
 	case DBUS_TYPE_BOOLEAN:
 		return DI_TYPE_BOOL;
@@ -54,7 +54,7 @@ static di_type_t dbus_type_to_di(int type) {
 		break
 
 static void
-dbus_deserialize_basic(DBusMessageIter *i, union di_value *retp, di_type_t *otype, int type) {
+dbus_deserialize_basic(DBusMessageIter *i, union di_value *retp, di_type *otype, int type) {
 	switch (type) {
 		DESERIAL(DBUS_TYPE_BOOLEAN, dbus_bool_t, bool_);
 		DESERIAL(DBUS_TYPE_INT16, dbus_int16_t, int_);
@@ -79,7 +79,7 @@ dbus_deserialize_basic(DBusMessageIter *i, union di_value *retp, di_type_t *otyp
 
 #undef _DESERIAL
 
-static void dbus_deserialize_one(DBusMessageIter *i, void *retp, di_type_t *otype, int type);
+static void dbus_deserialize_one(DBusMessageIter *i, void *retp, di_type *otype, int type);
 
 // Deserialize an array. `i' is the iterator, already recursed into the array
 // `type' is the array element type
@@ -105,7 +105,7 @@ dbus_deserialize_array(DBusMessageIter *i, struct di_array *retp, int type, int 
 	}
 	ret.arr = calloc(ret.length, esize);
 	for (int x = 0; x < ret.length; x++) {
-		di_type_t _;
+		di_type _;
 		dbus_deserialize_one(i, ret.arr + esize * x, &_, type);
 		dbus_message_iter_next(i);
 	}
@@ -127,7 +127,7 @@ void dbus_deserialize_struct(DBusMessageIter *i, void *retp) {
 		t.elements[x].type = dbus_type_to_di(type);
 
 		t.elements[x].value = calloc(1, di_sizeof_type(t.elements[x].type));
-		di_type_t rtype;
+		di_type rtype;
 		dbus_deserialize_one(i, t.elements[x].value, &rtype, type);
 
 		// Dict type can't be discerned from the outer type alone (which
@@ -160,7 +160,7 @@ static void dbus_deserialize_dict(DBusMessageIter *i, void *retp, int length) {
 	*(struct di_object **)retp = o;
 }
 
-static void dbus_deserialize_one(DBusMessageIter *i, void *retp, di_type_t *otype, int type) {
+static void dbus_deserialize_one(DBusMessageIter *i, void *retp, di_type *otype, int type) {
 	if (dbus_type_is_basic(type)) {
 		return dbus_deserialize_basic(i, retp, otype, type);
 	}
@@ -170,7 +170,7 @@ static void dbus_deserialize_one(DBusMessageIter *i, void *retp, di_type_t *otyp
 		struct di_variant *v = retp;
 		dbus_message_iter_recurse(i, &i2);
 		int type2 = dbus_message_iter_get_arg_type(&i2);
-		di_type_t di_type = DI_LAST_TYPE;
+		di_type di_type = DI_LAST_TYPE;
 		v->type = dbus_type_to_di(type2);
 		v->value = calloc(1, di_sizeof_type(v->type));
 		dbus_deserialize_one(&i2, v->value, &di_type, type2);

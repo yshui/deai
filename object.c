@@ -46,7 +46,7 @@ static_assert(alignof(struct di_object) == alignof(struct di_object_internal),
               "di_object alignment mismatch");
 // clang-format on
 
-static int di_call_internal(struct di_object *self, struct di_object *method_, di_type_t *rt,
+static int di_call_internal(struct di_object *self, struct di_object *method_, di_type *rt,
                             union di_value *ret, struct di_tuple args, bool *called) {
 	auto method = (struct di_object_internal *)method_;
 	*called = false;
@@ -72,7 +72,7 @@ static int di_call_internal(struct di_object *self, struct di_object *method_, d
 }
 
 #define gen_callx(fnname, getter)                                                        \
-	int fnname(struct di_object *self, struct di_string name, di_type_t *rt,         \
+	int fnname(struct di_object *self, struct di_string name, di_type *rt,         \
 	           union di_value *ret, struct di_tuple args, bool *called) {            \
 		struct di_object *val;                                                   \
 		*called = false;                                                         \
@@ -91,13 +91,13 @@ gen_callx(di_rawcallxn, di_rawgetxt);
 /// @param[out] found whether a handler is found
 static int call_handler_with_fallback(struct di_object *nonnull o,
                                       const char *nonnull prefix, struct di_string name,
-                                      struct di_variant arg, di_type_t *nullable rtype,
+                                      struct di_variant arg, di_type *nullable rtype,
                                       union di_value *nullable ret, bool *found) {
 	*found = false;
 
 	char *buf;
 	asprintf(&buf, "%s_%.*s", prefix, (int)name.length, name.data);
-	di_type_t rtype2;
+	di_type rtype2;
 	union di_value ret2;
 
 	struct di_variant args[2] = {arg, DI_VARIANT_INIT};
@@ -139,7 +139,7 @@ ret:
 	return rc;
 }
 
-int di_setx(struct di_object *o, struct di_string prop, di_type_t type, const void *val) {
+int di_setx(struct di_object *o, struct di_string prop, di_type type, const void *val) {
 	// If a setter is present, we just call that and we are done.
 	bool handler_found;
 	int rc = call_handler_with_fallback(o, "__set", prop,
@@ -172,7 +172,7 @@ int di_setx(struct di_object *o, struct di_string prop, di_type_t type, const vo
 	return di_add_member_clone(o, prop, type, val);
 }
 
-int di_refrawgetx(struct di_object *o, struct di_string prop, di_type_t *type,
+int di_refrawgetx(struct di_object *o, struct di_string prop, di_type *type,
                   union di_value **ret) {
 	auto m = di_lookup(o, prop);
 
@@ -187,7 +187,7 @@ int di_refrawgetx(struct di_object *o, struct di_string prop, di_type_t *type,
 	return 0;
 }
 
-int di_rawgetx(struct di_object *o, struct di_string prop, di_type_t *type, union di_value *ret) {
+int di_rawgetx(struct di_object *o, struct di_string prop, di_type *type, union di_value *ret) {
 	union di_value *tmp = NULL;
 	int rc = di_refrawgetx(o, prop, type, &tmp);
 	if (rc != 0) {
@@ -197,15 +197,15 @@ int di_rawgetx(struct di_object *o, struct di_string prop, di_type_t *type, unio
 	return 0;
 }
 
-/// A di_call_fn_t that does nothing.
-int di_noop(struct di_object *o, di_type_t *rt, union di_value *r, struct di_tuple args) {
+/// A di_call_fn that does nothing.
+int di_noop(struct di_object *o, di_type *rt, union di_value *r, struct di_tuple args) {
 	return 0;
 }
 
 /// Decide if `val` contains DI_LAST_TYPE, and if so, free `val`.
 /// Ordinary `di_free_value` cannot free value of DI_LAST_TYPE, this function should only
 /// be used when calling getter functions.
-static bool di_free_last_type(di_type_t type, union di_value *val) {
+static bool di_free_last_type(di_type type, union di_value *val) {
 	bool ret = false;
 	if (type == DI_LAST_TYPE) {
 		return true;
@@ -220,7 +220,7 @@ static bool di_free_last_type(di_type_t type, union di_value *val) {
 	return ret;
 }
 
-int di_getx(struct di_object *o, struct di_string prop, di_type_t *type, union di_value *ret) {
+int di_getx(struct di_object *o, struct di_string prop, di_type *type, union di_value *ret) {
 	int rc = di_rawgetx(o, prop, type, ret);
 	if (rc == 0) {
 		return 0;
@@ -241,10 +241,10 @@ int di_getx(struct di_object *o, struct di_string prop, di_type_t *type, union d
 }
 
 #define gen_tfunc(name, getter)                                                          \
-	int name(struct di_object *o, struct di_string prop, di_type_t rtype,            \
+	int name(struct di_object *o, struct di_string prop, di_type rtype,            \
 	         union di_value *ret) {                                                  \
 		union di_value ret2;                                                     \
-		di_type_t rt;                                                            \
+		di_type rt;                                                            \
 		int rc = getter(o, prop, &rt, &ret2);                                    \
 		if (rc != 0) {                                                           \
 			return rc;                                                       \
@@ -391,7 +391,7 @@ static void _di_finalize_object(struct di_object_internal *obj) {
 	while (m) {
 		auto next_m = m->hh.next;
 #if 0
-		with_cleanup_t(char) dbg = di_value_to_string(m->type, m->data);
+		scopedp(char) dbg = di_value_to_string(m->type, m->data);
 		fprintf(stderr, "removing member %.*s (%s)\n", (int)m->name.length,
 		        m->name.data, dbg);
 #endif
@@ -547,7 +547,7 @@ static int di_insert_member(struct di_object_internal *obj, struct di_member *m)
 }
 
 static int
-di_add_member(struct di_object_internal *o, struct di_string name, di_type_t t, void *v) {
+di_add_member(struct di_object_internal *o, struct di_string name, di_type t, void *v) {
 	if (!name.data) {
 		return -EINVAL;
 	}
@@ -568,7 +568,7 @@ di_add_member(struct di_object_internal *o, struct di_string name, di_type_t t, 
 	return ret;
 }
 
-int di_add_member_clone(struct di_object *o, struct di_string name, di_type_t t,
+int di_add_member_clone(struct di_object *o, struct di_string name, di_type t,
                         const void *value) {
 	if (di_sizeof_type(t) == 0) {
 		return -EINVAL;
@@ -580,7 +580,7 @@ int di_add_member_clone(struct di_object *o, struct di_string name, di_type_t t,
 	return di_add_member((struct di_object_internal *)o, name, t, copy);
 }
 
-int di_add_member_clonev(struct di_object *o, struct di_string name, di_type_t t, ...) {
+int di_add_member_clonev(struct di_object *o, struct di_string name, di_type t, ...) {
 	if (di_sizeof_type(t) == 0) {
 		return -EINVAL;
 	}
@@ -595,13 +595,13 @@ int di_add_member_clonev(struct di_object *o, struct di_string name, di_type_t t
 	return di_add_member_clone(o, name, t, &nv);
 }
 
-int di_add_member_move(struct di_object *o, struct di_string name, di_type_t *t, void *addr) {
+int di_add_member_move(struct di_object *o, struct di_string name, di_type *t, void *addr) {
 	auto sz = di_sizeof_type(*t);
 	if (sz == 0) {
 		return -EINVAL;
 	}
 
-	di_type_t tt = *t;
+	di_type tt = *t;
 	void *taddr = malloc(sz);
 	memcpy(taddr, addr, sz);
 
@@ -652,12 +652,12 @@ bool di_foreach_member_raw(struct di_object *obj_, di_member_cb cb, void *user_d
 	return false;
 }
 
-void di_set_object_dtor(struct di_object *nonnull obj, di_dtor_fn_t nullable dtor) {
+void di_set_object_dtor(struct di_object *nonnull obj, di_dtor_fn nullable dtor) {
 	auto internal = (struct di_object_internal *)obj;
 	internal->dtor = dtor;
 }
 
-void di_set_object_call(struct di_object *nonnull obj, di_call_fn_t nullable call) {
+void di_set_object_call(struct di_object *nonnull obj, di_call_fn nullable call) {
 	auto internal = (struct di_object_internal *)obj;
 	internal->call = call;
 }
@@ -686,7 +686,7 @@ void di_free_array(struct di_array arr) {
 	free(arr.arr);
 }
 
-void di_free_value(di_type_t t, union di_value *value_ptr) {
+void di_free_value(di_type t, union di_value *value_ptr) {
 	if (t == DI_TYPE_NIL) {
 		return;
 	}
@@ -735,7 +735,7 @@ void di_free_value(di_type_t t, union di_value *value_ptr) {
 	}
 }
 
-void di_copy_value(di_type_t t, void *dst, const void *src) {
+void di_copy_value(di_type t, void *dst, const void *src) {
 	const struct di_array *arr;
 	const struct di_tuple *tuple;
 	union di_value *dstval = dst;
@@ -811,12 +811,12 @@ struct di_listen_handle {
 ///
 /// After calling this the signal handler will stop from being called.
 static void di_listen_handle_stop(struct di_object *nonnull obj) {
-	di_weak_object_with_cleanup weak_sig;
-	di_weak_object_with_cleanup weak_handler;
+	scoped_di_weak_object *weak_sig;
+	scoped_di_weak_object *weak_handler;
 	DI_CHECK_OK(di_get(obj, "weak_signal", weak_sig));
 	DI_CHECK_OK(di_get(obj, "weak_handler", weak_handler));
 
-	di_object_with_cleanup sig = di_upgrade_weak_ref(weak_sig);
+	scoped_di_object *sig = di_upgrade_weak_ref(weak_sig);
 	if (sig == NULL) {
 		// Signal object already dead
 		return;
@@ -869,23 +869,23 @@ int di_rename_signal_member_raw(struct di_object *obj, struct di_string old_memb
 	if (rc != 0) {
 		return rc;
 	}
-	return di_add_member_move(obj, new_member_name, (di_type_t[]){DI_TYPE_OBJECT}, &val);
+	return di_add_member_move(obj, new_member_name, (di_type[]){DI_TYPE_OBJECT}, &val);
 }
 
 static void di_signal_remove_handler(struct di_object *sig_, struct di_weak_object *handler) {
 	struct di_signal *sig = (void *)sig_;
-	di_string_with_cleanup handler_member_name =
+	scoped_di_string handler_member_name =
 	    di_string_printf(HANDLER_PREFIX "%p", handler);
 
 	if (di_remove_member_raw(sig_, handler_member_name) != -ENOENT) {
 		sig->nhandlers -= 1;
 		if (sig->nhandlers == 0) {
 			// No handler remains, remove ourself from parent.
-			di_weak_object_with_cleanup weak_source;
-			di_string_with_cleanup signal_member_name;
+			scoped_di_weak_object *weak_source;
+			scoped_di_string signal_member_name;
 			DI_CHECK_OK(di_get(sig_, "weak_source", weak_source));
 			DI_CHECK_OK(di_get(sig_, "signal_name", signal_member_name));
-			di_object_with_cleanup source = di_upgrade_weak_ref(weak_source);
+			scoped_di_object *source = di_upgrade_weak_ref(weak_source);
 			if (source != NULL) {
 				di_remove_member(source, signal_member_name);
 			}
@@ -912,7 +912,7 @@ static void di_signal_dispatch(struct di_object *sig_, struct di_tuple args) {
 
 	assert(cnt == sig->nhandlers);
 	for (int i = 0; i < cnt; i++) {
-		di_type_t rtype;
+		di_type rtype;
 		union di_value ret;
 		int rc = di_call_objectt(handlers[i], &rtype, &ret, args);
 
@@ -939,7 +939,7 @@ static void di_signal_dispatch(struct di_object *sig_, struct di_tuple args) {
 }
 
 static void di_signal_add_handler(struct di_object *sig, struct di_object *handler) {
-	with_cleanup_t(char) new_signal_listener_name;
+	scopedp(char) *new_signal_listener_name;
 	asprintf(&new_signal_listener_name, HANDLER_PREFIX "%p", handler);
 	di_member_clone(sig, new_signal_listener_name, handler);
 
@@ -948,7 +948,7 @@ static void di_signal_add_handler(struct di_object *sig, struct di_object *handl
 
 struct di_object *
 di_listen_to(struct di_object *_obj, struct di_string name, struct di_object *h) {
-	with_cleanup_t(char) signal_member_name = NULL;
+	scopedp(char) *signal_member_name = NULL;
 	asprintf(&signal_member_name, "__signal_%.*s", (int)name.length, name.data);
 
 	auto signal_member_name_str = di_string_borrow(signal_member_name);
@@ -956,7 +956,7 @@ di_listen_to(struct di_object *_obj, struct di_string name, struct di_object *h)
 	auto obj = (struct di_object_internal *)_obj;
 	assert(!obj->destroyed);
 
-	di_object_with_cleanup sig = NULL;
+	scoped_di_object *sig = NULL;
 	int rc = di_get(_obj, signal_member_name, sig);
 	if (rc == -ENOENT) {
 		auto weak_source = di_weakly_ref_object(_obj);
@@ -1002,9 +1002,9 @@ int di_emitn(struct di_object *o, struct di_string name, struct di_tuple args) {
 
 	assert(args.length == 0 || (args.elements != NULL));
 
-	with_cleanup_t(char) signal_member_name = NULL;
+	scopedp(char) *signal_member_name = NULL;
 	asprintf(&signal_member_name, "__signal_%.*s", (int)name.length, name.data);
-	di_object_with_cleanup sig = NULL;
+	scoped_di_object *sig = NULL;
 	if (di_get(o, signal_member_name, sig) == 0) {
 		DI_CHECK_OK(di_call(sig, "dispatch", args));
 	}
@@ -1018,7 +1018,7 @@ struct di_object *di_get_roots(void) {
 	return (struct di_object *)roots;
 }
 
-static void di_scan_type(di_type_t, union di_value *, int (*)(struct di_object_internal *, int),
+static void di_scan_type(di_type, union di_value *, int (*)(struct di_object_internal *, int),
                          int, void (*)(struct di_object_internal *));
 static void di_scan_member(struct di_object_internal *obj,
                            int (*pre)(struct di_object_internal *, int), int state,
@@ -1028,7 +1028,7 @@ static void di_scan_member(struct di_object_internal *obj,
 		di_scan_type(m->type, m->data, pre, state, post);
 	}
 }
-static void di_scan_type(di_type_t type, union di_value *value,
+static void di_scan_type(di_type type, union di_value *value,
                          int (*pre)(struct di_object_internal *, int), int state,
                          void (*post)(struct di_object_internal *)) {
 	if (type == DI_TYPE_OBJECT) {
@@ -1163,10 +1163,10 @@ static void di_dump_tuple(struct di_tuple t, int depth) {
 	if (t.length == 0) {
 		return;
 	}
-	with_cleanup_t(char) prefix = indent(depth);
+	scopedp(char) *prefix = indent(depth);
 	di_log_va(log_module, DI_LOG_DEBUG, "\t%s(", prefix);
 	for (int i = 0; i < t.length; i++) {
-		with_cleanup_t(char) value_string =
+		scopedp(char) *value_string =
 		    di_value_to_string(t.elements[i].type, t.elements[i].value);
 		di_log_va(log_module, DI_LOG_DEBUG, "\t%s  %s: %s,", prefix,
 		          di_type_to_string(t.elements[i].type), value_string);
@@ -1184,12 +1184,12 @@ static void di_dump_array(struct di_array arr, int depth) {
 	if (arr.length == 0) {
 		return;
 	}
-	with_cleanup_t(char) prefix = indent(depth);
+	scopedp(char) *prefix = indent(depth);
 	auto step_size = di_sizeof_type(arr.elem_type);
 	di_log_va(log_module, DI_LOG_DEBUG, "\t%s[", prefix);
 	for (int i = 0; i < arr.length; i++) {
 		void *curr = arr.arr + i * step_size;
-		with_cleanup_t(char) value_string = di_value_to_string(arr.elem_type, curr);
+		scopedp(char) *value_string = di_value_to_string(arr.elem_type, curr);
 		di_log_va(log_module, DI_LOG_DEBUG, "\t%s  %s,", prefix, value_string);
 		if (arr.elem_type == DI_TYPE_OBJECT) {
 			((struct di_object_internal *)curr)->ref_count_scan--;
@@ -1201,7 +1201,7 @@ static void di_dump_array(struct di_array arr, int depth) {
 	}
 	di_log_va(log_module, DI_LOG_DEBUG, "\t%s]", prefix);
 }
-static void di_dump_type_content(di_type_t type, union di_value *value) {
+static void di_dump_type_content(di_type type, union di_value *value) {
 	if (type == DI_TYPE_OBJECT) {
 		auto obj_internal = (struct di_object_internal *)value->object;
 		obj_internal->ref_count_scan--;

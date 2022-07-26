@@ -6,7 +6,7 @@
 #include "common.h"
 #include "signature.h"
 
-int di_type_to_dbus_basic(di_type_t type) {
+int di_type_to_dbus_basic(di_type type) {
 	static_assert(sizeof(int) == 4, "NINT is not INT32");
 	static_assert(sizeof(unsigned int) == 4, "NUINT is not UINT32");
 	switch (type) {
@@ -81,7 +81,7 @@ static int type_signature_length_of_di_value(struct di_variant var) {
 }
 
 /// Whether deai type `type` can be converted to `dbus_type`
-static bool is_basic_type_compatible(di_type_t type, int dbus_type) {
+static bool is_basic_type_compatible(di_type type, int dbus_type) {
 	switch (dbus_type) {
 	case DBUS_TYPE_BOOLEAN:
 		return type == DI_TYPE_BOOL;

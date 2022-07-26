@@ -98,7 +98,7 @@ static const char *const SIGNAL_NAME[] = {"stdout_line", "stderr_line"};
 static void sigchld_handler(EV_P_ ev_child *w, int revents) {
 	struct child *c = container_of(w, struct child, w);
 	// Keep child process object alive when emitting
-	di_object_with_cleanup unused obj = di_ref_object((struct di_object *)c);
+	scoped_di_object unused *obj = di_ref_object((struct di_object *)c);
 
 	int sig = 0;
 	if (WIFSIGNALED(w->rstatus)) {
@@ -163,7 +163,7 @@ static struct di_object *di_setup_fds(bool ignore_output, int *opfds, int *epfds
 	epfds[0] = epfds[1] = -1;
 	*ifd = -1;
 
-	struct di_object *ret = NULL;
+	di_object *ret = NULL;
 	do {
 		if (!ignore_output) {
 			if (pipe(opfds) < 0 || pipe(epfds) < 0) {
@@ -213,7 +213,7 @@ static void di_child_process_new_exit_signal(struct di_object *p, struct di_obje
 	}
 
 	auto child = (struct child *)p;
-	di_object_with_cleanup di_obj = di_object_get_deai_weak(p);
+	scoped_di_object *di_obj = di_object_get_deai_weak(p);
 	if (di_obj == NULL) {
 		return;
 	}
@@ -226,33 +226,33 @@ static void di_child_process_new_exit_signal(struct di_object *p, struct di_obje
 	di_object_upgrade_deai(p);
 
 	auto roots = di_get_roots();
-	di_string_with_cleanup child_root_key =
+	scoped_di_string child_root_key =
 	    di_string_printf("child_process_%d", child->pid);
 	DI_CHECK_OK(di_call(roots, "add", child_root_key, p));
 }
 
 static void di_child_start_output_listener(struct di_object *p, int id) {
-	di_object_with_cleanup di_obj = di_object_get_deai_weak(p);
+	scoped_di_object *di_obj = di_object_get_deai_weak(p);
 	if (di_obj == NULL) {
 		return;
 	}
 
 	auto c = (struct child *)p;
 
-	di_object_with_cleanup event_module;
+	scoped_di_object *event_module;
 	DI_CHECK_OK(di_get(di_obj, "event", event_module));
 
-	di_object_with_cleanup fdevent;
+	scoped_di_object *fdevent;
 	DI_CHECK_OK(di_callr(event_module, "fdevent", fdevent, c->fds[id]));
 
-	di_object_with_cleanup closure = (void *)di_closure(output_cb, (p, id));
+	scoped_di_object *closure = (void *)di_closure(output_cb, (p, id));
 	auto listen_handle = di_listen_to(fdevent, di_string_borrow("read"), closure);
 
 	DI_CHECK_OK(di_call(listen_handle, "auto_stop", true));
 
-	di_string_with_cleanup listen_handle_key =
+	scoped_di_string listen_handle_key =
 	    di_string_printf("__listen_handle_for_output_%d", id);
-	di_add_member_move(p, listen_handle_key, (di_type_t[]){DI_TYPE_OBJECT}, &listen_handle);
+	di_add_member_move(p, listen_handle_key, (di_type[]){DI_TYPE_OBJECT}, &listen_handle);
 	c->output_buf[id] = string_buf_new();
 }
 
@@ -275,7 +275,7 @@ static void di_child_process_delete_exit_signal(struct di_object *obj) {
 		return;
 	}
 	auto c = (struct child *)obj;
-	di_object_with_cleanup di_obj = di_object_get_deai_strong((struct di_object *)c);
+	scoped_di_object *di_obj = di_object_get_deai_strong((struct di_object *)c);
 
 	auto di = (struct deai *)di_obj;
 	EV_P = di->loop;
@@ -283,14 +283,14 @@ static void di_child_process_delete_exit_signal(struct di_object *obj) {
 
 	// We as a fundamental event source has stopped, so remove roots and unref core.
 	auto roots = di_get_roots();
-	di_string_with_cleanup child_root_key = di_string_printf("child_process_%d", c->pid);
+	scoped_di_string child_root_key = di_string_printf("child_process_%d", c->pid);
 	DI_CHECK_OK(di_call(roots, "remove", child_root_key));
 
 	di_object_downgrade_deai((void *)c);
 }
 
 static void di_child_process_stop_output_listener(struct di_object *obj, int id) {
-	di_string_with_cleanup listen_handle_key =
+	scoped_di_string listen_handle_key =
 	    di_string_printf("__listen_handle_for_output_%d", id);
 	DI_CHECK_OK(di_remove_member_raw(obj, listen_handle_key));
 
@@ -328,7 +328,7 @@ struct di_object *di_spawn_run(struct di_spawn *p, struct di_array argv, bool ig
 	if (argv.elem_type != DI_TYPE_STRING) {
 		return di_new_error("Invalid argv type");
 	}
-	di_object_with_cleanup obj = di_module_get_deai((struct di_module *)p);
+	scoped_di_object *obj = di_module_get_deai((struct di_module *)p);
 	if (obj == NULL) {
 		return di_new_error("deai is shutting down...");
 	}

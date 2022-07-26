@@ -26,7 +26,7 @@ struct di_atom_entry {
 	UT_hash_handle hh, hh2;
 };
 
-define_trivial_cleanup_t(xcb_generic_error_t);
+define_trivial_cleanup(xcb_generic_error_t);
 
 /// Disconnect from the X server
 ///
@@ -35,7 +35,7 @@ define_trivial_cleanup_t(xcb_generic_error_t);
 /// Disconnecting from the X server will stop all related event sources. All objects
 /// coming from this connection will stop generating any events after this.
 /// You should stop using the Connection object after you have called disconnect.
-static void xorg_disconnect(struct di_xorg_connection *xc) {
+static void xorg_disconnect(di_xorg_connection *xc) {
 	if (xc->xkb_ctx) {
 		xkb_context_unref(xc->xkb_ctx);
 	}
@@ -60,7 +60,7 @@ static void xorg_disconnect(struct di_xorg_connection *xc) {
 
 struct _xext {
 	const char *name;
-	struct di_xorg_ext *(*new)(struct di_xorg_connection *xc);
+	struct di_xorg_ext *(*new)(di_xorg_connection *xc);
 } xext_reg[] = {
     {"xinput", new_xinput},
     {"randr", new_randr},
@@ -68,16 +68,16 @@ struct _xext {
     {NULL, NULL},
 };
 
-static void di_xorg_ioev(struct di_object *dc_obj) {
+static void di_xorg_ioev(di_object *dc_obj) {
 	// di_get_log(dc->x->di);
 	// di_log_va((void *)log, DI_LOG_DEBUG, "xcb ioev\n");
-	auto dc = (struct di_xorg_connection *)dc_obj;
+	auto dc = (di_xorg_connection *)dc_obj;
 	xcb_generic_event_t *ev;
 
 	while ((ev = xcb_poll_for_event(dc->c))) {
 		// handle event
 		{
-			di_string_with_cleanup event_name = DI_STRING_INIT;
+			scoped_di_string event_name = DI_STRING_INIT;
 			if (ev->response_type == XCB_GE_GENERIC) {
 				auto gev = (xcb_ge_generic_event_t *)ev;
 				event_name =
@@ -101,9 +101,9 @@ static void di_xorg_ioev(struct di_object *dc_obj) {
 
 		for (int i = 0; xext_reg[i].name != NULL; i++) {
 			// Only strongly referenced ext have signal listerners.
-			di_string_with_cleanup ext_key =
+			scoped_di_string ext_key =
 			    di_string_printf("___strong_x_ext_%s", xext_reg[i].name);
-			di_object_with_cleanup ext_obj = NULL;
+			scoped_di_object *ext_obj = NULL;
 			if (di_getxt(dc_obj, ext_key, DI_TYPE_OBJECT, (void *)&ext_obj) != 0) {
 				continue;
 			}
@@ -121,11 +121,11 @@ static void di_xorg_ioev(struct di_object *dc_obj) {
 
 	if (xcb_connection_has_error(dc->c)) {
 		di_emit(dc, "connection-error");
-		di_finalize_object((struct di_object *)dc);
+		di_finalize_object((di_object *)dc);
 	}
 }
 
-const struct di_string *di_xorg_get_atom_name(struct di_xorg_connection *xc, xcb_atom_t atom) {
+const struct di_string *di_xorg_get_atom_name(di_xorg_connection *xc, xcb_atom_t atom) {
 	struct di_atom_entry *ae = NULL;
 	HASH_FIND(hh, xc->a_byatom, &atom, sizeof(atom), ae);
 	if (ae) {
@@ -148,7 +148,7 @@ const struct di_string *di_xorg_get_atom_name(struct di_xorg_connection *xc, xcb
 	return &ae->name;
 }
 
-xcb_atom_t di_xorg_intern_atom(struct di_xorg_connection *xc, struct di_string name,
+xcb_atom_t di_xorg_intern_atom(di_xorg_connection *xc, struct di_string name,
                                xcb_generic_error_t **e) {
 	struct di_atom_entry *ae = NULL;
 	*e = NULL;
@@ -182,7 +182,7 @@ xcb_atom_t di_xorg_intern_atom(struct di_xorg_connection *xc, struct di_string n
 ///
 /// This property corresponds to the xrdb, which is usually set with the command
 /// line tool with the same name. Assigning to this property updates the xrdb.
-static struct di_string di_xorg_get_resource(struct di_xorg_connection *xc) {
+static struct di_string di_xorg_get_resource(di_xorg_connection *xc) {
 	auto scrn = screen_of_display(xc->c, xc->dflt_scrn);
 	auto r = xcb_get_property_reply(
 	    xc->c,
@@ -209,20 +209,20 @@ static struct di_string di_xorg_get_resource(struct di_xorg_connection *xc) {
 	return ret;
 }
 
-static void di_xorg_set_resource(struct di_xorg_connection *xc, struct di_string rdb) {
+static void di_xorg_set_resource(di_xorg_connection *xc, struct di_string rdb) {
 	auto scrn = screen_of_display(xc->c, xc->dflt_scrn);
-	with_cleanup_t(xcb_generic_error_t) e = xcb_request_check(
+	scopedp(xcb_generic_error_t) *e = xcb_request_check(
 	    xc->c, xcb_change_property(xc->c, XCB_PROP_MODE_REPLACE, scrn->root,
 	                               XCB_ATOM_RESOURCE_MANAGER, XCB_ATOM_STRING, 8,
 	                               rdb.length, rdb.data));
 	(void)e;
 }
 
-static struct di_variant di_xorg_get_ext(struct di_xorg_connection *xc, struct di_string name) {
-	di_weak_object_with_cleanup weak_ext = NULL;
-	di_string_with_cleanup ext_member =
+static struct di_variant di_xorg_get_ext(di_xorg_connection *xc, struct di_string name) {
+	scoped_di_weak_object *weak_ext = NULL;
+	scoped_di_string ext_member =
 	    di_string_concat(di_string_borrow_literal("___weak_x_ext_"), name);
-	union di_value tmp;
+	di_value tmp;
 	if (di_rawgetxt((void *)xc, ext_member, DI_TYPE_WEAK_OBJECT, &tmp) == 0) {
 		weak_ext = tmp.weak_object;
 	}
@@ -244,14 +244,14 @@ static struct di_variant di_xorg_get_ext(struct di_xorg_connection *xc, struct d
 		weak_ext = di_weakly_ref_object((void *)ext);
 		DI_CHECK_OK(di_add_member_clone((void *)xc, ext_member,
 		                                DI_TYPE_WEAK_OBJECT, &weak_ext));
-		return di_variant_of((struct di_object *)ext);
+		return di_variant_of((di_object *)ext);
 	}
 	return (struct di_variant){.type = DI_LAST_TYPE, .value = NULL};
 }
 
 /// TYPE: deai.plugin.xorg:Screen
 struct xscreen {
-	struct di_object;
+	di_object;
 	/// Width of the screen
 	///
 	/// EXPORT: deai.plugin.xorg:Screen.width: :integer
@@ -264,7 +264,7 @@ struct xscreen {
 /// Information about the current screen
 ///
 /// EXPORT: deai.plugin.xorg:Connection.screen: deai.plugin.xorg:Screen
-static struct di_object *get_screen(struct di_xorg_connection *dc) {
+static di_object *get_screen(struct di_xorg_connection *dc) {
 	auto scrn = screen_of_display(dc->c, dc->dflt_scrn);
 
 	auto ret = di_new_object_with_type2(struct xscreen, "deai.plugin.xorg:Screen");
@@ -383,8 +383,8 @@ static struct {
 /// - model (optional)
 /// - variant (optional)
 /// - options (optional)
-static void set_keymap(struct di_xorg_connection *xc, struct di_object *o) {
-	di_string_with_cleanup layout = DI_STRING_INIT, model = DI_STRING_INIT,
+static void set_keymap(di_xorg_connection *xc, di_object *o) {
+	scoped_di_string layout = DI_STRING_INIT, model = DI_STRING_INIT,
 	                       variant = DI_STRING_INIT, options = DI_STRING_INIT;
 
 	if (!o || di_get(o, "layout", layout)) {
@@ -503,23 +503,23 @@ out:
 }
 
 void print_stack_trace(int, int);
-void di_xorg_add_signal(struct di_xorg_connection *xc) {
+void di_xorg_add_signal(di_xorg_connection *xc) {
 	xc->nsignals += 1;
 	if (xc->nsignals != 1) {
 		return;
 	}
 	fprintf(stderr, "X start\n");
-	di_weak_object_with_cleanup weak_event = NULL;
+	scoped_di_weak_object *weak_event = NULL;
 	DI_CHECK_OK(di_get(xc, "__weak_event_module", weak_event));
-	di_object_with_cleanup eventm = di_upgrade_weak_ref(weak_event);
+	scoped_di_object *eventm = di_upgrade_weak_ref(weak_event);
 	if (eventm == NULL) {
 		// mostly likely deai is shutting down
 		return;
 	}
 
-	di_object_with_cleanup xcb_fd_event = NULL;
+	scoped_di_object *xcb_fd_event = NULL;
 	DI_CHECK_OK(di_callr(eventm, "fdevent", xcb_fd_event, xcb_get_file_descriptor(xc->c)));
-	di_closure_with_cleanup cl = di_closure(di_xorg_ioev, ((struct di_object *)xc));
+	scoped_di_closure *cl = di_closure(di_xorg_ioev, ((di_object *)xc));
 	auto lh =
 	    di_listen_to(xcb_fd_event, di_string_borrow("read"), (void *)cl);
 
@@ -527,7 +527,7 @@ void di_xorg_add_signal(struct di_xorg_connection *xc) {
 	di_member(xc, "__xcb_fd_event_read_listen_handle", lh);
 }
 
-void di_xorg_del_signal(struct di_xorg_connection *xc) {
+void di_xorg_del_signal(di_xorg_connection *xc) {
 	xc->nsignals -= 1;
 	if (xc->nsignals != 0) {
 		return;
@@ -538,7 +538,7 @@ void di_xorg_del_signal(struct di_xorg_connection *xc) {
 	    (void *)xc, di_string_borrow_literal("__xcb_fd_event_read_listen_handle"));
 }
 
-void di_xorg_signal_setter(struct di_object *obj, struct di_string member, struct di_object *sig) {
+void di_xorg_signal_setter(di_object *obj, struct di_string member, di_object *sig) {
 	if (!di_string_starts_with(member, "__signal_")) {
 		return;
 	}
@@ -548,7 +548,7 @@ void di_xorg_signal_setter(struct di_object *obj, struct di_string member, struc
 	di_xorg_add_signal((void *)obj);
 }
 
-void di_xorg_signal_deleter(struct di_object *obj, struct di_string member) {
+void di_xorg_signal_deleter(di_object *obj, struct di_string member) {
 	if (!di_string_starts_with(member, "__signal_")) {
 		return;
 	}
@@ -558,8 +558,8 @@ void di_xorg_signal_deleter(struct di_object *obj, struct di_string member) {
 	di_xorg_del_signal((void *)obj);
 }
 
-void di_xorg_ext_signal_setter(const char *signal, struct di_object *obj, struct di_object *sig) {
-	di_object_with_cleanup dc_obj = NULL;
+void di_xorg_ext_signal_setter(const char *signal, di_object *obj, di_object *sig) {
+	scoped_di_object *dc_obj = NULL;
 	if (di_get(obj, XORG_CONNECTION_MEMBER, dc_obj) != 0) {
 		return;
 	}
@@ -572,7 +572,7 @@ void di_xorg_ext_signal_setter(const char *signal, struct di_object *obj, struct
 	fprintf(stderr, "ext signal setter %s\n", ext->extname);
 	ext->nsignals += 1;
 	if (ext->nsignals == 1) {
-		di_string_with_cleanup strong_ext_member =
+		scoped_di_string strong_ext_member =
 		    di_string_printf("___strong_x_ext_%s", ext->extname);
 		if (di_add_member_clone(dc_obj, strong_ext_member, DI_TYPE_OBJECT, &ext) != 0) {
 			return;
@@ -581,8 +581,8 @@ void di_xorg_ext_signal_setter(const char *signal, struct di_object *obj, struct
 	}
 }
 
-void di_xorg_ext_signal_deleter(const char *signal, struct di_object *obj) {
-	di_object_with_cleanup dc_obj = NULL;
+void di_xorg_ext_signal_deleter(const char *signal, di_object *obj) {
+	scoped_di_object *dc_obj = NULL;
 	if (di_get(obj, XORG_CONNECTION_MEMBER, dc_obj) != 0) {
 		return;
 	}
@@ -593,14 +593,14 @@ void di_xorg_ext_signal_deleter(const char *signal, struct di_object *obj) {
 	fprintf(stderr, "delete ext signal %s\n", ext->extname);
 	ext->nsignals -= 1;
 	if (ext->nsignals == 0) {
-		di_string_with_cleanup strong_ext_member =
+		scoped_di_string strong_ext_member =
 		    di_string_printf("___strong_x_ext_%s", ext->extname);
 		di_remove_member_raw(dc_obj, strong_ext_member);
 		di_xorg_del_signal((void *)dc_obj);
 	}
 }
 
-static struct di_object *di_xorg_new_clipboard(struct di_xorg *x) {
+static di_object *di_xorg_new_clipboard(struct di_xorg *x) {
 }
 
 /// Connect to a X server
@@ -612,9 +612,9 @@ static struct di_object *di_xorg_new_clipboard(struct di_xorg *x) {
 /// Arguments:
 ///
 /// - display(:string) the display
-static struct di_object *di_xorg_connect_to(struct di_xorg *x, struct di_string displayname_) {
+static di_object *di_xorg_connect_to(struct di_xorg *x, struct di_string displayname_) {
 	int scrn;
-	with_cleanup_t(char) displayname = NULL;
+	scopedp(char) *displayname = NULL;
 	if (displayname_.length > 0) {
 		displayname = di_string_to_chars_alloc(displayname_);
 	}
@@ -626,24 +626,24 @@ static struct di_object *di_xorg_connect_to(struct di_xorg *x, struct di_string 
 
 	di_mgetm(x, event, di_new_error("Can't get event module"));
 
-	struct di_xorg_connection *dc = di_new_object_with_type2(
-	    struct di_xorg_connection, "deai.plugin.xorg:Connection");
+	auto dc = di_new_object_with_type2(
+	    di_xorg_connection, "deai.plugin.xorg:Connection");
 	dc->c = c;
 	dc->dflt_scrn = scrn;
 	dc->nsignals = 0;
 
-	di_weak_object_with_cleanup weak_eventm = di_weakly_ref_object(eventm);
+	scoped_di_weak_object *weak_eventm = di_weakly_ref_object(eventm);
 	di_member(dc, "__weak_event_module", weak_eventm);
 
 	di_set_object_dtor((void *)dc, (void *)xorg_disconnect);
 
 	di_method(dc, "__get", di_xorg_get_ext, struct di_string);
-	di_method(dc, "__set", di_xorg_signal_setter, struct di_string, struct di_object *);
+	di_method(dc, "__set", di_xorg_signal_setter, struct di_string, di_object *);
 	di_method(dc, "__delete", di_xorg_signal_deleter, struct di_string);
 	di_method(dc, "__get_xrdb", di_xorg_get_resource);
 	di_method(dc, "__set_xrdb", di_xorg_set_resource, struct di_string);
 	di_method(dc, "__get_screen", get_screen);
-	di_method(dc, "__set_keymap", set_keymap, struct di_object *);
+	di_method(dc, "__set_keymap", set_keymap, di_object *);
 	di_method(dc, "__get_clipboard", di_xorg_new_clipboard);
 	di_method(dc, "disconnect", di_finalize_object);
 
@@ -658,7 +658,7 @@ static struct di_object *di_xorg_connect_to(struct di_xorg *x, struct di_string 
 ///
 /// Connect to the default X server, usually the one specified in the DISPLAY
 /// environment variable.
-static struct di_object *di_xorg_connect(struct di_xorg *x) {
+static di_object *di_xorg_connect(struct di_xorg *x) {
 	return di_xorg_connect_to(x, DI_STRING_INIT);
 }
 
