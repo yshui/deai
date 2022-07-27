@@ -705,6 +705,7 @@ void di_free_value(di_type t, di_value *value_ptr) {
 		di_free_string(val->string);
 		break;
 	case DI_TYPE_OBJECT:
+	case DI_TYPE_EMPTY_OBJECT:
 		obj = val->object;
 		di_unref_object(obj);
 		break;
@@ -775,6 +776,7 @@ void di_copy_value(di_type t, void *dst, const void *src) {
 	case DI_TYPE_STRING:
 		dstval->string = di_clone_string(srcval->string);
 		break;
+	case DI_TYPE_EMPTY_OBJECT:
 	case DI_TYPE_OBJECT:
 		di_ref_object(srcval->object);
 		dstval->object = srcval->object;
@@ -1143,6 +1145,10 @@ void di_collect_garbage(void) {
 		             0, di_collect_garbage_collect_post);
 	}
 	collecting_garbage = false;
+}
+
+bool di_is_empty_object(di_object *nonnull obj) {
+	return ((di_object_internal *)obj)->members == NULL;
 }
 
 #ifdef TRACK_OBJECTS

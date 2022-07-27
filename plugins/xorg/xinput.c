@@ -346,6 +346,7 @@ static void di_xorg_xinput_set_prop(struct di_xorg_xinput_device *dev,
 		case DI_TYPE_ARRAY:
 		case DI_TYPE_TUPLE:
 		case DI_TYPE_VARIANT:
+		case DI_TYPE_EMPTY_OBJECT:
 		case DI_TYPE_OBJECT:
 		case DI_TYPE_WEAK_OBJECT:
 		case DI_TYPE_POINTER:

@@ -34,6 +34,7 @@ int di_type_to_dbus_basic(di_type type) {
 		DI_PANIC("Impossible types appeared in dbus serialization");
 	case DI_TYPE_NIL:
 	case DI_TYPE_POINTER:
+	case DI_TYPE_EMPTY_OBJECT:
 	case DI_TYPE_OBJECT:
 	case DI_TYPE_WEAK_OBJECT:
 	case DI_TYPE_VARIANT:

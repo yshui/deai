@@ -124,6 +124,7 @@ static inline int is_unsigned(di_type type) {
 		return 1;
 	case DI_TYPE_ANY:
 	case DI_TYPE_NIL:
+	case DI_TYPE_EMPTY_OBJECT:
 	case DI_TYPE_FLOAT:
 	case DI_TYPE_BOOL:
 	case DI_TYPE_ARRAY:
@@ -174,12 +175,70 @@ static inline bool is_integer(di_type t) {
 //                       not be performed if the caller owns the value, as that would
 //                       cause memory leakage. If `inp` is borrowed, `outp` must also be
 //                       borrowed downstream as well.
-static inline int unused di_type_conversion(di_type inty, di_value *inp,
-                                            di_type outty, di_value *outp,
-                                            bool borrowing) {
+static inline int unused di_type_conversion(di_type inty, di_value *inp, di_type outty,
+                                            di_value *outp, bool borrowing) {
 	if (inty == outty) {
 		memcpy(outp, inp, di_sizeof_type(inty));
 		return 0;
+	}
+
+	if ((inty == DI_TYPE_OBJECT && outty == DI_TYPE_EMPTY_OBJECT) ||
+	    (inty == DI_TYPE_EMPTY_OBJECT && outty == DI_TYPE_OBJECT)) {
+		// Note we don't check if an object is actually empty, because of getters,
+		// etc., it's impossible
+		outp->object = inp->object;
+		return 0;
+	}
+
+	if (inty == DI_TYPE_EMPTY_OBJECT && outty == DI_TYPE_ARRAY) {
+		if (!borrowing) {
+			di_unref_object(inp->object);
+		}
+		outp->array = DI_ARRAY_INIT;
+		return 0;
+	}
+
+	if (inty == DI_TYPE_EMPTY_OBJECT && outty == DI_TYPE_TUPLE) {
+		if (!borrowing) {
+			di_unref_object(inp->object);
+		}
+		outp->tuple = DI_TUPLE_INIT;
+		return 0;
+	}
+
+	if (inty == DI_TYPE_NIL) {
+		switch (outty) {
+		case DI_TYPE_WEAK_OBJECT:
+			outp->weak_object = (void *)&dead_weak_ref;
+			return 0;
+		case DI_TYPE_POINTER:
+			outp->pointer = NULL;
+			return 0;
+		case DI_TYPE_ARRAY:
+			outp->array = DI_ARRAY_INIT;
+			return 0;
+		case DI_TYPE_TUPLE:
+			outp->tuple = DI_TUPLE_INIT;
+			return 0;
+		case DI_TYPE_ANY:
+		case DI_LAST_TYPE:
+			DI_PANIC("Impossible types appeared in "
+			         "arguments");
+		case DI_TYPE_NIL:
+		case DI_TYPE_VARIANT:
+			unreachable();
+		case DI_TYPE_EMPTY_OBJECT:
+		case DI_TYPE_OBJECT:
+		case DI_TYPE_FLOAT:
+		case DI_TYPE_BOOL:
+		case DI_TYPE_INT:
+		case DI_TYPE_UINT:
+		case DI_TYPE_NINT:
+		case DI_TYPE_NUINT:
+		case DI_TYPE_STRING:
+		case DI_TYPE_STRING_LITERAL:
+			break;
+		}
 	}
 
 	if (outty == DI_TYPE_VARIANT) {
@@ -214,7 +273,7 @@ static inline int unused di_type_conversion(di_type inty, di_value *inp,
 
 	if (inty == DI_TYPE_VARIANT) {
 		int ret = di_type_conversion(inp->variant.type, inp->variant.value, outty,
-		                          outp, borrowing);
+		                             outp, borrowing);
 		if (ret != 0) {
 			return ret;
 		}
@@ -230,7 +289,7 @@ static inline int unused di_type_conversion(di_type inty, di_value *inp,
 		}
 		if (outty == DI_TYPE_FLOAT) {
 #define convert_case(srcfield)                                                           \
-	case di_typeof(((di_value *)0)->srcfield):                                 \
+	case di_typeof(((di_value *)0)->srcfield):                                       \
 		outp->float_ = (double)inp->srcfield;                                    \
 		break;
 			switch (inty) {
@@ -245,6 +304,7 @@ static inline int unused di_type_conversion(di_type inty, di_value *inp,
 			case DI_TYPE_ARRAY:
 			case DI_TYPE_TUPLE:
 			case DI_TYPE_VARIANT:
+			case DI_TYPE_EMPTY_OBJECT:
 			case DI_TYPE_OBJECT:
 			case DI_TYPE_WEAK_OBJECT:
 			case DI_TYPE_STRING:
@@ -272,6 +332,7 @@ static inline void unused va_arg_with_di_type(va_list ap, di_type t, void *buf) 
 	case DI_TYPE_STRING_LITERAL:
 	case DI_TYPE_POINTER:
 	case DI_TYPE_OBJECT:
+	case DI_TYPE_EMPTY_OBJECT:
 	case DI_TYPE_WEAK_OBJECT:
 		v.pointer = va_arg(ap, void *);
 		break;

@@ -88,6 +88,11 @@ typedef enum di_type {
 	DI_TYPE_NAME(NIL) = 0,
 	// unresolved, only used for element type of empty arrays.
 	DI_TYPE_NAME(ANY),
+	// an empty object, this is treated as special case because it could be converted
+	// to an empty array. emptyness of the object is actually not checked, because
+	// it's almost impossible: e.g. an object could have a getter that always return
+	// nothing. CANNOT be used as a parameter type.
+	DI_TYPE_NAME(EMPTY_OBJECT),
 	// boolean), no implicit conversion to number types
 	// C type: _Bool
 	DI_TYPE_NAME(BOOL),
@@ -212,6 +217,7 @@ static const di_string unused DI_STRING_INIT = {NULL, 0};
 union di_value {
 	// void unit;
 	// ? any;
+	// di_object *empty_object; - stored in `object` instead
 	bool bool_;
 	int nint;
 	unsigned int nuint;
@@ -629,6 +635,7 @@ static inline unused size_t di_sizeof_type(di_type t) {
 		return sizeof(di_string);
 	case DI_TYPE_NAME(STRING_LITERAL):
 	case DI_TYPE_NAME(OBJECT):
+	case DI_TYPE_NAME(EMPTY_OBJECT):
 	case DI_TYPE_NAME(POINTER):
 		return sizeof(void *);
 	case DI_TYPE_NAME(WEAK_OBJECT):

@@ -349,7 +349,7 @@ static inline unused const char *nonnull di_type_to_string(di_type type) {
 		LIST_APPLY(TYPE_CASE, SEP_COLON, NIL, ANY, BOOL, INT, UINT, NINT, NUINT,
 		           FLOAT, STRING, STRING_LITERAL);
 		LIST_APPLY(TYPE_CASE, SEP_COLON, TUPLE, ARRAY, VARIANT, OBJECT,
-		           WEAK_OBJECT, POINTER);
+		           WEAK_OBJECT, POINTER, EMPTY_OBJECT);
 	case DI_LAST_TYPE:
 		return "LAST_TYPE";
 	}
@@ -360,6 +360,7 @@ static inline unused char *nonnull di_value_to_string(di_type type, di_value *no
 	char *buf = NULL;
 	switch (type) {
 	case DI_TYPE_OBJECT:
+	case DI_TYPE_EMPTY_OBJECT:
 		asprintf(&buf, "%s: %p", di_get_type(value->object), value->object);
 		break;
 	case DI_TYPE_INT:

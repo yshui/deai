@@ -42,8 +42,8 @@ static void di_call_ffi_call(void *args_) {
 	ffi_call(args->cif, args->fn, args->ret, args->xargs);
 }
 
-static int _di_typed_trampoline(ffi_cif *cif, void (*fn)(void), void *ret, const di_type *fnats,
-                                di_tuple args0, di_tuple args) {
+static int _di_typed_trampoline(ffi_cif *cif, void (*fn)(void), void *ret,
+                                const di_type *fnats, di_tuple args0, di_tuple args) {
 	assert(args.length == 0 || args.elements != NULL);
 	assert(args0.length == 0 || args0.elements != NULL);
 	assert(args.length >= 0 && args0.length >= 0);
@@ -51,7 +51,6 @@ static int _di_typed_trampoline(ffi_cif *cif, void (*fn)(void), void *ret, const
 
 	struct di_variant *vars = args.elements;
 	di_value **xargs = alloca((args0.length + args.length) * sizeof(void *));
-	bool *args_cloned = alloca(args.length * sizeof(bool));
 	if (args0.elements != 0) {
 		for (int i = 0; i < args0.length; i++) {
 			xargs[i] = args0.elements[i].value;
@@ -66,56 +65,11 @@ static int _di_typed_trampoline(ffi_cif *cif, void (*fn)(void), void *ret, const
 		// as long as there's no overflow
 		xargs[i] = alloca(di_sizeof_type(fnats[i - args0.length]));
 		rc = di_type_conversion(vars[i - args0.length].type,
-		                        vars[i - args0.length].value, fnats[i - args0.length],
-		                        xargs[i], true);
+		                        vars[i - args0.length].value,
+		                        fnats[i - args0.length], xargs[i], true);
 		if (rc != 0) {
-			if (vars[i - args0.length].type == DI_TYPE_NIL) {
-				switch (fnats[i - args0.length]) {
-				case DI_TYPE_OBJECT:
-					rc = 0;
-					xargs[i]->object =
-					    di_new_object_with_type(di_object);
-					args_cloned[i - args0.length] = true;
-					break;
-				case DI_TYPE_WEAK_OBJECT:
-					rc = 0;
-					xargs[i] = (void *)&dead_weak_ref;
-					break;
-				case DI_TYPE_POINTER:
-					rc = 0;
-					xargs[i]->pointer = NULL;
-					break;
-				case DI_TYPE_ARRAY:
-					xargs[i]->array =
-					    (di_array){0, NULL, DI_TYPE_ANY};
-					rc = 0;
-					break;
-				case DI_TYPE_TUPLE:
-					xargs[i]->tuple = (di_tuple){0, NULL};
-					rc = 0;
-					break;
-				case DI_TYPE_ANY:
-				case DI_LAST_TYPE:
-					DI_PANIC("Impossible types appeared in "
-					         "arguments");
-				case DI_TYPE_NIL:
-				case DI_TYPE_VARIANT:
-					unreachable();
-				case DI_TYPE_FLOAT:
-				case DI_TYPE_BOOL:
-				case DI_TYPE_INT:
-				case DI_TYPE_UINT:
-				case DI_TYPE_NINT:
-				case DI_TYPE_NUINT:
-				case DI_TYPE_STRING:
-				case DI_TYPE_STRING_LITERAL:
-				default:
-					return rc;
-				}
-			} else {
-				// Conversion failed
-				return rc;
-			}
+			// Conversion failed
+			return rc;
 		}
 	}
 
@@ -130,8 +84,7 @@ static int _di_typed_trampoline(ffi_cif *cif, void (*fn)(void), void *ret, const
 	if (errobj != NULL) {
 		fprintf(stderr, "Caught error from di closure, it says:\n");
 		di_string err;
-		di_getxt(errobj, di_string_borrow("errmsg"), DI_TYPE_STRING,
-		         (di_value *)&err);
+		di_getxt(errobj, di_string_borrow("errmsg"), DI_TYPE_STRING, (di_value *)&err);
 		fprintf(stderr, "%.*s\n", (int)err.length, err.data);
 		di_free_string(err);
 		di_unref_object(errobj);
@@ -139,8 +92,7 @@ static int _di_typed_trampoline(ffi_cif *cif, void (*fn)(void), void *ret, const
 	return rc;
 }
 
-static int closure_trampoline(di_object *o, di_type *rtype, di_value *ret,
-                              di_tuple t) {
+static int closure_trampoline(di_object *o, di_type *rtype, di_value *ret, di_tuple t) {
 	if (!di_check_type(o, "deai:closure")) {
 		return -EINVAL;
 	}
@@ -217,8 +169,7 @@ struct di_closure *di_create_closure(void (*fn)(void), di_type rtype, di_tuple c
 	return cl;
 }
 
-int di_add_method(di_object *o, di_string name, void (*fn)(void),
-                  di_type rtype, int nargs, ...) {
+int di_add_method(di_object *o, di_string name, void (*fn)(void), di_type rtype, int nargs, ...) {
 	if (nargs < 0 || nargs + 1 > MAX_NARGS) {
 		return -EINVAL;
 	}
@@ -282,8 +233,8 @@ struct di_field_getter {
 	ptrdiff_t offset;
 };
 
-static int di_field_getter_call(di_object *getter, di_type *rtype,
-                                di_value *ret, di_tuple args) {
+static int
+di_field_getter_call(di_object *getter, di_type *rtype, di_value *ret, di_tuple args) {
 	DI_CHECK(di_check_type(getter, "deai:FieldGetter"));
 
 	if (args.elements[0].type != DI_TYPE_OBJECT) {
@@ -316,8 +267,7 @@ int di_call_object(di_object *o, di_type *rtype, di_value *ret, ...) {
 	return di_call_objectv(o, rtype, ret, ap);
 }
 
-int di_call_objectt(di_object *obj, di_type *rt, di_value *ret,
-                    di_tuple args) {
+int di_call_objectt(di_object *obj, di_type *rt, di_value *ret, di_tuple args) {
 	auto internal = (di_object_internal *)obj;
 	return internal->call(obj, rt, ret, args);
 }
