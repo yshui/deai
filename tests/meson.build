@@ -20,6 +20,7 @@ test_cases = [
   'promise.lua',
   'async.lua',
   'cycle.lua',
+  'twoway.lua',
 ]
 foreach t : test_cases
   test(t, deai_exe, args:

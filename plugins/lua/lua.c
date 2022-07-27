@@ -275,6 +275,52 @@ static int di_lua_di_getter(di_object *m, di_type *rt, di_value *ret, di_tuple t
 	return 0;
 }
 
+static int di_lua_di_setter(di_object *m, di_type *rt, di_value *ret, di_tuple tu) {
+	if (tu.length != 3) {
+		return -EINVAL;
+	}
+
+	struct di_variant *vars = tu.elements;
+	if (vars[0].type != DI_TYPE_OBJECT) {
+		DI_ASSERT(false, "first argument to getter is not an object");
+		return -EINVAL;
+	}
+
+	auto t = (struct di_lua_ref *)vars[0].value->object;
+	if (vars[1].type != DI_TYPE_STRING && vars[1].type != DI_TYPE_STRING_LITERAL) {
+		return -EINVAL;
+	}
+
+	scoped_di_object *script_obj = NULL;
+	scoped_di_object *state_obj = NULL;
+	DI_CHECK_OK(di_get(t, "___di_lua_script", script_obj));
+	DI_CHECK_OK(di_get(script_obj, "___di_lua_state", state_obj));
+
+	auto script = (struct di_lua_script *)script_obj;
+	auto state = (struct di_lua_state *)state_obj;
+	lua_State *L = state->L;
+	di_lua_xchg_env(L, script);
+
+	lua_rawgeti(L, LUA_REGISTRYINDEX, t->tref);
+
+	if (vars[1].type == DI_TYPE_STRING) {
+		lua_pushlstring(L, vars[1].value->string.data, vars[1].value->string.length);
+	} else {
+		const char *key = vars[1].value->string_literal;
+		lua_pushstring(L, key);
+	}
+
+	if (di_lua_pushvariant(L, NULL, vars[2]) != 1) {
+		lua_pop(L, 2); // key and table
+		return -EINVAL;
+	}
+	lua_settable(L, -3);
+	lua_pop(L, 1); // table
+
+	di_lua_xchg_env(L, script);
+	return 0;
+}
+
 static struct di_lua_ref *lua_type_to_di_object(lua_State *L, int i, void *call) {
 	// TODO(yshui): probably a good idea to make sure that same lua object get same
 	// di object?
@@ -300,6 +346,10 @@ static struct di_lua_ref *lua_type_to_di_object(lua_State *L, int i, void *call)
 	di_set_object_call((void *)getter, di_lua_di_getter);
 	di_add_member_move((void *)o, di_string_borrow("__get"),
 	                   (di_type[]){DI_TYPE_OBJECT}, (void **)&getter);
+	auto setter = di_new_object_with_type(di_object);
+	di_set_object_call((void *)setter, di_lua_di_setter);
+	di_add_member_move((void *)o, di_string_borrow("__set"),
+	                   (di_type[]){DI_TYPE_OBJECT}, (void **)&setter);
 	di_set_object_dtor((void *)o, (void *)lua_ref_dtor);
 	di_set_object_call((void *)o, call);
 
@@ -499,6 +549,7 @@ di_lua_pushproxy(lua_State *L, const char *name, void *o, const luaL_Reg *reg, b
 ///
 /// This function consume the reference to `obj`
 static void di_lua_pushobject(lua_State *L, const char *name, di_object *obj) {
+	// TODO: if the object comes from a lua object, push the original lua object.
 	struct di_lua_state *s;
 	di_lua_get_state(L, s);
 

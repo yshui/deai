@@ -1,6 +1,8 @@
+local called = false
 obj = {
     func = function(mod)
         di:log("error", "test\n")
+        called = true
     end
 }
 
@@ -10,4 +12,6 @@ di.test_a:func()
 -- Had to do this to eliminate the reference cycle
 -- lua_state -> di -> lua_ref -> lua_state
 di.test_a = nil
-collectgarbage("collect")
+if not called then
+    di:exit(1)
+end
