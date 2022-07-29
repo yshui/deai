@@ -242,7 +242,7 @@ static void di_child_start_output_listener(di_object *p, int id) {
 	scoped_di_object *event_module;
 	DI_CHECK_OK(di_get(di_obj, "event", event_module));
 
-	scoped_di_object *fdevent;
+	scoped_di_object *fdevent = NULL;
 	DI_CHECK_OK(di_callr(event_module, "fdevent", fdevent, c->fds[id]));
 
 	scoped_di_object *closure = (void *)di_closure(output_cb, (p, id));

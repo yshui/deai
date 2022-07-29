@@ -273,7 +273,7 @@ dbus_call_method(di_dbus_object *dobj, di_string iface, di_string method,
 
 	di_getm(di_object_get_deai_strong(conn), event, di_new_error(""));
 
-	int64_t serial;
+	int64_t serial = -1;
 	int rc;
 	scoped_di_string bus = DI_STRING_INIT, path = DI_STRING_INIT;
 	DI_CHECK_OK(di_get(dobj, "___bus_name", bus));
@@ -376,8 +376,8 @@ static struct di_variant di_dbus_object_getter(di_dbus_object *dobj, di_string m
 	}
 
 	const char *dot = memrchr(method.data, '.', method.length);
-	scopedp(char) *ifc;
-	scopedp(char) *m;
+	scopedp(char) *ifc = NULL;
+	scopedp(char) *m = NULL;
 	di_object *ret = NULL;
 	if (dot) {
 		const char *dot2 = memchr(method.data, '.', method.length);

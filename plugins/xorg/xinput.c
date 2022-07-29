@@ -10,6 +10,7 @@
 #include <deai/helper.h>
 
 #include <assert.h>
+#include <math.h>
 #include <ctype.h>
 #include <stdio.h>
 #include <xcb/xinput.h>
@@ -157,7 +158,7 @@ static di_string di_xorg_xinput_get_device_name(struct di_xorg_xinput_device *de
 		return di_string_dup("unknown");
 	}
 
-	scopedp(xcb_input_xi_query_device_reply_t) *rr;
+	scopedp(xcb_input_xi_query_device_reply_t) * rr;
 	auto info = xcb_input_get_device_info(dc->c, dev->deviceid, &rr);
 	if (!info) {
 		return di_string_dup("unknown");
@@ -178,7 +179,7 @@ static const char *di_xorg_xinput_get_device_use(struct di_xorg_xinput_device *d
 		return "unknown";
 	}
 
-	scopedp(xcb_input_xi_query_device_reply_t) *rr;
+	scopedp(xcb_input_xi_query_device_reply_t) * rr;
 	auto info = xcb_input_get_device_info(dc->c, dev->deviceid, &rr);
 	if (!info) {
 		return "unknown";
@@ -223,8 +224,8 @@ static di_string di_xorg_xinput_get_device_type(struct di_xorg_xinput_device *de
 		return di_string_dup("unknown");
 	}
 
-	scopedp(xcb_input_list_input_devices_reply_t) *r =
-	    xcb_input_list_input_devices_reply(dc->c, xcb_input_list_input_devices(dc->c), NULL);
+	scopedp(xcb_input_list_input_devices_reply_t) *r = xcb_input_list_input_devices_reply(
+	    dc->c, xcb_input_list_input_devices(dc->c), NULL);
 
 	auto di = xcb_input_list_input_devices_devices_iterator(r);
 	for (; di.rem; xcb_input_device_info_next(&di)) {
@@ -253,8 +254,8 @@ define_trivial_cleanup(xcb_input_xi_change_property_items_t);
 
 /// Arbitrary length limit for the property names
 #define XI_MAX_PROPERTY_NAME_LENGTH (256)
-static void di_xorg_xinput_set_prop(struct di_xorg_xinput_device *dev,
-                                    di_string key, struct di_variant var) {
+static void di_xorg_xinput_set_prop(struct di_xorg_xinput_device *dev, di_string key,
+                                    struct di_variant var) {
 	scopedp(di_xorg_connection) *dc = NULL;
 	if (get_xorg_connection((struct di_xorg_ext *)dev->xi, &dc) != 0) {
 		return;
@@ -300,8 +301,8 @@ static void di_xorg_xinput_set_prop(struct di_xorg_xinput_device *dev,
 	int step = prop->format / 8;
 	scopedp(char) *data = malloc(step * (arr.length));
 	for (int i = 0; i < arr.length; i++) {
-		int64_t i64;
-		float f;
+		int64_t i64 = INT64_MIN;
+		float f = nanf("");
 		void *dst = data + step * i;
 		di_value *src = arr.arr + di_sizeof_type(arr.elem_type) * i;
 
@@ -356,7 +357,8 @@ static void di_xorg_xinput_set_prop(struct di_xorg_xinput_device *dev,
 		}
 
 		if (prop->type == XCB_ATOM_INTEGER || prop->type == XCB_ATOM_CARDINAL) {
-			if (arr.elem_type == DI_TYPE_FLOAT || arr.elem_type == DI_TYPE_STRING) {
+			if (arr.elem_type == DI_TYPE_FLOAT || arr.elem_type == DI_TYPE_STRING ||
+			    arr.elem_type == DI_TYPE_STRING_LITERAL) {
 				goto err;
 			}
 			switch (prop->format) {
@@ -374,7 +376,8 @@ static void di_xorg_xinput_set_prop(struct di_xorg_xinput_device *dev,
 				break;
 			}
 		} else if (prop->type == float_atom) {
-			if (arr.elem_type == DI_TYPE_STRING) {
+			if (arr.elem_type == DI_TYPE_STRING ||
+			    arr.elem_type == DI_TYPE_STRING_LITERAL) {
 				goto err;
 			}
 			*(float *)dst = f;
