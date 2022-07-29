@@ -110,10 +110,8 @@ static void di_stop_ioev(struct di_ioev *ev) {
 	di_object_downgrade_deai((void *)ev);
 
 	auto roots = di_get_roots();
-	bool removed = false;
 	// Ignore error here, if someone called di:exit, we would've been removed already.
-	DI_CHECK_OK(di_callr(roots, "remove_anonymous", removed, (di_object *)ev));
-	DI_CHECK(removed);
+	di_call(roots, "remove_anonymous", (di_object *)ev);
 }
 
 /// Change monitored file descriptor events
@@ -225,9 +223,7 @@ static void di_timer_delete_signal(di_object *o) {
 	auto roots = di_get_roots();
 
 	// Ignore error because roots might have been removed by di:exit
-	bool removed = false;
-	DI_CHECK_OK(di_callr(roots, "remove_anonymous", removed, o));
-	DI_CHECK(removed);
+	di_call(roots, "remove_anonymous", o);
 
 	scoped_di_object *di_obj = di_object_get_deai_strong(o);
 	auto di = (struct deai *)di_obj;
@@ -323,18 +319,6 @@ static di_object *di_create_timer(di_object *obj, double timeout) {
 	return (di_object *)ret;
 }
 
-static void periodic_dtor(struct di_periodic *p) {
-	if (!p->running) {
-		return;
-	}
-
-	scoped_di_object *di_obj = di_object_get_deai_strong((di_object *)p);
-	if (di_obj) {
-		auto di = (struct deai *)di_obj;
-		ev_periodic_stop(di->loop, &p->pt);
-	}
-}
-
 /// Update timer interval and offset
 ///
 /// EXPORT: deai.builtin.event:Periodic.set(interval: :float, offset: :float): :void
@@ -358,21 +342,18 @@ static void di_periodic_signal_setter(di_object *o, di_object *sig) {
 	DI_CHECK_OK(di_callr(roots, "add_anonymous", added, o));
 	DI_CHECK(added);
 	di_object_upgrade_deai(o);
-
-	((struct di_periodic *)o)->running = true;
 }
 
 static void di_periodic_signal_deleter(di_object *o) {
-	di_remove_member_raw(o,
-	                     di_string_borrow_literal(di_signal_member_of("triggered")));
+	if (di_remove_member_raw(
+	        o, di_string_borrow_literal(di_signal_member_of("triggered"))) != 0) {
+		// Could happen this function is called as destructor
+		return;
+	}
 
 	auto roots = di_get_roots();
-	bool removed = false;
-	di_callr(roots, "remove_anonymous", removed, o);
-	DI_CHECK(removed);
+	di_call(roots, "remove_anonymous", o);
 	di_object_downgrade_deai(o);
-
-	((struct di_periodic *)o)->running = false;
 }
 
 /// Periodic timer event
@@ -381,13 +362,12 @@ static void di_periodic_signal_deleter(di_object *o) {
 ///
 /// A timer that first fire after :code:`offset` seconds, then every :code:`interval`
 /// seconds.
-static di_object *
-di_create_periodic(struct di_module *evm, double interval, double offset) {
+static di_object *di_create_periodic(struct di_module *evm, double interval, double offset) {
 	auto ret = di_new_object_with_type(struct di_periodic);
 	di_set_type((void *)ret, "deai.builtin.event:Periodic");
 	scoped_di_object *di_obj = di_module_get_deai(evm);
 
-	ret->dtor = (void *)periodic_dtor;
+	ret->dtor = (void *)di_periodic_signal_deleter;
 	di_method(ret, "set", periodic_set, double, double);
 	ev_periodic_init(&ret->pt, di_periodic_callback, offset, interval, NULL);
 	di_signal_setter_deleter(ret, "triggered", di_periodic_signal_setter,
@@ -441,11 +421,11 @@ struct di_promise {
 
 di_object *di_promise_then(di_object *promise, di_object *handler);
 void di_resolve_promise(struct di_promise *promise, struct di_variant var);
-static void di_promise_then_impl(struct di_promise *promise, struct di_promise *then_promise,
-                                 di_object *handler);
+static void di_promise_then_impl(struct di_promise *promise,
+                                 struct di_promise *then_promise, di_object *handler);
 
-static int di_promise_dispatch(di_object *prepare_handler, di_type *rt,
-                        di_value *r, di_tuple args) {
+static int
+di_promise_dispatch(di_object *prepare_handler, di_type *rt, di_value *r, di_tuple args) {
 	scoped_di_object *promise_;
 	if (di_get(prepare_handler, "promise", promise_) != 0) {
 		return 0;
@@ -565,14 +545,13 @@ static void di_promise_start_dispatch(struct di_promise *promise) {
 		return;
 	}
 
-	auto listen_handle =
-	    di_listen_to(timer, di_string_borrow("elapsed"), handler);
+	auto listen_handle = di_listen_to(timer, di_string_borrow("elapsed"), handler);
 	DI_CHECK_OK(di_call(listen_handle, "auto_stop", true));
 	di_member(promise, "___auto_listen_handle", listen_handle);
 }
 
-static void di_promise_then_impl(struct di_promise *promise, struct di_promise *then_promise,
-                                 di_object *handler) {
+static void di_promise_then_impl(struct di_promise *promise,
+                                 struct di_promise *then_promise, di_object *handler) {
 	uint64_t nhandlers;
 	DI_CHECK_OK(di_get(promise, "___n_handlers", nhandlers));
 	char *buf;
@@ -636,8 +615,8 @@ static void di_promise_collect_handler(int index, di_object *storage,
 	if (left == 0) {
 		int total;
 		DI_CHECK_OK(di_get(storage, "total", total));
-		scoped_di_tuple results = {
-		    .length = total, .elements = tmalloc(struct di_variant, total)};
+		scoped_di_tuple results = {.length = total,
+		                           .elements = tmalloc(struct di_variant, total)};
 		for (int i = 0; i < total; i++) {
 			scoped_di_string key = di_string_printf("%d", i);
 			di_value tmp;

@@ -43,5 +43,17 @@ c:then_(function(t)
     print(t)
 end)
 
+a = di.event:new_promise()
+b = di.event:new_promise()
+a2 = a:then_(function(a) return b end)
+a2:then_(function(a)
+    if a ~= 4 then
+        di:exit(1)
+    end
+    print("chain", a)
+end)
+a:resolve(1)
+b:resolve(4)
+
 unresolved = di.event:new_promise()
 collectgarbage()
