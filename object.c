@@ -72,11 +72,11 @@ static int di_call_internal(di_object *self, di_object *method_, di_type *rt,
 }
 
 #define gen_callx(fnname, getter)                                                        \
-	int fnname(di_object *self, di_string name, di_type *rt,         \
-	           di_value *ret, di_tuple args, bool *called) {            \
-		di_object *val;                                                   \
+	int fnname(di_object *self, di_string name, di_type *rt, di_value *ret,          \
+	           di_tuple args, bool *called) {                                        \
+		di_object *val;                                                          \
 		*called = false;                                                         \
-		int rc = getter(self, name, DI_TYPE_OBJECT, (di_value *)&val);     \
+		int rc = getter(self, name, DI_TYPE_OBJECT, (di_value *)&val);           \
 		if (rc != 0) {                                                           \
 			return rc;                                                       \
 		}                                                                        \
@@ -89,10 +89,10 @@ gen_callx(di_rawcallxn, di_rawgetxt);
 /// Call "<prefix>_<name>" with "<prefix>" as fallback
 ///
 /// @param[out] found whether a handler is found
-static int call_handler_with_fallback(di_object *nonnull o,
-                                      const char *nonnull prefix, di_string name,
-                                      struct di_variant arg, di_type *nullable rtype,
-                                      di_value *nullable ret, bool *found) {
+static int
+call_handler_with_fallback(di_object *nonnull o, const char *nonnull prefix,
+                           di_string name, struct di_variant arg, di_type *nullable rtype,
+                           di_value *nullable ret, bool *found) {
 	*found = false;
 
 	char *buf;
@@ -172,8 +172,7 @@ int di_setx(di_object *o, di_string prop, di_type type, const void *val) {
 	return di_add_member_clone(o, prop, type, val);
 }
 
-int di_refrawgetx(di_object *o, di_string prop, di_type *type,
-                  di_value **ret) {
+int di_refrawgetx(di_object *o, di_string prop, di_type *type, di_value **ret) {
 	auto m = di_lookup(o, prop);
 
 	// nil type is treated as non-existent
@@ -212,10 +211,10 @@ static bool di_free_last_type(di_type type, di_value *val) {
 	}
 	if (type == DI_TYPE_VARIANT) {
 		// In case of a variant, we need to check the inner type.
-		 ret = di_free_last_type(val->variant.type, val->variant.value);
-		 if (ret) {
-			 free(val->variant.value);
-		 }
+		ret = di_free_last_type(val->variant.type, val->variant.value);
+		if (ret) {
+			free(val->variant.value);
+		}
 	}
 	return ret;
 }
@@ -241,10 +240,9 @@ int di_getx(di_object *o, di_string prop, di_type *type, di_value *ret) {
 }
 
 #define gen_tfunc(name, getter)                                                          \
-	int name(di_object *o, di_string prop, di_type rtype,            \
-	         di_value *ret) {                                                  \
-		di_value ret2;                                                     \
-		di_type rt;                                                            \
+	int name(di_object *o, di_string prop, di_type rtype, di_value *ret) {           \
+		di_value ret2;                                                           \
+		di_type rt;                                                              \
 		int rc = getter(o, prop, &rt, &ret2);                                    \
 		if (rc != 0) {                                                           \
 			return rc;                                                       \
@@ -546,8 +544,7 @@ static int di_insert_member(di_object_internal *obj, struct di_member *m) {
 	return 0;
 }
 
-static int
-di_add_member(di_object_internal *o, di_string name, di_type t, void *v) {
+static int di_add_member(di_object_internal *o, di_string name, di_type t, void *v) {
 	if (!name.data) {
 		return -EINVAL;
 	}
@@ -568,8 +565,7 @@ di_add_member(di_object_internal *o, di_string name, di_type t, void *v) {
 	return ret;
 }
 
-int di_add_member_clone(di_object *o, di_string name, di_type t,
-                        const void *value) {
+int di_add_member_clone(di_object *o, di_string name, di_type t, const void *value) {
 	if (di_sizeof_type(t) == 0) {
 		return -EINVAL;
 	}
@@ -876,8 +872,7 @@ int di_rename_signal_member_raw(di_object *obj, di_string old_member_name,
 
 static void di_signal_remove_handler(di_object *sig_, struct di_weak_object *handler) {
 	struct di_signal *sig = (void *)sig_;
-	scoped_di_string handler_member_name =
-	    di_string_printf(HANDLER_PREFIX "%p", handler);
+	scoped_di_string handler_member_name = di_string_printf(HANDLER_PREFIX "%p", handler);
 
 	if (di_remove_member_raw(sig_, handler_member_name) != -ENOENT) {
 		sig->nhandlers -= 1;
@@ -941,15 +936,14 @@ static void di_signal_dispatch(di_object *sig_, di_tuple args) {
 }
 
 static void di_signal_add_handler(di_object *sig, di_object *handler) {
-	scopedp(char) *new_signal_listener_name;
+	scopedp(char) * new_signal_listener_name;
 	asprintf(&new_signal_listener_name, HANDLER_PREFIX "%p", handler);
 	di_member_clone(sig, new_signal_listener_name, handler);
 
 	((struct di_signal *)sig)->nhandlers += 1;
 }
 
-di_object *
-di_listen_to(di_object *_obj, di_string name, di_object *h) {
+di_object *di_listen_to(di_object *_obj, di_string name, di_object *h) {
 	scopedp(char) *signal_member_name = NULL;
 	asprintf(&signal_member_name, "__signal_%.*s", (int)name.length, name.data);
 
@@ -1020,19 +1014,17 @@ di_object *di_get_roots(void) {
 	return (di_object *)roots;
 }
 
-static void di_scan_type(di_type, di_value *, int (*)(di_object_internal *, int),
-                         int, void (*)(di_object_internal *));
-static void di_scan_member(di_object_internal *obj,
-                           int (*pre)(di_object_internal *, int), int state,
-                           void (*post)(di_object_internal *)) {
+static void di_scan_type(di_type, di_value *, int (*)(di_object_internal *, int), int,
+                         void (*)(di_object_internal *));
+static void di_scan_member(di_object_internal *obj, int (*pre)(di_object_internal *, int),
+                           int state, void (*post)(di_object_internal *)) {
 	struct di_member *m, *tmpm;
 	HASH_ITER (hh, obj->members, m, tmpm) {
 		di_scan_type(m->type, m->data, pre, state, post);
 	}
 }
-static void di_scan_type(di_type type, di_value *value,
-                         int (*pre)(di_object_internal *, int), int state,
-                         void (*post)(di_object_internal *)) {
+static void di_scan_type(di_type type, di_value *value, int (*pre)(di_object_internal *, int),
+                         int state, void (*post)(di_object_internal *)) {
 	if (type == DI_TYPE_OBJECT) {
 		auto obj = (di_object_internal *)value->object;
 		int next_state = 0;
@@ -1264,9 +1256,9 @@ void di_dump_objects(void) {
 }
 
 static void *di_mark_and_sweep_dfs(di_object_internal *o, bool *has_cycle);
-static void di_mark_and_sweep_detect_cycle(di_object_internal *o,
-                                           di_object_internal *next,
-                                           bool *has_cycle, void **cycle_return) {
+static void di_mark_and_sweep_detect_cycle(di_object_internal *o, di_string name,
+                                           di_object_internal *next, bool *has_cycle,
+                                           void **cycle_return) {
 	void *cycle = di_mark_and_sweep_dfs(next, has_cycle);
 
 	if (cycle != NULL) {
@@ -1275,10 +1267,9 @@ static void di_mark_and_sweep_detect_cycle(di_object_internal *o,
 			// We will overwrite cycle_return if it's not NULL,
 			// meaning when we detect cycles, we only print any one of them.
 			*cycle_return = cycle;
-			di_log_va(log_module, DI_LOG_DEBUG, "\t%p ->", o);
-		} else {
-			di_log_va(log_module, DI_LOG_DEBUG, "\t%p", o);
 		}
+		di_log_va(log_module, DI_LOG_DEBUG, "\t%.*s of %p%s",
+		          (int)name.length, name.data, o, cycle == o ? "" : ", which is");
 	}
 }
 
@@ -1287,7 +1278,7 @@ static void *di_mark_and_sweep_dfs(di_object_internal *o, bool *has_cycle) {
 		if (o->mark == 1) {
 			if (!*has_cycle) {
 				di_log_va(log_module, DI_LOG_DEBUG,
-				          "Reference cycle detected:\n\t%p ->", o);
+				          "Reference cycle detected:\n\t%p, which is", o);
 				*has_cycle = true;
 				return o;
 			}
@@ -1301,24 +1292,26 @@ static void *di_mark_and_sweep_dfs(di_object_internal *o, bool *has_cycle) {
 	struct di_member *i, *tmpi;
 	HASH_ITER (hh, o->members, i, tmpi) {
 		if (i->type == DI_TYPE_OBJECT) {
-			di_mark_and_sweep_detect_cycle(o, (void *)i->data->object,
-			                               has_cycle, &cycle_return);
+			di_mark_and_sweep_detect_cycle(
+			    o, i->name, (void *)i->data->object, has_cycle, &cycle_return);
 		} else if (i->type == DI_TYPE_ARRAY && i->data->array.elem_type == DI_TYPE_OBJECT) {
 			di_object_internal **objects = i->data->array.arr;
 			for (int j = 0; j < i->data->array.length; j++) {
-				di_mark_and_sweep_detect_cycle(o, objects[j], has_cycle,
-				                               &cycle_return);
+				di_mark_and_sweep_detect_cycle(o, i->name, objects[j],
+				                               has_cycle, &cycle_return);
 			}
 		} else if (i->type == DI_TYPE_TUPLE) {
 			for (int j = 0; j < i->data->tuple.length; j++) {
 				if (i->data->tuple.elements[j].type == DI_TYPE_OBJECT) {
 					di_mark_and_sweep_detect_cycle(
-					    o, (void *)i->data->tuple.elements[j].value->object,
+					    o, i->name,
+					    (void *)i->data->tuple.elements[j].value->object,
 					    has_cycle, &cycle_return);
 				}
 			}
 		} else if (i->type == DI_TYPE_VARIANT && i->data->variant.type == DI_TYPE_OBJECT) {
-			di_mark_and_sweep_detect_cycle(o, (void *)i->data->variant.value->object,
+			di_mark_and_sweep_detect_cycle(o, i->name,
+			                               (void *)i->data->variant.value->object,
 			                               has_cycle, &cycle_return);
 		}
 	}
