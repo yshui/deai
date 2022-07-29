@@ -97,8 +97,8 @@ call_handler_with_fallback(di_object *nonnull o, const char *nonnull prefix,
 
 	char *buf;
 	asprintf(&buf, "%s_%.*s", prefix, (int)name.length, name.data);
-	di_type rtype2;
-	di_value ret2;
+	di_type rtype2 = DI_LAST_TYPE;
+	di_value ret2 = {0};
 
 	struct di_variant args[2] = {arg, DI_VARIANT_INIT};
 	di_tuple tmp = {

@@ -318,6 +318,7 @@ static int di_lua_di_setter(di_object *m, di_type *rt, di_value *ret, di_tuple t
 	lua_pop(L, 1); // table
 
 	di_lua_xchg_env(L, script);
+	*rt = DI_TYPE_NIL;
 	return 0;
 }
 
