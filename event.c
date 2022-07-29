@@ -407,12 +407,17 @@ static void di_prepare(EV_P_ ev_prepare *w, int revents) {
 #endif
 	}
 
+	struct di_prepare *dep = (void *)w;
+	// Event module could be freed by garbage collector (because here we don't
+	// increment the reference count). Use a weak reference to detect when it's freed.
+	scoped_di_weak_object *weak_eventm = di_weakly_ref_object((void *)dep->evm);
 	di_collect_garbage();
 
-	struct di_prepare *dep = (void *)w;
 	// Keep event module alive during emission
-	scoped_di_object unused *obj = di_ref_object((di_object *)dep->evm);
-	di_emit(dep->evm, "prepare");
+	scoped_di_object *obj = di_upgrade_weak_ref(weak_eventm);
+	if (obj) {
+		di_emit(obj, "prepare");
+	}
 }
 
 /// A pending value
