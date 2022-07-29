@@ -32,7 +32,7 @@ struct di_timer {
 struct di_periodic {
 	di_object_internal;
 	ev_periodic pt;
-	uint64_t root_handle;
+	bool running;
 };
 
 /// SIGNAL: deai.builtin.event:IoEv.read() File descriptor became readable
@@ -79,15 +79,14 @@ static void di_start_ioev(struct di_ioev *ev) {
 
 	auto di = (struct deai *)di_obj;
 	ev_io_start(di->loop, &ev->evh);
-	ev->running = true;
 
 	// Keep the mainloop alive while we are running
 	di_object_upgrade_deai((void *)ev);
 
 	// Add event source to roots when it's running
 	auto roots = di_get_roots();
-	scoped_di_string root_key = di_string_printf("fdevent_for_%d", ev->evh.fd);
-	DI_CHECK_OK(di_call(roots, "add", root_key, (di_object *)ev));
+	DI_CHECK_OK(di_callr(roots, "add_anonymous", ev->running, (di_object *)ev));
+	DI_CHECK(ev->running);
 }
 
 /// Stop the event source
@@ -111,10 +110,10 @@ static void di_stop_ioev(struct di_ioev *ev) {
 	di_object_downgrade_deai((void *)ev);
 
 	auto roots = di_get_roots();
-	scoped_di_string root_key = di_string_printf("fdevent_for_%d", ev->evh.fd);
-
+	bool removed = false;
 	// Ignore error here, if someone called di:exit, we would've been removed already.
-	di_call(roots, "remove", root_key);
+	DI_CHECK_OK(di_callr(roots, "remove_anonymous", removed, (di_object *)ev));
+	DI_CHECK(removed);
 }
 
 /// Change monitored file descriptor events
@@ -226,8 +225,9 @@ static void di_timer_delete_signal(di_object *o) {
 	auto roots = di_get_roots();
 
 	// Ignore error because roots might have been removed by di:exit
-	scoped_di_string timer_key = di_string_printf("___timer_%p", o);
-	di_call(roots, "remove", timer_key);
+	bool removed = false;
+	DI_CHECK_OK(di_callr(roots, "remove_anonymous", removed, o));
+	DI_CHECK(removed);
 
 	scoped_di_object *di_obj = di_object_get_deai_strong(o);
 	auto di = (struct deai *)di_obj;
@@ -254,11 +254,12 @@ static void di_timer_add_signal(di_object *o, di_object *sig) {
 
 	// Add ourselve to GC root
 	auto roots = di_get_roots();
-	scoped_di_string timer_key = di_string_printf("___timer_%p", o);
-	if (di_call(roots, "add", timer_key, o) != 0) {
+	bool added = false;
+	if (di_callr(roots, "add_anonymous", added, o) != 0) {
 		// Could happen if di:exit is called
 		di_timer_delete_signal(o);
 	}
+	DI_CHECK(added);
 	auto di = (struct deai *)di_obj;
 
 	// Recalculate timeout
@@ -322,13 +323,15 @@ static di_object *di_create_timer(di_object *obj, double timeout) {
 }
 
 static void periodic_dtor(struct di_periodic *p) {
-	if (p->root_handle == 0) {
+	if (!p->running) {
 		return;
 	}
 
 	scoped_di_object *di_obj = di_object_get_deai_strong((di_object *)p);
-	auto di = (struct deai *)di_obj;
-	ev_periodic_stop(di->loop, &p->pt);
+	if (di_obj) {
+		auto di = (struct deai *)di_obj;
+		ev_periodic_stop(di->loop, &p->pt);
+	}
 }
 
 /// Update timer interval and offset
@@ -354,6 +357,8 @@ static void di_periodic_signal_setter(di_object *o, di_object *sig) {
 	DI_CHECK_OK(di_callr(roots, "add_anonymous", added, o));
 	DI_CHECK(added);
 	di_object_upgrade_deai(o);
+
+	((struct di_periodic *)o)->running = true;
 }
 
 static void di_periodic_signal_deleter(di_object *o) {
@@ -365,6 +370,8 @@ static void di_periodic_signal_deleter(di_object *o) {
 	di_callr(roots, "remove_anonymous", removed, o);
 	DI_CHECK(removed);
 	di_object_downgrade_deai(o);
+
+	((struct di_periodic *)o)->running = false;
 }
 
 /// Periodic timer event
