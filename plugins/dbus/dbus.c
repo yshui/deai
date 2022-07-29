@@ -967,18 +967,7 @@ static DBusHandlerResult dbus_filter(DBusConnection *conn, DBusMessage *msg, voi
 /// EXPORT: dbus.session_bus: deai.plugin.dbus:DBusConnection
 ///
 /// A connection to the DBus session bus.
-static di_object *di_dbus_get_session_bus(di_object *o) {
-	struct di_module *m = (void *)o;
-	DBusError e;
-	dbus_error_init(&e);
-
-	DBusConnection *conn = dbus_bus_get_private(DBUS_BUS_SESSION, &e);
-	if (conn == NULL) {
-		auto ret = di_new_error(e.message);
-		dbus_error_free(&e);
-		return ret;
-	}
-
+static di_object *di_dbus_connection_to_di(struct di_module *m, DBusConnection *conn) {
 	auto di = di_module_get_deai(m);
 	if (di == NULL) {
 		return di_new_error("deai is shutting down...");
@@ -1005,6 +994,33 @@ static di_object *di_dbus_get_session_bus(di_object *o) {
 	dbus_bus_add_match(conn, match, NULL);
 
 	return (void *)ret;
+}
+
+static di_object *di_dbus_get_session_bus(di_object *o) {
+	DBusError e;
+	dbus_error_init(&e);
+
+	DBusConnection *conn = dbus_bus_get_private(DBUS_BUS_SESSION, &e);
+	if (conn == NULL) {
+		auto ret = di_new_error(e.message);
+		dbus_error_free(&e);
+		return ret;
+	}
+	return di_dbus_connection_to_di((void *)o, conn);
+}
+
+static di_object *di_dbus_connect(di_object *o, di_string address) {
+	DBusError e;
+	dbus_error_init(&e);
+
+	scopedp(char) *c_address = di_string_to_chars_alloc(address);
+	DBusConnection *conn = dbus_connection_open_private(c_address, &e);
+	if (conn == NULL) {
+		auto ret = di_new_error(e.message);
+		dbus_error_free(&e);
+		return ret;
+	}
+	return di_dbus_connection_to_di((void *)o, conn);
 }
 
 #ifdef UNITTESTS
@@ -1085,6 +1101,7 @@ struct di_module *new_dbus_module(struct deai *di) {
 	di_method(m, "run_unit_tests", di_dbus_unit_tests);
 #endif
 	di_getter(m, session_bus, di_dbus_get_session_bus);
+	di_method(m, "connect", di_dbus_connect, di_string);
 	return m;
 }
 
