@@ -258,6 +258,7 @@ static void di_timer_add_signal(di_object *o, di_object *sig) {
 	if (di_callr(roots, "add_anonymous", added, o) != 0) {
 		// Could happen if di:exit is called
 		di_timer_delete_signal(o);
+		return;
 	}
 	DI_CHECK(added);
 	auto di = (struct deai *)di_obj;
