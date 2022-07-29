@@ -405,16 +405,14 @@ static di_array di_get_argv(struct deai *p) {
 }
 
 int di_register_module(struct deai *p, di_string name, struct di_module **m) {
-	int ret =
-	    di_add_member_move((void *)p, name, (di_type[]){DI_TYPE_OBJECT}, (void **)m);
+	int ret = di_add_member_move((void *)p, name, (di_type[]){DI_TYPE_OBJECT}, (void **)m);
 	return ret;
 }
 
 /// Register a module
 ///
 /// EXPORT: register_module(name: :string, module: deai:module): :integer
-static int
-di_register_module_method(struct deai *p, di_string name, struct di_module *m) {
+static int di_register_module_method(struct deai *p, di_string name, struct di_module *m) {
 	// Don't consumer the ref, because it breaks the usual method call sementics
 	return di_add_member_clonev((void *)p, name, DI_TYPE_OBJECT, m);
 }
@@ -482,31 +480,43 @@ static void di_clear_roots(di_object *di_) {
 	}
 }
 
-/// Add an unnamed root. Unlike the named roots, these roots don't need a unique name,
-/// but the caller instead needs to keep a handle to the root in order to remove it.
-/// The returned handle is guaranteed to be greater than 0
-static uint64_t di_add_anonymous_root(di_object *obj, di_object *root) {
+/// Add an unnamed root.
+///
+/// EXPORT: deai:Roots.add_anonymous(root: :object): :boolean
+///
+/// Unlike the named roots, these roots don't need a unique name, but the same object
+/// cannot be added twice. Returns true if the root was added, false if it was already
+/// there.
+static bool di_add_anonymous_root(di_object *obj, di_object *root) {
 	auto roots = (struct di_roots *)obj;
-	DI_CHECK(roots->next_anonymous_root_id != 0, "anonymous root id overflown");
 
-	auto aroot = tmalloc(struct di_anonymous_root, 1);
+	struct di_anonymous_root *aroot = NULL;
+	HASH_FIND_PTR(roots->anonymous_roots, &root, aroot);
+	if (aroot != NULL) {
+		return false;
+	}
+	aroot = tmalloc(struct di_anonymous_root, 1);
 	aroot->obj = di_ref_object(root);
-	aroot->id = roots->next_anonymous_root_id;
-	roots->next_anonymous_root_id++;
-	HASH_ADD(hh, roots->anonymous_roots, id, sizeof(uint64_t), aroot);
-	return aroot->id;
+	HASH_ADD_PTR(roots->anonymous_roots, obj, aroot);
+	return true;
 }
 
 /// Remove an unnamed root.
-static void di_remove_anonymous_root(di_object *obj, uint64_t root_handle) {
+///
+/// EXPORT: deai:Roots.remove_anonymous(root: :object): :boolean
+///
+/// Returns true if the root was removed, false if it does not exist.
+static bool di_remove_anonymous_root(di_object *obj, di_object *root) {
 	auto roots = (struct di_roots *)obj;
 	struct di_anonymous_root *aroot = NULL;
-	HASH_FIND(hh, roots->anonymous_roots, &root_handle, sizeof(root_handle), aroot);
+	HASH_FIND_PTR(roots->anonymous_roots, &root, aroot);
 	if (aroot) {
 		HASH_DEL(roots->anonymous_roots, aroot);
 		di_unref_object(aroot->obj);
 		free(aroot);
+		return true;
 	}
+	return false;
 }
 
 static void di_roots_dtor(di_object *obj) {
@@ -533,6 +543,9 @@ static void di_roots_dtor(di_object *obj) {
 	free(objects_to_free);
 }
 
+/// Get roots
+///
+/// EXPORT: roots: deai:Roots
 static di_object *di_roots_getter(di_object *unused di) {
 	// If roots is gotten via a deai getter, we need to respect the getter semantics
 	// and increment the refcount, even though normally this is not needed.
@@ -552,11 +565,9 @@ int main(int argc, char *argv[]) {
 	DI_CHECK_OK(di_method(roots, "add", di_add_root, di_string, di_object *));
 	DI_CHECK_OK(di_method(roots, "remove", di_remove_root, di_string));
 	DI_CHECK_OK(di_method(roots, "clear", di_clear_roots));
-	DI_CHECK_OK(di_method(roots, "__add_anonymous", di_add_anonymous_root,
-	                      di_object *));
-	DI_CHECK_OK(di_method(roots, "__remove_anonymous", di_remove_anonymous_root, uint64_t));
+	DI_CHECK_OK(di_method(roots, "add_anonymous", di_add_anonymous_root, di_object *));
+	DI_CHECK_OK(di_method(roots, "remove_anonymous", di_remove_anonymous_root, di_object *));
 	di_set_object_dtor((di_object *)roots, di_roots_dtor);
-	roots->next_anonymous_root_id = 1;
 
 	// exit_code and quit cannot be owned by struct deai, because they are read
 	// after struct deai is freed.
@@ -583,8 +594,8 @@ int main(int argc, char *argv[]) {
 
 	DI_CHECK_OK(di_method(p, "load_plugin_from_dir", load_plugin_from_dir, di_string));
 	DI_CHECK_OK(di_method(p, "load_plugin", load_plugin, di_string));
-	DI_CHECK_OK(di_method(p, "register_module", di_register_module_method,
-	                      di_string, di_object *));
+	DI_CHECK_OK(di_method(p, "register_module", di_register_module_method, di_string,
+	                      di_object *));
 	DI_CHECK_OK(di_method(p, "chdir", di_chdir, di_string));
 	DI_CHECK_OK(di_method(p, "exec", di_exec, di_array));
 

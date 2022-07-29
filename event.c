@@ -349,9 +349,10 @@ static void di_periodic_signal_setter(di_object *o, di_object *sig) {
 	if (di_member_clone(o, di_signal_member_of("triggered"), sig) != 0) {
 		return;
 	}
-	struct di_periodic *p = (void *)o;
 	auto roots = di_get_roots();
-	DI_CHECK_OK(di_callr(roots, "__add_anonymous", p->root_handle, o));
+	bool added = false;
+	DI_CHECK_OK(di_callr(roots, "add_anonymous", added, o));
+	DI_CHECK(added);
 	di_object_upgrade_deai(o);
 }
 
@@ -359,11 +360,11 @@ static void di_periodic_signal_deleter(di_object *o) {
 	di_remove_member_raw(o,
 	                     di_string_borrow_literal(di_signal_member_of("triggered")));
 
-	struct di_periodic *p = (void *)o;
 	auto roots = di_get_roots();
-	di_call(roots, "__remove_anonymous", p->root_handle);
+	bool removed = false;
+	di_callr(roots, "remove_anonymous", removed, o);
+	DI_CHECK(removed);
 	di_object_downgrade_deai(o);
-	p->root_handle = 0;
 }
 
 /// Periodic timer event

@@ -53,13 +53,11 @@ extern thread_local struct list_head all_objects;
 
 struct di_anonymous_root {
 	di_object *nonnull obj;
-	uint64_t id;
 	UT_hash_handle hh;
 };
 
 struct di_roots {
 	di_object_internal;
-	uint64_t next_anonymous_root_id;
 	struct di_anonymous_root *nullable anonymous_roots;
 };
 

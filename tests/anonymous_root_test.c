@@ -9,8 +9,9 @@ DEAI_PLUGIN_ENTRY_POINT(di) {
 	auto roots = di_get_roots();
 	DI_CHECK(roots);
 
-	uint64_t root_handle = 0;
-	di_callr(roots, "__add_anonymous", root_handle, object);
+	bool added = false;
+	di_callr(roots, "add_anonymous", added, object);
+	DI_CHECK(added);
 	auto weak = di_weakly_ref_object(object);
 	di_unref_object(object);
 
@@ -18,7 +19,9 @@ DEAI_PLUGIN_ENTRY_POINT(di) {
 	DI_CHECK(object != NULL);
 	di_unref_object(object);
 
-	di_call(roots, "__remove_anonymous", root_handle);
+	bool removed = false;
+	di_callr(roots, "remove_anonymous", removed, object);
+	DI_CHECK(removed);
 	object = di_upgrade_weak_ref(weak);
 	DI_CHECK(object == NULL);
 

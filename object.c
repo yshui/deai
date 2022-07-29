@@ -1238,9 +1238,11 @@ void di_dump_objects(void) {
 	// Account for references from the roots
 	if (roots != NULL) {
 		roots->ref_count_scan--;
+		di_log_va(log_module, DI_LOG_DEBUG, "Anonymous roots:\n");
 		for (auto root = roots->anonymous_roots; root; root = root->hh.next) {
 			auto obj_internal = (di_object_internal *)root->obj;
 			obj_internal->ref_count_scan--;
+			di_log_va(log_module, DI_LOG_DEBUG, "\t%p\n", root->obj);
 		}
 	}
 
