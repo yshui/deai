@@ -817,22 +817,27 @@ static void di_dbus_shutdown(di_dbus_connection *conn) {
 
 	scoped_di_object *di = di_object_get_deai_strong((di_object *)conn);
 	scoped_di_object *eventm = NULL;
-	DI_CHECK_OK(di_get(di, "event", eventm));
+	di_get(di, "event", eventm);
 
-	// This function might be called in dbus dispatch function, closing connection in
-	// that context is bad. So, we drop it in the "prepare" signal handler, to make
-	// sure it is dropped when there is nothing on the stack.
-	auto shutdown = di_new_object_with_type(struct di_dbus_shutdown_handler);
-	shutdown->conn = conn->conn;
-	di_set_object_dtor((void *)shutdown, di_dbus_shutdown_part2);
-	di_set_object_call((void *)shutdown, di_dbus_drop_root);
+	if (eventm != NULL) {
+		// This function might be called in dbus dispatch function, closing connection in
+		// that context is bad. So, we drop it in the "prepare" signal handler, to make
+		// sure it is dropped when there is nothing on the stack.
+		auto shutdown = di_new_object_with_type(struct di_dbus_shutdown_handler);
+		shutdown->conn = conn->conn;
+		di_set_object_dtor((void *)shutdown, di_dbus_shutdown_part2);
+		di_set_object_call((void *)shutdown, di_dbus_drop_root);
 
-	auto listen_handle =
-	    di_listen_to(eventm, di_string_borrow("prepare"), (di_object *)shutdown);
+		auto listen_handle =
+			di_listen_to(eventm, di_string_borrow("prepare"), (di_object *)shutdown);
 
-	DI_CHECK_OK(di_call(listen_handle, "auto_stop", true));
-	DI_CHECK_OK(di_member(shutdown, "___listen_handle", listen_handle));
-	di_unref_object((void *)shutdown);
+		DI_CHECK_OK(di_call(listen_handle, "auto_stop", true));
+		DI_CHECK_OK(di_member(shutdown, "___listen_handle", listen_handle));
+		di_unref_object((void *)shutdown);
+	} else {
+		dbus_connection_close(conn->conn);
+		dbus_connection_unref(conn->conn);
+	}
 
 	conn->conn = NULL;
 }
