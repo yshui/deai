@@ -33,19 +33,20 @@ dbusl:once("exit", function()
     end
     b = nil
     b = di.dbus.session_bus
-    local o = b:get("org.freedesktop.DBus", "/org/freedesktop/DBus")
+    local o = b:get("org.freedesktop.DBus", "/org/freedesktop/DBus", "")
+    local o2 = b:get("org.freedesktop.DBus", "/org/freedesktop/DBus", "org.dummy")
 
     -- Use non-existent method to test message serialization
     di.event:collect_promises({
         o:Introspect(),
         o:ListNames(),
         o:GetAllMatchRules(),
-        o["org.dummy.Dummy"](o, {1,2,3}),
-        o["org.dummy.Dummy"](o, {"asdf","qwer"}),
-        o["org.dummy.Dummy"](o, 1),
-        o["org.dummy.Dummy"](o, "asdf"),
-        o["org.dummy.Dummy"]:call_with_signature(o, "iii", 1,2,3),
-        o["org.dummy.Dummy"]:call_with_signature(o, "av", {1,2,3}),
+        o2:Dummy({1,2,3}),
+        o2:Dummy({"asdf","qwer"}),
+        o2:Dummy(1),
+        o2:Dummy("asdf"),
+        o2.Dummy:call_with_signature(o2, "iii", 1,2,3),
+        o2.Dummy:call_with_signature(o2, "av", {1,2,3}),
     }):then_(function(results)
         for i, v in pairs(results) do
             is_err, reply = unpack(v);

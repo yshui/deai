@@ -596,11 +596,9 @@ static inline void unused di_free_string(di_string str) {
 }
 
 static inline void unused di_free_di_stringp(di_string *nonnull str) {
-	if (str->length) {
-		free((char *)str->data);
-		str->data = NULL;
-		str->length = 0;
-	}
+	free((char *)str->data);
+	str->data = NULL;
+	str->length = 0;
 }
 
 static inline void unused di_free_di_tuplep(di_tuple *nonnull t) {

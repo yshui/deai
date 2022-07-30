@@ -376,34 +376,12 @@ static struct di_variant di_dbus_object_getter(di_dbus_object *dobj, di_string m
 		return ret;
 	}
 
-	const char *dot = memrchr(method.data, '.', method.length);
-	scopedp(char) *ifc = NULL;
-	scopedp(char) *m = NULL;
-	di_object *ret = NULL;
-	if (dot) {
-		const char *dot2 = memchr(method.data, '.', method.length);
-		if (dot == method.data || !*(dot + 1)) {
-			ret = di_new_error("Method name or interface "
-			                   "name is empty");
-			goto out;
-		}
-		if (dot2 == dot) {
-			ret = di_new_error("Invalid interface name");
-			goto out;
-		}
-		ifc = strndup(method.data, dot - method.data);
-		m = strndup(dot + 1, method.length - (dot + 1 - method.data));
-	} else {
-		ifc = NULL;
-		m = di_string_to_chars_alloc(method);
-	}
-
-	ret = (void *)di_new_object_with_type(di_dbus_method);
+	di_object *ret = (void *)di_new_object_with_type(di_dbus_method);
 	di_set_type(ret, "deai.plugin.dbus:DBusMethod");
 
 	di_dbus_method *mo = (void *)ret;
-	mo->method = di_string_dup(m);
-	mo->interface = di_string_dup(ifc);
+	mo->method = di_clone_string(method);
+	DI_CHECK_OK(di_get(dobj, "___interface", mo->interface));
 
 	di_set_object_dtor((void *)ret, di_dbus_free_method);
 	di_set_object_call((void *)ret, call_dbus_method);
@@ -412,7 +390,7 @@ static struct di_variant di_dbus_object_getter(di_dbus_object *dobj, di_string m
 	di_set_object_call(cwm, call_dbus_method_with_signature);
 	di_add_member_move((void *)ret, di_string_borrow("call_with_signature"),
 	                   (di_type[]){DI_TYPE_OBJECT}, &cwm);
-out:
+
 	di_value *value = tmalloc(di_value, 1);
 	value->object = ret;
 	return (struct di_variant){.type = DI_TYPE_OBJECT, .value = value};
@@ -448,10 +426,7 @@ di_dbus_object_new_signal(di_dbus_object *dobj, di_string member_name, di_object
 	scoped_di_string path = DI_STRING_INIT;
 	DI_CHECK_OK(di_get(dobj, "___object_path", path));
 	di_string interface = DI_STRING_INIT;
-	di_string member = DI_STRING_INIT;
-	if (!di_string_split_once(signal_name, '.', &interface, &member)) {
-		member = signal_name;
-	}
+	DI_CHECK_OK(di_get(dobj, "___interface", interface));
 
 	scoped_di_object *conn = NULL;
 	if (di_get(dobj, "___deai_dbus_connection", conn) != 0) {
@@ -463,7 +438,7 @@ di_dbus_object_new_signal(di_dbus_object *dobj, di_string member_name, di_object
 		return;
 	}
 
-	char *match = to_dbus_match_rule(path, interface, member);
+	char *match = to_dbus_match_rule(path, interface, signal_name);
 	dbus_bus_add_match(c->conn, match, NULL);
 	free(match);
 
@@ -696,11 +671,14 @@ static void di_dbus_object_set_owner(di_object *o, di_tuple data) {
 /// returned. Listen for a "reply" signal on the object to receive the reply.
 ///
 /// For how DBus types map to deai type, see :lua:mod:`dbus` for more details.
-static di_object *di_dbus_get_object(di_object *o, di_string bus, di_string obj) {
+static di_object *
+di_dbus_get_object(di_object *o, di_string bus, di_string obj, di_string interface) {
 	di_getm(di_object_get_deai_strong(o), event, di_new_error(""));
 
 	scoped_di_string object_cache_name =
 	    di_string_printf("object_cache_%.*s", (int)bus.length, bus.data);
+	scoped_di_string obj_and_interface = di_string_printf(
+	    "%.*s@%.*s", (int)obj.length, obj.data, (int)interface.length, interface.data);
 
 	scoped_di_object *object_cache = di_get_object_via_weak(o, object_cache_name);
 	if (object_cache == NULL) {
@@ -713,7 +691,7 @@ static di_object *di_dbus_get_object(di_object *o, di_string bus, di_string obj)
 		                   &weak_object_cache);
 	}
 
-	di_object *ret = di_get_object_via_weak(object_cache, obj);
+	di_object *ret = di_get_object_via_weak(object_cache, obj_and_interface);
 	if (ret != NULL) {
 		return ret;
 	}
@@ -725,20 +703,20 @@ static di_object *di_dbus_get_object(di_object *o, di_string bus, di_string obj)
 	DI_CHECK_OK(di_add_member_clonev(
 	    ret, di_string_borrow_literal("___deai_dbus_connection"), DI_TYPE_OBJECT, o));
 
-	di_add_member_clonev(ret, di_string_borrow_literal("___bus_name"), DI_TYPE_STRING, bus);
-	di_add_member_clonev(ret, di_string_borrow_literal("___object_path"),
-	                     DI_TYPE_STRING, obj);
+	di_member_clone(ret, "___bus_name", bus);
+	di_member_clone(ret, "___object_path", obj);
+	di_member_clone(ret, "___interface", interface);
 
 	di_method(ret, "__get", di_dbus_object_getter, di_string);
 	di_method(ret, "__set", di_dbus_object_new_signal, di_string, di_object *);
 	di_method(ret, "__delete", di_dbus_object_del_signal, di_string);
 
 	// Keep the cache directory object alive
-	di_add_member_clonev(ret, di_string_borrow_literal("___object_cache"),
-	                     DI_TYPE_OBJECT, object_cache);
+	di_member_clone(ret, "___object_cache", object_cache);
 
 	struct di_weak_object *weak_object = di_weakly_ref_object(ret);
-	di_add_member_move(object_cache, obj, (di_type[]){DI_TYPE_WEAK_OBJECT}, &weak_object);
+	di_add_member_move(object_cache, obj_and_interface,
+	                   (di_type[]){DI_TYPE_WEAK_OBJECT}, &weak_object);
 
 	// Do way know the owner of the well-known name yet?
 	scoped_di_string owner = DI_STRING_INIT;
@@ -843,15 +821,14 @@ struct di_signal_info {
 	di_tuple args;
 };
 static void di_emit_signal_for(di_object *directory, struct di_signal_info *info) {
-	scoped_di_object *obj = di_get_object_via_weak(directory, info->path);
+	scoped_di_string obj_with_interface =
+	    di_string_printf("%.*s@%.*s", (int)info->path.length, info->path.data,
+	                     (int)info->interface.length, info->interface.data);
+	scoped_di_object *obj = di_get_object_via_weak(directory, obj_with_interface);
 	if (obj == NULL) {
 		return;
 	}
-	scoped_di_string signal_name_with_interface =
-	    di_string_printf("%.*s.%.*s", (int)info->interface.length, info->interface.data,
-	                     (int)info->member.length, info->member.data);
 	di_emitn(obj, info->member, info->args);
-	di_emitn(obj, signal_name_with_interface, info->args);
 }
 
 static bool di_peer_foreach_cb(di_string name, di_type type, di_value *value, void *ud) {
@@ -974,7 +951,7 @@ static di_object *di_dbus_connection_to_di(struct di_module *m, DBusConnection *
 
 	di_method(ret, "send", di_dbus_send_message, di_string, di_string, di_string,
 	          di_string, di_string, di_string, di_tuple);
-	di_method(ret, "get", di_dbus_get_object, di_string, di_string);
+	di_method(ret, "get", di_dbus_get_object, di_string, di_string, di_string);
 
 	di_set_object_dtor((void *)ret, (void *)di_dbus_shutdown);
 
