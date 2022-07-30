@@ -267,6 +267,9 @@ di_dbus_add_promise_for(di_object *conn, di_object *eventm, int64_t serial) {
 	di_dbus_nsignal_inc((void *)conn);
 	return promise;
 }
+static int64_t di_dbus_send_message(di_object *o, di_string type, di_string bus_,
+                                    di_string objpath_, di_string iface_,
+                                    di_string method_, di_string signature, di_tuple args);
 
 /// SIGNAL: deai.plugin.dbus:DBusPendingReply.reply(,...) reply received
 ///
@@ -282,14 +285,13 @@ static di_object *dbus_call_method(di_dbus_object *dobj, di_string iface,
 	di_getm(di_object_get_deai_strong(conn), event, di_new_error(""));
 
 	int64_t serial = -1;
-	int rc;
 	scoped_di_string bus = DI_STRING_INIT, path = DI_STRING_INIT;
 	DI_CHECK_OK(di_get(dobj, "___bus_name", bus));
 	DI_CHECK_OK(di_get(dobj, "___object_path", path));
-	if ((rc = di_callr(conn, "send", serial, di_string_borrow_literal("method"), bus,
-	                   path, iface, method, signature, t)) != 0 ||
-	    serial < 0) {
-		return di_new_error("Failed to send %d %d", serial, rc);
+	serial = di_dbus_send_message(conn, di_string_borrow_literal("method"), bus, path,
+	                              iface, method, signature, t);
+	if (serial < 0) {
+		return di_new_error("Failed to send %d", serial);
 	}
 
 	return di_dbus_add_promise_for(conn, eventm, serial);
@@ -388,8 +390,7 @@ static struct di_variant di_dbus_object_getter(di_dbus_object *dobj, di_string m
 
 	auto cwm = di_new_object_with_type(di_object);
 	di_set_object_call(cwm, call_dbus_method_with_signature);
-	di_add_member_move((void *)ret, di_string_borrow("call_with_signature"),
-	                   (di_type[]){DI_TYPE_OBJECT}, &cwm);
+	di_member(ret, "call_with_signature", cwm);
 
 	di_value *value = tmalloc(di_value, 1);
 	value->object = ret;
@@ -621,11 +622,8 @@ static void di_dbus_name_changed(di_object *conn, di_string well_known,
 }
 
 static void di_dbus_object_set_owner(di_object *o, di_tuple data) {
-	if (data.length != 2 || data.elements[0].type != DI_TYPE_BOOL ||
-	    data.elements[1].type != DI_TYPE_TUPLE) {
-		// Promise resolved with the wrong type
-		return;
-	}
+	DI_CHECK(data.length == 2 && data.elements[0].type == DI_TYPE_BOOL &&
+	         data.elements[1].type == DI_TYPE_TUPLE);
 	auto payload = data.elements[1].value->tuple;
 	if (data.elements[0].value->bool_) {
 		// Is error
@@ -653,6 +651,68 @@ static void di_dbus_object_set_owner(di_object *o, di_tuple data) {
 	scoped_di_string owner = DI_STRING_INIT;
 	di_get(object_cache, "___owner_name", owner);
 	di_dbus_name_changed(conn, bus_name, owner, payload.elements[0].value->string);
+}
+
+static di_variant di_dbus_unpack_property_get(di_tuple data) {
+	DI_CHECK(data.length == 2 && data.elements[0].type == DI_TYPE_BOOL &&
+	         data.elements[1].type == DI_TYPE_TUPLE);
+	auto args = data.elements[1].value->tuple;
+	if (data.elements[0].value->bool_) {
+		di_variant ret = {
+		    .type = DI_TYPE_OBJECT,
+		    .value = tmalloc(di_value, 1),
+		};
+		if (args.length > 0 && args.elements[0].type == DI_TYPE_STRING) {
+			ret.value->object =
+			    di_new_error("%.*s", (int)args.elements[0].value->string.length,
+			                 args.elements[0].value->string.data);
+		} else {
+			ret.value->object = di_new_error("Unknown error");
+		}
+		return ret;
+	}
+	if (args.length == 1) {
+		// Unpack the tuple if it only has one element
+		di_variant ret = DI_VARIANT_INIT;
+		di_copy_value(DI_TYPE_VARIANT, &ret, &args.elements[0]);
+		return ret;
+	}
+	di_variant ret = {
+	    .type = DI_TYPE_TUPLE,
+	    .value = tmalloc(di_value, 1),
+	};
+	di_copy_value(DI_TYPE_TUPLE, &ret.value->tuple, &args);
+	return ret;
+}
+
+static di_variant di_dbus_get_property(di_object *dobj, di_string property) {
+	scoped_di_object *conn = NULL;
+	di_variant ret = {
+	    .type = DI_TYPE_OBJECT,
+	    .value = tmalloc(di_value, 1),
+	};
+	if (di_get(dobj, "___deai_dbus_connection", conn) != 0) {
+		ret.value->object = di_new_error("DBus connection gone");
+		return ret;
+	}
+	di_getm(di_object_get_deai_strong(conn), event, ret.value->object = di_new_error("");
+	        return ret);
+	scoped_di_string obj = DI_STRING_INIT, bus = DI_STRING_INIT, interface = DI_STRING_INIT;
+	DI_CHECK_OK(di_get(dobj, "___object_path", obj));
+	DI_CHECK_OK(di_get(dobj, "___bus_name", bus));
+	DI_CHECK_OK(di_get(dobj, "___interface", interface));
+	auto serial = di_dbus_send_message(
+	    conn, di_string_borrow_literal("method"), bus, obj,
+	    di_string_borrow_literal(DBUS_INTERFACE_PROPERTIES), di_string_borrow_literal("Get"),
+	    di_string_borrow_literal(""), di_tuple(interface, property));
+	if (serial < 0) {
+		ret.value->object = di_new_error("DBus error");
+		return ret;
+	}
+	scoped_di_object *promise = di_dbus_add_promise_for(conn, eventm, serial);
+	scoped_di_closure *handler = di_closure(di_dbus_unpack_property_get, (), di_tuple);
+	ret.value->object = di_promise_then(promise, (void *)handler);
+	return ret;
 }
 
 /// Get a DBus object
@@ -710,6 +770,7 @@ di_dbus_get_object(di_object *o, di_string bus, di_string obj, di_string interfa
 	di_method(ret, "__get", di_dbus_object_getter, di_string);
 	di_method(ret, "__set", di_dbus_object_new_signal, di_string, di_object *);
 	di_method(ret, "__delete", di_dbus_object_del_signal, di_string);
+	di_method(ret, "get", di_dbus_get_property, di_string);
 
 	// Keep the cache directory object alive
 	di_member_clone(ret, "___object_cache", object_cache);

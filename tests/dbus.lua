@@ -34,6 +34,7 @@ dbusl:once("exit", function()
     b = nil
     b = di.dbus.session_bus
     local o = b:get("org.freedesktop.DBus", "/org/freedesktop/DBus", "")
+    local o3 = b:get("org.freedesktop.DBus", "/org/freedesktop/DBus", "org.freedesktop.DBus")
     local o2 = b:get("org.freedesktop.DBus", "/org/freedesktop/DBus", "org.dummy")
 
     -- Use non-existent method to test message serialization
@@ -53,5 +54,16 @@ dbusl:once("exit", function()
             print(i, is_err, unpack(reply))
         end
     end)
-    o = nil
+    o2:get("DummyProp"):then_(function(e)
+        if e.errmsg == nil then
+            di:exit(1)
+        end
+        print("Get DummyProp", e.errmsg)
+    end)
+    o3:get("Features"):then_(function(e)
+        if type(e) ~= "table" then
+            di:exit(1)
+        end
+        print(unpack(e))
+    end)
 end)
