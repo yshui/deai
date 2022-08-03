@@ -563,6 +563,10 @@ static di_object *di_roots_getter(di_object *unused di) {
 	return (di_object *)roots;
 }
 
+static const char *di_get_plugin_install_dir(di_object *p unused) {
+	return DI_PLUGIN_INSTALL_DIR;
+}
+
 int main(int argc, char *argv[]) {
 #ifdef TRACK_OBJECTS
 	INIT_LIST_HEAD(&all_objects);
@@ -615,6 +619,7 @@ int main(int argc, char *argv[]) {
 #ifdef HAVE_SETPROCTITLE
 	DI_CHECK_OK(di_method(p, "__set_proctitle", di_set_pr_name, di_string));
 #endif
+	DI_CHECK_OK(di_getter(p, DI_PLUGIN_INSTALL_DIR, di_get_plugin_install_dir));
 	auto closure = (di_object *)di_closure(di_dump_objects, ());
 	di_member(p, "dump_objects", closure);
 
