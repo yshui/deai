@@ -4,6 +4,7 @@
 
 /* Copyright (c) 2017, Yuxuan Shui <yshuiv7@gmail.com> */
 
+#include <dirent.h>
 #include <string.h>
 #include <sys/utsname.h>
 
@@ -57,6 +58,29 @@ static const char *di_get_hostname(struct deai *p) {
 	return strdup(buf.nodename);
 }
 
+static di_array di_listdir(di_object *o unused, di_string path) {
+	int capacity = 0;
+	di_array ret = {.arr = NULL, .length = 0, .elem_type = DI_TYPE_STRING};
+	scopedp(char) *c_path = di_string_to_chars_alloc(path);
+	DIR *dir = opendir(c_path);
+	if (!dir) {
+		return ret;
+	}
+	struct dirent *ent = NULL;
+	while ((ent = readdir(dir))) {
+		if (strcmp(ent->d_name, ".") == 0 || strcmp(ent->d_name, "..") == 0) {
+			continue;
+		}
+		if (capacity == ret.length) {
+			capacity = capacity * 2 + 1;
+			ret.arr = realloc(ret.arr, capacity * sizeof(di_string));
+		}
+		((di_string *)ret.arr)[ret.length] = di_string_dup(ent->d_name);
+		ret.length++;
+	}
+	return ret;
+}
+
 /// EXPORT: os: deai:module
 ///
 /// OS environment
@@ -81,5 +105,6 @@ void di_init_os(struct deai *di) {
 	di_member(m, "env", o);
 
 	di_getter(m, hostname, di_get_hostname);
+	di_method(m, "listdir", di_listdir, di_string);
 	di_register_module(di, di_string_borrow("os"), &m);
 }
