@@ -705,18 +705,20 @@ int main(int argc, char *argv[]) {
 		quit = true;
 	}
 
-	if (rt == DI_TYPE_OBJECT) {
+	di_object *retobj = NULL;
+	if (di_type_conversion(rt, &retd, DI_TYPE_OBJECT, (void *)&retobj, false) == 0) {
 		di_string errmsg;
-		if (di_get(retd.object, "errmsg", errmsg) == 0) {
+		if (di_get(retobj, "errmsg", errmsg) == 0) {
 			fprintf(stderr, "The function you called returned an error message:\n%.*s\n",
 			        (int)errmsg.length, errmsg.data);
 			di_free_string(errmsg);
 			exit_code = EXIT_FAILURE;
 			quit = true;
 		}
+		di_unref_object(retobj);
+	} else {
+		di_free_value(rt, &retd);
 	}
-
-	di_free_value(rt, &retd);
 	free(method);
 	free(modname);
 
