@@ -33,34 +33,44 @@
 #include "uthash.h"
 #include "utils.h"
 
-static void load_plugin_impl(struct deai *p, char *sopath) {
+static bool load_plugin_impl(struct deai *p, char *sopath) {
 
 	void *handle = dlopen(sopath, RTLD_NOW | RTLD_LOCAL);
 
 	if (!handle) {
 		fprintf(stderr, "Failed to load %s: %s\n", sopath, dlerror());
-		return;
+		return false;
 	}
 
 	init_fn_t init_fn = dlsym(handle, "di_plugin_init");
 	if (!init_fn) {
 		fprintf(stderr, "%s doesn't have a di_plugin_init function\n", sopath);
-		return;
+		return false;
 	}
 
 	init_fn(p);
+	return true;
 }
 
 /// Load a single plugin
 ///
 /// EXPORT: load_plugin(file: :string): :void
-static void load_plugin(struct deai *p, di_string sopath) {
+static struct di_variant load_plugin(struct deai *p, di_string sopath) {
 	if (!sopath.data) {
-		return;
+		return DI_VARIANT_INIT;
 	}
 
 	scopedp(char) *sopath_str = di_string_to_chars_alloc(sopath);
-	load_plugin_impl(p, sopath_str);
+	bool success = load_plugin_impl(p, sopath_str);
+	if (!success) {
+		struct di_variant ret = {
+			.type = DI_TYPE_OBJECT,
+			.value = tmalloc(di_value, 1),
+		};
+		ret.value->object = di_new_error("Failed to load plugin");
+		return ret;
+	}
+	return DI_VARIANT_INIT;
 }
 
 static int load_plugin_from_dir_impl(struct deai *di, const char *path) {
