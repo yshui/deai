@@ -49,3 +49,5 @@ di_lua_lib = shared_library('di_lua', src,
   dependencies: lua, include_directories: incs,
   c_args: base_c_args + extra_c_args, name_prefix: '',
   install: true, install_dir: plugin_install_dir)
+
+install_data('builtin.lua', install_dir:  plugin_install_dir / 'lua', install_tag: 'runtime')

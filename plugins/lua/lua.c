@@ -1357,6 +1357,19 @@ static struct di_module *di_new_lua(struct deai *di) {
 	auto m = di_new_module(di);
 
 	di_method(m, "load_script", di_lua_load_script, di_string);
+
+	// Load the builtin lua script. The returned object could safely die. The builtin
+	// script should register modules which should keep it alive.
+	scoped_di_object *ret = di_lua_load_script(
+	    (void *)m,
+	    di_string_borrow_literal(DI_PLUGIN_INSTALL_DIR "/lua/builtin.lua"));
+
+	scoped_di_string errmsg = DI_STRING_INIT;
+	if (di_get(ret, "errmsg", errmsg) == 0) {
+		di_log_va(log_module, DI_LOG_ERROR, "Failed to load builtin lua script: %.*s",
+		          (int)errmsg.length, errmsg.data);
+		// The builtin script is not critical.
+	}
 	return m;
 }
 DEAI_PLUGIN_ENTRY_POINT(di) {
