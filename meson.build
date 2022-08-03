@@ -54,7 +54,6 @@ if get_option('b_sanitize').contains('undefined')
 endif
 
 base_c_args = required_common_args + required_c_args
-base_ld_args = [ '-rdynamic' ]
 foreach arg: test_common_args + test_c_args
   if cc.has_argument(arg)
     base_c_args = base_c_args + [ arg ]
@@ -124,7 +123,7 @@ deai_exe = executable('deai', core_src, c_args: base_c_args
 , dependencies: core_deps
 , link_with: [ cpp_dummy, libutils ]
 , include_directories: incs
-, link_args: base_ld_args
+, export_dynamic: true
 , install: true)
 subdir('tests')
 

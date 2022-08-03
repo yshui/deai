@@ -442,7 +442,6 @@ PUBLIC_DEAI_API void di_copy_value(di_type t, void *nullable dst, const void *nu
 /// updating the metadata fields in the signal object
 PUBLIC_DEAI_API int di_rename_signal_member_raw(di_object *nonnull obj, di_string old_member_name,
                                                 di_string new_member_name);
-
 /// Duplicate null terminated string `str` into a di_string
 static inline di_string unused di_string_dup(const char *nullable str) {
 	return (di_string){
