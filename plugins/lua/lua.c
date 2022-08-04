@@ -44,6 +44,7 @@
 #include <deai/helper.h>
 
 #include "compat.h"
+#include "config.h"
 #include "list.h"
 #include "uthash.h"
 #include "utils.h"
