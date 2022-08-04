@@ -1,4 +1,7 @@
-di.spawn:run({"tests/cs", "20"}, true)
+o = di.spawn:run({"tests/cs", "20"}, false)
+o:on("stderr_line", function(data)
+    print(data)
+end)
 t = di.event:timer(1)
 t:once("elapsed", function()
     di:quit()

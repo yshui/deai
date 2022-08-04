@@ -3,9 +3,6 @@ di.os.env.PATH = "/non-existent"
 print(di.os.env.PATH)
 
 e = di.spawn:run({"ls"}, false)
-e:on("stdout", function(line)
-    print(line)
-end)
 e:once("exit", function(ec, sig)
     print(ec, sig)
     assert(ec == 1)

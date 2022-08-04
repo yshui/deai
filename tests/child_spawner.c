@@ -11,16 +11,16 @@ int main(int argc, const char **argv) {
 
 startover:
 	if (!credits) {
-		//fprintf(stderr, "%d: no credit\n", getpid());
+		fprintf(stderr, "%d: no credit\n", getpid());
 		goto end;
 	}
 	srand(getpid());
 	n = rand()%min(3, credits)+1;
 	credits -= n;
-	//fprintf(stderr, "%d:%d %d\n", getpid(), n, credits);
+	fprintf(stderr, "%d:%d %d\n", getpid(), n, credits);
 	int childcredits = credits/n;
 	for (int i = 0; i < n; i++) {
-		//fprintf(stderr, " %d:%d %d\n", getpid(), i, childcredits+(i<credits%n));
+		fprintf(stderr, " %d:%d %d\n", getpid(), i, childcredits+(i<credits%n));
 		if (!fork()) {
 			//child
 			setpgid(0, 0);

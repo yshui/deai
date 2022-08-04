@@ -312,11 +312,11 @@ static int di_lua_di_setter(di_object *m, di_type *rt, di_value *ret, di_tuple t
 	}
 
 	if (di_lua_pushvariant(L, NULL, vars[2]) != 1) {
-		lua_pop(L, 2); // key and table
+		lua_pop(L, 2);        // key and table
 		return -EINVAL;
 	}
 	lua_settable(L, -3);
-	lua_pop(L, 1); // table
+	lua_pop(L, 1);        // table
 
 	di_lua_xchg_env(L, script);
 	*rt = DI_TYPE_NIL;
