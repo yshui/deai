@@ -78,6 +78,7 @@ static di_array di_listdir(di_object *o unused, di_string path) {
 		((di_string *)ret.arr)[ret.length] = di_string_dup(ent->d_name);
 		ret.length++;
 	}
+	closedir(dir);
 	return ret;
 }
 
