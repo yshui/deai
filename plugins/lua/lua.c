@@ -1322,6 +1322,14 @@ static int di_lua_meta_newindex(lua_State *L) {
 	return 0;
 }
 
+/// Convert a lua table to a di_object
+///
+/// EXPORT: lua.as_di_object: :object
+static di_object *di_lua_as_di_object(di_object *lua unused, di_object *obj) {
+	// Real magic is done in di_lua_method_handler
+	return di_ref_object(obj);
+}
+
 /// Lua scripting
 ///
 /// EXPORT: lua: deai:module
@@ -1358,6 +1366,7 @@ static struct di_module *di_new_lua(struct deai *di) {
 	auto m = di_new_module(di);
 
 	di_method(m, "load_script", di_lua_load_script, di_string);
+	di_method(m, "as_di_object", di_lua_as_di_object, di_object *);
 
 	// Load the builtin lua script. The returned object could safely die. The builtin
 	// script should register modules which should keep it alive.
