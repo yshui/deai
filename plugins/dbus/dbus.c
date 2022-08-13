@@ -1016,11 +1016,6 @@ static di_object *di_dbus_connection_to_di(struct di_module *m, DBusConnection *
 
 	di_set_object_dtor((void *)ret, (void *)di_dbus_shutdown);
 
-	const char *match =
-	    "type='signal',sender='" DBUS_SERVICE_DBUS "',path='" DBUS_PATH_DBUS "'"
-	    ",interface='" DBUS_INTERFACE_DBUS "',member='NameOwnerChanged'";
-	dbus_bus_add_match(conn, match, NULL);
-
 	return (void *)ret;
 }
 
@@ -1034,6 +1029,12 @@ static di_object *di_dbus_get_session_bus(di_object *o) {
 		dbus_error_free(&e);
 		return ret;
 	}
+
+	const char *match =
+	    "type='signal',sender='" DBUS_SERVICE_DBUS "',path='" DBUS_PATH_DBUS "'"
+	    ",interface='" DBUS_INTERFACE_DBUS "',member='NameOwnerChanged'";
+	dbus_bus_add_match(conn, match, NULL);
+
 	return di_dbus_connection_to_di((void *)o, conn);
 }
 
@@ -1049,6 +1050,11 @@ static di_object *di_dbus_handle_hello_reply(di_object *conn, di_tuple args_) {
 	scopedp(char) *name = di_string_to_chars_alloc(args.elements[0].value->string);
 	di_log_va(log_module, DI_LOG_DEBUG, "unique name is: %s", name);
 	dbus_bus_set_unique_name(((di_dbus_connection *)conn)->conn, name);
+
+	const char *match =
+	    "type='signal',sender='" DBUS_SERVICE_DBUS "',path='" DBUS_PATH_DBUS "'"
+	    ",interface='" DBUS_INTERFACE_DBUS "',member='NameOwnerChanged'";
+	dbus_bus_add_match(((di_dbus_connection *)conn)->conn, match, NULL);
 	return di_ref_object(conn);
 }
 
