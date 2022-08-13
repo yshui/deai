@@ -767,13 +767,18 @@ void di_copy_value(di_type t, void *dst, const void *src) {
 	switch (t) {
 	case DI_TYPE_ARRAY:
 		arr = &srcval->array;
-		assert(di_sizeof_type(arr->elem_type) != 0);
-		d = calloc(arr->length, di_sizeof_type(arr->elem_type));
-		for (int i = 0; i < arr->length; i++) {
-			di_copy_value(arr->elem_type, d + di_sizeof_type(arr->elem_type) * i,
-			              arr->arr + di_sizeof_type(arr->elem_type) * i);
+		if (arr->length == 0) {
+			dstval->array = *arr;
+		} else {
+			assert(di_sizeof_type(arr->elem_type) != 0);
+			d = calloc(arr->length, di_sizeof_type(arr->elem_type));
+			for (int i = 0; i < arr->length; i++) {
+				di_copy_value(arr->elem_type,
+				              d + di_sizeof_type(arr->elem_type) * i,
+				              arr->arr + di_sizeof_type(arr->elem_type) * i);
+			}
+			dstval->array = (di_array){arr->length, d, arr->elem_type};
 		}
-		dstval->array = (di_array){arr->length, d, arr->elem_type};
 		break;
 	case DI_TYPE_TUPLE:
 		tuple = &srcval->tuple;
@@ -1293,8 +1298,8 @@ static void di_mark_and_sweep_detect_cycle(di_object_internal *o, di_string name
 			// meaning when we detect cycles, we only print any one of them.
 			*cycle_return = cycle;
 		}
-		di_log_va(log_module, DI_LOG_DEBUG, "\t%.*s of %p%s",
-		          (int)name.length, name.data, o, cycle == o ? "" : ", which is");
+		di_log_va(log_module, DI_LOG_DEBUG, "\t%.*s of %p%s", (int)name.length,
+		          name.data, o, cycle == o ? "" : ", which is");
 	}
 }
 

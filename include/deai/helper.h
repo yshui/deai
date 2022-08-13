@@ -21,16 +21,15 @@
 
 /// Create a setter that, when called, sets member `theirs` of `them` instead
 PUBLIC_DEAI_API di_object *nonnull di_redirected_setter(struct di_weak_object *nonnull them,
-                                                               di_string theirs);
+                                                        di_string theirs);
 /// Create a getter that, when called, returns member `theirs` from `them`
 PUBLIC_DEAI_API di_object *nonnull di_redirected_getter(struct di_weak_object *nonnull them,
-                                                               di_string theirs);
+                                                        di_string theirs);
 /// Redirect listeners of `ours` on `us` to `theirs` on `them`. Whenever handlers are
 /// registered for `ours` on `us`, they will be redirected to `theirs` on `them` instead,
 /// by adding a getter/setter for __signal_<ours> on `us`.
-PUBLIC_DEAI_API int
-di_redirect_signal(di_object *nonnull us, struct di_weak_object *nonnull them,
-                   di_string ours, di_string theirs);
+PUBLIC_DEAI_API int di_redirect_signal(di_object *nonnull us, struct di_weak_object *nonnull them,
+                                       di_string ours, di_string theirs);
 
 #define RET_IF_ERR(expr)                                                                 \
 	do {                                                                             \
@@ -51,7 +50,7 @@ di_redirect_signal(di_object *nonnull us, struct di_weak_object *nonnull them,
 		int rc;                                                                  \
 		do {                                                                     \
 			rc = di_getxt((void *)(o), di_string_borrow(prop), di_typeof(r), \
-			              (di_value *)&(r));                           \
+			              (di_value *)&(r));                                 \
 			if (rc != 0) {                                                   \
 				break;                                                   \
 			}                                                                \
@@ -119,11 +118,10 @@ di_redirect_signal(di_object *nonnull us, struct di_weak_object *nonnull them,
 
 #define object_cleanup __attribute__((cleanup(di_free_di_objectp)))
 
-#define capture(...)                                                                     \
-	VA_ARGS_LENGTH(__VA_ARGS__)                                                      \
-	, (di_type[]){LIST_APPLY(di_typeof, SEP_COMMA, __VA_ARGS__)},                    \
-	    (const di_value *[]) {                                                 \
-		LIST_APPLY(addressof_di_value, SEP_COMMA, __VA_ARGS__)                   \
+#define capture(...)                                                                         \
+	VA_ARGS_LENGTH(__VA_ARGS__)                                                          \
+	, (di_type[]){LIST_APPLY(di_typeof, SEP_COMMA, __VA_ARGS__)}, (const di_value *[]) { \
+		LIST_APPLY(addressof_di_value, SEP_COMMA, __VA_ARGS__)                       \
 	}
 
 #define capture_types(...) LIST_APPLY_pre(typeof, SEP_COMMA, __VA_ARGS__)
@@ -137,11 +135,11 @@ di_redirect_signal(di_object *nonnull us, struct di_weak_object *nonnull them,
 	scoped_di_object *modn##m = NULL;                                                \
 	do {                                                                             \
 		int rc = 0;                                                              \
-		scoped_di_object *__deai_tmp_di = (di_object *)(di_expr);         \
+		scoped_di_object *__deai_tmp_di = (di_object *)(di_expr);                \
 		if (__deai_tmp_di == NULL) {                                             \
 			on_err;                                                          \
 		}                                                                        \
-		di_object *__o;                                                   \
+		di_object *__o;                                                          \
 		rc = di_get(__deai_tmp_di, #modn, __o);                                  \
 		if (rc != 0) {                                                           \
 			on_err;                                                          \
@@ -155,56 +153,54 @@ di_redirect_signal(di_object *nonnull us, struct di_weak_object *nonnull them,
 	di_getm(di_module_get_deai((struct di_module *)(mod)), modn, break)
 
 // call but ignore return
-#define di_call(o, name, ...)                                                            \
-	({                                                                               \
-		int rc = 0;                                                              \
-		do {                                                                     \
-			di_type rtype;                                                   \
-			di_value ret;                                              \
-			bool called;                                                     \
-			rc = di_callx((di_object *)(o), di_string_borrow(name),   \
-			              &rtype, &ret, di_tuple(__VA_ARGS__), &called);     \
-			if (rc != 0) {                                                   \
-				break;                                                   \
-			}                                                                \
-			di_free_value(rtype, &ret);                                      \
-		} while (0);                                                             \
-		rc;                                                                      \
+#define di_call(o, name, ...)                                                               \
+	({                                                                                  \
+		int __rc = 0;                                                               \
+		do {                                                                        \
+			di_type __rtype;                                                    \
+			di_value __ret;                                                     \
+			bool __called;                                                      \
+			__rc = di_callx((di_object *)(o), di_string_borrow(name), &__rtype, \
+			                &__ret, di_tuple(__VA_ARGS__), &__called);          \
+			if (__rc != 0) {                                                    \
+				break;                                                      \
+			}                                                                   \
+			di_free_value(__rtype, &__ret);                                     \
+		} while (0);                                                                \
+		__rc;                                                                       \
 	})
 
-#define di_callr(o, name, r, ...)                                                        \
-	({                                                                               \
-		int __deai_callr_rc = 0;                                                 \
-		do {                                                                     \
-			di_type __deai_callr_rtype;                                      \
-			di_value __deai_callr_ret;                                 \
-			bool called;                                                     \
-			__deai_callr_rc =                                                \
-			    di_callx((di_object *)(o), di_string_borrow(name),    \
-			             &__deai_callr_rtype, &__deai_callr_ret,             \
-			             di_tuple(__VA_ARGS__), &called);                    \
-			if (__deai_callr_rc != 0) {                                      \
-				break;                                                   \
-			}                                                                \
-			if (di_typeof(r) != __deai_callr_rtype) {                        \
-				di_free_value(__deai_callr_rtype, &__deai_callr_ret);    \
-				__deai_callr_rc = -EINVAL;                               \
-				break;                                                   \
-			}                                                                \
-			(r) = *(typeof(r) *)&__deai_callr_ret;                           \
-		} while (0);                                                             \
-		__deai_callr_rc;                                                         \
+#define di_callr(o, name, r, ...)                                                          \
+	({                                                                                 \
+		int __deai_callr_rc = 0;                                                   \
+		do {                                                                       \
+			di_type __deai_callr_rtype;                                        \
+			di_value __deai_callr_ret;                                         \
+			bool called;                                                       \
+			__deai_callr_rc = di_callx(                                        \
+			    (di_object *)(o), di_string_borrow(name), &__deai_callr_rtype, \
+			    &__deai_callr_ret, di_tuple(__VA_ARGS__), &called);            \
+			if (__deai_callr_rc != 0) {                                        \
+				break;                                                     \
+			}                                                                  \
+			if (di_typeof(r) != __deai_callr_rtype) {                          \
+				di_free_value(__deai_callr_rtype, &__deai_callr_ret);      \
+				__deai_callr_rc = -EINVAL;                                 \
+				break;                                                     \
+			}                                                                  \
+			(r) = *(typeof(r) *)&__deai_callr_ret;                             \
+		} while (0);                                                               \
+		__deai_callr_rc;                                                           \
 	})
 
 #define di_variant(x)                                                                    \
 	((struct di_variant){                                                            \
-	    (di_value *)addressof(x),                                              \
+	    (di_value *)addressof(x),                                                    \
 	    di_typeof(x),                                                                \
 	})
 #define di_tuple(...)                                                                    \
-	((di_tuple){                                                              \
-	    VA_ARGS_LENGTH(__VA_ARGS__),                                                 \
-	    (struct di_variant[]){LIST_APPLY(di_variant, SEP_COMMA, __VA_ARGS__)}})
+	((di_tuple){VA_ARGS_LENGTH(__VA_ARGS__),                                         \
+	            (struct di_variant[]){LIST_APPLY(di_variant, SEP_COMMA, __VA_ARGS__)}})
 
 #define di_call_callable(c, ...)                                                         \
 	({                                                                               \
@@ -253,47 +249,46 @@ di_redirect_signal(di_object *nonnull us, struct di_weak_object *nonnull them,
 	({                                                                                   \
 		__auto_type __deai_tmp_field_getter =                                        \
 		    di_new_field_getter(di_typeof((o)->name), offsetof(typeof(*(o)), name)); \
-		di_member((di_object *)(o), "__get_" #name, __deai_tmp_field_getter); \
+		di_member((di_object *)(o), "__get_" #name, __deai_tmp_field_getter);        \
 	})
 
 #define di_member(o, name, v)                                                            \
-	di_add_member_move((di_object *)(o), di_string_borrow(name),              \
+	di_add_member_move((di_object *)(o), di_string_borrow(name),                     \
 	                   (di_type[]){di_typeof(v)}, &(v))
 
 #define di_member_clone(o, name, v)                                                      \
-	di_add_member_clonev((di_object *)(o), di_string_borrow(name),            \
-	                     di_typeof(v), (v))
+	di_add_member_clonev((di_object *)(o), di_string_borrow(name), di_typeof(v), (v))
 
 #define di_getter(o, name, g) di_method(o, STRINGIFY(__get_##name), g)
 #define di_setter(o, name, s, type) di_method(o, STRINGIFY(__set_##name), s, type);
 #define di_signal_setter_deleter(o, sig, setter, deleter)                                \
 	do {                                                                             \
-		di_method(o, di_signal_setter_of(sig), setter, di_object *);      \
+		di_method(o, di_signal_setter_of(sig), setter, di_object *);             \
 		di_method(o, di_signal_deleter_of(sig), deleter);                        \
 	} while (0)
 
 #define di_signal_setter_deleter_with_signal_name(o, sig, setter, deleter)               \
 	do {                                                                             \
 		const char *signal_name = di_signal_member_of(sig);                      \
-		di_object *setter_closure = (void *)di_closure(                   \
-		    setter, (signal_name), di_object *, di_object *);      \
+		di_object *setter_closure =                                              \
+		    (void *)di_closure(setter, (signal_name), di_object *, di_object *); \
 		di_member(o, di_signal_setter_of(sig), setter_closure);                  \
-		di_object *deleter_closure =                                      \
-		    (void *)di_closure(deleter, (signal_name), di_object *);      \
+		di_object *deleter_closure =                                             \
+		    (void *)di_closure(deleter, (signal_name), di_object *);             \
 		di_member(o, di_signal_deleter_of(sig), deleter_closure);                \
 	} while (0)
 
-#define di_getter_setter(o, name, g, s)                                                      \
-	({                                                                                   \
-		int rc = 0;                                                                  \
-		do {                                                                         \
-			rc = di_getter(o, name, g);                                          \
-			if (rc != 0) {                                                       \
-				break;                                                       \
-			}                                                                    \
-			rc = di_setter(o, name, s, di_return_typeof(g, di_object *)); \
-		} while (0);                                                                 \
-		rc;                                                                          \
+#define di_getter_setter(o, name, g, s)                                                  \
+	({                                                                               \
+		int rc = 0;                                                              \
+		do {                                                                     \
+			rc = di_getter(o, name, g);                                      \
+			if (rc != 0) {                                                   \
+				break;                                                   \
+			}                                                                \
+			rc = di_setter(o, name, s, di_return_typeof(g, di_object *));    \
+		} while (0);                                                             \
+		rc;                                                                      \
 	})
 
 // Note: this is just used to create a value of `type`, but this value is not guaranteed
@@ -323,8 +318,8 @@ di_redirect_signal(di_object *nonnull us, struct di_weak_object *nonnull them,
 #define di_return_typeid(fn, ...) di_typeid(di_return_typeof(fn, ##__VA_ARGS__))
 
 #define di_register_typed_method(o, name, fn, rtype, ...)                                \
-	di_add_method((di_object *)(o), di_string_borrow(name), (void *)(fn),     \
-	              (rtype), VA_ARGS_LENGTH(__VA_ARGS__), ##__VA_ARGS__)
+	di_add_method((di_object *)(o), di_string_borrow(name), (void *)(fn), (rtype),   \
+	              VA_ARGS_LENGTH(__VA_ARGS__), ##__VA_ARGS__)
 
 #define INDIRECT(fn, ...) fn(__VA_ARGS__)
 
@@ -332,7 +327,7 @@ di_redirect_signal(di_object *nonnull us, struct di_weak_object *nonnull them,
 // even if B expands to something starts with a comma
 #define di_method(obj, name, fn, ...)                                                    \
 	INDIRECT(di_register_typed_method, obj, name, fn,                                \
-	         di_return_typeid(fn, di_object *, ##__VA_ARGS__)                 \
+	         di_return_typeid(fn, di_object *, ##__VA_ARGS__)                        \
 	             LIST_APPLY_pre(di_typeid, SEP_COMMA, ##__VA_ARGS__))
 
 define_object_cleanup(di_closure);
@@ -464,8 +459,7 @@ static inline di_object *nullable unused di_module_get_deai(struct di_module *no
 }
 
 /// Consumes a di_value and create a di_variant containing that di_value
-static inline struct di_variant unused di_variant_of_impl(di_type type,
-                                                          di_value *nullable val) {
+static inline struct di_variant unused di_variant_of_impl(di_type type, di_value *nullable val) {
 	struct di_variant ret = {
 	    .type = type,
 	    .value = NULL,
@@ -485,7 +479,7 @@ static inline struct di_variant unused di_variant_of_impl(di_type type,
 ///
 /// Getting and removing and done without going through getter or deleter.
 static inline di_object *nullable unused di_get_object_via_weak(di_object *nonnull o,
-                                                                       di_string prop) {
+                                                                di_string prop) {
 	scoped_di_weak_object *weak = NULL;
 	di_object *object = NULL;
 	if (di_rawgetxt(o, prop, DI_TYPE_WEAK_OBJECT, (void *)&weak) == 0) {
@@ -508,14 +502,14 @@ static inline di_value as_di_value(di_type type, void *nonnull value) {
 #define di_array_index(arr, index)                                                       \
 	((struct di_variant){                                                            \
 	    .type = arr.elem_type,                                                       \
-	    .value = (di_value[]){as_di_value(                                     \
+	    .value = (di_value[]){as_di_value(                                           \
 	        arr.elem_type, arr.arr + di_sizeof_type(arr.elem_type) + index)}})
 
 #define di_variant_of(v)                                                                 \
 	({                                                                               \
 		auto __deai_variant_tmp = (v);                                           \
 		di_variant_of_impl(di_typeof(__deai_variant_tmp),                        \
-		                   (di_value *)&__deai_variant_tmp);               \
+		                   (di_value *)&__deai_variant_tmp);                     \
 	})
 
 /// Variant of the bottom type. Meaning this variant "doesn't exist", used to indicate
@@ -523,8 +517,8 @@ static inline di_value as_di_value(di_type type, void *nonnull value) {
 static const struct di_variant DI_BOTTOM_VARIANT = (struct di_variant){NULL, DI_LAST_TYPE};
 
 /// Shortcut for calling di_remove_member_raw then di_add_member_clone
-static inline unused int di_rawsetx(di_object *nonnull o, di_string prop,
-                                    di_type type, const void *nonnull value) {
+static inline unused int
+di_rawsetx(di_object *nonnull o, di_string prop, di_type type, const void *nonnull value) {
 	int ret = di_remove_member_raw(o, prop);
 	if (ret != 0 && ret != -ENOENT) {
 		return ret;

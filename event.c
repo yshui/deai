@@ -629,11 +629,14 @@ static void di_promise_join_handler(int index, di_object *storage,
 	}
 }
 
-/// Create a promise that resolves when all given promises resolve
+/// Create a promise that resolves when all given promises resolve. Returns a promises
+/// that resolves into an array, which stores the results of the promises.
+///
+/// The promises can resolve in any order.
 ///
 /// EXPORT: event.join_promises(promises: [deai:Promise]): deai:Promise
 di_object *di_join_promises(di_object *event_module, di_array promises) {
-	if (promises.elem_type != DI_TYPE_OBJECT) {
+	if (promises.length > 0 && promises.elem_type != DI_TYPE_OBJECT) {
 		return di_new_error("promises must all be objects");
 	}
 	di_object **arr = promises.arr;
@@ -643,6 +646,11 @@ di_object *di_join_promises(di_object *event_module, di_array promises) {
 		}
 	}
 	auto ret = di_new_promise(event_module);
+	if (promises.length == 0) {
+		di_array arg = DI_ARRAY_INIT;
+		di_call(ret, "resolve", arg);
+		return ret;
+	}
 	scoped_di_object *storage = di_new_object_with_type(di_object);
 	int cnt = 0;
 	for (int i = 0; i < promises.length; i++) {
