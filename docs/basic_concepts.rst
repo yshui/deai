@@ -25,6 +25,15 @@ Then you can use it like this:
    obj.some_attribute = a + 1 -- write to a member of the object
    obj:connect() -- connect to the X server
 
+Iterators
+---------
+
+Iterators are special types of objects that can be used to iterate over a number of elements.
+
+For an object to be an iterator, it must have a member function named "next". When "next" is first called, it should set a member named "front", to be the current element. Every subsequent call to "next" should advance the iterator, and set "front" to the next element.
+
+"next" should return true if "front" is set, or false if the iterator is exhausted. In that case, "front" should remain unchanged.
+
 Signals
 =======
 
