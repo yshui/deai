@@ -426,6 +426,8 @@ static void di_promise_then_impl(struct di_promise *promise,
 
 static int
 di_promise_dispatch(di_object *prepare_handler, di_type *rt, di_value *r, di_tuple args) {
+	*rt = DI_TYPE_NIL;
+
 	scoped_di_object *promise_;
 	if (di_get(prepare_handler, "promise", promise_) != 0) {
 		return 0;
