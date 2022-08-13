@@ -396,7 +396,14 @@ int di_remove_member(di_object *obj, di_string name) {
 	return di_remove_member_raw(obj, name);
 }
 
+#ifdef TRACK_OBJECTS
+static void di_dump_object(di_object_internal *obj);
+#endif
+
 static void _di_finalize_object(di_object_internal *obj) {
+#ifdef TRACK_OBJECTS
+	di_log_va(log_module, DI_LOG_DEBUG, "Finalizing object %p", obj);
+#endif
 	// Call dtor before removing members and signals, so the dtor can still make use
 	// of whatever is stored in the object, and emit more signals.
 	// But this also means signal and member deleters won't be called for them.
@@ -411,7 +418,7 @@ static void _di_finalize_object(di_object_internal *obj) {
 	while (m) {
 		auto next_m = m->hh.next;
 #if 0
-		scopedp(char) dbg = di_value_to_string(m->type, m->data);
+		scopedp(char) *dbg = di_value_to_string(m->type, m->data);
 		fprintf(stderr, "removing member %.*s (%s)\n", (int)m->name.length,
 		        m->name.data, dbg);
 #endif
@@ -430,6 +437,7 @@ static inline void di_decrement_weak_ref_count(di_object_internal *obj) {
 		assert(obj->ref_count == 0);
 #ifdef TRACK_OBJECTS
 		list_del(&obj->siblings);
+		fprintf(stderr, "freeing object %p\n", obj);
 #endif
 		free(obj);
 	}
@@ -1084,8 +1092,10 @@ static void di_scan_type(di_type type, di_value *value, int (*pre)(di_object_int
 	}
 }
 
+// Stage 1, count all references reachable from the unreferenced root object. mark is set to 1
 static int di_collect_garbage_mark(di_object_internal *o, int _ unused) {
-	// fprintf(stderr, "\tmark %p %s %lu/%lu\n", o, di_get_type((void *)o), o->ref_count_scan, o->ref_count);
+	// fprintf(stderr, "\tmark %p %s %lu/%lu\n", o, di_get_type((void *)o),
+	//        o->ref_count_scan, o->ref_count);
 	o->ref_count_scan += 1;
 	if (o->mark == 1) {
 		return -1;
@@ -1093,6 +1103,17 @@ static int di_collect_garbage_mark(di_object_internal *o, int _ unused) {
 	o->mark = 1;
 	return 0;
 }
+
+// Stage 2, check if ref_count_scan == ref_count. If true, this means all references to
+// this object are reachable from the unreferenced root object, i.e. there is no external
+// references, meaning this object can be garbage collected.
+//
+// If ref_count_scan < ref_count, this means there are external references to this object,
+// we cannot garbage collect it, and we also need to revive all objects that are reachable
+// from this object.
+//
+// mark is set to 2 if this object should be collected, and to 0 if this object is
+// revived.
 static int di_collect_garbage_scan(di_object_internal *o, int revive) {
 	if (o->ref_count_scan > o->ref_count) {
 		di_log_va(log_module, DI_LOG_ERROR,
@@ -1118,23 +1139,34 @@ static int di_collect_garbage_scan(di_object_internal *o, int revive) {
 	o->mark = 2;
 	// all references to `o` are internal, so this object can be collected.
 	// fprintf(stderr, "\tcollecting %p, %lu/%lu %s\n", o, o->ref_count_scan,
-	//		o->ref_count, di_get_type((void *)o));
+	//        o->ref_count, di_get_type((void *)o));
 	return 0;
 }
-static int di_collect_garbage_collect_pre(di_object_internal *o, int _ unused) {
+static int di_collect_garbage_collect_prepare(di_object_internal *o, int _ unused) {
 	if (o->mark == 0 || o->mark == 3) {
 		return -1;
 	}
 	// Make sure objects will not be finalized before we manually finalize them.
+	// fprintf(stderr, "\tpre-finalizing %p\n", o);
 	di_ref_object((void *)o);
 	o->mark = 3;
 	return 0;
 }
-static void di_collect_garbage_collect_post(di_object_internal *o) {
-	if (o->mark == 3) {
-		_di_finalize_object(o);
-		di_unref_object((void *)o);
+static int di_collect_garbage_collect_pre(di_object_internal *o, int _ unused) {
+	if (o->mark == 0 || o->mark == 4) {
+		return -1;
 	}
+	assert(o->mark == 3);
+	o->mark = 4;
+	return 0;
+}
+static void di_collect_garbage_collect_post(di_object_internal *o) {
+	assert(o->mark == 4);
+	// fprintf(stderr, "\tpost-finalizing %p\n", o);
+	_di_finalize_object(o);
+
+	o->mark = 0;
+	di_unref_object((void *)o);
 }
 /// Collect garbage in cyclic references
 void di_collect_garbage(void) {
@@ -1142,7 +1174,7 @@ void di_collect_garbage(void) {
 	di_object_internal *i, *ni;
 	list_for_each_entry_safe (i, ni, &unreferred_objects, unreferred_siblings) {
 		// fprintf(stderr, "unref root: %p %lu/%lu %d, %s\n", i, i->ref_count_scan,
-		//         i->ref_count, i->mark, di_get_type((void *)i));
+		//        i->ref_count, i->mark, di_get_type((void *)i));
 		if (i->mark != 1) {
 			di_scan_type(DI_TYPE_OBJECT, (void *)&i, di_collect_garbage_mark, 0, NULL);
 			// unreferred_objects list doesn't constitute as a reference.
@@ -1155,10 +1187,21 @@ void di_collect_garbage(void) {
 	}
 	list_for_each_entry (i, &unreferred_objects, unreferred_siblings) {
 		// fprintf(stderr, "unref root: %p %lu/%lu %d, %s\n", i, i->ref_count_scan,
-		//         i->ref_count, i->mark, di_get_type((void *)i));
+		//        i->ref_count, i->mark, di_get_type((void *)i));
 		di_scan_type(DI_TYPE_OBJECT, (void *)&i, di_collect_garbage_scan, 0, NULL);
 	}
+
+	// Increment reference count of objects that are to be freed. This is because user
+	// dtor can cause arbitrary objects to be freed, which can cause us to use-after-free.
 	list_for_each_entry_safe (i, ni, &unreferred_objects, unreferred_siblings) {
+		// fprintf(stderr, "unref root: %p %lu/%lu %d, %s\n", i, i->ref_count_scan,
+		//        i->ref_count, i->mark, di_get_type((void *)i));
+		di_scan_type(DI_TYPE_OBJECT, (void *)&i, di_collect_garbage_collect_prepare,
+		             0, NULL);
+	}
+	list_for_each_entry_safe (i, ni, &unreferred_objects, unreferred_siblings) {
+		// fprintf(stderr, "unref root: %p %lu/%lu %d, %s\n", i, i->ref_count_scan,
+		//        i->ref_count, i->mark, di_get_type((void *)i));
 		list_del_init(&i->unreferred_siblings);
 		di_scan_type(DI_TYPE_OBJECT, (void *)&i, di_collect_garbage_collect_pre,
 		             0, di_collect_garbage_collect_post);
@@ -1354,18 +1397,21 @@ bool di_mark_and_sweep(bool *has_cycle) {
 
 	di_object_internal *i;
 	list_for_each_entry (i, &all_objects, siblings) {
-		i->mark = 0;
+		assert(i->mark == 0);
 	}
 	di_mark_and_sweep_dfs((di_object_internal *)roots, has_cycle);
 	for (auto root = roots->anonymous_roots; root != NULL; root = root->hh.next) {
 		di_mark_and_sweep_dfs((di_object_internal *)root->obj, has_cycle);
 	}
+
+	bool ret = false;
 	list_for_each_entry (i, &all_objects, siblings) {
 		if (i->mark == 0 && i->ref_count > 0) {
 			di_log_va(log_module, DI_LOG_DEBUG, "%p is not marked\n", i);
-			return true;
+			ret = true;
 		}
+		i->mark = 0;
 	}
-	return false;
+	return ret;
 }
 #endif
