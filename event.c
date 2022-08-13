@@ -35,6 +35,11 @@ struct di_periodic {
 	bool running;
 };
 
+typedef struct di_event_module {
+	di_object_internal;
+	ev_idle idlew;
+} di_event_module;
+
 /// SIGNAL: deai.builtin.event:IoEv.read() File descriptor became readable
 ///
 /// SIGNAL: deai.builtin.event:IoEv.write() File descriptor became writable
@@ -410,16 +415,7 @@ void di_resolve_promise(struct di_promise *promise, struct di_variant var);
 static void di_promise_then_impl(struct di_promise *promise,
                                  struct di_promise *then_promise, di_object *handler);
 
-static int
-di_promise_dispatch(di_object *prepare_handler, di_type *rt, di_value *r, di_tuple args) {
-	*rt = DI_TYPE_NIL;
-
-	scoped_di_object *promise_;
-	if (di_get(prepare_handler, "promise", promise_) != 0) {
-		return 0;
-	}
-
-	di_promise *promise = (void *)promise_;
+static int di_promise_dispatch(di_promise *promise) {
 	di_variant resolved;
 	uint64_t nhandlers;
 	DI_CHECK_OK(di_get(promise, "___resolved", resolved));
@@ -489,7 +485,7 @@ di_promise_dispatch(di_object *prepare_handler, di_type *rt, di_value *r, di_tup
 	free(then_promises);
 	di_free_value(DI_TYPE_VARIANT, (void *)&resolved);
 	// Stop listening for the signal
-	di_remove_member((void *)promise, di_string_borrow("___auto_listen_handle"));
+	di_remove_member((void *)promise, di_string_borrow("is_pending"));
 	return 0;
 }
 
@@ -510,12 +506,11 @@ di_object *di_new_promise(di_object *event_module) {
 }
 
 static void di_promise_start_dispatch(struct di_promise *promise) {
-	if (di_lookup((void *)promise, di_string_borrow("___auto_listen_handle"))) {
+	if (di_lookup((void *)promise, di_string_borrow("is_pending"))) {
 		// Already started dispatch
 		return;
 	}
 
-	scoped_di_object *handler = di_new_object_with_type(di_object);
 	scoped_di_weak_object *weak_event = NULL;
 	DI_CHECK_OK(di_get(promise, "___weak_event_module", weak_event));
 	scoped_di_object *event_module = di_upgrade_weak_ref(weak_event);
@@ -523,19 +518,29 @@ static void di_promise_start_dispatch(struct di_promise *promise) {
 		return;
 	}
 
-	di_member_clone(handler, "promise", (di_object *)promise);
-	di_set_object_call(handler, di_promise_dispatch);
-
-	// Use a 0 second timer because prepare isn't guaranteed to be called if
-	// epoll blocks.
-	scoped_di_object *timer = NULL;
-	if (di_callr(event_module, "timer", timer, 0.0) != 0) {
+	scoped_di_object *di_obj = di_object_get_deai_strong(event_module);
+	if (di_obj == NULL) {
+		// deai is shutting down
 		return;
 	}
+	auto di = (struct deai *)di_obj;
+	ev_idle_start(di->loop, &((di_event_module *)event_module)->idlew);
 
-	auto listen_handle = di_listen_to(timer, di_string_borrow("elapsed"), handler);
-	DI_CHECK_OK(di_call(listen_handle, "auto_stop", true));
-	di_member(promise, "___auto_listen_handle", listen_handle);
+	int pending_count = 0;
+	DI_CHECK_OK(di_get(event_module, "pending_count", pending_count));
+	scoped_di_string key = di_string_printf("pending_promise_%d", pending_count);
+
+	di_rawsetx((void *)event_module, di_string_borrow_literal("pending_count"),
+	           DI_TYPE_NINT, (int[]){pending_count + 1});
+
+	if (pending_count == 0) {
+		// Add event_module to roots
+		auto roots = di_get_roots();
+		di_call(roots, "add_anonymous", event_module);
+	}
+
+	di_add_member_clone(event_module, key, DI_TYPE_OBJECT, &promise);
+	di_member_clone(promise, "is_pending", true);
 }
 
 static void di_promise_then_impl(struct di_promise *promise,
@@ -686,6 +691,41 @@ void di_resolve_promise(struct di_promise *promise, struct di_variant var) {
 	di_promise_start_dispatch(promise);
 }
 
+void di_idle_cb(EV_P_ ev_idle *w, int revents) {
+	ev_idle_stop(EV_A_ w);
+	auto eventm = container_of(w, di_event_module, idlew);
+	do {
+		int pending_count = 0;
+		DI_CHECK_OK(di_get(eventm, "pending_count", pending_count));
+		if (pending_count == 0) {
+			break;
+		}
+
+		// Pop the promise with the highest index
+		scoped_di_string key =
+		    di_string_printf("pending_promise_%d", pending_count - 1);
+		scoped_di_object *promise = NULL;
+		DI_CHECK_OK(di_getxt((void *)eventm, key, DI_TYPE_OBJECT, (di_value *)&promise));
+		DI_CHECK_OK(di_remove_member_raw((void *)eventm, key));
+		di_rawsetx((void *)eventm, di_string_borrow_literal("pending_count"),
+		           DI_TYPE_NINT, (int[]){pending_count - 1});
+
+		di_promise_dispatch((void *)promise);
+	} while (true);
+
+	auto roots = di_get_roots();
+	di_call(roots, "remove_anonymous", (di_object *)eventm);
+}
+
+void di_event_module_dtor(di_object *obj) {
+	auto em = (di_event_module *)obj;
+	auto di_obj = di_object_get_deai_strong(obj);
+	if (di_obj) {
+		auto di = (struct deai *)di_obj;
+		ev_idle_stop(di->loop, &em->idlew);
+	}
+}
+
 /// Core events
 ///
 /// EXPORT: event: deai:module
@@ -693,7 +733,8 @@ void di_resolve_promise(struct di_promise *promise, struct di_variant var) {
 /// Fundament event sources exposed by deai. This is the building blocks of other event
 /// sources.
 void di_init_event(struct deai *di) {
-	auto em = di_new_module(di);
+	auto em = di_new_module_with_size(di, sizeof(di_event_module));
+	auto eventp = (di_event_module *)em;
 
 	di_method(em, "fdevent", di_create_ioev, int);
 	di_method(em, "timer", di_create_timer, double);
@@ -707,5 +748,10 @@ void di_init_event(struct deai *di) {
 	ev_prepare_init(dep, di_prepare);
 	ev_prepare_start(di->loop, (ev_prepare *)dep);
 
+	ev_idle_init(&eventp->idlew, di_idle_cb);
+
+	di_rawsetx((void *)em, di_string_borrow_literal("pending_count"), DI_TYPE_NINT,
+	           (int[]){0});
+	di_set_object_dtor((void *)em, di_event_module_dtor);
 	di_register_module(di, di_string_borrow("event"), &em);
 }
