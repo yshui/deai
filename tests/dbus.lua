@@ -50,8 +50,7 @@ dbusl:once("exit", function()
         o2.Dummy:call_with_signature(o2, "av", {1,2,3}),
     }):then_(function(results)
         for i, v in pairs(results) do
-            is_err, reply = unpack(v);
-            print(i, is_err, unpack(reply))
+            print(i, v)
         end
     end)
     o2:get("DummyProp"):then_(function(e)

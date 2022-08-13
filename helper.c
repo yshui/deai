@@ -12,24 +12,6 @@
 
 #include "di_internal.h"
 #include "utils.h"
-di_object *di_new_error(const char *fmt, ...) {
-	va_list ap;
-	va_start(ap, fmt);
-
-	di_string errmsg;
-	int ret = vasprintf((char **)&errmsg.data, fmt, ap);
-	if (ret < 0) {
-		errmsg = di_string_dup(fmt);
-	} else {
-		errmsg.length = strlen(errmsg.data);
-	}
-
-	auto err = di_new_object_with_type(di_object);
-	di_set_type(err, "deai:Error");
-
-	di_member(err, "errmsg", errmsg);
-	return err;
-}
 
 static int di_redirected_getter_imp(di_object *getter, di_type *rt,
                                     di_value *r, di_tuple args) {

@@ -46,6 +46,29 @@ static_assert(alignof(di_object) == alignof(di_object_internal),
               "di_object alignment mismatch");
 // clang-format on
 
+di_object *di_new_error(const char *fmt, ...) {
+	va_list ap;
+	va_start(ap, fmt);
+
+	di_string errmsg;
+	int ret = vasprintf((char **)&errmsg.data, fmt, ap);
+	if (ret < 0) {
+		errmsg = di_string_dup(fmt);
+	} else {
+		errmsg.length = strlen(errmsg.data);
+	}
+
+	auto err = di_new_object_with_type(di_object);
+	di_set_type(err, "deai:Error");
+
+	di_member(err, "errmsg", errmsg);
+	return err;
+}
+
+bool di_is_error(di_object *obj) {
+	return di_check_type(obj, "deai:Error");
+}
+
 static int di_call_internal(di_object *self, di_object *method_, di_type *rt,
                             di_value *ret, di_tuple args, bool *called) {
 	auto method = (di_object_internal *)method_;

@@ -653,38 +653,6 @@ static void di_dbus_object_set_owner(di_object *o, di_tuple data) {
 	di_dbus_name_changed(conn, bus_name, owner, payload.elements[0].value->string);
 }
 
-static di_variant di_dbus_unpack_property_get(di_tuple data) {
-	DI_CHECK(data.length == 2 && data.elements[0].type == DI_TYPE_BOOL &&
-	         data.elements[1].type == DI_TYPE_TUPLE);
-	auto args = data.elements[1].value->tuple;
-	if (data.elements[0].value->bool_) {
-		di_variant ret = {
-		    .type = DI_TYPE_OBJECT,
-		    .value = tmalloc(di_value, 1),
-		};
-		if (args.length > 0 && args.elements[0].type == DI_TYPE_STRING) {
-			ret.value->object =
-			    di_new_error("%.*s", (int)args.elements[0].value->string.length,
-			                 args.elements[0].value->string.data);
-		} else {
-			ret.value->object = di_new_error("Unknown error");
-		}
-		return ret;
-	}
-	if (args.length == 1) {
-		// Unpack the tuple if it only has one element
-		di_variant ret = DI_VARIANT_INIT;
-		di_copy_value(DI_TYPE_VARIANT, &ret, &args.elements[0]);
-		return ret;
-	}
-	di_variant ret = {
-	    .type = DI_TYPE_TUPLE,
-	    .value = tmalloc(di_value, 1),
-	};
-	di_copy_value(DI_TYPE_TUPLE, &ret.value->tuple, &args);
-	return ret;
-}
-
 static di_variant di_dbus_get_property(di_object *dobj, di_string property) {
 	scoped_di_object *conn = NULL;
 	di_variant ret = {
@@ -709,9 +677,7 @@ static di_variant di_dbus_get_property(di_object *dobj, di_string property) {
 		ret.value->object = di_new_error("DBus error");
 		return ret;
 	}
-	scoped_di_object *promise = di_dbus_add_promise_for(conn, eventm, serial);
-	scoped_di_closure *handler = di_closure(di_dbus_unpack_property_get, (), di_tuple);
-	ret.value->object = di_promise_then(promise, (void *)handler);
+	ret.value->object = di_dbus_add_promise_for(conn, eventm, serial);
 	return ret;
 }
 
@@ -974,20 +940,35 @@ static DBusHandlerResult dbus_filter(DBusConnection *conn, DBusMessage *msg, voi
 			}
 		}
 		return DBUS_HANDLER_RESULT_HANDLED;
-	} else if (type == DBUS_MESSAGE_TYPE_ERROR || type == DBUS_MESSAGE_TYPE_METHOD_RETURN) {
+	}
+
+	if (type == DBUS_MESSAGE_TYPE_ERROR || type == DBUS_MESSAGE_TYPE_METHOD_RETURN) {
 		auto serial = dbus_message_get_reply_serial(msg);
 		scoped_di_string promise_name =
 		    di_string_printf("promise_for_request_%u", serial);
 		bool is_error = (type == DBUS_MESSAGE_TYPE_ERROR);
 		scoped_di_object *promise = NULL;
 		if (di_getxt(ud, promise_name, DI_TYPE_OBJECT, (di_value *)&promise) == 0) {
-			auto packed_args = di_tuple(is_error, t);
-			di_resolve_promise((void *)promise, di_variant(packed_args));
+			if (is_error) {
+				auto msg = t.elements[0].value->string;
+				auto err = di_new_error("%.*s", (int)msg.length, msg.data);
+				di_resolve_promise((void *)promise, di_variant(err));
+				di_unref_object(err);
+			} else {
+				di_variant args;
+				if (t.length == 1) {
+					args = t.elements[0];
+				} else {
+					args = di_variant(t);
+				}
+				di_resolve_promise((void *)promise, args);
+			}
 			di_remove_member(obj, promise_name);
 			di_dbus_nsignal_dec((void *)obj);
 		}
 		return DBUS_HANDLER_RESULT_HANDLED;
 	}
+
 	return DBUS_HANDLER_RESULT_NOT_YET_HANDLED;
 }
 
@@ -1038,18 +1019,10 @@ static di_object *di_dbus_get_session_bus(di_object *o) {
 	return di_dbus_connection_to_di((void *)o, conn);
 }
 
-static di_object *di_dbus_handle_hello_reply(di_object *conn, di_tuple args_) {
-	DI_CHECK(args_.length == 2 && args_.elements[0].type == DI_TYPE_BOOL &&
-	         args_.elements[1].type == DI_TYPE_TUPLE);
-
-	auto args = args_.elements[1].value->tuple;
-
-	if (args.length != 1 || args.elements[0].type != DI_TYPE_STRING) {
-		return di_new_error("Invalid hello reply");
-	}
-	scopedp(char) *name = di_string_to_chars_alloc(args.elements[0].value->string);
-	di_log_va(log_module, DI_LOG_DEBUG, "unique name is: %s", name);
-	dbus_bus_set_unique_name(((di_dbus_connection *)conn)->conn, name);
+static di_object *di_dbus_handle_hello_reply(di_object *conn, di_string name) {
+	scopedp(char) *c_name = di_string_to_chars_alloc(name);
+	di_log_va(log_module, DI_LOG_DEBUG, "unique name is: %s", c_name);
+	dbus_bus_set_unique_name(((di_dbus_connection *)conn)->conn, c_name);
 
 	const char *match =
 	    "type='signal',sender='" DBUS_SERVICE_DBUS "',path='" DBUS_PATH_DBUS "'"
@@ -1079,7 +1052,7 @@ static di_object *di_dbus_connect(di_object *o, di_string address) {
 	                                   DI_STRING_INIT, DI_TUPLE_INIT);
 	DI_CHECK(serial >= 0);
 	scoped_di_object *promise = di_dbus_add_promise_for(ret, eventm, serial);
-	scoped_di_closure *handler = di_closure(di_dbus_handle_hello_reply, (ret), di_tuple);
+	scoped_di_closure *handler = di_closure(di_dbus_handle_hello_reply, (ret), di_string);
 	return di_promise_then(promise, (void *)handler);
 }
 
