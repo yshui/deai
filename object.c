@@ -503,7 +503,13 @@ struct di_weak_object *di_weakly_ref_object(di_object *_obj) {
 di_object *nullable di_upgrade_weak_ref(struct di_weak_object *weak) {
 	assert(weak != PTR_POISON);
 	auto obj = (di_object_internal *)weak;
-	if (obj->ref_count > 0 && obj->destroyed == 0) {
+	// Garbage collector cannot call user code when mark == 1 or 2
+	assert(obj->mark == 0 || obj->mark == 3 || obj->mark == 4);
+	// If mark == 3 or 4, the object is scheduled for destruction. If we allow
+	// upgrades of weak reference to it, then user might "revive" it by, e.g. adding
+	// it to roots. Yet the garbage collector will still finalize the object, causing
+	// surprising behavior. So we forbid upgrades of weak references in the case.
+	if (obj->ref_count > 0 && obj->destroyed == 0 && obj->mark != 3 && obj->mark != 4) {
 		return di_ref_object((di_object *)obj);
 	}
 	return NULL;
@@ -1196,8 +1202,8 @@ void di_collect_garbage(void) {
 	list_for_each_entry_safe (i, ni, &unreferred_objects, unreferred_siblings) {
 		// fprintf(stderr, "unref root: %p %lu/%lu %d, %s\n", i, i->ref_count_scan,
 		//        i->ref_count, i->mark, di_get_type((void *)i));
-		di_scan_type(DI_TYPE_OBJECT, (void *)&i, di_collect_garbage_collect_prepare,
-		             0, NULL);
+		di_scan_type(DI_TYPE_OBJECT, (void *)&i,
+		             di_collect_garbage_collect_prepare, 0, NULL);
 	}
 	list_for_each_entry_safe (i, ni, &unreferred_objects, unreferred_siblings) {
 		// fprintf(stderr, "unref root: %p %lu/%lu %d, %s\n", i, i->ref_count_scan,
