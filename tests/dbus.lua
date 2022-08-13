@@ -38,7 +38,7 @@ dbusl:once("exit", function()
     local o2 = b:get("org.freedesktop.DBus", "/org/freedesktop/DBus", "org.dummy")
 
     -- Use non-existent method to test message serialization
-    di.event:collect_promises({
+    di.event:join_promises({
         o:Introspect(),
         o:ListNames(),
         o:GetAllMatchRules(),

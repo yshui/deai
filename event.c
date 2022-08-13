@@ -602,7 +602,7 @@ di_object *di_promise_then(di_object *promise, di_object *handler) {
 	return ret;
 }
 
-static void di_promise_collect_handler(int index, di_object *storage,
+static void di_promise_join_handler(int index, di_object *storage,
                                        di_object *then_promise, struct di_variant var) {
 	scoped_di_string key = di_string_printf("%d", index);
 	DI_CHECK_OK(di_add_member_clone(storage, key, DI_TYPE_VARIANT, &var));
@@ -629,8 +629,8 @@ static void di_promise_collect_handler(int index, di_object *storage,
 
 /// Create a promise that resolves when all given promises resolve
 ///
-/// EXPORT: event.collect_promises(promises: [deai:Promise]): deai:Promise
-di_object *di_collect_promises(di_object *event_module, di_array promises) {
+/// EXPORT: event.join_promises(promises: [deai:Promise]): deai:Promise
+di_object *di_join_promises(di_object *event_module, di_array promises) {
 	if (promises.elem_type != DI_TYPE_OBJECT) {
 		return di_new_error("promises must all be objects");
 	}
@@ -645,7 +645,7 @@ di_object *di_collect_promises(di_object *event_module, di_array promises) {
 	int cnt = 0;
 	for (int i = 0; i < promises.length; i++) {
 		scoped_di_object *handler = (void *)di_closure(
-		    di_promise_collect_handler, (cnt, storage, ret), struct di_variant);
+		    di_promise_join_handler, (cnt, storage, ret), struct di_variant);
 		if (di_call(arr[i], "then", handler) == 0) {
 			cnt += 1;
 		}
@@ -703,7 +703,7 @@ void di_init_event(struct deai *di) {
 	di_method(em, "timer", di_create_timer, double);
 	di_method(em, "periodic", di_create_periodic, double, double);
 	di_method(em, "new_promise", di_new_promise);
-	di_method(em, "collect_promises", di_collect_promises, di_array);
+	di_method(em, "join_promises", di_join_promises, di_array);
 	di_method(em, "any_promise", di_any_promise, di_array);
 
 	auto dep = tmalloc(struct di_prepare, 1);

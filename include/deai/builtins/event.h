@@ -12,7 +12,7 @@ PUBLIC_DEAI_API void di_resolve_promise(struct di_promise *, struct di_variant);
 PUBLIC_DEAI_API di_object *
 di_any_promise(di_object *event_module, di_array promises);
 PUBLIC_DEAI_API di_object *
-di_collect_promises(di_object *event_module, di_array promises);
+di_join_promises(di_object *event_module, di_array promises);
 PUBLIC_DEAI_API di_object *
 di_promise_then(di_object *promise, di_object *handler);
 PUBLIC_DEAI_API di_object *di_new_promise(di_object *event_module);

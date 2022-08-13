@@ -21,7 +21,7 @@ a:resolve(1)
 b = di.event:new_promise()
 b:resolve(2)
 
-c = di.event:collect_promises({a,b})
+c = di.event:join_promises({a,b})
 c:then_(function(t)
     if t[1] ~= 1 or t[2] ~= 2 then
         di:exit(1)
