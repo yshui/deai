@@ -569,6 +569,7 @@ static void di_lua_pushobject(lua_State *L, const char *name, di_object *obj) {
 		}
 		// .. _lua quirk:
 		// The weak reference to this proxy died before __gc is called for it.
+		lua_pop(L, 1); // pop the nil
 	}
 
 	// Push the proxy, and weakly reference it from the lua registry
