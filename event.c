@@ -719,7 +719,7 @@ void di_idle_cb(EV_P_ ev_idle *w, int revents) {
 
 void di_event_module_dtor(di_object *obj) {
 	auto em = (di_event_module *)obj;
-	auto di_obj = di_object_get_deai_strong(obj);
+	scoped_di_object *di_obj = di_object_get_deai_strong(obj);
 	if (di_obj) {
 		auto di = (struct deai *)di_obj;
 		ev_idle_stop(di->loop, &em->idlew);
