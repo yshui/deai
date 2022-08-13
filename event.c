@@ -71,7 +71,7 @@ static void di_start_ioev(struct di_ioev *ev) {
 		return;
 	}
 
-	scoped_di_object *di_obj = di_object_get_deai_weak((void *)ev);
+	scoped_di_object *di_obj = di_object_get_deai_strong((void *)ev);
 	if (di_obj == NULL) {
 		// deai is shutting down
 		return;
@@ -79,9 +79,6 @@ static void di_start_ioev(struct di_ioev *ev) {
 
 	auto di = (struct deai *)di_obj;
 	ev_io_start(di->loop, &ev->evh);
-
-	// Keep the mainloop alive while we are running
-	di_object_upgrade_deai((void *)ev);
 
 	// Add event source to roots when it's running
 	auto roots = di_get_roots();
@@ -105,9 +102,6 @@ static void di_stop_ioev(struct di_ioev *ev) {
 	auto di = (struct deai *)di_obj;
 	ev_io_stop(di->loop, &ev->evh);
 	ev->running = false;
-
-	// Stop referencing the mainloop since we are not running
-	di_object_downgrade_deai((void *)ev);
 
 	auto roots = di_get_roots();
 	// Ignore error here, if someone called di:exit, we would've been removed already.
@@ -206,8 +200,7 @@ static di_object *di_create_ioev(di_object *obj, int fd) {
 
 	// Started ioev has strong ref to ddi
 	// Stopped has weak ref
-	auto weak_di = di_weakly_ref_object(di_obj);
-	di_member(ret, DEAI_MEMBER_NAME_RAW, weak_di);
+	di_member(ret, DEAI_MEMBER_NAME_RAW, di_obj);
 
 	di_signal_setter_deleter(ret, "read", di_enable_read, di_disable_read);
 	di_signal_setter_deleter(ret, "write", di_enable_write, di_disable_write);
@@ -228,7 +221,6 @@ static void di_timer_delete_signal(di_object *o) {
 	scoped_di_object *di_obj = di_object_get_deai_strong(o);
 	auto di = (struct deai *)di_obj;
 	ev_timer_stop(di->loop, &t->evt);
-	di_object_downgrade_deai(o);
 }
 
 static void di_timer_add_signal(di_object *o, di_object *sig) {
@@ -237,7 +229,7 @@ static void di_timer_add_signal(di_object *o, di_object *sig) {
 		return;
 	}
 
-	scoped_di_object *di_obj = di_object_get_deai_weak(o);
+	scoped_di_object *di_obj = di_object_get_deai_strong(o);
 	if (di_obj == NULL) {
 		return;
 	}
@@ -245,8 +237,6 @@ static void di_timer_add_signal(di_object *o, di_object *sig) {
 	if (di_member_clone(o, "__signal_elapsed", sig) != 0) {
 		return;
 	}
-
-	di_object_upgrade_deai(o);
 
 	// Add ourselve to GC root
 	auto roots = di_get_roots();
@@ -314,8 +304,7 @@ static di_object *di_create_timer(di_object *obj, double timeout) {
 
 	// Started timers have strong references to di
 	// Stopped ones have weak ones
-	auto weak_di = di_weakly_ref_object(di_obj);
-	di_member(ret, DEAI_MEMBER_NAME_RAW, weak_di);
+	di_member(ret, DEAI_MEMBER_NAME_RAW, di_obj);
 	return (di_object *)ret;
 }
 
@@ -341,7 +330,6 @@ static void di_periodic_signal_setter(di_object *o, di_object *sig) {
 	bool added = false;
 	DI_CHECK_OK(di_callr(roots, "add_anonymous", added, o));
 	DI_CHECK(added);
-	di_object_upgrade_deai(o);
 }
 
 static void di_periodic_signal_deleter(di_object *o) {
@@ -353,7 +341,6 @@ static void di_periodic_signal_deleter(di_object *o) {
 
 	auto roots = di_get_roots();
 	di_call(roots, "remove_anonymous", o);
-	di_object_downgrade_deai(o);
 }
 
 /// Periodic timer event
@@ -376,8 +363,7 @@ static di_object *di_create_periodic(struct di_module *evm, double interval, dou
 	auto di = (struct deai *)di_obj;
 	ev_periodic_start(di->loop, &ret->pt);
 
-	auto weak_di = di_weakly_ref_object(di_obj);
-	di_member(ret, DEAI_MEMBER_NAME_RAW, weak_di);
+	di_member(ret, DEAI_MEMBER_NAME_RAW, di_obj);
 	return (void *)ret;
 }
 
@@ -605,7 +591,7 @@ di_object *di_promise_then(di_object *promise, di_object *handler) {
 }
 
 static void di_promise_join_handler(int index, di_object *storage,
-                                       di_object *then_promise, struct di_variant var) {
+                                    di_object *then_promise, struct di_variant var) {
 	scoped_di_string key = di_string_printf("%d", index);
 	DI_CHECK_OK(di_add_member_clone(storage, key, DI_TYPE_VARIANT, &var));
 

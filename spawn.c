@@ -213,7 +213,7 @@ static void di_child_process_new_exit_signal(di_object *p, di_object *sig) {
 	}
 
 	auto child = (struct child *)p;
-	scoped_di_object *di_obj = di_object_get_deai_weak(p);
+	scoped_di_object *di_obj = di_object_get_deai_strong(p);
 	if (di_obj == NULL) {
 		return;
 	}
@@ -222,9 +222,6 @@ static void di_child_process_new_exit_signal(di_object *p, di_object *sig) {
 	ev_child_init(&child->w, sigchld_handler, child->pid, 0);
 	ev_child_start(di->loop, &child->w);
 
-	// Add ourselves to root since we are now a fundamental event source.
-	di_object_upgrade_deai(p);
-
 	auto roots = di_get_roots();
 	scoped_di_string child_root_key =
 	    di_string_printf("child_process_%d", child->pid);
@@ -232,7 +229,7 @@ static void di_child_process_new_exit_signal(di_object *p, di_object *sig) {
 }
 
 static void di_child_start_output_listener(di_object *p, int id) {
-	scoped_di_object *di_obj = di_object_get_deai_weak(p);
+	scoped_di_object *di_obj = di_object_get_deai_strong(p);
 	if (di_obj == NULL) {
 		return;
 	}
@@ -285,8 +282,6 @@ static void di_child_process_delete_exit_signal(di_object *obj) {
 	auto roots = di_get_roots();
 	scoped_di_string child_root_key = di_string_printf("child_process_%d", c->pid);
 	DI_CHECK_OK(di_call(roots, "remove", child_root_key));
-
-	di_object_downgrade_deai((void *)c);
 }
 
 static void di_child_process_stop_output_listener(di_object *obj, int id) {
@@ -398,8 +393,7 @@ di_object *di_spawn_run(struct di_spawn *p, di_array argv, bool ignore_output) {
 	cp->fds[1] = epfds[0];
 
 	// Keep a reference from the ChildProcess object to deai, to keep it alive
-	auto weak_di = di_weakly_ref_object(obj);
-	di_member(cp, DEAI_MEMBER_NAME_RAW, weak_di);
+	di_member(cp, DEAI_MEMBER_NAME_RAW, obj);
 	return (void *)cp;
 }
 

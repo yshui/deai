@@ -415,47 +415,14 @@ static inline unused char *nonnull di_value_to_string(di_type type, di_value *no
 #define DEAI_MEMBER_NAME                                                                 \
 	((di_string){.data = DEAI_MEMBER_NAME_RAW, .length = strlen(DEAI_MEMBER_NAME_RAW)})
 
-static inline di_object *nullable unused di_object_get_deai_weak(di_object *nonnull o) {
-	scoped_di_weak_object *weak = NULL;
-	di_get(o, DEAI_MEMBER_NAME_RAW, weak);
-
-	if (weak == NULL) {
-		return NULL;
-	}
-	return di_upgrade_weak_ref(weak);
-}
-
 static inline di_object *nullable unused di_object_get_deai_strong(di_object *nonnull o) {
 	di_object *strong = NULL;
 	di_get(o, DEAI_MEMBER_NAME_RAW, strong);
 	return strong;
 }
 
-/// Downgrade the __deai member from a strong reference to a weak reference
-static inline void unused di_object_downgrade_deai(di_object *nonnull o) {
-	scoped_di_object *di_obj = NULL;
-	di_get(o, DEAI_MEMBER_NAME_RAW, di_obj);
-	if (di_obj != NULL) {
-		__auto_type weak = di_weakly_ref_object(di_obj);
-		di_remove_member_raw(o, DEAI_MEMBER_NAME);
-		di_member(o, DEAI_MEMBER_NAME_RAW, weak);
-	}
-}
-/// Upgrade the __deai member from a weak reference to a strong reference
-static inline void unused di_object_upgrade_deai(di_object *nonnull o) {
-	scoped_di_weak_object *di_obj = NULL;
-	di_get(o, DEAI_MEMBER_NAME_RAW, di_obj);
-	if (di_obj != NULL) {
-		__auto_type strong = di_upgrade_weak_ref(di_obj);
-		di_remove_member_raw(o, DEAI_MEMBER_NAME);
-		if (strong != NULL) {
-			di_member(o, DEAI_MEMBER_NAME_RAW, strong);
-		}
-	}
-}
-
 static inline di_object *nullable unused di_module_get_deai(struct di_module *nonnull o) {
-	return di_object_get_deai_weak((di_object *)o);
+	return di_object_get_deai_strong((di_object *)o);
 }
 
 /// Consumes a di_value and create a di_variant containing that di_value

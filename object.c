@@ -356,8 +356,7 @@ struct di_module *di_new_module_with_size(struct deai *di, size_t size) {
 
 	di_set_type((void *)pm, "deai:module");
 
-	auto weak = di_weakly_ref_object((di_object *)di);
-	di_member(pm, "__deai", weak);
+	di_member_clone(pm, "__deai", (di_object *)di);
 
 	return (void *)pm;
 }

@@ -86,7 +86,6 @@ struct deai {
 
 struct di_module {
 	di_object;
-	UT_hash_handle hh;
 };
 
 extern struct di_roots *nullable roots;
