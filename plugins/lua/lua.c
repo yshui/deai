@@ -1056,7 +1056,7 @@ static int di_lua_pushvariant(lua_State *L, const char *name, struct di_variant 
 
 	if (var.type == DI_TYPE_ARRAY) {
 		if (var.value->array.elem_type == DI_TYPE_ANY) {
-			lua_pushnil(L);
+			lua_createtable(L, 0, 0);
 			return 1;
 		}
 	}
