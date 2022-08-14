@@ -721,6 +721,9 @@ static di_object *di_lua_load_script(di_object *obj, di_string path_) {
 	// Remove the errfunc
 	lua_remove(L->L, 1);
 
+	DI_CHECK_OK(luaL_loadstring(L->L, "collectgarbage()"));
+	DI_CHECK_OK(lua_pcall(L->L, 0, 0, 0));
+
 	if (ret != 0) {
 		// Right now there's no way to revert what this script
 		// have done. (e.g. add listeners). So there's not much
@@ -868,6 +871,8 @@ static int call_lua_function(struct di_lua_ref *ref, di_type *rt, di_value *ret,
 
 	di_lua_xchg_env(L, script);
 
+	DI_CHECK_OK(luaL_loadstring(L, "collectgarbage(\"step\", 20)"));
+	DI_CHECK_OK(lua_pcall(L, 0, 0, 0));
 	return 0;
 }
 
