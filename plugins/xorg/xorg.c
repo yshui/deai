@@ -148,8 +148,8 @@ const di_string *di_xorg_get_atom_name(di_xorg_connection *xc, xcb_atom_t atom) 
 	return &ae->name;
 }
 
-xcb_atom_t di_xorg_intern_atom(di_xorg_connection *xc, di_string name,
-                               xcb_generic_error_t **e) {
+xcb_atom_t
+di_xorg_intern_atom(di_xorg_connection *xc, di_string name, xcb_generic_error_t **e) {
 	struct di_atom_entry *ae = NULL;
 	*e = NULL;
 
@@ -385,7 +385,7 @@ static struct {
 /// - options (optional)
 static void set_keymap(di_xorg_connection *xc, di_object *o) {
 	scoped_di_string layout = DI_STRING_INIT, model = DI_STRING_INIT,
-	                       variant = DI_STRING_INIT, options = DI_STRING_INIT;
+	                 variant = DI_STRING_INIT, options = DI_STRING_INIT;
 
 	if (!o || di_get(o, "layout", layout)) {
 		di_log_va(log_module, DI_LOG_ERROR,
@@ -421,9 +421,9 @@ static void set_keymap(di_xorg_connection *xc, di_object *o) {
 		goto out;
 	}
 
-	int keysym_per_keycode = 0;
-	int max_keycode = xkb_keymap_max_keycode(map), min_keycode =
-	                                                   xkb_keymap_min_keycode(map);
+	unsigned int keysym_per_keycode = 0;
+	auto max_keycode = xkb_keymap_max_keycode(map);
+	auto min_keycode = xkb_keymap_min_keycode(map);
 	if (max_keycode > xsetup->max_keycode) {
 		// Xorg doesn't accept keycode > 255
 		max_keycode = xsetup->max_keycode;
@@ -431,8 +431,8 @@ static void set_keymap(di_xorg_connection *xc, di_object *o) {
 	if (min_keycode < xsetup->min_keycode) {
 		min_keycode = xsetup->min_keycode;
 	}
-	for (int i = min_keycode; i <= max_keycode; i++) {
-		int nlevels = xkb_keymap_num_levels_for_key(map, i, 0);
+	for (auto i = min_keycode; i <= max_keycode; i++) {
+		auto nlevels = xkb_keymap_num_levels_for_key(map, i, 0);
 		if (nlevels > keysym_per_keycode) {
 			keysym_per_keycode = nlevels;
 		}
@@ -440,10 +440,11 @@ static void set_keymap(di_xorg_connection *xc, di_object *o) {
 
 	// Xorg uses 2 groups of keymapping, while xkbcommon uses 1 group
 	keysym_per_keycode += 2;
-	keysyms = tmalloc(xcb_keysym_t, keysym_per_keycode * (max_keycode - min_keycode + 1));
+	keysyms =
+	    tmalloc(xcb_keysym_t, (long)keysym_per_keycode * (max_keycode - min_keycode + 1));
 
-	for (int i = min_keycode; i <= max_keycode; i++) {
-		int nlevels = xkb_keymap_num_levels_for_key(map, i, 0);
+	for (auto i = min_keycode; i <= max_keycode; i++) {
+		auto nlevels = xkb_keymap_num_levels_for_key(map, i, 0);
 		for (int j = 0; j < nlevels; j++) {
 			const xkb_keysym_t *sym;
 			int nsyms = xkb_keymap_key_get_syms_by_level(map, i, 0, j, &sym);
@@ -520,8 +521,7 @@ void di_xorg_add_signal(di_xorg_connection *xc) {
 	scoped_di_object *xcb_fd_event = NULL;
 	DI_CHECK_OK(di_callr(eventm, "fdevent", xcb_fd_event, xcb_get_file_descriptor(xc->c)));
 	scoped_di_closure *cl = di_closure(di_xorg_ioev, ((di_object *)xc));
-	auto lh =
-	    di_listen_to(xcb_fd_event, di_string_borrow("read"), (void *)cl);
+	auto lh = di_listen_to(xcb_fd_event, di_string_borrow("read"), (void *)cl);
 
 	DI_CHECK_OK(di_call(lh, "auto_stop", true));
 	di_member(xc, "__xcb_fd_event_read_listen_handle", lh);
@@ -626,8 +626,8 @@ static di_object *di_xorg_connect_to(struct di_xorg *x, di_string displayname_) 
 
 	di_mgetm(x, event, di_new_error("Can't get event module"));
 
-	auto dc = di_new_object_with_type2(
-	    di_xorg_connection, "deai.plugin.xorg:Connection");
+	auto dc =
+	    di_new_object_with_type2(di_xorg_connection, "deai.plugin.xorg:Connection");
 	dc->c = c;
 	dc->dflt_scrn = scrn;
 	dc->nsignals = 0;
