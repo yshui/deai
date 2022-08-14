@@ -503,13 +503,13 @@ struct di_weak_object *di_weakly_ref_object(di_object *_obj) {
 di_object *nullable di_upgrade_weak_ref(struct di_weak_object *weak) {
 	assert(weak != PTR_POISON);
 	auto obj = (di_object_internal *)weak;
-	// Garbage collector cannot call user code when mark == 1 or 2
-	assert(obj->mark == 0 || obj->mark == 3 || obj->mark == 4);
-	// If mark == 3 or 4, the object is scheduled for destruction. If we allow
+	// Garbage collector cannot call user code when mark == 1
+	assert(obj->mark == 0 || obj->mark == 2 || obj->mark == 3);
+	// If mark == 2 or 3, the object is scheduled for destruction. If we allow
 	// upgrades of weak reference to it, then user might "revive" it by, e.g. adding
 	// it to roots. Yet the garbage collector will still finalize the object, causing
 	// surprising behavior. So we forbid upgrades of weak references in the case.
-	if (obj->ref_count > 0 && obj->destroyed == 0 && obj->mark != 3 && obj->mark != 4) {
+	if (obj->ref_count > 0 && obj->destroyed == 0 && obj->mark != 2 && obj->mark != 3) {
 		return di_ref_object((di_object *)obj);
 	}
 	return NULL;
@@ -1148,7 +1148,7 @@ static int di_collect_garbage_scan(di_object_internal *o, int revive) {
 	//        o->ref_count, di_get_type((void *)o));
 	return 0;
 }
-static int di_collect_garbage_collect_prepare(di_object_internal *o, int _ unused) {
+static int di_collect_garbage_collect_pre(di_object_internal *o, int _ unused) {
 	if (o->mark == 0 || o->mark == 3) {
 		return -1;
 	}
@@ -1158,16 +1158,8 @@ static int di_collect_garbage_collect_prepare(di_object_internal *o, int _ unuse
 	o->mark = 3;
 	return 0;
 }
-static int di_collect_garbage_collect_pre(di_object_internal *o, int _ unused) {
-	if (o->mark == 0 || o->mark == 4) {
-		return -1;
-	}
-	assert(o->mark == 3);
-	o->mark = 4;
-	return 0;
-}
 static void di_collect_garbage_collect_post(di_object_internal *o) {
-	assert(o->mark == 4);
+	assert(o->mark == 3);
 	// fprintf(stderr, "\tpost-finalizing %p\n", o);
 	_di_finalize_object(o);
 
@@ -1197,13 +1189,10 @@ void di_collect_garbage(void) {
 		di_scan_type(DI_TYPE_OBJECT, (void *)&i, di_collect_garbage_scan, 0, NULL);
 	}
 
-	// Increment reference count of objects that are to be freed. This is because user
-	// dtor can cause arbitrary objects to be freed, which can cause us to use-after-free.
+	// Strongly reference unreferred object roots. So they can't be freed while we are
+	// going through the list.
 	list_for_each_entry_safe (i, ni, &unreferred_objects, unreferred_siblings) {
-		// fprintf(stderr, "unref root: %p %lu/%lu %d, %s\n", i, i->ref_count_scan,
-		//        i->ref_count, i->mark, di_get_type((void *)i));
-		di_scan_type(DI_TYPE_OBJECT, (void *)&i,
-		             di_collect_garbage_collect_prepare, 0, NULL);
+		di_ref_object((di_object *)i);
 	}
 	list_for_each_entry_safe (i, ni, &unreferred_objects, unreferred_siblings) {
 		// fprintf(stderr, "unref root: %p %lu/%lu %d, %s\n", i, i->ref_count_scan,
@@ -1211,6 +1200,7 @@ void di_collect_garbage(void) {
 		list_del_init(&i->unreferred_siblings);
 		di_scan_type(DI_TYPE_OBJECT, (void *)&i, di_collect_garbage_collect_pre,
 		             0, di_collect_garbage_collect_post);
+		di_unref_object((di_object *)i);
 	}
 	collecting_garbage = false;
 }
