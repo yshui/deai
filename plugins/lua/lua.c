@@ -445,7 +445,7 @@ static int di_lua_gc(lua_State *L) {
 	// Forget about this object
 	char *buf = NULL;
 	asprintf(&buf, "___lua_userdata_to_object_%p", optr);
-	DI_CHECK_OK(di_remove_member_raw((void *)s, di_string_borrow(buf)));
+	DI_CHECK_OK(di_delete_member_raw((void *)s, di_string_borrow(buf)));
 	free(buf);
 
 	// Check if ___di_object_<object> is still pointing to this proxy. If that's the
@@ -467,7 +467,7 @@ static int di_lua_gc(lua_State *L) {
 		current_optr = di_lua_checkproxy(L, -1);
 	}
 	if (current_optr == optr) {
-		DI_CHECK_OK(di_remove_member_raw((void *)s, di_string_borrow(buf)));
+		DI_CHECK_OK(di_delete_member_raw((void *)s, di_string_borrow(buf)));
 	}
 	free(buf);
 	return 0;
@@ -687,7 +687,7 @@ static di_object *di_lua_load_script(di_object *obj, di_string path_) {
 
 		if (L == NULL) {
 			// __lua_state not found, or lua_state has been dropped
-			di_remove_member_raw((di_object *)m,
+			di_delete_member_raw((di_object *)m,
 			                     di_string_borrow("__lua_state"));
 			L = lua_new_state(m);
 		}
@@ -1311,7 +1311,7 @@ static int di_lua_meta_newindex(lua_State *L) {
 
 	int ret;
 	if (vt == DI_TYPE_NIL) {
-		ret = di_remove_member(ud, key);
+		ret = di_delete_member(ud, key);
 	} else {
 		ret = di_setx(ud, key, vt, &val);
 		di_free_value(vt, &val);

@@ -548,10 +548,10 @@ public:
 	/// Remove this member from the object
 	void erase() const {
 		if constexpr (raw) {
-			c_api::di_remove_member_raw(
+			c_api::di_delete_member_raw(
 			    target, util::string_to_borrowed_deai_value(key));
 		} else {
-			c_api::di_remove_member(target,
+			c_api::di_delete_member(target,
 			                        util::string_to_borrowed_deai_value(key));
 		}
 	}

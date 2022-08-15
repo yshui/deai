@@ -280,8 +280,8 @@ di_setx(di_object *nonnull o, di_string prop, di_type type, const void *nullable
 /// @param[out] type Type of the value
 /// @param[out] ret Reference to the value.
 /// @return 0 for success, or an error code.
-int di_refrawgetx(di_object *nonnull o, di_string prop, di_type *nonnull type,
-                  di_value *nullable *nonnull ret);
+PUBLIC_DEAI_API int di_refrawgetx(di_object *nonnull o, di_string prop,
+                                  di_type *nonnull type, di_value *nullable *nonnull ret);
 /// Fetch a member with name `prop` from an object `o`, without calling the getter
 /// functions. The value is cloned, then returned.
 ///
@@ -358,14 +358,19 @@ PUBLIC_DEAI_API int nonnull_all di_add_member_clonev(di_object *nonnull o, di_st
                                                      di_type, ...);
 
 /// Remove a member of object `o`, without calling the deleter.
-PUBLIC_DEAI_API int di_remove_member_raw(di_object *nonnull o, di_string name);
+PUBLIC_DEAI_API int di_delete_member_raw(di_object *nonnull o, di_string name);
+
+/// Remove a member of object `o`, without calling the deleter. Transfer the ownership of
+/// the member to the caller via `ret`.
+PUBLIC_DEAI_API int di_remove_member_raw(di_object *obj, di_string name, di_variant *ret);
+
 /// Remove a member of object `o`, or call its deleter.
 /// If the specialized deleter `__delete_<name>` exists, it will be called; if not,
 /// the generic deleter, `__delete`, will be tried. At last, this function will try to
 /// find and remove a member with name `name`.
 ///
 /// `name` cannot name an internal member
-PUBLIC_DEAI_API int di_remove_member(di_object *nonnull o, di_string name);
+PUBLIC_DEAI_API int di_delete_member(di_object *nonnull o, di_string name);
 
 /// Check whether a member with `name` exists in the object, without calling the
 /// getters. Returns non-NULL if the member exists, and NULL otherwise.
@@ -427,6 +432,11 @@ PUBLIC_DEAI_API void di_free_array(di_array);
 /// Free a `value` of type `t`. This function does not free the storage space used by
 /// `value`. This is to make this function usable for values stored on the stack.
 PUBLIC_DEAI_API void di_free_value(di_type t, di_value *nullable value_ptr);
+
+static inline void unused di_free_variant(di_variant v) {
+	di_free_value(v.type, v.value);
+	free(v.value);
+}
 
 /// Copy value of type `t` from `src` to `dst`. It's assumed that `dst` has enough memory
 /// space to hold a value of type `t`, and that `dst` doesn't contain a valid value
@@ -811,6 +821,32 @@ static inline void unused di_free_di_weak_objectpp(di_weak_object *nullable *non
 	})
 
 #define di_get(o, prop, r) di_get2(o, di_string_borrow(prop), r)
+
+/// Get a raw member of an object, returning the value without cloning it.
+/// This is only possible with raw members, because getter returns are temporary values.
+/// And the type of `r` has to match exactly the type of the member, no conversion is performed.
+#define di_rawget_borrowed2(o, prop, r)                                                      \
+	({                                                                                   \
+		int __di_rawget__borrowd2_rc;                                                \
+		di_type __di_rawget__borrowd2_rtype;                                         \
+		di_value *__di_rawget__borrowd2_ret;                                         \
+		do {                                                                         \
+			__di_rawget__borrowd2_rc =                                           \
+			    di_refrawgetx((void *)(o), (prop), &__di_rawget__borrowd2_rtype, \
+			                  &(__di_rawget__borrowd2_ret));                     \
+			if (__di_rawget__borrowd2_rc != 0) {                                 \
+				break;                                                       \
+			}                                                                    \
+			if (__di_rawget__borrowd2_rtype != di_typeof(r)) {                   \
+				__di_rawget__borrowd2_rc = -ERANGE;                          \
+				break;                                                       \
+			}                                                                    \
+			memcpy(&(r), __di_rawget__borrowd2_ret,                              \
+			       di_sizeof_type(__di_rawget__borrowd2_rtype));                 \
+		} while (0);                                                                 \
+		__di_rawget__borrowd2_rc;                                                    \
+	})
+#define di_rawget_borrowed(o, prop, r) di_rawget_borrowed2(o, di_string_borrow(prop), r)
 
 /// A valid but non-upgradeable weak reference
 PUBLIC_DEAI_API extern const di_weak_object *const nonnull dead_weak_ref;

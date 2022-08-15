@@ -12,10 +12,10 @@ static di_object *create_di_object(di_object *unused _) {
 }
 
 DEAI_PLUGIN_ENTRY_POINT(di) {
-	di_remove_member_raw((di_object *)di, di_string_borrow("lua"));
-	di_remove_member_raw((di_object *)di, di_string_borrow("xorg"));
-	di_remove_member_raw((di_object *)di, di_string_borrow("file"));
-	di_remove_member_raw((di_object *)di, di_string_borrow("dbus"));
+	di_delete_member_raw((di_object *)di, di_string_borrow("lua"));
+	di_delete_member_raw((di_object *)di, di_string_borrow("xorg"));
+	di_delete_member_raw((di_object *)di, di_string_borrow("file"));
+	di_delete_member_raw((di_object *)di, di_string_borrow("dbus"));
 	di_call(di, "load_plugin", (const char *)"./plugins/lua/di_lua.so");
 	di_call(di, "load_plugin", (const char *)"./plugins/xorg/di_xorg.so");
 	di_call(di, "load_plugin", (const char *)"./plugins/file/di_file.so");

@@ -1,7 +1,7 @@
 di:load_plugin("./plugins/xorg/di_xorg.so")
-di.spawn:run({"Xvfb", ":1", "-screen", "0", "1600x1200x24+32"}, true)
-di.spawn:run({"Xvfb", ":2", "-screen", "0", "1600x1200x24+32"}, true)
-di.os.env.DISPLAY=":1"
+di.spawn:run({"Xvfb", ":101", "-screen", "0", "1600x1200x24+32"}, true)
+di.spawn:run({"Xvfb", ":102", "-screen", "0", "1600x1200x24+32"}, true)
+di.os.env.DISPLAY=":101"
 
 local listen_handles = {}
 table.insert(listen_handles, di.event:timer(0.2):on("elapsed", function()
@@ -84,7 +84,7 @@ table.insert(listen_handles, di.event:timer(0.2):on("elapsed", function()
         end
 
         o:disconnect()
-        o = di.xorg:connect_to(":2")
+        o = di.xorg:connect_to(":102")
         if o.errmsg then
             print(o.errmsg)
             di:exit(1)

@@ -179,10 +179,10 @@ static void keybinding_new_signal(const char *signal, di_object *obj, di_object 
 	}
 	ungrab(kb);
 early_err:
-	di_remove_member(obj, di_string_borrow(signal));
+	di_delete_member(obj, di_string_borrow(signal));
 }
 static void keybinding_del_signal(const char *signal, di_object *obj) {
-	if (di_remove_member_raw(obj, di_string_borrow(signal)) != 0) {
+	if (di_delete_member_raw(obj, di_string_borrow(signal)) != 0) {
 		return;
 	}
 	bool has_signal = di_has_member(obj, "__signal_pressed") ||
@@ -202,7 +202,7 @@ static void keybinding_del_signal(const char *signal, di_object *obj) {
 
 	// Stop keeping ourself alive
 	scoped_di_string keybinding_key = di_string_printf("___keybinding_%p", obj);
-	di_remove_member_raw(key_obj, keybinding_key);
+	di_delete_member_raw(key_obj, keybinding_key);
 }
 /// Add a new key binding
 ///
@@ -403,7 +403,7 @@ void key_deregister_listener(struct xorg_key *k) {
 	for (int i = 0; i < ARRAY_SIZE(OPCODES); i++) {
 		scoped_di_string autolh_key =
 		    di_string_printf("___auto_handle_for_%d", OPCODES[i]);
-		di_remove_member_raw((void *)k, autolh_key);
+		di_delete_member_raw((void *)k, autolh_key);
 	}
 }
 

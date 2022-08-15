@@ -46,7 +46,7 @@ static void xorg_disconnect(di_xorg_connection *xc) {
 	xc->nsignals = 0;
 
 	// Drop the auto stop handle to stop the signal listener
-	di_remove_member_raw(
+	di_delete_member_raw(
 	    (void *)xc, di_string_borrow_literal("__xcb_fd_event_read_listen_handle"));
 
 	struct di_atom_entry *ae, *tae;
@@ -231,7 +231,7 @@ static struct di_variant di_xorg_get_ext(di_xorg_connection *xc, di_string name)
 		if (ext != NULL) {
 			return di_variant_of(ext);
 		}
-		di_remove_member_raw((void *)xc, ext_member);
+		di_delete_member_raw((void *)xc, ext_member);
 	}
 	for (int i = 0; xext_reg[i].name; i++) {
 		if (!di_string_eq(di_string_borrow(xext_reg[i].name), name)) {
@@ -534,7 +534,7 @@ void di_xorg_del_signal(di_xorg_connection *xc) {
 	}
 	fprintf(stderr, "X stop\n");
 	// Drop the auto stop handle to stop the listener
-	di_remove_member_raw(
+	di_delete_member_raw(
 	    (void *)xc, di_string_borrow_literal("__xcb_fd_event_read_listen_handle"));
 }
 
@@ -552,7 +552,7 @@ void di_xorg_signal_deleter(di_object *obj, di_string member) {
 	if (!di_string_starts_with(member, "__signal_")) {
 		return;
 	}
-	if (di_remove_member_raw(obj, member) != 0) {
+	if (di_delete_member_raw(obj, member) != 0) {
 		return;
 	}
 	di_xorg_del_signal((void *)obj);
@@ -586,7 +586,7 @@ void di_xorg_ext_signal_deleter(const char *signal, di_object *obj) {
 	if (di_get(obj, XORG_CONNECTION_MEMBER, dc_obj) != 0) {
 		return;
 	}
-	if (di_remove_member_raw(obj, di_string_borrow(signal)) != 0) {
+	if (di_delete_member_raw(obj, di_string_borrow(signal)) != 0) {
 		return;
 	}
 	struct di_xorg_ext *ext = (void *)obj;
@@ -595,7 +595,7 @@ void di_xorg_ext_signal_deleter(const char *signal, di_object *obj) {
 	if (ext->nsignals == 0) {
 		scoped_di_string strong_ext_member =
 		    di_string_printf("___strong_x_ext_%s", ext->extname);
-		di_remove_member_raw(dc_obj, strong_ext_member);
+		di_delete_member_raw(dc_obj, strong_ext_member);
 		di_xorg_del_signal((void *)dc_obj);
 	}
 }

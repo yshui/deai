@@ -175,25 +175,23 @@ static bool dbus_toggle_watch_impl(DBusWatch *w, void *ud, bool enabled) {
 	if (!enabled) {
 		// Remove the listen handles: they are auto stop handles so this is enough
 		if (flags & DBUS_WATCH_READABLE) {
-			scopedp(char) * listen_handle_name;
-			asprintf(&listen_handle_name,
-			         "__dbus_ioev_read_listen_handle_for_watch_%p", w);
-			di_remove_member_raw((void *)oc, di_string_borrow(listen_handle_name));
+			scoped_di_string listen_handle_name = di_string_printf(
+			    "__dbus_ioev_read_listen_handle_for_watch_%p", w);
+			di_delete_member_raw((void *)oc, listen_handle_name);
 		}
 		if (flags & DBUS_WATCH_WRITABLE) {
-			scopedp(char) * listen_handle_name;
-			asprintf(&listen_handle_name,
-			         "__dbus_ioev_write_listen_handle_for_"
-			         "watch_%p",
-			         w);
-			di_remove_member_raw((void *)oc, di_string_borrow(listen_handle_name));
+			scoped_di_string listen_handle_name =
+			    di_string_printf("__dbus_ioev_write_listen_handle_for_"
+			                     "watch_%p",
+			                     w);
+			di_delete_member_raw((void *)oc, listen_handle_name);
 		}
 	} else {
 		// Add signal listeners, this automatically starts the fdevent.
-		scoped_di_object *eventm = NULL;
-		scoped_di_object *di = di_object_get_deai_strong((di_object *)oc);
+		di_object *eventm = NULL;
+		di_object *di = di_object_borrow_deai((di_object *)oc);
 		scoped_di_object *ioev = NULL;
-		if (di_get(di, "event", eventm) != 0) {
+		if (di_rawget_borrowed(di, "event", eventm) != 0) {
 			return false;
 		}
 		if (di_callr(eventm, "fdevent", ioev, dbus_watch_get_unix_fd(w)) != 0) {
@@ -215,12 +213,10 @@ static void dbus_toggle_watch(DBusWatch *w, void *ud) {
 
 static unsigned int dbus_add_watch(DBusWatch *w, void *ud) {
 	di_dbus_connection *oc = ud;
-	scoped_di_object *ioev = NULL;
 	/*fprintf(stderr, "w %p, flags: %d, fd: %d\n", w, flags, fd);*/
-	scopedp(char) * ioev_name;
-	asprintf(&ioev_name, "__dbus_ioev_for_watch_%p", w);
+	scoped_di_string ioev_name = di_string_printf("__dbus_ioev_for_watch_%p", w);
 
-	if (di_get(oc, ioev_name, ioev) == 0) {
+	if (di_lookup((void *)oc, ioev_name) != 0) {
 		// We are already watching this fd?
 		DI_PANIC("Same watch added multiple times by dbus");
 	}
@@ -277,12 +273,12 @@ static int64_t di_dbus_send_message(di_object *o, di_string type, di_string bus_
 static di_object *dbus_call_method(di_dbus_object *dobj, di_string iface,
                                    di_string method, di_string signature, di_tuple t) {
 
-	scoped_di_object *conn = NULL;
-	if (di_get(dobj, "___deai_dbus_connection", conn) != 0) {
+	di_object *conn = NULL;
+	if (di_rawget_borrowed(dobj, "___deai_dbus_connection", conn) != 0) {
 		return di_new_error("DBus connection gone");
 	}
 
-	di_getm(di_object_get_deai_strong(conn), event, di_new_error(""));
+	di_borrowm(di_object_borrow_deai(conn), event, di_new_error(""));
 
 	int64_t serial = -1;
 	scoped_di_string bus = DI_STRING_INIT, path = DI_STRING_INIT;
@@ -429,8 +425,8 @@ di_dbus_object_new_signal(di_dbus_object *dobj, di_string member_name, di_object
 	di_string interface = DI_STRING_INIT;
 	DI_CHECK_OK(di_get(dobj, "___interface", interface));
 
-	scoped_di_object *conn = NULL;
-	if (di_get(dobj, "___deai_dbus_connection", conn) != 0) {
+	di_object *conn = NULL;
+	if (di_rawget_borrowed(dobj, "___deai_dbus_connection", conn) != 0) {
 		return;
 	}
 
@@ -460,7 +456,7 @@ static void di_dbus_object_del_signal(di_dbus_object *obj, di_string member_name
 		return;
 	}
 
-	if (di_remove_member_raw((void *)obj, member_name) != 0) {
+	if (di_delete_member_raw((void *)obj, member_name) != 0) {
 		return;
 	}
 
@@ -495,7 +491,7 @@ static void di_dbus_object_del_signal(di_dbus_object *obj, di_string member_name
 	/// Stop keeping this object alive
 	scoped_di_string keep_alive_name = di_string_printf(
 	    "___keep_alive_%p_%.*s", obj, (int)signal_name.length, signal_name.data);
-	DI_CHECK_OK(di_remove_member_raw((void *)conn, keep_alive_name));
+	DI_CHECK_OK(di_delete_member_raw((void *)conn, keep_alive_name));
 }
 
 /// Send a message to dbus
@@ -556,7 +552,7 @@ static void di_dbus_name_changed(di_object *conn, di_string well_known,
 		    di_string_printf("peer_%.*s", (int)old_owner.length, old_owner.data);
 		scoped_di_object *peer = di_get_object_via_weak(conn, peer_object_name);
 		if (peer != NULL) {
-			di_remove_member_raw(peer, well_known);
+			di_delete_member_raw(peer, well_known);
 		}
 	}
 	// Get the object cache directory for the well_known name.
@@ -588,7 +584,7 @@ static void di_dbus_name_changed(di_object *conn, di_string well_known,
 			di_string curr = ((di_string *)all_memebers.arr)[i];
 			if (di_string_starts_with(curr, "peer_") ||
 			    di_string_starts_with(curr, "object_cache_")) {
-				di_remove_member_raw(conn, curr);
+				di_delete_member_raw(conn, curr);
 			}
 		}
 	}
@@ -615,8 +611,8 @@ static void di_dbus_name_changed(di_object *conn, di_string well_known,
 	} else {
 		di_log_va(log_module, DI_LOG_DEBUG, "dbus: name %.*s unowned",
 		          (int)well_known.length, well_known.data);
-		di_remove_member_raw(directory, di_string_borrow_literal("___owner"));
-		di_remove_member_raw(directory,
+		di_delete_member_raw(directory, di_string_borrow_literal("___owner"));
+		di_delete_member_raw(directory,
 		                     di_string_borrow_literal("___owner_name"));
 	}
 }
@@ -654,17 +650,17 @@ static void di_dbus_object_set_owner(di_object *o, di_tuple data) {
 }
 
 static di_variant di_dbus_get_property(di_object *dobj, di_string property) {
-	scoped_di_object *conn = NULL;
+	di_object *conn = NULL;
 	di_variant ret = {
 	    .type = DI_TYPE_OBJECT,
 	    .value = tmalloc(di_value, 1),
 	};
-	if (di_get(dobj, "___deai_dbus_connection", conn) != 0) {
+	if (di_rawget_borrowed(dobj, "___deai_dbus_connection", conn) != 0) {
 		ret.value->object = di_new_error("DBus connection gone");
 		return ret;
 	}
-	di_getm(di_object_get_deai_strong(conn), event, ret.value->object = di_new_error("");
-	        return ret);
+	di_borrowm(di_object_borrow_deai(conn), event, ret.value->object = di_new_error("");
+	           return ret);
 	scoped_di_string obj = DI_STRING_INIT, bus = DI_STRING_INIT, interface = DI_STRING_INIT;
 	DI_CHECK_OK(di_get(dobj, "___object_path", obj));
 	DI_CHECK_OK(di_get(dobj, "___bus_name", bus));
@@ -699,7 +695,7 @@ static di_variant di_dbus_get_property(di_object *dobj, di_string property) {
 /// For how DBus types map to deai type, see :lua:mod:`dbus` for more details.
 static di_object *
 di_dbus_get_object(di_object *o, di_string bus, di_string obj, di_string interface) {
-	di_getm(di_object_get_deai_strong(o), event, di_new_error(""));
+	di_borrowm(di_object_borrow_deai(o), event, di_new_error(""));
 
 	scoped_di_string object_cache_name =
 	    di_string_printf("object_cache_%.*s", (int)bus.length, bus.data);
@@ -797,7 +793,7 @@ static int di_dbus_drop_root(di_object *self_, di_type *rtype, di_value *unused 
 	*rtype = DI_TYPE_NIL;
 	// Remove the listen handle so self gets dropped and
 	// di_dbus_shutdown_part2 gets called
-	di_remove_member_raw(self_, di_string_borrow_literal("___listen_handle"));
+	di_delete_member_raw(self_, di_string_borrow_literal("___listen_handle"));
 	return 0;
 }
 
@@ -812,9 +808,9 @@ static void di_dbus_shutdown(di_dbus_connection *conn) {
 		dbus_connection_remove_filter(conn->conn, dbus_filter, conn);
 	}
 
-	scoped_di_object *di = di_object_get_deai_strong((di_object *)conn);
-	scoped_di_object *eventm = NULL;
-	di_get(di, "event", eventm);
+	di_object *di = di_object_borrow_deai((di_object *)conn);
+	di_object *eventm = NULL;
+	di_rawget_borrowed(di, "event", eventm);
 
 	if (eventm != NULL) {
 		// This function might be called in dbus dispatch function, closing connection in
@@ -947,8 +943,8 @@ static DBusHandlerResult dbus_filter(DBusConnection *conn, DBusMessage *msg, voi
 		scoped_di_string promise_name =
 		    di_string_printf("promise_for_request_%u", serial);
 		bool is_error = (type == DBUS_MESSAGE_TYPE_ERROR);
-		scoped_di_object *promise = NULL;
-		if (di_get2(ud, promise_name, promise) == 0) {
+		di_object *promise = NULL;
+		if (di_rawget_borrowed2(ud, promise_name, promise) == 0) {
 			if (is_error) {
 				auto msg = t.elements[0].value->string;
 				auto err = di_new_error("%.*s", (int)msg.length, msg.data);
@@ -963,7 +959,7 @@ static DBusHandlerResult dbus_filter(DBusConnection *conn, DBusMessage *msg, voi
 				}
 				di_resolve_promise((void *)promise, args);
 			}
-			di_remove_member(obj, promise_name);
+			di_delete_member_raw(obj, promise_name);
 			di_dbus_nsignal_dec((void *)obj);
 		}
 		return DBUS_HANDLER_RESULT_HANDLED;

@@ -168,8 +168,12 @@ static inline bool is_integer(di_type t) {
 ///   will be transferred to `outp`. There is no need to free `inp` afterwards, but `outp`
 ///   is expected to be freed by the caller.
 ///
-///   If `inp`'s value is not borrowed, the conversion will not touch `inp`, and `outp`
+///   If `inp`'s value is not owned, the conversion will not touch `inp`, and `outp`
 ///   will borrow the value in `inp`. `outp` must not be freed afterwards.
+///
+/// Returns 0 on success, -EINVAL if the conversion is not possible, -ERANGE if source is
+/// a integer type and its value is out of range of the destination type. If the conversion
+/// fails, `outp` is left untouched.
 ///
 /// @param[in] borrowing Whether the `inp` value is owned or borrowed. Some conversion can
 //                       not be performed if the caller owns the value, as that would

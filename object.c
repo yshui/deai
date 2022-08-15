@@ -283,8 +283,7 @@ gen_tfunc(di_getxt, di_getx);
 gen_tfunc(di_rawgetxt, di_rawgetx);
 
 int di_set_type(di_object *o, const char *type) {
-	di_remove_member_raw(o, di_string_borrow("__type"));
-	return di_add_member_clonev(o, di_string_borrow("__type"), DI_TYPE_STRING_LITERAL, type);
+	return di_rawsetx(o, di_string_borrow("__type"), DI_TYPE_STRING_LITERAL, &type);
 }
 
 const char *di_get_type(di_object *o) {
@@ -365,26 +364,35 @@ struct di_module *di_new_module(struct deai *di) {
 	return di_new_module_with_size(di, sizeof(struct di_module));
 }
 
-static void di_remove_member_raw_impl(di_object_internal *obj, struct di_member *m) {
+static di_variant di_remove_member_raw_impl(di_object_internal *obj, struct di_member *m) {
 	HASH_DEL(*(struct di_member **)&obj->members, m);
 
-	di_free_value(m->type, m->data);
-	free(m->data);
+	auto ret = (di_variant){.type = m->type, .value = m->data};
 	di_free_string(m->name);
 	free(m);
+	return ret;
 }
 
-int di_remove_member_raw(di_object *obj, di_string name) {
+int di_remove_member_raw(di_object *obj, di_string name, di_variant *ret) {
+	auto m = di_lookup(obj, name);
+	if (!m) {
+		return -ENOENT;
+	}
+	*ret = di_remove_member_raw_impl((void *)obj, m);
+	return 0;
+}
+
+int di_delete_member_raw(di_object *obj, di_string name) {
 	auto m = di_lookup(obj, name);
 	if (!m) {
 		return -ENOENT;
 	}
 
-	di_remove_member_raw_impl((di_object_internal *)obj, (void *)m);
+	di_free_variant(di_remove_member_raw_impl((di_object_internal *)obj, (void *)m));
 	return 0;
 }
 
-int di_remove_member(di_object *obj, di_string name) {
+int di_delete_member(di_object *obj, di_string name) {
 	bool handler_found;
 	int rc2 = call_handler_with_fallback(obj, "__delete", name,
 	                                     (struct di_variant){NULL, DI_LAST_TYPE},
@@ -393,7 +401,7 @@ int di_remove_member(di_object *obj, di_string name) {
 		return rc2;
 	}
 
-	return di_remove_member_raw(obj, name);
+	return di_delete_member_raw(obj, name);
 }
 
 #ifdef TRACK_OBJECTS
@@ -422,7 +430,7 @@ static void _di_finalize_object(di_object_internal *obj) {
 		fprintf(stderr, "removing member %.*s (%s)\n", (int)m->name.length,
 		        m->name.data, dbg);
 #endif
-		di_remove_member_raw_impl(obj, m);
+		di_free_variant(di_remove_member_raw_impl(obj, m));
 		m = next_m;
 	}
 }
@@ -844,6 +852,8 @@ struct di_listen_handle {
 	di_object;
 };
 
+static void di_signal_remove_handler(di_object *sig_, struct di_weak_object *handler);
+
 /// Stop the handler
 ///
 /// EXPORT: deai:ListenHandle.stop(): :void
@@ -861,9 +871,7 @@ static void di_listen_handle_stop(di_object *nonnull obj) {
 		return;
 	}
 
-	if (di_call(sig, "remove", weak_handler) != 0) {
-		di_log_va(log_module, DI_LOG_ERROR, "Failed to call \"remove\" on signal object");
-	}
+	di_signal_remove_handler(sig, weak_handler);
 }
 
 static void di_listen_handle_dtor(di_object *obj) {
@@ -904,7 +912,7 @@ int di_rename_signal_member_raw(di_object *obj, di_string old_member_name,
 		return rc;
 	}
 
-	rc = di_remove_member_raw(obj, old_member_name);
+	rc = di_delete_member_raw(obj, old_member_name);
 	if (rc != 0) {
 		return rc;
 	}
@@ -915,7 +923,7 @@ static void di_signal_remove_handler(di_object *sig_, struct di_weak_object *han
 	struct di_signal *sig = (void *)sig_;
 	scoped_di_string handler_member_name = di_string_printf(HANDLER_PREFIX "%p", handler);
 
-	if (di_remove_member_raw(sig_, handler_member_name) != -ENOENT) {
+	if (di_delete_member_raw(sig_, handler_member_name) != -ENOENT) {
 		sig->nhandlers -= 1;
 		if (sig->nhandlers == 0) {
 			// No handler remains, remove ourself from parent.
@@ -925,7 +933,7 @@ static void di_signal_remove_handler(di_object *sig_, struct di_weak_object *han
 			DI_CHECK_OK(di_get(sig_, "signal_name", signal_member_name));
 			scoped_di_object *source = di_upgrade_weak_ref(weak_source);
 			if (source != NULL) {
-				di_remove_member(source, signal_member_name);
+				di_delete_member(source, signal_member_name);
 			}
 		}
 	}
@@ -1013,9 +1021,7 @@ di_object *di_listen_to(di_object *_obj, di_string name, di_object *h) {
 		return di_new_error("Failed to get signal object %s", strerror(rc));
 	}
 
-	if (di_call(sig, "add", h) != 0) {
-		return di_new_error("Failed to call \"add\" on signal object");
-	}
+	di_signal_add_handler(sig, h);
 
 	auto listen_handle = di_new_object_with_type(struct di_listen_handle);
 	DI_CHECK_OK(di_set_type((void *)listen_handle, "deai:ListenHandle"));
@@ -1043,7 +1049,7 @@ int di_emitn(di_object *o, di_string name, di_tuple args) {
 	asprintf(&signal_member_name, "__signal_%.*s", (int)name.length, name.data);
 	scoped_di_object *sig = NULL;
 	if (di_get(o, signal_member_name, sig) == 0) {
-		DI_CHECK_OK(di_call(sig, "dispatch", args));
+		di_signal_dispatch(sig, args);
 	}
 	return 0;
 }

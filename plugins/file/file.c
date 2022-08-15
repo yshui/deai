@@ -257,7 +257,7 @@ static void di_file_delete_signal(di_object *fw_, di_string member_name) {
 		return;
 	}
 
-	if (di_remove_member_raw(fw_, member_name) != 0) {
+	if (di_delete_member_raw(fw_, member_name) != 0) {
 		return;
 	}
 
@@ -265,7 +265,7 @@ static void di_file_delete_signal(di_object *fw_, di_string member_name) {
 	fw->nsignals -= 1;
 	if (fw->nsignals == 0) {
 		// Drop listen handle to stop it
-		di_remove_member_raw(
+		di_delete_member_raw(
 		    fw_, di_string_borrow("__inotify_fd_event_read_listen_handle"));
 	}
 }

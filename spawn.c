@@ -120,9 +120,9 @@ static void sigchld_handler(EV_P_ ev_child *w, int revents) {
 	di_emit(c, "exit", ec, sig);
 
 	// Proactively stop all signal listeners.
-	di_remove_member((void *)c, di_string_borrow("__signal_stdout_line"));
-	di_remove_member((void *)c, di_string_borrow("__signal_stderr_line"));
-	di_remove_member((void *)c, di_string_borrow("__signal_exit"));
+	di_delete_member((void *)c, di_string_borrow("__signal_stdout_line"));
+	di_delete_member((void *)c, di_string_borrow("__signal_stderr_line"));
+	di_delete_member((void *)c, di_string_borrow("__signal_exit"));
 }
 
 static void child_destroy(di_object *obj) {
@@ -213,7 +213,7 @@ static void di_child_process_new_exit_signal(di_object *p, di_object *sig) {
 	}
 
 	auto child = (struct child *)p;
-	scoped_di_object *di_obj = di_object_get_deai_strong(p);
+	auto di_obj = di_object_borrow_deai(p);
 	if (di_obj == NULL) {
 		return;
 	}
@@ -228,7 +228,7 @@ static void di_child_process_new_exit_signal(di_object *p, di_object *sig) {
 }
 
 static void di_child_start_output_listener(di_object *p, int id) {
-	scoped_di_object *di_obj = di_object_get_deai_strong(p);
+	auto di_obj = di_object_borrow_deai(p);
 	if (di_obj == NULL) {
 		return;
 	}
@@ -267,11 +267,11 @@ static void di_child_process_new_stderr_signal(di_object *p, di_object *sig) {
 }
 
 static void di_child_process_delete_exit_signal(di_object *obj) {
-	if (di_remove_member_raw(obj, di_string_borrow("__signal_exit")) != 0) {
+	if (di_delete_member_raw(obj, di_string_borrow("__signal_exit")) != 0) {
 		return;
 	}
 	auto c = (struct child *)obj;
-	scoped_di_object *di_obj = di_object_get_deai_strong((di_object *)c);
+	auto di_obj = di_object_borrow_deai((di_object *)c);
 
 	auto di = (struct deai *)di_obj;
 	EV_P = di->loop;
@@ -286,7 +286,7 @@ static void di_child_process_delete_exit_signal(di_object *obj) {
 static void di_child_process_stop_output_listener(di_object *obj, int id) {
 	scoped_di_string listen_handle_key =
 	    di_string_printf("__listen_handle_for_output_%d", id);
-	DI_CHECK_OK(di_remove_member_raw(obj, listen_handle_key));
+	DI_CHECK_OK(di_delete_member_raw(obj, listen_handle_key));
 
 	auto c = (struct child *)obj;
 	string_buf_clear(c->output_buf[id]);
@@ -295,13 +295,13 @@ static void di_child_process_stop_output_listener(di_object *obj, int id) {
 }
 
 static void di_child_process_delete_stdout_signal(di_object *obj) {
-	if (di_remove_member_raw(obj, di_string_borrow("__signal_stdout_line")) == 0) {
+	if (di_delete_member_raw(obj, di_string_borrow("__signal_stdout_line")) == 0) {
 		di_child_process_stop_output_listener(obj, 0);
 	}
 }
 
 static void di_child_process_delete_stderr_signal(di_object *obj) {
-	if (di_remove_member_raw(obj, di_string_borrow("__signal_stderr_line")) == 0) {
+	if (di_delete_member_raw(obj, di_string_borrow("__signal_stderr_line")) == 0) {
 		di_child_process_stop_output_listener(obj, 1);
 	}
 }
@@ -322,7 +322,7 @@ di_object *di_spawn_run(struct di_spawn *p, di_array argv, bool ignore_output) {
 	if (argv.elem_type != DI_TYPE_STRING) {
 		return di_new_error("Invalid argv type");
 	}
-	scoped_di_object *obj = di_module_get_deai((struct di_module *)p);
+	di_object *obj = di_module_get_deai((struct di_module *)p);
 	if (obj == NULL) {
 		return di_new_error("deai is shutting down...");
 	}

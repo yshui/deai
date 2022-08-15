@@ -121,6 +121,14 @@ PUBLIC_DEAI_API int di_redirect_signal(di_object *nonnull us, struct di_weak_obj
 		modn##m = __o;                                                           \
 	} while (0)
 
+#define di_borrowm(di, modn, on_err)                                                     \
+	di_object *modn##m = NULL;                                                       \
+	do {                                                                             \
+		if (di_rawget_borrowed((di), #modn, modn##m) != 0) {                    \
+			on_err;                                                          \
+		}                                                                        \
+	} while (0)
+
 #define di_mgetm(mod, modn, on_err)                                                      \
 	di_getm(di_module_get_deai((struct di_module *)(mod)), modn, return (on_err))
 #define di_mgetmi(mod, modn)                                                             \
@@ -304,8 +312,18 @@ static inline di_object *nullable unused di_object_get_deai_strong(di_object *no
 	return strong;
 }
 
+static inline di_object *nullable unused di_object_borrow_deai(di_object *nonnull o) {
+	di_object *ret = NULL;
+	di_rawget_borrowed(o, DEAI_MEMBER_NAME_RAW, ret);
+	return ret;
+}
+
 static inline di_object *nullable unused di_module_get_deai(struct di_module *nonnull o) {
 	return di_object_get_deai_strong((di_object *)o);
+}
+
+static inline di_object *nullable unused di_module_borrow_deai(struct di_module *nonnull o) {
+	return di_object_borrow_deai((di_object *)o);
 }
 
 /// Consumes a di_value and create a di_variant containing that di_value
@@ -335,7 +353,7 @@ static inline di_object *nullable unused di_get_object_via_weak(di_object *nonnu
 	if (di_rawgetxt(o, prop, DI_TYPE_WEAK_OBJECT, (void *)&weak) == 0) {
 		object = di_upgrade_weak_ref(weak);
 		if (object == NULL) {
-			di_remove_member_raw(o, prop);
+			di_delete_member_raw(o, prop);
 		}
 	}
 	return object;
@@ -369,7 +387,7 @@ static const struct di_variant DI_BOTTOM_VARIANT = (struct di_variant){NULL, DI_
 /// Shortcut for calling di_remove_member_raw then di_add_member_clone
 static inline unused int
 di_rawsetx(di_object *nonnull o, di_string prop, di_type type, const void *nonnull value) {
-	int ret = di_remove_member_raw(o, prop);
+	int ret = di_delete_member_raw(o, prop);
 	if (ret != 0 && ret != -ENOENT) {
 		return ret;
 	}

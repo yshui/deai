@@ -48,8 +48,6 @@ typedef struct di_event_module {
 /// readable or writable
 static void di_ioev_callback(EV_P_ ev_io *w, int revents) {
 	auto ev = container_of(w, struct di_ioev, evh);
-	// Keep ev alive during emission
-	scoped_di_object unused *obj = di_ref_object((di_object *)ev);
 	if (revents & EV_READ) {
 		di_emit(ev, "read");
 	}
@@ -61,9 +59,6 @@ static void di_ioev_callback(EV_P_ ev_io *w, int revents) {
 /// SIGNAL: deai.builtin.event:Periodic.triggered(now: :float) Timeout was reached
 static void di_periodic_callback(EV_P_ ev_periodic *w, int revents) {
 	auto p = container_of(w, struct di_periodic, pt);
-	// Keep timer alive during emission
-	scoped_di_object unused *obj = di_ref_object((di_object *)p);
-
 	double now = ev_now(EV_A);
 	di_emit(p, "triggered", now);
 }
@@ -76,7 +71,7 @@ static void di_start_ioev(struct di_ioev *ev) {
 		return;
 	}
 
-	scoped_di_object *di_obj = di_object_get_deai_strong((void *)ev);
+	di_object *di_obj = di_object_borrow_deai((void *)ev);
 	if (di_obj == NULL) {
 		// deai is shutting down
 		return;
@@ -99,14 +94,16 @@ static void di_stop_ioev(struct di_ioev *ev) {
 		return;
 	}
 
-	scoped_di_object *di_obj = di_object_get_deai_strong((void *)ev);
-	if (di_obj == NULL) {
-		return;
-	}
+	{
+		di_object *di_obj = di_object_borrow_deai((void *)ev);
+		if (di_obj == NULL) {
+			return;
+		}
 
-	auto di = (struct deai *)di_obj;
-	ev_io_stop(di->loop, &ev->evh);
-	ev->running = false;
+		auto di = (struct deai *)di_obj;
+		ev_io_stop(di->loop, &ev->evh);
+		ev->running = false;
+	}
 
 	auto roots = di_get_roots();
 	// Ignore error here, if someone called di:exit, we would've been removed already.
@@ -152,7 +149,7 @@ static void di_enable_write(di_object *obj, di_object *sig) {
 }
 
 static void di_disable_read(di_object *obj) {
-	if (di_remove_member_raw(obj, di_string_borrow("__signal_read")) != 0) {
+	if (di_delete_member_raw(obj, di_string_borrow("__signal_read")) != 0) {
 		return;
 	}
 
@@ -162,7 +159,7 @@ static void di_disable_read(di_object *obj) {
 }
 
 static void di_disable_write(di_object *obj) {
-	if (di_remove_member_raw(obj, di_string_borrow("__signal_write")) != 0) {
+	if (di_delete_member_raw(obj, di_string_borrow("__signal_write")) != 0) {
 		return;
 	}
 
@@ -174,9 +171,9 @@ static void di_disable_write(di_object *obj) {
 static void di_ioev_dtor(di_object *obj) {
 	// Normally the ev_io won't be running, but if someone removed us from the roots,
 	// e.g. by calling di:exit(), then ev_io could be running.
-	// Removing the signal objects should be enough to stop it.
-	di_remove_member(obj, di_string_borrow_literal("__signal_read"));
-	di_remove_member(obj, di_string_borrow_literal("__signal_write"));
+	// Removing the signal objects, the deleter should stop it.
+	di_delete_member(obj, di_string_borrow_literal("__signal_read"));
+	di_delete_member(obj, di_string_borrow_literal("__signal_write"));
 }
 
 /// File descriptor events
@@ -195,7 +192,7 @@ static di_object *di_create_ioev(di_object *obj, int fd) {
 	di_set_type((void *)ret, "deai.builtin.event:IoEv");
 	di_set_object_dtor((void *)ret, di_ioev_dtor);
 
-	scoped_di_object *di_obj = di_module_get_deai(em);
+	auto di_obj = di_module_get_deai(em);
 	if (di_obj == NULL) {
 		return di_new_error("deai is shutting down...");
 	}
@@ -213,7 +210,7 @@ static di_object *di_create_ioev(di_object *obj, int fd) {
 }
 
 static void di_timer_delete_signal(di_object *o) {
-	if (di_remove_member_raw(o, di_string_borrow("__signal_elapsed")) != 0) {
+	if (di_delete_member_raw(o, di_string_borrow("__signal_elapsed")) != 0) {
 		return;
 	}
 
@@ -223,7 +220,7 @@ static void di_timer_delete_signal(di_object *o) {
 	// Ignore error because roots might have been removed by di:exit
 	di_call(roots, "remove_anonymous", o);
 
-	scoped_di_object *di_obj = di_object_get_deai_strong(o);
+	di_object *di_obj = di_object_borrow_deai(o);
 	auto di = (struct deai *)di_obj;
 	ev_timer_stop(di->loop, &t->evt);
 }
@@ -234,7 +231,7 @@ static void di_timer_add_signal(di_object *o, di_object *sig) {
 		return;
 	}
 
-	scoped_di_object *di_obj = di_object_get_deai_strong(o);
+	di_object *di_obj = di_object_borrow_deai(o);
 	if (di_obj == NULL) {
 		return;
 	}
@@ -263,11 +260,11 @@ static void di_timer_add_signal(di_object *o, di_object *sig) {
 /// SIGNAL: deai.builtin.event:Timer.elapsed(now: :float) Timeout was reached
 static void di_timer_callback(EV_P_ ev_timer *t, int revents) {
 	auto d = container_of(t, struct di_timer, evt);
-	// Keep timer alive during emission
+	// Keep timer alive because we will still be using it after emission.
 	scoped_di_object unused *obj = di_ref_object((di_object *)d);
 
 	double now = ev_now(EV_A);
-	scoped_di_object *di_obj = di_object_get_deai_strong((di_object *)d);
+	di_object *di_obj = di_object_borrow_deai((di_object *)d);
 	DI_CHECK(di_obj);
 
 	auto di = (struct deai *)di_obj;
@@ -293,7 +290,7 @@ static di_object *di_create_timer(di_object *obj, double timeout) {
 	struct di_module *em = (void *)obj;
 	auto ret = di_new_object_with_type(struct di_timer);
 	di_set_type((void *)ret, "deai.builtin.event:Timer");
-	scoped_di_object *di_obj = di_module_get_deai(em);
+	auto di_obj = di_module_get_deai(em);
 	if (di_obj == NULL) {
 		return di_new_error("deai is shutting down...");
 	}
@@ -319,7 +316,7 @@ static di_object *di_create_timer(di_object *obj, double timeout) {
 ///
 /// Timer will be reset after update.
 static void periodic_set(struct di_periodic *p, double interval, double offset) {
-	scoped_di_object *di_obj = di_object_get_deai_strong((di_object *)p);
+	auto di_obj = di_object_borrow_deai((di_object *)p);
 	DI_CHECK(di_obj != NULL);
 	ev_periodic_set(&p->pt, offset, interval, NULL);
 
@@ -338,7 +335,7 @@ static void di_periodic_signal_setter(di_object *o, di_object *sig) {
 }
 
 static void di_periodic_signal_deleter(di_object *o) {
-	if (di_remove_member_raw(
+	if (di_delete_member_raw(
 	        o, di_string_borrow_literal(di_signal_member_of("triggered"))) != 0) {
 		// Could happen this function is called as destructor
 		return;
@@ -357,7 +354,7 @@ static void di_periodic_signal_deleter(di_object *o) {
 static di_object *di_create_periodic(struct di_module *evm, double interval, double offset) {
 	auto ret = di_new_object_with_type(struct di_periodic);
 	di_set_type((void *)ret, "deai.builtin.event:Periodic");
-	scoped_di_object *di_obj = di_module_get_deai(evm);
+	auto di_obj = di_module_get_deai(evm);
 
 	ret->dtor = (void *)di_periodic_signal_deleter;
 	di_method(ret, "set", periodic_set, double, double);
@@ -427,27 +424,23 @@ static int di_promise_dispatch(di_promise *promise) {
 	auto handlers = tmalloc(di_object *, nhandlers);
 	auto then_promises = tmalloc(di_object *, nhandlers);
 
-	// Copy out all the handlers and promises in case they got overwritten by the
+	// Move out all the handlers and promises in case they got overwritten by the
 	// handlers.
 	for (uint64_t i = 0; i < nhandlers; i++) {
-		{
-			char *buf;
-			di_string str;
-			str.length = asprintf(&buf, "___then_handler_%lu", i);
-			str.data = buf;
-			if (di_get(promise, buf, handlers[i]) == 0) {
-				di_remove_member((void *)promise, str);
-			} else {
-				handlers[i] = NULL;
-			}
-			free(buf);
-
-			str.length = asprintf(&buf, "___then_promise_%lu", i);
-			str.data = buf;
-			DI_CHECK_OK(di_get(promise, buf, then_promises[i]));
-			di_remove_member((void *)promise, str);
-			free(buf);
+		scoped_di_string str = DI_STRING_INIT;
+		di_variant var = DI_VARIANT_INIT;
+		str = di_string_printf("___then_handler_%lu", i);
+		handlers[i] = NULL;
+		if (di_remove_member_raw((void *)promise, str, &var) == 0) {
+			di_type_conversion(DI_TYPE_VARIANT, (di_value *)&var,
+			                   DI_TYPE_OBJECT, (di_value *)&handlers[i], false);
 		}
+		di_free_string(str);
+
+		str = di_string_printf("___then_promise_%lu", i);
+		DI_CHECK_OK(di_remove_member_raw((void *)promise, str, &var));
+		di_type_conversion(DI_TYPE_VARIANT, (di_value *)&var, DI_TYPE_OBJECT,
+		                   (di_value *)&then_promises[i], false);
 	}
 
 	for (uint64_t i = 0; i < nhandlers; i++) {
@@ -484,8 +477,7 @@ static int di_promise_dispatch(di_promise *promise) {
 	free(handlers);
 	free(then_promises);
 	di_free_value(DI_TYPE_VARIANT, (void *)&resolved);
-	// Stop listening for the signal
-	di_remove_member((void *)promise, di_string_borrow("is_pending"));
+	di_delete_member_raw((void *)promise, di_string_borrow("is_pending"));
 	return 0;
 }
 
@@ -518,7 +510,7 @@ static void di_promise_start_dispatch(struct di_promise *promise) {
 		return;
 	}
 
-	scoped_di_object *di_obj = di_object_get_deai_strong(event_module);
+	di_object *di_obj = di_object_borrow_deai(event_module);
 	if (di_obj == NULL) {
 		// deai is shutting down
 		return;
@@ -706,7 +698,7 @@ void di_idle_cb(EV_P_ ev_idle *w, int revents) {
 		    di_string_printf("pending_promise_%d", pending_count - 1);
 		scoped_di_object *promise = NULL;
 		DI_CHECK_OK(di_get2(eventm, key, promise));
-		DI_CHECK_OK(di_remove_member_raw((void *)eventm, key));
+		DI_CHECK_OK(di_delete_member_raw((void *)eventm, key));
 		di_rawsetx((void *)eventm, di_string_borrow_literal("pending_count"),
 		           DI_TYPE_NINT, (int[]){pending_count - 1});
 
@@ -719,7 +711,7 @@ void di_idle_cb(EV_P_ ev_idle *w, int revents) {
 
 void di_event_module_dtor(di_object *obj) {
 	auto em = (di_event_module *)obj;
-	scoped_di_object *di_obj = di_object_get_deai_strong(obj);
+	di_object *di_obj = di_object_borrow_deai(obj);
 	if (di_obj) {
 		auto di = (struct deai *)di_obj;
 		ev_idle_stop(di->loop, &em->idlew);

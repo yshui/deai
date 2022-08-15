@@ -64,8 +64,8 @@ static struct di_variant load_plugin(struct deai *p, di_string sopath) {
 	bool success = load_plugin_impl(p, sopath_str);
 	if (!success) {
 		struct di_variant ret = {
-			.type = DI_TYPE_OBJECT,
-			.value = tmalloc(di_value, 1),
+		    .type = DI_TYPE_OBJECT,
+		    .value = tmalloc(di_value, 1),
 		};
 		ret.value->object = di_new_error("Failed to load plugin");
 		return ret;
@@ -469,7 +469,7 @@ static bool di_add_root(di_object *di, di_string key, di_object *obj) {
 static bool di_remove_root(di_object *di, di_string key) {
 	char *buf;
 	asprintf(&buf, "__root_%.*s", (int)key.length, key.data);
-	int rc = di_remove_member_raw(di, di_string_borrow(buf));
+	int rc = di_delete_member_raw(di, di_string_borrow(buf));
 	free(buf);
 	return rc == 0;
 }
@@ -485,7 +485,7 @@ static void di_clear_roots(di_object *di_) {
 			continue;
 		}
 		if (strncmp(i->name.data, root_prefix, root_prefix_len) == 0) {
-			di_remove_member_raw(di_, i->name);
+			di_delete_member_raw(di_, i->name);
 		}
 	}
 }
