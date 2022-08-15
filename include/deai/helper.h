@@ -45,19 +45,6 @@ PUBLIC_DEAI_API int di_redirect_signal(di_object *nonnull us, struct di_weak_obj
 			abort();                                                         \
 	} while (0)
 
-#define di_get(o, prop, r)                                                               \
-	({                                                                               \
-		int rc;                                                                  \
-		do {                                                                     \
-			rc = di_getxt((void *)(o), di_string_borrow(prop), di_typeof(r), \
-			              (di_value *)&(r));                                 \
-			if (rc != 0) {                                                   \
-				break;                                                   \
-			}                                                                \
-		} while (0);                                                             \
-		rc;                                                                      \
-	})
-
 #define di_gets(o, prop, r)                                                              \
 	if (di_get(o, prop, r))                                                          \
 		return;
@@ -118,19 +105,6 @@ PUBLIC_DEAI_API int di_redirect_signal(di_object *nonnull us, struct di_weak_obj
 
 #define object_cleanup __attribute__((cleanup(di_free_di_objectp)))
 
-#define capture(...)                                                                         \
-	VA_ARGS_LENGTH(__VA_ARGS__)                                                          \
-	, (di_type[]){LIST_APPLY(di_typeof, SEP_COMMA, __VA_ARGS__)}, (const di_value *[]) { \
-		LIST_APPLY(addressof_di_value, SEP_COMMA, __VA_ARGS__)                       \
-	}
-
-#define capture_types(...) LIST_APPLY_pre(typeof, SEP_COMMA, __VA_ARGS__)
-
-#define di_closure(fn, caps, ...)                                                             \
-	di_create_closure((void *)fn, di_return_typeid(fn capture_types caps, ##__VA_ARGS__), \
-	                  di_tuple caps, VA_ARGS_LENGTH(__VA_ARGS__),                         \
-	                  (di_type[]){LIST_APPLY(di_typeid, SEP_COMMA, __VA_ARGS__)})
-
 #define di_getm(di_expr, modn, on_err)                                                   \
 	scoped_di_object *modn##m = NULL;                                                \
 	do {                                                                             \
@@ -151,97 +125,6 @@ PUBLIC_DEAI_API int di_redirect_signal(di_object *nonnull us, struct di_weak_obj
 	di_getm(di_module_get_deai((struct di_module *)(mod)), modn, return (on_err))
 #define di_mgetmi(mod, modn)                                                             \
 	di_getm(di_module_get_deai((struct di_module *)(mod)), modn, break)
-
-// call but ignore return
-#define di_call(o, name, ...)                                                               \
-	({                                                                                  \
-		int __rc = 0;                                                               \
-		do {                                                                        \
-			di_type __rtype;                                                    \
-			di_value __ret;                                                     \
-			bool __called;                                                      \
-			__rc = di_callx((di_object *)(o), di_string_borrow(name), &__rtype, \
-			                &__ret, di_tuple(__VA_ARGS__), &__called);          \
-			if (__rc != 0) {                                                    \
-				break;                                                      \
-			}                                                                   \
-			di_free_value(__rtype, &__ret);                                     \
-		} while (0);                                                                \
-		__rc;                                                                       \
-	})
-
-#define di_callr(o, name, r, ...)                                                          \
-	({                                                                                 \
-		int __deai_callr_rc = 0;                                                   \
-		do {                                                                       \
-			di_type __deai_callr_rtype;                                        \
-			di_value __deai_callr_ret;                                         \
-			bool called;                                                       \
-			__deai_callr_rc = di_callx(                                        \
-			    (di_object *)(o), di_string_borrow(name), &__deai_callr_rtype, \
-			    &__deai_callr_ret, di_tuple(__VA_ARGS__), &called);            \
-			if (__deai_callr_rc != 0) {                                        \
-				break;                                                     \
-			}                                                                  \
-			if (di_typeof(r) != __deai_callr_rtype) {                          \
-				di_free_value(__deai_callr_rtype, &__deai_callr_ret);      \
-				__deai_callr_rc = -EINVAL;                                 \
-				break;                                                     \
-			}                                                                  \
-			(r) = *(typeof(r) *)&__deai_callr_ret;                             \
-		} while (0);                                                               \
-		__deai_callr_rc;                                                           \
-	})
-
-#define di_variant(x)                                                                    \
-	((struct di_variant){                                                            \
-	    (di_value *)addressof(x),                                                    \
-	    di_typeof(x),                                                                \
-	})
-#define di_tuple(...)                                                                    \
-	((di_tuple){VA_ARGS_LENGTH(__VA_ARGS__),                                         \
-	            (struct di_variant[]){LIST_APPLY(di_variant, SEP_COMMA, __VA_ARGS__)}})
-
-#define di_call_callable(c, ...)                                                         \
-	({                                                                               \
-		int rc = 0;                                                              \
-		do {                                                                     \
-			di_type rt;                                                      \
-			void *ret;                                                       \
-			rc = c->call(c, &rt, &ret, di_tuple(__VA_ARGS__));               \
-			if (rc != 0)                                                     \
-				break;                                                   \
-			di_free_value(rt, ret);                                          \
-			free(ret);                                                       \
-		} while (0);                                                             \
-		rc;                                                                      \
-	})
-
-#define di_callr_callable(c, r, ...)                                                     \
-	({                                                                               \
-		int rc = 0;                                                              \
-		do {                                                                     \
-			di_type rt;                                                      \
-			void *ret;                                                       \
-			rc = c->call(c, &rt, &ret, di_tuple(__VA_ARGS__));               \
-			if (rc != 0)                                                     \
-				break;                                                   \
-			if (di_typeof(r) != rt) {                                        \
-				di_free_value(rt, ret);                                  \
-				free(ret);                                               \
-				rc = -EINVAL;                                            \
-				break;                                                   \
-			}                                                                \
-			(r) = *(typeof(r) *)ret;                                         \
-			free(ret);                                                       \
-		} while (0);                                                             \
-		rc;                                                                      \
-	})
-
-#define di_has_member(o, name)                                                           \
-	(di_lookup((di_object *)(o), di_string_borrow(name)) != NULL)
-#define di_emit(o, name, ...)                                                            \
-	di_emitn((di_object *)o, di_string_borrow(name), di_tuple(__VA_ARGS__))
 
 /// Register a field of struct `o` as a read only member of the di_object, by using a
 /// field getter
@@ -270,11 +153,11 @@ PUBLIC_DEAI_API int di_redirect_signal(di_object *nonnull us, struct di_weak_obj
 #define di_signal_setter_deleter_with_signal_name(o, sig, setter, deleter)               \
 	do {                                                                             \
 		const char *signal_name = di_signal_member_of(sig);                      \
-		di_object *setter_closure =                                              \
-		    (void *)di_closure(setter, (signal_name), di_object *, di_object *); \
+		di_object *setter_closure = (void *)di_make_closure(                     \
+		    setter, (signal_name), di_object *, di_object *);                    \
 		di_member(o, di_signal_setter_of(sig), setter_closure);                  \
 		di_object *deleter_closure =                                             \
-		    (void *)di_closure(deleter, (signal_name), di_object *);             \
+		    (void *)di_make_closure(deleter, (signal_name), di_object *);        \
 		di_member(o, di_signal_deleter_of(sig), deleter_closure);                \
 	} while (0)
 

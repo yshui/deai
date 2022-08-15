@@ -93,7 +93,7 @@ typedef enum di_type {
 	// it's almost impossible: e.g. an object could have a getter that always return
 	// nothing. CANNOT be used as a parameter type.
 	DI_TYPE_NAME(EMPTY_OBJECT),
-	// boolean), no implicit conversion to number types
+	// boolean, no implicit conversion to number types
 	// C type: _Bool
 	DI_TYPE_NAME(BOOL),
 	// native integer
@@ -111,7 +111,7 @@ typedef enum di_type {
 	// implementation defined floating point number type
 	// C type: double
 	DI_TYPE_NAME(FLOAT),
-	// generic pointer), whose memory is not managed by deai
+	// generic pointer, whose memory is not managed by deai
 	// C type: void *
 	DI_TYPE_NAME(POINTER),
 	// a deai object reference
@@ -120,17 +120,17 @@ typedef enum di_type {
 	// a weak deai object reference
 	// C type: struct di_weak_object
 	DI_TYPE_NAME(WEAK_OBJECT),
-	// immutable utf-8 string
-	// C type: char *
+	// a string. a fat pointer to a char array, with length
+	// C type: di_string
 	DI_TYPE_NAME(STRING),
-	// immutable utf-8 string), which is not allocated on stack
+	// a string, whose memory is not managed by deai.
 	// C type: const char *
 	DI_TYPE_NAME(STRING_LITERAL),
-	// an array. all elements in the array have the same type. see `di_array`
-	// for more info.
+	// an array. all elements in the array have the same type.
+	// a fat pointer with a type and a length.
 	// C type: di_array
 	DI_TYPE_NAME(ARRAY),
-	// a tuple. a collection of variable number of elements), each with its own type.
+	// a tuple. a collection of variable number of elements, each with its own type.
 	// C type: di_tuple
 	DI_TYPE_NAME(TUPLE),
 	// sum type of all deai types. note: variants always hold a reference to their
@@ -227,10 +227,6 @@ union di_value {
 	void *nullable pointer;
 	di_object *nonnull object;
 	di_weak_object *nonnull weak_object;
-	// XXX di_typeof(di_value::string) is string literal, not string.
-	//     If you want to return a owned string, you cannot rely on
-	//     di_typeof(value->field). Or if you want to capture a string,
-	//     you have to cast it to (char *)
 	di_string string;
 	const char *nonnull string_literal;
 	di_array array;
@@ -711,6 +707,110 @@ static inline void unused di_free_di_weak_objectpp(di_weak_object *nullable *non
 #define scoped_di_weak_object scopedp(di_weak_object)
 #define scoped_di_string scoped(di_string)
 #define scoped_di_tuple scoped(di_tuple)
+
+#define di_has_member(o, name)                                                           \
+	(di_lookup((di_object *)(o), di_string_borrow(name)) != NULL)
+#define di_emit(o, name, ...)                                                            \
+	di_emitn((di_object *)o, di_string_borrow(name), di_make_tuple(__VA_ARGS__))
+
+#define di_make_variant(x)                                                               \
+	((struct di_variant){                                                            \
+	    (di_value *)addressof(x),                                                    \
+	    di_typeof(x),                                                                \
+	})
+#define di_make_tuple(...)                                                               \
+	((di_tuple){VA_ARGS_LENGTH(__VA_ARGS__),                                         \
+	            (struct di_variant[]){LIST_APPLY(di_make_variant, SEP_COMMA, __VA_ARGS__)}})
+// call but ignore return
+#define di_call(o, name, ...)                                                               \
+	({                                                                                  \
+		int __rc = 0;                                                               \
+		do {                                                                        \
+			di_type __rtype;                                                    \
+			di_value __ret;                                                     \
+			bool __called;                                                      \
+			__rc = di_callx((di_object *)(o), di_string_borrow(name), &__rtype, \
+			                &__ret, di_make_tuple(__VA_ARGS__), &__called);     \
+			if (__rc != 0) {                                                    \
+				break;                                                      \
+			}                                                                   \
+			di_free_value(__rtype, &__ret);                                     \
+		} while (0);                                                                \
+		__rc;                                                                       \
+	})
+
+#define di_callr(o, name, r, ...)                                                          \
+	({                                                                                 \
+		int __deai_callr_rc = 0;                                                   \
+		do {                                                                       \
+			di_type __deai_callr_rtype;                                        \
+			di_value __deai_callr_ret;                                         \
+			bool called;                                                       \
+			__deai_callr_rc = di_callx(                                        \
+			    (di_object *)(o), di_string_borrow(name), &__deai_callr_rtype, \
+			    &__deai_callr_ret, di_make_tuple(__VA_ARGS__), &called);       \
+			if (__deai_callr_rc != 0) {                                        \
+				break;                                                     \
+			}                                                                  \
+			if (di_typeof(r) != __deai_callr_rtype) {                          \
+				di_free_value(__deai_callr_rtype, &__deai_callr_ret);      \
+				__deai_callr_rc = -EINVAL;                                 \
+				break;                                                     \
+			}                                                                  \
+			(r) = *(typeof(r) *)&__deai_callr_ret;                             \
+		} while (0);                                                               \
+		__deai_callr_rc;                                                           \
+	})
+
+#define di_call_callable(c, ...)                                                         \
+	({                                                                               \
+		int rc = 0;                                                              \
+		do {                                                                     \
+			di_type rt;                                                      \
+			void *ret;                                                       \
+			rc = c->call(c, &rt, &ret, di_make_tuple(__VA_ARGS__));          \
+			if (rc != 0)                                                     \
+				break;                                                   \
+			di_free_value(rt, ret);                                          \
+			free(ret);                                                       \
+		} while (0);                                                             \
+		rc;                                                                      \
+	})
+
+#define di_callr_callable(c, r, ...)                                                     \
+	({                                                                               \
+		int rc = 0;                                                              \
+		do {                                                                     \
+			di_type rt;                                                      \
+			void *ret;                                                       \
+			rc = c->call(c, &rt, &ret, di_make_tuple(__VA_ARGS__));          \
+			if (rc != 0)                                                     \
+				break;                                                   \
+			if (di_typeof(r) != rt) {                                        \
+				di_free_value(rt, ret);                                  \
+				free(ret);                                               \
+				rc = -EINVAL;                                            \
+				break;                                                   \
+			}                                                                \
+			(r) = *(typeof(r) *)ret;                                         \
+			free(ret);                                                       \
+		} while (0);                                                             \
+		rc;                                                                      \
+	})
+
+#define di_get2(o, prop, r)                                                                 \
+	({                                                                                  \
+		int rc;                                                                     \
+		do {                                                                        \
+			rc = di_getxt((void *)(o), (prop), di_typeof(r), (di_value *)&(r)); \
+			if (rc != 0) {                                                      \
+				break;                                                      \
+			}                                                                   \
+		} while (0);                                                                \
+		rc;                                                                         \
+	})
+
+#define di_get(o, prop, r) di_get2(o, di_string_borrow(prop), r)
 
 /// A valid but non-upgradeable weak reference
 PUBLIC_DEAI_API extern const di_weak_object *const nonnull dead_weak_ref;

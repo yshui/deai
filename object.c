@@ -1055,15 +1055,6 @@ di_object *di_get_roots(void) {
 	return (di_object *)roots;
 }
 
-static void di_scan_type(di_type, di_value *, int (*)(di_object_internal *, int), int,
-                         void (*)(di_object_internal *));
-static void di_scan_member(di_object_internal *obj, int (*pre)(di_object_internal *, int),
-                           int state, void (*post)(di_object_internal *)) {
-	struct di_member *m, *tmpm;
-	HASH_ITER (hh, obj->members, m, tmpm) {
-		di_scan_type(m->type, m->data, pre, state, post);
-	}
-}
 static void di_scan_type(di_type type, di_value *value, int (*pre)(di_object_internal *, int),
                          int state, void (*post)(di_object_internal *)) {
 	if (type == DI_TYPE_OBJECT) {
@@ -1073,7 +1064,10 @@ static void di_scan_type(di_type type, di_value *value, int (*pre)(di_object_int
 			next_state = pre(obj, state);
 		}
 		if (next_state >= 0) {
-			di_scan_member(obj, pre, next_state, post);
+			struct di_member *m, *tmpm;
+			HASH_ITER (hh, obj->members, m, tmpm) {
+				di_scan_type(m->type, m->data, pre, next_state, post);
+			}
 			if (post) {
 				post(obj);
 			}

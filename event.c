@@ -612,9 +612,9 @@ static void di_promise_join_handler(int index, di_object *storage,
 		                           .elements = tmalloc(struct di_variant, total)};
 		for (int i = 0; i < total; i++) {
 			scoped_di_string key = di_string_printf("%d", i);
-			di_value tmp;
-			DI_CHECK_OK(di_getxt(storage, key, DI_TYPE_VARIANT, &tmp));
-			results.elements[i] = tmp.variant;
+			di_variant tmp;
+			DI_CHECK_OK(di_get2(storage, key, tmp));
+			results.elements[i] = tmp;
 		}
 		di_call(then_promise, "resolve", results);
 	}
@@ -645,7 +645,7 @@ di_object *di_join_promises(di_object *event_module, di_array promises) {
 	scoped_di_object *storage = di_new_object_with_type(di_object);
 	int cnt = 0;
 	for (int i = 0; i < promises.length; i++) {
-		scoped_di_object *handler = (void *)di_closure(
+		scoped_di_object *handler = (void *)di_make_closure(
 		    di_promise_join_handler, (cnt, storage, ret), struct di_variant);
 		if (di_call(arr[i], "then", handler) == 0) {
 			cnt += 1;
@@ -676,7 +676,7 @@ di_object *di_any_promise(di_object *event_module, di_array promises) {
 	auto ret = di_new_promise(event_module);
 	for (int i = 0; i < promises.length; i++) {
 		scoped_di_object *handler =
-		    (void *)di_closure(di_any_promise_handler, (ret), struct di_variant);
+		    (void *)di_make_closure(di_any_promise_handler, (ret), struct di_variant);
 		di_call(arr[i], "then", handler);
 	}
 	return ret;
@@ -705,7 +705,7 @@ void di_idle_cb(EV_P_ ev_idle *w, int revents) {
 		scoped_di_string key =
 		    di_string_printf("pending_promise_%d", pending_count - 1);
 		scoped_di_object *promise = NULL;
-		DI_CHECK_OK(di_getxt((void *)eventm, key, DI_TYPE_OBJECT, (di_value *)&promise));
+		DI_CHECK_OK(di_get2(eventm, key, promise));
 		DI_CHECK_OK(di_remove_member_raw((void *)eventm, key));
 		di_rawsetx((void *)eventm, di_string_borrow_literal("pending_count"),
 		           DI_TYPE_NINT, (int[]){pending_count - 1});

@@ -119,7 +119,7 @@ static int di_file_ioev(struct di_weak_object *weak) {
 			di_emit(fw, "moved-to", we->fname, path, ev->cookie);
 		}
 #undef emit
-next:
+	next:
 		off += sizeof(struct inotify_event) + ev->len;
 		ev = (void *)(evbuf + off);
 	}
@@ -220,8 +220,7 @@ static void stop_file_watcher(struct di_file_watch *fw) {
 	}
 }
 
-static void di_file_new_signal(di_object *fw_, di_string member_name,
-                               di_object *sig) {
+static void di_file_new_signal(di_object *fw_, di_string member_name, di_object *sig) {
 	if (!di_string_starts_with(member_name, "__signal_")) {
 		return;
 	}
@@ -245,8 +244,7 @@ static void di_file_new_signal(di_object *fw_, di_string member_name,
 		scoped_di_object *fdevent = NULL;
 		DI_CHECK_OK(di_callr(event_module, "fdevent", fdevent, fw->fd));
 
-		scoped_di_closure *cl =
-		    di_closure(di_file_ioev, ((di_object *)fw));
+		scoped_di_closure *cl = di_make_closure(di_file_ioev, ((di_object *)fw));
 		auto listen_handle =
 		    di_listen_to(fdevent, di_string_borrow("read"), (void *)cl);
 		DI_CHECK_OK(di_call(listen_handle, "auto_stop", true));

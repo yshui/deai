@@ -620,7 +620,7 @@ int main(int argc, char *argv[]) {
 	DI_CHECK_OK(di_method(p, "__set_proctitle", di_set_pr_name, di_string));
 #endif
 	DI_CHECK_OK(di_getter(p, DI_PLUGIN_INSTALL_DIR, di_get_plugin_install_dir));
-	auto closure = (di_object *)di_closure(di_dump_objects, ());
+	auto closure = (di_object *)di_make_closure(di_dump_objects, ());
 	di_member(p, "dump_objects", closure);
 
 	DI_CHECK_OK(di_method(p, "track_object_ref", di_track_object_ref, di_object *));

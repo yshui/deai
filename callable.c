@@ -83,8 +83,8 @@ static int _di_typed_trampoline(ffi_cif *cif, void (*fn)(void), void *ret,
 	di_object *errobj = di_try(di_call_ffi_call, &ffi_args);
 	if (errobj != NULL) {
 		fprintf(stderr, "Caught error from di closure, it says:\n");
-		di_string err;
-		di_getxt(errobj, di_string_borrow("errmsg"), DI_TYPE_STRING, (di_value *)&err);
+		di_string err = DI_STRING_INIT;
+		DI_CHECK_OK(di_get(errobj, "errmsg", err));
 		fprintf(stderr, "%.*s\n", (int)err.length, err.data);
 		di_free_string(err);
 		di_unref_object(errobj);

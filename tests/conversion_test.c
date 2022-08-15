@@ -14,8 +14,8 @@ static di_string takes_string_and_return(di_string str) {
 }
 
 DEAI_PLUGIN_ENTRY_POINT(di) {
-	scoped_di_closure *test1 = di_closure(takes_string, (), const char *);
-	scoped_di_closure *test2 = di_closure(takes_string_and_return, (), di_string);
+	scoped_di_closure *test1 = di_make_closure(takes_string, (), const char *);
+	scoped_di_closure *test2 = di_make_closure(takes_string_and_return, (), di_string);
 
 	di_type retty;
 	di_value val, val2;

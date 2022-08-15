@@ -223,8 +223,7 @@ static void di_child_process_new_exit_signal(di_object *p, di_object *sig) {
 	ev_child_start(di->loop, &child->w);
 
 	auto roots = di_get_roots();
-	scoped_di_string child_root_key =
-	    di_string_printf("child_process_%d", child->pid);
+	scoped_di_string child_root_key = di_string_printf("child_process_%d", child->pid);
 	DI_CHECK_OK(di_call(roots, "add", child_root_key, p));
 }
 
@@ -242,7 +241,7 @@ static void di_child_start_output_listener(di_object *p, int id) {
 	scoped_di_object *fdevent = NULL;
 	DI_CHECK_OK(di_callr(event_module, "fdevent", fdevent, c->fds[id]));
 
-	scoped_di_object *closure = (void *)di_closure(output_cb, (p, id));
+	scoped_di_object *closure = (void *)di_make_closure(output_cb, (p, id));
 	auto listen_handle = di_listen_to(fdevent, di_string_borrow("read"), closure);
 
 	DI_CHECK_OK(di_call(listen_handle, "auto_stop", true));
@@ -378,8 +377,7 @@ di_object *di_spawn_run(struct di_spawn *p, di_array argv, bool ignore_output) {
 	di_set_object_dtor((di_object *)cp, child_destroy);
 	di_method(cp, "__get_pid", get_child_pid);
 	di_method(cp, "kill", kill_child, int);
-	di_method(cp, "__set___signal_exit", di_child_process_new_exit_signal,
-	          di_object *);
+	di_method(cp, "__set___signal_exit", di_child_process_new_exit_signal, di_object *);
 	di_method(cp, "__set___signal_stdout_line", di_child_process_new_stdout_signal,
 	          di_object *);
 	di_method(cp, "__set___signal_stderr_line", di_child_process_new_stderr_signal,

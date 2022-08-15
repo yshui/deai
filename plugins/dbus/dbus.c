@@ -138,7 +138,7 @@ static void _dbus_lookup_member(_di_dbus_object *o, const char *method,
                                 bool is_signal, di_object *closure) {
 	auto p = _dbus_introspect(o);
 
-	auto cl = di_closure(_dbus_lookup_member_cb,
+	auto cl = di_make_closure(_dbus_lookup_member_cb,
 	                     (method, is_signal, closure), void *);
 	di_listen_to_once(p, "reply", (void *)cl, true);
 	di_unref_object((void *)cl);
@@ -160,7 +160,7 @@ static void ioev_callback(di_object *conn, void *ptr, int event) {
 static void dbus_add_signal_handler_for(di_object *ioev, DBusWatch *w, di_dbus_connection *oc,
                                         const char *signal, int event) {
 	scoped_di_object *handler =
-	    (void *)di_closure(ioev_callback, ((di_object *)oc, (void *)w, event));
+	    (void *)di_make_closure(ioev_callback, ((di_object *)oc, (void *)w, event));
 	auto l = di_listen_to(ioev, di_string_borrow(signal), handler);
 	DI_CHECK_OK(di_call(l, "auto_stop", true));
 
@@ -672,7 +672,7 @@ static di_variant di_dbus_get_property(di_object *dobj, di_string property) {
 	auto serial = di_dbus_send_message(
 	    conn, di_string_borrow_literal("method"), bus, obj,
 	    di_string_borrow_literal(DBUS_INTERFACE_PROPERTIES), di_string_borrow_literal("Get"),
-	    di_string_borrow_literal(""), di_tuple(interface, property));
+	    di_string_borrow_literal(""), di_make_tuple(interface, property));
 	if (serial < 0) {
 		ret.value->object = di_new_error("DBus error");
 		return ret;
@@ -769,7 +769,7 @@ di_dbus_get_object(di_object *o, di_string bus, di_string obj, di_string interfa
 		}
 
 		{
-			scoped_di_closure *set_owner = di_closure(
+			scoped_di_closure *set_owner = di_make_closure(
 			    di_dbus_object_set_owner, ((di_object *)ret), di_tuple);
 			scoped_di_object *promise = di_dbus_add_promise_for(o, eventm, serial);
 			// We don't care about the promise returned by `then`
@@ -948,18 +948,18 @@ static DBusHandlerResult dbus_filter(DBusConnection *conn, DBusMessage *msg, voi
 		    di_string_printf("promise_for_request_%u", serial);
 		bool is_error = (type == DBUS_MESSAGE_TYPE_ERROR);
 		scoped_di_object *promise = NULL;
-		if (di_getxt(ud, promise_name, DI_TYPE_OBJECT, (di_value *)&promise) == 0) {
+		if (di_get2(ud, promise_name, promise) == 0) {
 			if (is_error) {
 				auto msg = t.elements[0].value->string;
 				auto err = di_new_error("%.*s", (int)msg.length, msg.data);
-				di_resolve_promise((void *)promise, di_variant(err));
+				di_resolve_promise((void *)promise, di_make_variant(err));
 				di_unref_object(err);
 			} else {
 				di_variant args;
 				if (t.length == 1) {
 					args = t.elements[0];
 				} else {
-					args = di_variant(t);
+					args = di_make_variant(t);
 				}
 				di_resolve_promise((void *)promise, args);
 			}
@@ -1052,7 +1052,8 @@ static di_object *di_dbus_connect(di_object *o, di_string address) {
 	                                   DI_STRING_INIT, DI_TUPLE_INIT);
 	DI_CHECK(serial >= 0);
 	scoped_di_object *promise = di_dbus_add_promise_for(ret, eventm, serial);
-	scoped_di_closure *handler = di_closure(di_dbus_handle_hello_reply, (ret), di_string);
+	scoped_di_closure *handler =
+	    di_make_closure(di_dbus_handle_hello_reply, (ret), di_string);
 	return di_promise_then(promise, (void *)handler);
 }
 

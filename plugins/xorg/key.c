@@ -146,8 +146,7 @@ static int refresh_binding(struct keybinding *kb) {
 }
 static bool key_register_listener(struct xorg_key *k);
 static void key_deregister_listener(struct xorg_key *k);
-static void
-keybinding_new_signal(const char *signal, di_object *obj, di_object *sig) {
+static void keybinding_new_signal(const char *signal, di_object *obj, di_object *sig) {
 	bool had_signal = di_has_member(obj, "__signal_pressed") ||
 	                  di_has_member(obj, "__signal_released");
 	if (di_add_member_clone(obj, di_string_borrow(signal), DI_TYPE_OBJECT, &sig) != 0) {
@@ -219,8 +218,7 @@ static void keybinding_del_signal(const char *signal, di_object *obj) {
 ///                 intercept the key press, otherwise it will behave like a normal key
 ///                 press.
 /// - key(:string)
-di_object *
-new_binding(struct xorg_key *k, di_array modifiers, di_string key, bool replay) {
+di_object *new_binding(struct xorg_key *k, di_array modifiers, di_string key, bool replay) {
 	scoped_di_object *dc_obj = NULL;
 	if (di_get(k, XORG_CONNECTION_MEMBER, dc_obj) != 0) {
 		return di_new_error("Connection died");
@@ -347,7 +345,9 @@ static void handle_key(struct di_xorg_ext *ext, xcb_generic_event_t *ev) {
 	}
 
 	struct keybinding *kb, *nkb;
-	list_for_each_entry (kb, &k->bindings, siblings) { di_ref_object((void *)kb); }
+	list_for_each_entry (kb, &k->bindings, siblings) {
+		di_ref_object((void *)kb);
+	}
 
 	bool replay = true;
 	list_for_each_entry_safe (kb, nkb, &k->bindings, siblings) {
@@ -380,7 +380,7 @@ static void handle_key(struct di_xorg_ext *ext, xcb_generic_event_t *ev) {
 const int OPCODES[] = {XCB_KEY_PRESS, XCB_KEY_RELEASE, XCB_MAPPING_NOTIFY};
 bool key_register_listener(struct xorg_key *k) {
 	scoped_di_object *handler =
-	    (void *)di_closure(handle_key, ((di_object *)k), void *);
+	    (void *)di_make_closure(handle_key, ((di_object *)k), void *);
 	scoped_di_object *dc = NULL;
 	if (di_get(k, XORG_CONNECTION_MEMBER, dc) != 0) {
 		return false;
@@ -388,8 +388,7 @@ bool key_register_listener(struct xorg_key *k) {
 
 	fprintf(stderr, "reg\n");
 	for (int i = 0; i < ARRAY_SIZE(OPCODES); i++) {
-		scoped_di_string signal =
-		    di_string_printf("___raw_x_event_%d", OPCODES[i]);
+		scoped_di_string signal = di_string_printf("___raw_x_event_%d", OPCODES[i]);
 		auto lh = di_listen_to(dc, signal, handler);
 		scoped_di_string autolh_key =
 		    di_string_printf("___auto_handle_for_%d", OPCODES[i]);

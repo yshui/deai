@@ -104,7 +104,7 @@ static void di_xorg_ioev(di_object *dc_obj) {
 			scoped_di_string ext_key =
 			    di_string_printf("___strong_x_ext_%s", xext_reg[i].name);
 			scoped_di_object *ext_obj = NULL;
-			if (di_getxt(dc_obj, ext_key, DI_TYPE_OBJECT, (void *)&ext_obj) != 0) {
+			if (di_get2(dc_obj, ext_key, ext_obj) != 0) {
 				continue;
 			}
 			struct di_xorg_ext *ext = (void *)ext_obj;
@@ -520,7 +520,7 @@ void di_xorg_add_signal(di_xorg_connection *xc) {
 
 	scoped_di_object *xcb_fd_event = NULL;
 	DI_CHECK_OK(di_callr(eventm, "fdevent", xcb_fd_event, xcb_get_file_descriptor(xc->c)));
-	scoped_di_closure *cl = di_closure(di_xorg_ioev, ((di_object *)xc));
+	scoped_di_closure *cl = di_make_closure(di_xorg_ioev, ((di_object *)xc));
 	auto lh = di_listen_to(xcb_fd_event, di_string_borrow("read"), (void *)cl);
 
 	DI_CHECK_OK(di_call(lh, "auto_stop", true));
