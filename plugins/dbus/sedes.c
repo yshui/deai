@@ -262,7 +262,9 @@ dbus_serialize_basic_with_type(DBusMessageIter *i, struct di_variant var, int db
 	switch (dbus_type) {
 	case DBUS_TYPE_BOOLEAN:
 		if (var.type == DI_TYPE_BOOL) {
-			return dbus_message_iter_append_basic(i, dbus_type, var.value);
+			// dbus_bool_t is a uint32, we can't cast a bool* to it.
+			dbus_bool_t tmp = var.value->bool_;
+			return dbus_message_iter_append_basic(i, dbus_type, &tmp);
 		}
 		return false;
 	case DBUS_TYPE_INT16:
