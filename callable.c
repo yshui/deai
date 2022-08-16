@@ -9,6 +9,7 @@
 
 #include <deai/callable.h>
 #include <deai/object.h>
+#include <deai/type.h>
 
 #include "di_internal.h"
 #include "utils.h"

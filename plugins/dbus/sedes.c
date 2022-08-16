@@ -4,13 +4,13 @@
 /// variants (type signature 'av')
 
 #include <deai/helper.h>
+#include <deai/type.h>
 #include <assert.h>
 
 #include "common.h"
 #include "list.h"
 #include "sedes.h"
 #include "signature.h"
-#include "utils.h"
 
 static di_type dbus_type_to_di(int type) {
 	switch (type) {
@@ -83,8 +83,7 @@ static void dbus_deserialize_one(DBusMessageIter *i, void *retp, di_type *otype,
 
 // Deserialize an array. `i' is the iterator, already recursed into the array
 // `type' is the array element type
-static void
-dbus_deserialize_array(DBusMessageIter *i, di_array *retp, int type, int length) {
+static void dbus_deserialize_array(DBusMessageIter *i, di_array *retp, int type, int length) {
 	if (dbus_type_is_fixed(type)) {
 		di_array ret;
 		int length;

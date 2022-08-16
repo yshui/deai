@@ -1,5 +1,6 @@
 #include <deai/deai.h>
 #include <deai/helper.h>
+#include <deai/type.h>
 #include <assert.h>
 
 #include "common.h"

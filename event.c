@@ -7,6 +7,7 @@
 #include <deai/builtins/event.h>
 #include <deai/builtins/log.h>
 #include <deai/deai.h>
+#include <deai/type.h>
 #include <deai/helper.h>
 
 #include <ev.h>

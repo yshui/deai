@@ -8,6 +8,7 @@
 #include <deai/callable.h>
 #include <deai/helper.h>
 #include <deai/object.h>
+#include <deai/type.h>
 #include <assert.h>
 #include <ev.h>
 #include <stdalign.h>

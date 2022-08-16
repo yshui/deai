@@ -48,7 +48,9 @@ inline constexpr bool all_of_v = all_of<Bools...>::value;
 namespace c_api {
 extern "C" {
 #define __auto_type auto        // NOLINT
-#include "../deai.h"
+#include "../object.h"
+#include "../error.h"
+#include "../callable.h"
 #undef __auto_type
 }
 }        // namespace c_api

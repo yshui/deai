@@ -379,6 +379,13 @@ PUBLIC_DEAI_API int di_delete_member(di_object *nonnull o, di_string name);
 PUBLIC_DEAI_API struct di_member *nullable di_lookup(di_object *nonnull, di_string name);
 PUBLIC_DEAI_API di_object *nullable di_new_object(size_t sz, size_t alignment);
 
+static inline di_object *unused
+di_new_object_with_type_name(size_t size, size_t alignment, const char *type) {
+	__auto_type ret = di_new_object(size, alignment);
+	di_set_type(ret, type);
+	return ret;
+}
+
 /// Listen to signal `name` emitted from object `o`. When the signal is emitted, handler
 /// `h` will be called. If the returned object is dropped, the listen-to relationship is
 /// automatically stopped.
