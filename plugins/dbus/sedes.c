@@ -309,10 +309,21 @@ static int dbus_serialize_with_signature(DBusMessageIter *i, struct di_variant v
 		return 0;
 	}
 	if (*si.current.data == DBUS_TYPE_VARIANT) {
-		auto inner = type_signature_of_di_value(var);
+		struct dbus_signature inner;
+		if (var.type == DI_TYPE_VARIANT) {
+			// We are getting a variant, in this case we both lose one layer.
+			inner = type_signature_of_di_value(var.value->variant);
+		} else {
+			// We don't have a variant, so we wrap the value in a dbus variant.
+			inner = type_signature_of_di_value(var);
+		}
 		DBusMessageIter i2;
 		dbus_message_iter_open_container(i, DBUS_TYPE_VARIANT, inner.current.data, &i2);
-		dbus_serialize_with_signature(&i2, var, inner);
+		if (var.type == DI_TYPE_VARIANT) {
+			dbus_serialize_with_signature(&i2, var.value->variant, inner);
+		} else {
+			dbus_serialize_with_signature(&i2, var, inner);
+		}
 		auto ret = dbus_message_iter_close_container(i, &i2) ? 0 : -ENOMEM;
 		di_free_string(inner.current);
 		free_dbus_signature(inner);

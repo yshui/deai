@@ -239,7 +239,8 @@ type_signature_of_di_value_to_buffer(struct di_variant var, char *buffer) {
 		return ret;
 	}
 	if (var.type == DI_TYPE_VARIANT) {
-		return type_signature_of_di_value_to_buffer(var.value->variant, buffer);
+		*buffer = 'v';
+		return (struct dbus_signature){(di_string){buffer, 1}, 0, NULL};
 	}
 	return (struct dbus_signature){DI_STRING_INIT, -EINVAL, NULL};
 }
