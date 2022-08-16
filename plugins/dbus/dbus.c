@@ -677,6 +677,27 @@ static di_variant di_dbus_get_property(di_object *dobj, di_string property) {
 	return ret;
 }
 
+static di_object *di_dbus_set_property(di_object *dobj, di_string property, di_variant value) {
+	di_object *conn = NULL;
+	if (di_rawget_borrowed(dobj, "___deai_dbus_connection", conn) != 0) {
+		return di_new_error("DBus connection gone");
+	}
+	di_borrowm(di_object_borrow_deai(conn), event, return di_new_error(""));
+	scoped_di_string obj = DI_STRING_INIT, bus = DI_STRING_INIT, interface = DI_STRING_INIT;
+	DI_CHECK_OK(di_get(dobj, "___object_path", obj));
+	DI_CHECK_OK(di_get(dobj, "___bus_name", bus));
+	DI_CHECK_OK(di_get(dobj, "___interface", interface));
+	auto serial = di_dbus_send_message(conn, di_string_borrow_literal("method"), bus, obj,
+	                     di_string_borrow_literal(DBUS_INTERFACE_PROPERTIES),
+	                     di_string_borrow_literal("Set"),
+			     di_string_borrow_literal("ssv"),
+	                     di_make_tuple(interface, property, value));
+	if (serial < 0) {
+		return di_new_error("DBus error");
+	}
+	return di_dbus_add_promise_for(conn, eventm, serial);
+}
+
 /// Get a DBus object
 ///
 /// EXPORT: dbus.session_bus.get(destionation: :string, object_path: :string): deai.plugin.dbus:DBusObject
@@ -733,6 +754,7 @@ di_dbus_get_object(di_object *o, di_string bus, di_string obj, di_string interfa
 	di_method(ret, "__set", di_dbus_object_new_signal, di_string, di_object *);
 	di_method(ret, "__delete", di_dbus_object_del_signal, di_string);
 	di_method(ret, "get", di_dbus_get_property, di_string);
+	di_method(ret, "set", di_dbus_set_property, di_string, di_variant);
 
 	// Keep the cache directory object alive
 	di_member_clone(ret, "___object_cache", object_cache);
