@@ -5,6 +5,7 @@ deps = [
   dependency('xcb-xkb', required: true),
   dependency('xcb-keysyms', required: true),
   dependency('xkbcommon', required: true),
+  cc.find_library('m', required: true),
 ]
 src = ['xorg.c', 'xinput.c', 'randr.c', 'key.c']
 local_inc = include_directories('.')
