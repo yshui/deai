@@ -18,4 +18,5 @@ stdenv.mkDerivation {
   name = "deai";
   nativeBuildInputs = [ meson ninja pkgconf ];
   buildInputs = [ libev libffi libxcb libXau libXdmcp xcbutilkeysyms libxkbcommon dbus systemdLibs lua ];
+  passthru.providedSessions = [ "deai" ];
 }
