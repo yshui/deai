@@ -1,6 +1,6 @@
 [Desktop Entry]
 Name=deai-lua
 Comment=DEsktop Automation Infrastructure (Lua)
-TryExec=deai-lua
-Exec=deai-lua
+TryExec=@prefix@/bin/deai-lua
+Exec=@prefix@/bin/deai-lua
 Type=Application
