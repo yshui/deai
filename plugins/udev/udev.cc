@@ -75,6 +75,16 @@ auto Device::get_properties() -> Ref<Object> {
 	return util::new_object<DeviceProperties>(util::unsafe_to_object_ref(*this));
 }
 
+/// TYPE: deai.plugin.udev:Enumerator
+struct Enumerator {
+private:
+	udev_enumerate *raw;
+public:
+	static constexpr const char *type [[maybe_unused]] = "deai.plugin.udev:Enumerator";
+	Enumerator(udev *udev) : raw(udev_enumerate_new(udev)) {
+	}
+};
+
 struct Module {
 private:
 	auto get_or_create_context() -> Ref<Object> {
@@ -114,6 +124,15 @@ public:
 		udev_enumerate_unref(e);
 		return ret;
 	}
+
+	/// Enumerate udev devices matching certain criteria
+	///
+	/// EXPORT: udev.search(): deai.plugin.udev:Enumerator
+	auto search() -> Ref<Object> {
+		auto context = get_or_create_context();
+		auto &context_inner = util::unsafe_to_inner<Context>(context);
+		return util::new_object<Enumerator>(context_inner.context);
+	}
 };
 
 /// udev
@@ -125,6 +144,7 @@ auto di_new_udev(::deai::Ref<::deai::Core> &di) {
 	auto obj = util::new_object<Module>();
 	auto &module = util::unsafe_to_inner<Module>(obj);
 	util::add_method<&Module::device_from_dev_node>(module, "device_from_dev_node");
+	util::add_method<&Module::search>(module, "search");
 	return obj;
 }
 
