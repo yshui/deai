@@ -566,8 +566,9 @@ static void di_promise_then_impl(struct di_promise *promise,
 /// with the resolved value as argument.
 ///
 /// Returns a promise that will be resolved after handler returns. If handler returns
-/// another promise, then returned promise will be resolved after that promises resolves,
-/// otherwise return promise will resolve to the value returned by the handler.
+/// another promise, then the promise returned by this function will resolve after the
+/// promise returned by the handler resolves, otherwise the returned promise will resolve
+/// to the value returned by the handler.
 ///
 /// Note the handler will always be called after being registered, whether the
 /// promise returned by this function is freed or not.
@@ -719,6 +720,19 @@ void di_event_module_dtor(di_object *obj) {
 	}
 }
 
+/// Create a new promise that is already resolved
+///
+/// EXPORT: event.ready_promise(value: :any): deai:Promise
+///
+/// Arguments:
+///
+/// - value what the returned promise will resolve to
+di_object *di_ready_promise(di_object *event_module, di_variant value) {
+	auto ret = di_new_promise(event_module);
+	di_resolve_promise((di_promise *)ret, value);
+	return ret;
+}
+
 /// Core events
 ///
 /// EXPORT: event: deai:module
@@ -733,6 +747,7 @@ void di_init_event(struct deai *di) {
 	di_method(em, "timer", di_create_timer, double);
 	di_method(em, "periodic", di_create_periodic, double, double);
 	di_method(em, "new_promise", di_new_promise);
+	di_method(em, "ready_promise", di_ready_promise, di_variant);
 	di_method(em, "join_promises", di_join_promises, di_array);
 	di_method(em, "any_promise", di_any_promise, di_array);
 
