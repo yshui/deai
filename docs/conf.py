@@ -12,6 +12,7 @@ from pathlib import Path
 sys.path.append(str(Path(__file__).resolve().parent / "sphinx-exts"))
 extensions = ['luadomain']
 
+os.environ['RUST_LOG'] = 'info'
 subprocess.run(["meson", "setup", "../build", ".."])
 try:
     os.symlink("build/compile_commands.json", "../compile_commands.json")

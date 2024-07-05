@@ -996,6 +996,7 @@ fn process_child(docs: &mut Docs, child: &clang::Entity) {
 }
 fn main() {
     env_logger::init();
+    log::info!("clang version {}", clang::get_version());
     let mut docs = Docs::new();
     let args = Options::parse();
     let clang = clang::Clang::new().unwrap();
