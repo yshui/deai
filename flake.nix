@@ -8,7 +8,10 @@
   in rec {
     packages.${system}.deai = deai;
     devShell.${system} = deai.overrideAttrs (o: {
-      nativeBuildInputs = o.nativeBuildInputs ++ [ pkgs.clippy ];
+      nativeBuildInputs = (with pkgs; [
+        clippy clang-tools_17
+      ]) ++ o.nativeBuildInputs;
+      hardeningDisable = [ "all" ];
     });
     overlays.default = final: prev: {
       deai = final.callPackage ./default.nix {};

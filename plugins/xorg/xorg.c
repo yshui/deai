@@ -15,7 +15,6 @@
 #include <xkbcommon/xkbcommon.h>
 
 #include "uthash.h"
-#include "utils.h"
 
 #include "xorg.h"
 
