@@ -994,21 +994,58 @@ fn process_child(docs: &mut Docs, child: &clang::Entity) {
         _ => (),
     }
 }
+
+fn is_cpp(cmd: &clang::CompileCommand) -> bool {
+    let args = cmd.get_arguments();
+    for parts in args.windows(2) {
+        if parts[0] == "-x" {
+            return parts[1] == "c++"
+        }
+    }
+
+    let filename = cmd.get_filename();
+    if let Some(ext) = filename.extension() {
+        return ext == "cpp" || ext == "cxx" || ext == "cc"
+    }
+
+    args[0] == "g++" || args[0] == "clang++"
+}
+
+#[derive(Debug)]
+struct Clang(clang_sys::support::Clang);
+impl Clang {
+    fn c_include_args(&self) -> impl Iterator<Item = String> + '_ {
+        self.0
+            .c_search_paths
+            .iter()
+            .map(|x| x.iter())
+            .flatten()
+            .map(|x| format!("-I{}", x.display()))
+    }
+    fn cpp_include_args(&self) -> impl Iterator<Item = String> + '_ {
+        self.0
+            .cpp_search_paths
+            .iter()
+            .map(|x| x.iter())
+            .flatten()
+            .map(|x| format!("-I{}", x.display()))
+    }
+}
+
 fn main() {
     env_logger::init();
+    let clang_sys = Clang(clang_sys::support::Clang::find(None, &[]).unwrap());
+    log::info!("{:?}", clang_sys);
     log::info!("clang version {}", clang::get_version());
     let mut docs = Docs::new();
     let args = Options::parse();
     let clang = clang::Clang::new().unwrap();
     let cdb = clang::CompilationDatabase::from_directory(&args.input).unwrap();
     let index = clang::Index::new(&clang, false, true);
-    let clang_include = format!(
-        "-I/usr/lib/clang/{}/include",
-        clang::get_version().strip_prefix("clang version ").unwrap()
-    );
     for cmd in cdb.get_all_compile_commands().get_commands() {
         let full_name = cmd.get_directory().join(cmd.get_filename());
-        log::debug!("{}", full_name.display());
+        let is_cpp = is_cpp(&cmd);
+        log::debug!("{}, argv0: {}, cpp: {is_cpp}", full_name.display(), cmd.get_arguments()[0]);
         let mut parser = index.parser(&full_name);
         parser.skip_function_bodies(true);
         let mut args: Vec<_> = cmd
@@ -1030,7 +1067,11 @@ fn main() {
                 }
             })
             .collect();
-        args.push(clang_include.clone());
+        if is_cpp {
+            args.extend(clang_sys.cpp_include_args());
+        } else {
+            args.extend(clang_sys.c_include_args());
+        }
         parser.arguments(&args);
         let tu = parser.parse().unwrap();
         //println!("{:?} {:?}", full_name, tu);

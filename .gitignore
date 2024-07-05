@@ -12,3 +12,5 @@ deai.d
 .ccls-cache
 .cache
 .clangd
+/docs/scanner/target
+/docs/scanner/Cargo.lock

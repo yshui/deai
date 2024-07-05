@@ -9,6 +9,7 @@ build:
     - libclang1
     - libclang-dev
     - meson
+    - clang
     - libev-dev
     - libdbus-1-dev
     - libxcb-randr0-dev

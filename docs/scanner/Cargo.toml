@@ -6,6 +6,7 @@ edition = "2021"
 [dependencies]
 anyhow = "1.0.54"
 clang = { version = "2.0.0", features = ["clang_10_0"] }
+clang-sys = { version = "1.8.1", features = ["clang_10_0"] }
 clap = { version = "4.5.0", features = ["derive"] }
 either = "1.6.1"
 env_logger = "0.11.0"
