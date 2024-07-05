@@ -5,6 +5,7 @@ copyright = '2022, Yuxuan Shui'
 author = 'Yuxuan Shui'
 
 add_module_names = False
+html_theme = 'sphinx_rtd_theme'
 
 import sys, os, subprocess
 
