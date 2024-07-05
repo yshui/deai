@@ -500,7 +500,7 @@ static void di_dbus_object_del_signal(di_dbus_object *obj, di_string member_name
 ///
 /// Arguments:
 ///
-/// - bus(:string) recipent of this message, not used is type is "signal"
+/// - bus(:string) recipent of this message, not used if type is "signal"
 ///
 /// Returns a serial number if type is 'method'.
 static int64_t di_dbus_send_message(di_object *o, di_string type, di_string bus_,
