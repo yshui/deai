@@ -575,6 +575,10 @@ static di_array get_view_outputs(struct di_xorg_view *v) {
 	auto outputs = xcb_randr_get_crtc_info_outputs(r);
 	ret.elem_type = DI_TYPE_OBJECT;
 	ret.length = xcb_randr_get_crtc_info_outputs_length(r);
+	if (ret.length == 0) {
+		return ret;
+	}
+
 	void **arr = ret.arr = tmalloc(void *, ret.length);
 	for (int i = 0; i < ret.length; i++) {
 		arr[i] = make_object_for_output(v->rr, outputs[i]);
