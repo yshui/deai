@@ -45,8 +45,6 @@
 
 #include "compat.h"
 #include "config.h"
-#include "list.h"
-#include "uthash.h"
 #include "utils.h"
 
 #define tmalloc(type, nmem) (type *)calloc(nmem, sizeof(type))
@@ -569,7 +567,7 @@ static void di_lua_pushobject(lua_State *L, const char *name, di_object *obj) {
 		}
 		// .. _lua quirk:
 		// The weak reference to this proxy died before __gc is called for it.
-		lua_pop(L, 1); // pop the nil
+		lua_pop(L, 1);        // pop the nil
 	}
 
 	// Push the proxy, and weakly reference it from the lua registry
@@ -774,6 +772,9 @@ di_lua_table_to_array(lua_State *L, int index, int nelem, di_type elemt, di_arra
  * @return Whether the table is an array
  */
 static bool di_lua_checkarray(lua_State *L, int index, int *nelem, di_type *elemt) {
+	if (index < 0) {
+		index = lua_gettop(L) + index + 1;
+	}
 	lua_pushnil(L);
 	if (lua_next(L, index) == 0) {
 		// Empty array
@@ -921,7 +922,7 @@ static int di_lua_type_to_di(lua_State *L, int i, di_type *t, di_value *ret) {
 		}
 		ret_arg(i, object, toobjref);
 	case LUA_TTABLE:;
-		// Non-array tables, and tables with metatable shoudl become an di_object
+		// Non-array tables, and tables with metatable should become an di_object
 		bool has_metatable = lua_getmetatable(L, i);
 		if (has_metatable) {
 			lua_pop(L, 1);        // pop the metatable
@@ -1330,9 +1331,15 @@ static int di_lua_meta_newindex(lua_State *L) {
 
 /// Convert a lua table to a di_object
 ///
-/// EXPORT: lua.as_di_object: :object
-static di_object *di_lua_as_di_object(di_object *lua unused, di_object *obj) {
-	// Real magic is done in di_lua_method_handler
+/// EXPORT: lua.as_di_object(obj: :object): :object
+///
+/// This is intended to be called from lua scripts. It converts a lua table to a
+/// di_object. It is kind of useless when called from outside lua, since what it does is
+/// just returning the object passed to it. The real magic is the inner workings of the
+/// lua plugin which allows external functions to be called from lua scripts.
+static di_object *di_lua_as_di_object(di_object * /*lua*/, di_object *obj) {
+	// Real magic is done in di_lua_method_handler, which converts the lua table to a
+	// di_object. And all we need to do is to return the object.
 	return di_ref_object(obj);
 }
 
