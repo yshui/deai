@@ -141,6 +141,135 @@ static void free_output_info(di_object *o) {
 	free((char *)i->name);
 }
 
+/// Properties of an output
+///
+/// This functions as a dictionary of properties of an output. The keys are strings, and
+/// the retrieved values are strings, arrays of strings, or arrays of integers.
+///
+/// Values from X server are converted as such:
+///
+///   - If the type is `ATOM`, then each of the values, which are atoms, are converted to
+///     strings by looking up the atom name. The result is an array of strings.
+///   - If the type is `INTEGER`, and the bit width is 8, then the values are treated as bytes,
+///     and are returned as a single string. An example of such a property is the EDID.
+///   - If the type is `INTEGER`, and the bit width is 16 or 32, then the values are returned
+///     as an array of integers.
+///
+/// TYPE: deai.plugin.xorg.randr:OutputProps
+struct di_xorg_output_props {
+	// Unused object for documentation
+	di_object;
+};
+
+static di_variant output_props_getter(di_object *this, di_string prop) {
+	scoped_di_object *rr_obj;
+	xcb_randr_output_t oid;
+	di_get(this, "___randr", rr_obj);
+	di_get(this, "___oid", oid);
+
+	auto rr = (struct di_xorg_randr *)rr_obj;
+	scopedp(di_xorg_connection) *dc = NULL;
+	if (get_xorg_connection((struct di_xorg_ext *)rr, &dc) != 0) {
+		return DI_VARIANT_INIT;
+	}
+
+	xcb_generic_error_t *e = NULL;
+	auto atom = di_xorg_intern_atom(dc, prop, &e);
+	if (e) {
+		free(e);
+		return DI_VARIANT_INIT;
+	}
+
+	scopedp(xcb_randr_get_output_property_reply_t) *r = xcb_randr_get_output_property_reply(
+	    dc->c,
+	    xcb_randr_get_output_property(dc->c, oid, atom, XCB_ATOM_ANY, 0, UINT_MAX, 0, 0),
+	    &e);
+	if (e) {
+		free(e);
+		return DI_VARIANT_INIT;
+	}
+	if (r->type == XCB_ATOM_INTEGER && r->format == 8) {
+		// Return bytes array as string
+		di_variant ret = {
+		    .value = calloc(1, sizeof(di_string)),
+		    .type = DI_TYPE_STRING,
+		};
+
+		ret.value->string =
+		    di_string_ndup((char *)xcb_randr_get_output_property_data(r),
+		                   xcb_randr_get_output_property_data_length(r));
+		return ret;
+	}
+	if (r->type == XCB_ATOM_INTEGER) {
+		// Return array of integers
+		di_variant ret = {
+		    .value = calloc(1, sizeof(di_array)),
+		    .type = DI_TYPE_ARRAY,
+		};
+		ret.value->array = (di_array){
+		    .arr = calloc(r->num_items, sizeof(int)),
+		    .length = r->num_items,
+		    .elem_type = DI_TYPE_INT,
+		};
+		if (!ret.value->array.arr) {
+			return DI_VARIANT_INIT;
+		}
+		auto arr = (int *)ret.value->array.arr;
+		auto data16 = (int16_t *)xcb_randr_get_output_property_data(r);
+		auto data32 = (int32_t *)xcb_randr_get_output_property_data(r);
+		for (int i = 0; i < r->num_items; i++) {
+			switch (r->format) {
+			case 16:
+				arr[i] = data16[i];
+				break;
+			case 32:
+				arr[i] = data32[i];
+				break;
+			default:
+				assert(false);
+				free(ret.value->array.arr);
+				return DI_VARIANT_INIT;
+			}
+		}
+		return ret;
+	}
+	if (r->type == XCB_ATOM_ATOM) {
+		// Return array of strings
+		di_variant ret = {
+		    .value = calloc(1, sizeof(di_array)),
+		    .type = DI_TYPE_ARRAY,
+		};
+		ret.value->array = (di_array){
+		    .arr = calloc(r->num_items, sizeof(di_string)),
+		    .length = r->num_items,
+		    .elem_type = DI_TYPE_STRING,
+		};
+		if (!ret.value->array.arr) {
+			return DI_VARIANT_INIT;
+		}
+		auto arr = (di_string *)ret.value->array.arr;
+		auto atoms = (xcb_atom_t *)xcb_randr_get_output_property_data(r);
+		for (int i = 0; i < r->num_items; i++) {
+			arr[i] = di_clone_string(*di_xorg_get_atom_name(dc, atoms[i]));
+		}
+		return ret;
+	}
+	// Unknown?
+	return DI_VARIANT_INIT;
+}
+
+/// Output properties
+///
+/// EXPORT: deai.plugin.xorg.randr:Output.props: deai.plugin.xorg.randr:OutputProps
+static di_object *get_output_props_object(struct di_xorg_output *o) {
+	auto ret = di_new_object_with_type(di_object);
+
+	di_member_clone(ret, "___randr", (di_object *)o->rr);
+	di_member(ret, "___oid", o->oid);
+	di_method(ret, "__get", output_props_getter, di_string);
+	return ret;
+}
+
 /// Output info
 ///
 /// EXPORT: deai.plugin.xorg.randr:Output.info: deai.plugin.xorg.randr:OutputInfo
@@ -408,8 +537,7 @@ static void output_dtor(struct di_xorg_output *o) {
 	di_unref_object((void *)o->rr);
 }
 
-static di_object *
-make_object_for_output(struct di_xorg_randr *rr, xcb_randr_output_t oid) {
+static di_object *make_object_for_output(struct di_xorg_randr *rr, xcb_randr_output_t oid) {
 	DI_CHECK(di_has_member(rr, XORG_CONNECTION_MEMBER));
 
 	auto obj = di_new_object_with_type2(struct di_xorg_output, "deai.plugin.xorg."
@@ -421,6 +549,7 @@ make_object_for_output(struct di_xorg_randr *rr, xcb_randr_output_t oid) {
 	di_getter(obj, info, get_output_info);
 	di_getter_setter(obj, backlight, get_output_backlight, set_output_backlight);
 	di_getter(obj, max_backlight, get_output_max_backlight);
+	di_getter(obj, props, get_output_props_object);
 
 	di_set_object_dtor((void *)obj, (void *)output_dtor);
 
@@ -604,8 +733,7 @@ static di_array rr_outputs(struct di_xorg_randr *rr) {
 	return ret;
 }
 
-static di_object *
-make_object_for_modes(struct di_xorg_randr *rr, xcb_randr_mode_info_t *m) {
+static di_object *make_object_for_modes(struct di_xorg_randr *rr, xcb_randr_mode_info_t *m) {
 	auto o = di_new_object_with_type2(struct di_xorg_mode, "deai.plugin.xorg.randr:"
 	                                                       "Mode");
 	o->id = m->id;
