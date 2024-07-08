@@ -773,6 +773,35 @@ impl Docs {
         }
         Ok(())
     }
+    fn generate_references(
+        &self,
+        type_entry: &TypeEntry,
+        mut output: impl std::io::Write,
+    ) -> std::io::Result<()> {
+        if type_entry.references.len() > 0 {
+            let references = type_entry
+                .references
+                .iter()
+                .map(|ref_| match ref_ {
+                    a @ Access::Ancestry { .. } => {
+                        format!(":lua:meth:`{a} <{a}>`", a = a)
+                    }
+                    Access::Member { ty, member } => format!(
+                        ":lua:attr:`{}.{member} <{}.{member}>`",
+                        ty.simple_display(),
+                        ty.rst_display(),
+                        member = member
+                    ),
+                })
+                .join(", ");
+            writeln!(
+                output,
+                "See {references} for more information about this type\n",
+                references = references
+            )?;
+        }
+        Ok(())
+    }
     fn generate_single(&self, entry: AccessOrType<'_>, target: &Path) -> std::io::Result<()> {
         self.with_entry(&entry, |e| {
             let children = e.children();
@@ -811,6 +840,9 @@ impl Docs {
                             writeln!(output, "{}\n", p)?;
                         }
                     }
+                    if let Some(type_entry) = self.by_type.get(&ty) {
+                        self.generate_references(&type_entry.borrow(), &mut output)?;
+                    }
                 }
                 Either::Right(type_entry) => {
                     match entry {
@@ -825,28 +857,7 @@ impl Docs {
                             writeln!(output, "{}\n", p)?;
                         }
                     }
-                    if type_entry.references.len() > 0 {
-                        let references = type_entry
-                            .references
-                            .iter()
-                            .map(|ref_| match ref_ {
-                                a @ Access::Ancestry { .. } => {
-                                    format!(":lua:meth:`{a} <{a}>`", a = a)
-                                }
-                                Access::Member { ty, member } => format!(
-                                    ":lua:attr:`{}.{member} <{}.{member}>`",
-                                    ty.simple_display(),
-                                    ty.rst_display(),
-                                    member = member
-                                ),
-                            })
-                            .join(", ");
-                        writeln!(
-                            output,
-                            "See {references} for more information about this type\n",
-                            references = references
-                        )?;
-                    }
+                    self.generate_references(type_entry, &mut output)?;
                 }
             }
             let prop_it = children.iter().filter(|(_, c)| {
