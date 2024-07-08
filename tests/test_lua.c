@@ -20,6 +20,7 @@ DEAI_PLUGIN_ENTRY_POINT(di) {
 	di_call(di, "load_plugin", (const char *)"./plugins/xorg/di_xorg.so");
 	di_call(di, "load_plugin", (const char *)"./plugins/file/di_file.so");
 	di_call(di, "load_plugin", (const char *)"./plugins/dbus/di_dbus.so");
+	di_call(di, "load_plugin", (const char *)"./plugins/hwinfo/di_hwinfo.so");
 
 	scoped_di_object *luam = NULL;
 	DI_CHECK_OK(di_get(di, "lua", luam));

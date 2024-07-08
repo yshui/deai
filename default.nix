@@ -4,6 +4,7 @@
 , pkgconf
 , dbus
 , rustPlatform
+, libdisplay-info
 , libffi
 , libxcb
 , libXau
@@ -31,7 +32,7 @@ stdenv.mkDerivation {
   src = ./.;
   name = "deai";
   nativeBuildInputs = [ meson ninja pkgconf cargo rustc python llvmPackages_17.clang ];
-  buildInputs = [ libev libffi libxcb libXau libXdmcp xcbutilkeysyms libxkbcommon dbus systemdLibs lua ];
+  buildInputs = [ libev libffi libxcb libXau libXdmcp xcbutilkeysyms libxkbcommon dbus systemdLibs lua libdisplay-info ];
   env = {
     LLVM_CONFIG_PATH = "${llvmPackages_17.libllvm.dev}/bin/llvm-config";
     LIBCLANG_PATH = "${llvmPackages_17.libclang.lib}/lib";
