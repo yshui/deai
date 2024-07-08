@@ -10,7 +10,7 @@ extern "C" {
 namespace deai::plugins::hwinfo {
 /// Hardware information module for display devices.
 ///
-/// TYPE: deai.plugin.hwinfo:Display
+/// TYPE: deai.plugin.hwinfo.display:Module
 class Display {
 public:
 	static constexpr const char *type [[maybe_unused]] =
