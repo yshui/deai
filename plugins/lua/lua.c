@@ -1230,6 +1230,49 @@ call_lua_signal_handler_once(di_object *obj, di_type *rt, di_value *ret, di_tupl
 	return di_call_objectt(handler, rt, ret, t);
 }
 
+static di_variant di_lua_globals_getter(di_object *globals, di_string key) {
+	scopedp(di_object) *m = NULL;
+	di_get(globals, "___di_lua_module", m);
+
+	scoped_di_weak_object *weak_lua_state = NULL;
+	scopedp(di_lua_state) *L = NULL;
+	int rc = di_get(m, "__lua_state", weak_lua_state);
+	if (rc == 0) {
+		L = (di_lua_state *)di_upgrade_weak_ref(weak_lua_state);
+	} else {
+		DI_CHECK(rc == -ENOENT);
+		return DI_VARIANT_INIT;
+	}
+	if (L == NULL) {
+		// __lua_state not found, or lua_state has been dropped
+		di_delete_member_raw((di_object *)m, di_string_borrow("__lua_state"));
+		return DI_VARIANT_INIT;
+	}
+
+	scopedp(char) *keystr = di_string_to_chars_alloc(key);
+	lua_getglobal(L->L, keystr);
+
+	di_type t;
+	di_value *ret = tmalloc(di_value, 1);
+	di_lua_type_to_di(L->L, -1, &t, ret);
+	lua_pop(L->L, 1);        // Top of stack is the value
+	return (struct di_variant){.value = ret, .type = t};
+}
+
+/// Get the global variables from loaded lua scripts
+///
+/// EXPORT: lua.globals: deai.plugin.lua:Globals
+///
+/// This object is an accessor to all global variables in the loaded lua scripts. Each
+/// global variable is accessible as a property with the same name of this object.
+static di_object *di_lua_get_globals(di_object *lua) {
+	auto g = di_new_object_with_type(di_object);
+	di_set_type((di_object *)g, "deai.plugin.lua:Globals");
+	di_member_clone(g, "___di_lua_module", lua);
+	di_method(g, "__get", di_lua_globals_getter, di_string);
+	return (di_object *)g;
+}
+
 /// Lua proxy of a deai object
 ///
 /// TYPE: deai.plugin.lua:Proxy
@@ -1380,6 +1423,7 @@ static struct di_module *di_new_lua(struct deai *di) {
 
 	di_method(m, "load_script", di_lua_load_script, di_string);
 	di_method(m, "as_di_object", di_lua_as_di_object, di_object *);
+	di_getter(m, globals, di_lua_get_globals);
 
 	// Load the builtin lua script. The returned object could safely die. The builtin
 	// script should register modules which should keep it alive.
