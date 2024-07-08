@@ -301,7 +301,6 @@ static struct {
 	int modifier_keycode_head[8] = {
 	    [0 ... 7] = -1,
 	};
-	int total_modifier_keys = 0;
 	memset(next_keycode_indices, -1, sizeof next_keycode_indices);
 
 	// Sanity check
@@ -329,7 +328,6 @@ static struct {
 				modifier_keycode_head[j] = total_keycodes;
 				keycodes[total_keycodes++] = i;
 				modifier_keycode_count[j]++;
-				total_modifier_keys++;
 			}
 		}
 		xkb_state_update_key(state, i, XKB_KEY_UP);

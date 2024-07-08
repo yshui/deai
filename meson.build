@@ -22,6 +22,7 @@ test_common_args = [
     '-Werror=switch-enum',
     '-Werror=nonnull',
     '-Werror=implicit-fallthrough',
+    '-Wno-c2x-extensions',
     '-Wall'
 ]
 

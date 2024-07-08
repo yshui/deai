@@ -362,7 +362,7 @@ PUBLIC_DEAI_API int di_delete_member_raw(di_object *nonnull o, di_string name);
 
 /// Remove a member of object `o`, without calling the deleter. Transfer the ownership of
 /// the member to the caller via `ret`.
-PUBLIC_DEAI_API int di_remove_member_raw(di_object *obj, di_string name, di_variant *ret);
+PUBLIC_DEAI_API int di_remove_member_raw(di_object *nonnull obj, di_string name, di_variant *nonnull ret);
 
 /// Remove a member of object `o`, or call its deleter.
 /// If the specialized deleter `__delete_<name>` exists, it will be called; if not,
@@ -379,9 +379,12 @@ PUBLIC_DEAI_API int di_delete_member(di_object *nonnull o, di_string name);
 PUBLIC_DEAI_API struct di_member *nullable di_lookup(di_object *nonnull, di_string name);
 PUBLIC_DEAI_API di_object *nullable di_new_object(size_t sz, size_t alignment);
 
-static inline di_object *unused
-di_new_object_with_type_name(size_t size, size_t alignment, const char *type) {
+static inline di_object *nullable unused
+di_new_object_with_type_name(size_t size, size_t alignment, const char *nonnull type) {
 	__auto_type ret = di_new_object(size, alignment);
+	if (ret == NULL) {
+		abort();
+	}
 	di_set_type(ret, type);
 	return ret;
 }
