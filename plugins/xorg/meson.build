@@ -13,3 +13,4 @@ di_xorg_lib = shared_library('di_xorg', src,
   include_directories: incs+[local_inc],
   dependencies: deps, c_args: base_c_args, name_prefix: '',
   link_with: [ libutils ], install: true, install_dir: plugin_install_dir)
+all_plugins += [ di_xorg_lib ]

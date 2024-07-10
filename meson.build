@@ -96,7 +96,7 @@ libutils = static_library('libutils', ['string_buf.c'], include_directories: inc
 # link deai against a cpp library, so clang++ is used to link the final binary. this is
 # in order to fix undefined symbol problem with UBSan
 cpp_dummy = static_library('cpp_dummy', ['dummy.cc'])
-
+all_plugins = []
 subdir('plugins')
 
 core_src = [
@@ -126,6 +126,15 @@ deai_exe = executable('deai', core_src, c_args: base_c_args
 , include_directories: incs
 , export_dynamic: true
 , install: true)
+all_plugins_files = []
+foreach plugin: all_plugins
+  all_plugins_files += [plugin.full_path()]
+endforeach
+all_plugins_files = ':'.join(all_plugins_files)
+run_deai_data = configuration_data()
+run_deai_data.set('all_plugins', all_plugins_files)
+run_deai_data.set('deai_exe', deai_exe.full_path())
+configure_file(input: 'run_deai.sh.in', output: 'run_deai.sh', configuration: run_deai_data)
 subdir('tests')
 
 base_headers = [
