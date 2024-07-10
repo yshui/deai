@@ -247,7 +247,7 @@ di_field_getter_call(di_object *getter, di_type *rtype, di_value *ret, di_tuple 
 	auto field_getter = (struct di_field_getter *)getter;
 	*rtype = field_getter->type;
 
-	memcpy(ret, object + field_getter->offset, di_sizeof_type(field_getter->type));
+	di_copy_value(field_getter->type, ret, object + field_getter->offset);
 	return 0;
 }
 
