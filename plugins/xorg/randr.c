@@ -10,6 +10,7 @@
 #include "xorg.h"
 
 #include <assert.h>
+#include <math.h>
 #include <stdio.h>
 #include <xcb/randr.h>
 
@@ -91,6 +92,18 @@ struct di_xorg_mode {
 	///
 	/// EXPORT: deai.plugin.xorg.randr:Mode.height: :unsigned
 	unsigned int height;
+	/// Refresh rate
+	///
+	/// EXPORT: deai.plugin.xorg.randr:Mode.fps: :float
+	double fps;
+	/// Whether this mode is interlaced
+	///
+	/// EXPORT: deai.plugin.xorg.randr:Mode.interlaced: :bool
+	bool interlaced;
+	/// Whether this mode is double-scanned
+	///
+	/// EXPORT: deai.plugin.xorg.randr:Mode.double_scan: :bool
+	bool double_scan;
 };
 
 /// TYPE: deai.plugin.xorg.randr:ViewConfig
@@ -745,9 +758,27 @@ static di_object *make_object_for_modes(struct di_xorg_randr *rr, xcb_randr_mode
 	o->width = m->width;
 	o->height = m->height;
 
+	double vtotal = m->vtotal;
+	if (m->mode_flags & XCB_RANDR_MODE_FLAG_INTERLACE) {
+		o->interlaced = true;
+		vtotal /= 2.0;
+	}
+	if (m->mode_flags & XCB_RANDR_MODE_FLAG_DOUBLE_SCAN) {
+		o->double_scan = true;
+		vtotal *= 2.0;
+	}
+	if (m->htotal != 0 && vtotal != 0) {
+		o->fps = (double)m->dot_clock / (m->htotal * vtotal);
+	} else {
+		o->fps = NAN;
+	}
+
+	di_field(o, interlaced);
+	di_field(o, double_scan);
 	di_field(o, width);
 	di_field(o, height);
 	di_field(o, id);
+	di_field(o, fps);
 
 	return (void *)o;
 }
