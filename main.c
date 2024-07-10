@@ -695,8 +695,33 @@ int main(int argc, char *argv[]) {
 	// (3) Load default plugins
 	int ret = load_plugin_from_dir_impl(p, DI_PLUGIN_INSTALL_DIR);
 	if (ret != 0) {
-		fprintf(stderr, "Failed to load plugins from \"%s\", which is fine.\n",
-		        DI_PLUGIN_INSTALL_DIR);
+		fprintf(stderr, "Failed to load plugins from \"%s\".\n", DI_PLUGIN_INSTALL_DIR);
+	}
+	const char *additional_plugin_dirs = getenv("DEAI_EXTRA_PLUGIN_DIRS");
+	while (additional_plugin_dirs) {
+		const char *next = strchr(additional_plugin_dirs, ':');
+		if (!next) {
+			next = additional_plugin_dirs + strlen(additional_plugin_dirs);
+		}
+		char *dir = strndup(additional_plugin_dirs, next - additional_plugin_dirs);
+		if (load_plugin_from_dir_impl(p, dir) != 0) {
+			fprintf(stderr, "Failed to load plugins from \"%s\".\n", dir);
+		}
+		free(dir);
+		additional_plugin_dirs = *next ? next + 1 : NULL;
+	}
+	const char *additional_plugins = getenv("DEAI_EXTRA_PLUGINS");
+	while (additional_plugins) {
+		const char *next = strchr(additional_plugins, ':');
+		if (!next) {
+			next = additional_plugins + strlen(additional_plugins);
+		}
+		char *plugin = strndup(additional_plugins, next - additional_plugins);
+		if (!load_plugin_impl(p, plugin)) {
+			fprintf(stderr, "Failed to load plugin \"%s\".\n", plugin);
+		}
+		free(plugin);
+		additional_plugins = *next ? next + 1 : NULL;
 	}
 
 	di_object *mod = NULL;
