@@ -380,6 +380,31 @@ static di_object *get_output_current_view(struct di_xorg_output *o) {
 	return make_object_for_view(o->rr, r->crtc);
 }
 
+static di_array get_output_views(struct di_xorg_output *o) {
+	scopedp(di_xorg_connection) *dc = NULL;
+	if (get_xorg_connection((struct di_xorg_ext *)o->rr, &dc) != 0) {
+		return DI_ARRAY_INIT;
+	}
+
+	scopedp(xcb_randr_get_output_info_reply_t) *r = xcb_randr_get_output_info_reply(
+	    dc->c, xcb_randr_get_output_info(dc->c, o->id, o->rr->cts), NULL);
+	if (!r || r->status != 0 || r->num_crtcs == 0) {
+		return DI_ARRAY_INIT;
+	}
+
+	di_array ret = {
+	    .length = r->num_crtcs,
+	    .elem_type = DI_TYPE_OBJECT,
+	    .arr = tmalloc(void *, r->num_crtcs),
+	};
+	auto arr = (di_object **)ret.arr;
+	auto crtcs = xcb_randr_get_output_info_crtcs(r);
+	for (int i = 0; i < r->num_crtcs; i++) {
+		arr[i] = make_object_for_view(o->rr, crtcs[i]);
+	}
+	return ret;
+}
+
 /// View config
 ///
 /// EXPORT: deai.plugin.xorg.randr:View.config: deai.plugin.xorg.randr:ViewConfig
@@ -601,6 +626,7 @@ static di_object *make_object_for_output(struct di_xorg_randr *rr, xcb_randr_out
 	obj->id = oid;
 	di_field(obj, id);
 	di_getter(obj, current_view, get_output_current_view);
+	di_getter(obj, views, get_output_views);
 	di_getter(obj, info, get_output_info);
 	di_getter_setter(obj, backlight, get_output_backlight, set_output_backlight);
 	di_getter(obj, max_backlight, get_output_max_backlight);
