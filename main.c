@@ -21,8 +21,8 @@
 
 #include <deai/builtins/log.h>
 #include <deai/deai.h>
-#include <deai/type.h>
 #include <deai/helper.h>
+#include <deai/type.h>
 
 #include <config.h>
 

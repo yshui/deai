@@ -97,7 +97,7 @@ function apply_xi_settings(dev)
         o = get_output("eDP1")
         s = xc.screen
 
-        tr = get_transform_matrix(o.view.config, s)
+        tr = get_transform_matrix(o.current_view.config, s)
         print(unpack(tr))
         -- apply the transformation matrix to touchscreen
         p["Coordinate Transformation Matrix"] = tr
@@ -124,7 +124,7 @@ for i, v in ipairs(devs) do
     end
 end
 for _, v in pairs(xc.randr.outputs) do
-    print("\t",v.name, v.view)
+    print("\t",v.name, v.current_view)
 end
 
 xc.randr.on("view-change", function(v)

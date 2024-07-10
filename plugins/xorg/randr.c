@@ -32,7 +32,7 @@ struct di_xorg_output {
 	di_object;
 	struct di_xorg_randr *rr;
 
-	xcb_randr_output_t oid;
+	xcb_randr_output_t id;
 };
 
 /// Type: deai.xorg.xorg.randr:OutputInfo
@@ -70,7 +70,7 @@ struct di_xorg_view {
 	di_object;
 	struct di_xorg_randr *rr;
 
-	xcb_randr_crtc_t cid;
+	xcb_randr_crtc_t id;
 	xcb_timestamp_t ts;
 };
 
@@ -265,7 +265,7 @@ static di_object *get_output_props_object(struct di_xorg_output *o) {
 	auto ret = di_new_object_with_type(di_object);
 
 	di_member_clone(ret, "___randr", (di_object *)o->rr);
-	di_member(ret, "___oid", o->oid);
+	di_member(ret, "___oid", o->id);
 	di_method(ret, "__get", output_props_getter, di_string);
 	return ret;
 }
@@ -280,7 +280,7 @@ static di_object *get_output_info(struct di_xorg_output *o) {
 	}
 
 	scopedp(xcb_randr_get_output_info_reply_t) *r = xcb_randr_get_output_info_reply(
-	    dc->c, xcb_randr_get_output_info(dc->c, o->oid, o->rr->cts), NULL);
+	    dc->c, xcb_randr_get_output_info(dc->c, o->id, o->rr->cts), NULL);
 
 	if (!r || r->status != 0) {
 		return di_new_object_with_type(di_object);
@@ -306,19 +306,19 @@ static di_object *get_output_info(struct di_xorg_output *o) {
 	return (di_object *)ret;
 }
 
-/// Output view
+/// Output's current connected view
 ///
-/// EXPORT: deai.plugin.xorg.randr:Output.view: deai.plugin.xorg.randr:View
+/// EXPORT: deai.plugin.xorg.randr:Output.current_view: deai.plugin.xorg.randr:View
 ///
 /// A "view" is the portion of the overall Xorg screen that's displayed on this output.
-static di_object *get_output_view(struct di_xorg_output *o) {
+static di_object *get_output_current_view(struct di_xorg_output *o) {
 	scopedp(di_xorg_connection) *dc = NULL;
 	if (get_xorg_connection((struct di_xorg_ext *)o->rr, &dc) != 0) {
 		return di_new_object_with_type(di_object);
 	}
 
 	scopedp(xcb_randr_get_output_info_reply_t) *r = xcb_randr_get_output_info_reply(
-	    dc->c, xcb_randr_get_output_info(dc->c, o->oid, o->rr->cts), NULL);
+	    dc->c, xcb_randr_get_output_info(dc->c, o->id, o->rr->cts), NULL);
 	if (!r || r->status != 0 || r->crtc == 0) {
 		return di_new_object_with_type(di_object);
 	}
@@ -338,7 +338,7 @@ static di_object *get_view_config(struct di_xorg_view *v) {
 	}
 
 	scopedp(xcb_randr_get_crtc_info_reply_t) *cr = xcb_randr_get_crtc_info_reply(
-	    dc->c, xcb_randr_get_crtc_info(dc->c, v->cid, v->rr->cts), NULL);
+	    dc->c, xcb_randr_get_crtc_info(dc->c, v->id, v->rr->cts), NULL);
 	if (!cr || cr->status != 0) {
 		return di_new_object_with_type(di_object);
 	}
@@ -431,14 +431,14 @@ static void set_view_config(struct di_xorg_view *v, di_object *cfg) {
 retry:
 	// We might need to retry under race conditions, because Xorg sucks
 	cr = xcb_randr_get_crtc_info_reply(
-	    dc->c, xcb_randr_get_crtc_info(dc->c, v->cid, v->rr->cts), NULL);
+	    dc->c, xcb_randr_get_crtc_info(dc->c, v->id, v->rr->cts), NULL);
 	if (!cr || cr->status != 0) {
 		return;
 	}
 
 	scopedp(xcb_randr_set_crtc_config_reply_t) *scr = xcb_randr_set_crtc_config_reply(
 	    dc->c,
-	    xcb_randr_set_crtc_config(dc->c, v->cid, cr->timestamp, v->rr->cts, x, y, mode,
+	    xcb_randr_set_crtc_config(dc->c, v->id, cr->timestamp, v->rr->cts, x, y, mode,
 	                              rr_rot, xcb_randr_get_crtc_info_outputs_length(cr),
 	                              xcb_randr_get_crtc_info_outputs(cr)),
 	    NULL);
@@ -470,7 +470,7 @@ static int get_output_backlight(struct di_xorg_output *o) {
 	}
 	scopedp(xcb_randr_get_output_property_reply_t) *r = xcb_randr_get_output_property_reply(
 	    dc->c,
-	    xcb_randr_get_output_property(dc->c, o->oid, bklatom, XCB_ATOM_ANY, 0, 4, 0, 0),
+	    xcb_randr_get_output_property(dc->c, o->id, bklatom, XCB_ATOM_ANY, 0, 4, 0, 0),
 	    NULL);
 
 	if (!r || r->type != XCB_ATOM_INTEGER || r->num_items != 1 || r->format != 32) {
@@ -495,7 +495,7 @@ static void set_output_backlight(struct di_xorg_output *o, int bkl) {
 
 	int32_t v = bkl;
 	e = xcb_request_check(dc->c, xcb_randr_change_output_property(
-	                                 dc->c, o->oid, bklatom, XCB_ATOM_INTEGER, 32,
+	                                 dc->c, o->id, bklatom, XCB_ATOM_INTEGER, 32,
 	                                 XCB_PROP_MODE_REPLACE, 1, (void *)&v));
 	if (e) {
 		di_log_va(log_module, DI_LOG_ERROR, "Failed to set backlight");
@@ -520,7 +520,7 @@ static int get_output_max_backlight(struct di_xorg_output *o) {
 
 	scopedp(xcb_randr_query_output_property_reply_t) *r =
 	    xcb_randr_query_output_property_reply(
-	        dc->c, xcb_randr_query_output_property(dc->c, o->oid, bklatom), NULL);
+	        dc->c, xcb_randr_query_output_property(dc->c, o->id, bklatom), NULL);
 	if (!r) {
 		return -1;
 	}
@@ -540,12 +540,12 @@ static void output_dtor(struct di_xorg_output *o) {
 static di_object *make_object_for_output(struct di_xorg_randr *rr, xcb_randr_output_t oid) {
 	DI_CHECK(di_has_member(rr, XORG_CONNECTION_MEMBER));
 
-	auto obj = di_new_object_with_type2(struct di_xorg_output, "deai.plugin.xorg."
-	                                                           "randr:"
-	                                                           "Output");
+	auto obj = di_new_object_with_type2(struct di_xorg_output,
+	                                    "deai.plugin.xorg.randr:Output");
 	obj->rr = rr;
-	obj->oid = oid;
-	di_getter(obj, view, get_output_view);
+	obj->id = oid;
+	di_field(obj, id);
+	di_getter(obj, current_view, get_output_current_view);
 	di_getter(obj, info, get_output_info);
 	di_getter_setter(obj, backlight, get_output_backlight, set_output_backlight);
 	di_getter(obj, max_backlight, get_output_max_backlight);
@@ -570,7 +570,7 @@ static di_array get_view_outputs(struct di_xorg_view *v) {
 	}
 
 	auto r = xcb_randr_get_crtc_info_reply(
-	    dc->c, xcb_randr_get_crtc_info(dc->c, v->cid, v->rr->cts), NULL);
+	    dc->c, xcb_randr_get_crtc_info(dc->c, v->id, v->rr->cts), NULL);
 
 	auto outputs = xcb_randr_get_crtc_info_outputs(r);
 	ret.elem_type = DI_TYPE_OBJECT;
@@ -594,12 +594,13 @@ static void view_dtor(struct di_xorg_view *v) {
 static di_object *make_object_for_view(struct di_xorg_randr *rr, xcb_randr_crtc_t cid) {
 	DI_CHECK(di_has_member(rr, XORG_CONNECTION_MEMBER));
 
-	auto obj = di_new_object_with_type2(struct di_xorg_view, "deai.plugin.xorg.randr:"
-	                                                         "View");
+	auto obj =
+	    di_new_object_with_type2(struct di_xorg_view, "deai.plugin.xorg.randr:View");
 	obj->rr = rr;
-	obj->cid = cid;
+	obj->id = cid;
 
 	di_getter(obj, outputs, get_view_outputs);
+	di_field(obj, id);
 	di_getter_setter(obj, config, get_view_config, set_view_config);
 	di_set_object_dtor((void *)obj, (void *)view_dtor);
 
@@ -738,8 +739,8 @@ static di_array rr_outputs(struct di_xorg_randr *rr) {
 }
 
 static di_object *make_object_for_modes(struct di_xorg_randr *rr, xcb_randr_mode_info_t *m) {
-	auto o = di_new_object_with_type2(struct di_xorg_mode, "deai.plugin.xorg.randr:"
-	                                                       "Mode");
+	auto o =
+	    di_new_object_with_type2(struct di_xorg_mode, "deai.plugin.xorg.randr:Mode");
 	o->id = m->id;
 	o->width = m->width;
 	o->height = m->height;
