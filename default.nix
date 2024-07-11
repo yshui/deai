@@ -1,4 +1,5 @@
 { stdenv
+, elfutils
 , meson
 , ninja
 , pkgconf
@@ -11,6 +12,7 @@
 , libXdmcp
 , libev
 , libxkbcommon
+, libunwind
 , llvmPackages_17
 , lua
 , systemdLibs
@@ -18,7 +20,10 @@
 , sphinx
 , rustc
 , python3
-, xcbutilkeysyms }:
+, xcbutilkeysyms
+, xdotool
+, zlib
+, zstd }:
 let
   python = python3.withPackages (p: [
     p.sphinx
@@ -31,8 +36,11 @@ in
 stdenv.mkDerivation {
   src = ./.;
   name = "deai";
-  nativeBuildInputs = [ meson ninja pkgconf cargo rustc python llvmPackages_17.clang ];
-  buildInputs = [ libev libffi libxcb libXau libXdmcp xcbutilkeysyms libxkbcommon dbus systemdLibs lua libdisplay-info ];
+  nativeBuildInputs = [ meson ninja pkgconf cargo rustc python llvmPackages_17.clang xdotool ];
+  buildInputs = [
+    libev libffi libxcb libXau libXdmcp xcbutilkeysyms libxkbcommon dbus systemdLibs lua libdisplay-info
+    libunwind elfutils zlib zstd
+  ];
   env = {
     LLVM_CONFIG_PATH = "${llvmPackages_17.libllvm.dev}/bin/llvm-config";
     LIBCLANG_PATH = "${llvmPackages_17.libclang.lib}/lib";
