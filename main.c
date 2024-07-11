@@ -35,6 +35,10 @@
 #include "utils.h"
 
 static bool load_plugin_impl(struct deai *p, char *sopath) {
+	if (*sopath != '/') {
+		fprintf(stderr, "Plugin path must be absolute: %s\n", sopath);
+		return false;
+	}
 
 	void *handle = dlopen(sopath, RTLD_NOW | RTLD_LOCAL);
 
