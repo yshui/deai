@@ -21,3 +21,8 @@ di_log_va(di_object *nullable o, int log_level, const char *nonnull fmt, ...);
 PUBLIC_DEAI_API int di_set_log_level(di_object *nonnull o, int log_level);
 
 PUBLIC_DEAI_API extern di_object *nullable log_module;
+
+#define log_info(...) di_log_va(log_module, DI_LOG_INFO, __VA_ARGS__)
+#define log_debug(...) di_log_va(log_module, DI_LOG_DEBUG, __VA_ARGS__)
+#define log_warn(...) di_log_va(log_module, DI_LOG_WARN, __VA_ARGS__)
+#define log_error(...) di_log_va(log_module, DI_LOG_ERROR, __VA_ARGS__)
