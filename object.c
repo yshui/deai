@@ -1179,7 +1179,6 @@ static void di_collect_garbage_collect_post(di_object_internal *o) {
 	// fprintf(stderr, "\tpost-finalizing %p, %lu\n", o, o->ref_count);
 	_di_finalize_object(o);
 	di_unref_object((void *)o);
-	o->mark = 0;
 }
 /// Collect garbage in cyclic references
 void di_collect_garbage(void) {
