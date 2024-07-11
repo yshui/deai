@@ -1,3 +1,3 @@
 #!/bin/sh
 export DEAI_EXTRA_PLUGINS="@all_plugins@"
-@deai_exe@ "$@"
+exec @deai_exe@ "$@"
