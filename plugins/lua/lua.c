@@ -101,6 +101,7 @@ static int di_lua_pushvariant(lua_State *L, const char *name, struct di_variant 
 static int di_lua_meta_index(lua_State *L);
 static int di_lua_meta_index_for_weak_object(lua_State *L);
 static int di_lua_meta_newindex(lua_State *L);
+static int di_lua_meta_pairs(lua_State *L);
 
 static int di_lua_errfunc(lua_State *L) {
 	/* Convert error to string, to prevent a follow-up error with lua_concat. */
@@ -281,6 +282,54 @@ static int di_lua_di_setter(di_object *m, di_type *rt, di_value *ret, di_tuple t
 	return 0;
 }
 
+static di_tuple di_lua_di_next(di_object *lua_ref, di_string name) {
+	struct di_lua_ref *t = (struct di_lua_ref *)lua_ref;
+	scoped_di_object *state_obj = NULL;
+	DI_CHECK_OK(di_get(t, "___di_lua_state", state_obj));
+
+	auto state = (struct di_lua_state *)state_obj;
+	lua_State *L = state->L;
+
+	lua_rawgeti(L, LUA_REGISTRYINDEX, t->tref);
+	if (lua_isnil(L, -1)) {
+		lua_pop(L, 1);
+		return DI_TUPLE_INIT;
+	}
+
+	if (name.data) {
+		lua_pushlstring(L, name.data, name.length);
+	} else {
+		lua_pushnil(L);
+	}
+
+	di_string key;
+	while (true) {
+		if (lua_next(L, -2) == 0) {
+			lua_pop(L, 1);
+			return DI_TUPLE_INIT;
+		}
+		// Ignore non-string keys
+		if (!lua_isstring(L, -2)) {
+			lua_pop(L, 1);
+			continue;
+		}
+		key.data = lua_tolstring(L, -2, &key.length);
+		if (!di_string_starts_with(key, "__")) {
+			break;
+		}
+	}
+
+	di_tuple ret;
+	ret.length = 2;
+	ret.elements = tmalloc(struct di_variant, 2);
+	ret.elements[0].type = DI_TYPE_STRING;
+	ret.elements[0].value = malloc(sizeof(di_string));
+	ret.elements[0].value->string = di_clone_string(key);
+	di_lua_type_to_di_variant(L, -1, &ret.elements[1]);
+	lua_pop(L, 3);
+	return ret;
+}
+
 static struct di_lua_ref *lua_type_to_di_object(lua_State *L, int i, void *call) {
 	// TODO(yshui): probably a good idea to make sure that same lua object get same
 	// di object?
@@ -307,6 +356,8 @@ static struct di_lua_ref *lua_type_to_di_object(lua_State *L, int i, void *call)
 	                   (di_type[]){DI_TYPE_OBJECT}, (void **)&setter);
 	di_set_object_dtor((void *)o, (void *)lua_ref_dtor);
 	di_set_object_call((void *)o, call);
+
+	di_method(o, "__next", di_lua_di_next, di_string);
 
 	// Need to return
 	return o;
@@ -437,6 +488,7 @@ static int di_lua_gc_for_weak_object(lua_State *L) {
 static const luaL_Reg di_lua_object_methods[] = {
     {"__index", di_lua_meta_index},
     {"__newindex", di_lua_meta_newindex},
+    {"__pairs", di_lua_meta_pairs},
     {"__gc", di_lua_gc},
     {0, 0},
 };
@@ -1335,6 +1387,37 @@ static int di_lua_meta_newindex(lua_State *L) {
 		}
 	}
 	return 0;
+}
+
+static int di_lua_meta_next(lua_State *L) {
+	// stack: [ object key ]
+	di_object *ud = *di_lua_checkproxy(L, 1);
+	di_string key = DI_STRING_INIT;
+	if (lua_gettop(L) == 2 && !lua_isnil(L, 2)) {
+		key.data = luaL_checklstring(L, 2, &key.length);
+		if (key.data == NULL) {
+			return luaL_argerror(L, 2, "key must be a string");
+		}
+	}
+
+	scoped_di_tuple next = di_object_next_member(ud, key);
+	if (next.length < 2) {
+		return 0;
+	}
+	di_lua_pushvariant(L, NULL, next.elements[0]);
+	di_lua_pushvariant(L, NULL, next.elements[1]);
+	return 2;
+}
+
+static int di_lua_meta_pairs(lua_State *L) {
+	if (lua_gettop(L) != 1) {
+		return luaL_error(L, "wrong number of arguments to __pairs");
+	}
+
+	lua_pushcfunction(L, di_lua_meta_next);        // stack: [ object next ]
+	lua_insert(L, 1);                              // stack: [ next object ]
+	lua_pushnil(L);                                // stack: [ next object nil ]
+	return 3;
 }
 
 /// Convert a lua table to a di_object

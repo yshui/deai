@@ -89,7 +89,7 @@ static inline void unused save_xorg_connection(struct di_xorg_ext *nonnull ext,
 define_object_cleanup(di_xorg_connection);
 
 const di_string *nullable di_xorg_get_atom_name(struct di_xorg_connection *nonnull xc,
-                                                       xcb_atom_t atom);
+                                                xcb_atom_t atom);
 xcb_atom_t di_xorg_intern_atom(struct di_xorg_connection *nonnull xc, di_string name,
                                xcb_generic_error_t *nullable *nonnull e);
 

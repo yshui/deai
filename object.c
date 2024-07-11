@@ -664,6 +664,63 @@ struct di_member *di_lookup(di_object *_obj, di_string name) {
 	return (void *)ret;
 }
 
+di_tuple di_object_next_member(di_object *obj, di_string name) {
+	di_object *next = NULL;
+	if (di_rawget_borrowed(obj, "__next", next) == 0) {
+		di_variant ret = DI_VARIANT_INIT;
+		di_tuple args = {
+		    .length = 2,
+		    .elements =
+		        (struct di_variant[]){
+		            {.type = DI_TYPE_OBJECT, .value = (di_value *)&obj},
+		            {.type = DI_TYPE_STRING, .value = (di_value *)&name},
+		        },
+		};
+		di_value inner;
+		ret.value = &inner;
+		if (((di_object_internal *)next)->call(next, &ret.type, ret.value, args) != 0) {
+			return DI_TUPLE_INIT;
+		}
+		if (ret.type != DI_TYPE_TUPLE) {
+			di_free_value(ret.type, &inner);
+			return DI_TUPLE_INIT;
+		}
+		if (inner.tuple.length != 2 || inner.tuple.elements[0].type != DI_TYPE_STRING) {
+			di_free_tuple(inner.tuple);
+			return DI_TUPLE_INIT;
+		}
+		return inner.tuple;
+	}
+	di_tuple ret = DI_TUPLE_INIT;
+	struct di_member *m = NULL, *next_m = NULL;
+	if (name.data == NULL) {
+		HASH_ITER (hh, ((di_object_internal *)obj)->members, m, next_m) {
+			if (di_string_starts_with(m->name, "__")) {
+				continue;
+			}
+			break;
+		}
+	} else {
+		m = di_lookup(obj, name);
+		m = m == NULL ? NULL : m->hh.next;
+		while (m != NULL && di_string_starts_with(m->name, "__")) {
+			m = m->hh.next;
+		}
+	}
+	if (m == NULL) {
+		return ret;
+	}
+	ret.length = 2;
+	ret.elements = tmalloc(struct di_variant, 2);
+	ret.elements[0].type = DI_TYPE_STRING;
+	ret.elements[0].value = (di_value *)tmalloc(di_string, 1);
+	ret.elements[0].value->string = di_clone_string(m->name);
+	ret.elements[1].type = m->type;
+	ret.elements[1].value = malloc(di_sizeof_type(m->type));
+	di_copy_value(m->type, ret.elements[1].value, m->data);
+	return ret;
+}
+
 /// Return an array of strings of all raw member names
 di_array di_get_all_member_names_raw(di_object *obj_) {
 	auto obj = (di_object_internal *)obj_;

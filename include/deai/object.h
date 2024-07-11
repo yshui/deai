@@ -362,7 +362,8 @@ PUBLIC_DEAI_API int di_delete_member_raw(di_object *nonnull o, di_string name);
 
 /// Remove a member of object `o`, without calling the deleter. Transfer the ownership of
 /// the member to the caller via `ret`.
-PUBLIC_DEAI_API int di_remove_member_raw(di_object *nonnull obj, di_string name, di_variant *nonnull ret);
+PUBLIC_DEAI_API int
+di_remove_member_raw(di_object *nonnull obj, di_string name, di_variant *nonnull ret);
 
 /// Remove a member of object `o`, or call its deleter.
 /// If the specialized deleter `__delete_<name>` exists, it will be called; if not,
@@ -379,8 +380,8 @@ PUBLIC_DEAI_API int di_delete_member(di_object *nonnull o, di_string name);
 PUBLIC_DEAI_API struct di_member *nullable di_lookup(di_object *nonnull, di_string name);
 PUBLIC_DEAI_API di_object *nullable di_new_object(size_t sz, size_t alignment);
 
-static inline di_object *nullable unused
-di_new_object_with_type_name(size_t size, size_t alignment, const char *nonnull type) {
+static inline di_object *nullable unused di_new_object_with_type_name(size_t size, size_t alignment,
+                                                                      const char *nonnull type) {
 	__auto_type ret = di_new_object(size, alignment);
 	if (ret == NULL) {
 		abort();
@@ -435,6 +436,11 @@ typedef bool (*nonnull di_member_cb)(di_string name, di_type, di_value *nonnull 
                                      void *nullable data);
 PUBLIC_DEAI_API bool
 di_foreach_member_raw(di_object *nonnull obj_, di_member_cb cb, void *nullable user_data);
+/// Iterate over all members of an object. If a member named `__next` exists in the object,
+/// it will be called to get the next member. Otherwise, the raw member list will be used.
+/// By default, members whose names start with "__" are considered internal members, and
+/// will not be returned. This behavior is not enforced if `__next` is defined.
+PUBLIC_DEAI_API di_tuple di_object_next_member(di_object *nonnull obj, di_string name);
 
 PUBLIC_DEAI_API void di_free_tuple(di_tuple);
 PUBLIC_DEAI_API void di_free_array(di_array);
@@ -662,31 +668,28 @@ static inline unused size_t di_sizeof_type(di_type t) {
 // Workaround for _Generic limitations, see:
 // http://www.open-std.org/jtc1/sc22/wg14/www/docs/n1930.htm
 #define di_typeid(x)                                                                     \
-	_Generic((x*)0, \
-	di_array *: DI_TYPE_ARRAY, \
-	di_tuple *: DI_TYPE_TUPLE, \
-	di_variant *: DI_TYPE_VARIANT, \
-	int *: DI_TYPE_NINT, \
-	unsigned int *: DI_TYPE_NUINT, \
-	int64_t *: DI_TYPE_INT, \
-	uint64_t *: DI_TYPE_UINT, \
-	/* You need to return a `char *` if you returns an owned string,
-	   and you should cast to `char *` when capturing a string OR a string literal.
-	   this is because a borrowed string literal could be long OR short lived. so you
-	   have to capture owned string to be safe.
-	 */ \
-	di_string*: DI_TYPE_STRING, \
-	/* use a const to differentiate strings and string literals
-	 * doesn't mean strings are actually mutable.
-	 */ \
-	const char **: DI_TYPE_STRING_LITERAL, \
-	di_object **: DI_TYPE_OBJECT, \
-	di_weak_object **: DI_TYPE_WEAK_OBJECT, \
-	void **: DI_TYPE_POINTER, \
-	double *: DI_TYPE_FLOAT, \
-	void *: DI_TYPE_NIL, \
-	bool *: DI_TYPE_BOOL \
-)
+	_Generic((x *)0,                                                                 \
+	    di_array *: DI_TYPE_ARRAY,                                                   \
+	    di_tuple *: DI_TYPE_TUPLE,                                                   \
+	    di_variant *: DI_TYPE_VARIANT,                                               \
+	    int *: DI_TYPE_NINT,                                                         \
+	    unsigned int *: DI_TYPE_NUINT,                                               \
+	    int64_t *: DI_TYPE_INT,                                                      \
+	    uint64_t *: DI_TYPE_UINT, /* You need to return a `char *` if you returns an owned string,                                                                           \
+	                                 and you should cast to `char *` when capturing a string OR a string literal.                                                           \
+	                                 this is because a borrowed string literal could be long OR short lived. so you                                                          \
+	                                 have to capture owned string to be safe.        \
+	                               */                                                \
+	    di_string *: DI_TYPE_STRING, /* use a const to differentiate strings and string literals                                                                                \
+	                                  * doesn't mean strings are actually mutable.   \
+	                                  */                                             \
+	    const char **: DI_TYPE_STRING_LITERAL,                                       \
+	    di_object **: DI_TYPE_OBJECT,                                                \
+	    di_weak_object **: DI_TYPE_WEAK_OBJECT,                                      \
+	    void **: DI_TYPE_POINTER,                                                    \
+	    double *: DI_TYPE_FLOAT,                                                     \
+	    void *: DI_TYPE_NIL,                                                         \
+	    bool *: DI_TYPE_BOOL)
 
 #define di_signal_member_of_(sig) "__signal_" sig
 #define di_signal_member_of(sig) (di_signal_member_of_(sig))
@@ -780,42 +783,6 @@ static inline void unused di_free_di_weak_objectpp(di_weak_object *nullable *non
 			(r) = *(typeof(r) *)&__deai_callr_ret;                             \
 		} while (0);                                                               \
 		__deai_callr_rc;                                                           \
-	})
-
-#define di_call_callable(c, ...)                                                         \
-	({                                                                               \
-		int rc = 0;                                                              \
-		do {                                                                     \
-			di_type rt;                                                      \
-			void *ret;                                                       \
-			rc = c->call(c, &rt, &ret, di_make_tuple(__VA_ARGS__));          \
-			if (rc != 0)                                                     \
-				break;                                                   \
-			di_free_value(rt, ret);                                          \
-			free(ret);                                                       \
-		} while (0);                                                             \
-		rc;                                                                      \
-	})
-
-#define di_callr_callable(c, r, ...)                                                     \
-	({                                                                               \
-		int rc = 0;                                                              \
-		do {                                                                     \
-			di_type rt;                                                      \
-			void *ret;                                                       \
-			rc = c->call(c, &rt, &ret, di_make_tuple(__VA_ARGS__));          \
-			if (rc != 0)                                                     \
-				break;                                                   \
-			if (di_typeof(r) != rt) {                                        \
-				di_free_value(rt, ret);                                  \
-				free(ret);                                               \
-				rc = -EINVAL;                                            \
-				break;                                                   \
-			}                                                                \
-			(r) = *(typeof(r) *)ret;                                         \
-			free(ret);                                                       \
-		} while (0);                                                             \
-		rc;                                                                      \
 	})
 
 #define di_get2(o, prop, r)                                                                 \
