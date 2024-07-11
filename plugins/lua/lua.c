@@ -329,6 +329,8 @@ static int di_lua_method_handler_impl(lua_State *L, const char *name, di_object 
 		}
 	}
 
+	lua_pop(L, nargs);
+
 	di_value ret;
 	di_type rtype;
 	int rc = di_call_objectt(m, &rtype, &ret, t);
