@@ -1,4 +1,4 @@
-obj = di:create_di_object()
+obj = di.lua:as_di_object({["a"] = true})
 weak_obj = obj:weakref()
 obj2 = weak_obj:upgrade()
 assert(obj2)

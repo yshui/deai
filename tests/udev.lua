@@ -1,4 +1,3 @@
-di:load_plugin('./plugins/udev/di_udev.so')
 assert(di.udev ~= nil)
 
 

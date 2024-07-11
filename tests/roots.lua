@@ -1,4 +1,4 @@
-obj = di:create_di_object()
+obj = di.lua:as_di_object({["a"] = true})
 di.roots:add("test_root", obj)
 weak = obj:weakref()
 obj = nil
@@ -18,7 +18,7 @@ collectgarbage("collect")
 obj = weak:upgrade()
 assert(obj == nil)
 
-obj = di:create_di_object()
+obj = di.lua:as_di_object({["b"] = true})
 di.roots:add("test_root", obj)
 weak = obj:weakref()
 obj = nil

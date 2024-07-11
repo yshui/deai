@@ -12,10 +12,6 @@ using namespace deai::util;
 using namespace std::literals;
 
 DEAI_CPP_PLUGIN_ENTRY_POINT(di) {
-	di.raw_members()["lua"].erase();
-
-	di.method_call<void>("load_plugin", "./plugins/lua/di_lua.so"sv);
-
 	auto luam = di["lua"]->object_ref().value();
 
 	auto err = luam.method_call<Ref<Object>>("load_script", "../tests/invalid.lua"sv);
