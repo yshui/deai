@@ -97,11 +97,6 @@ struct di_lua_ref {
 	int tref;
 };
 
-typedef struct di_lua_script {
-	di_object;
-	char *path;
-} di_lua_script;
-
 static int di_lua_pushvariant(lua_State *L, const char *name, struct di_variant var);
 static int di_lua_meta_index(lua_State *L);
 static int di_lua_meta_index_for_weak_object(lua_State *L);
@@ -143,10 +138,6 @@ static int di_lua_errfunc(lua_State *L) {
 	}
 
 	return 1;
-}
-
-static void di_lua_free_script(struct di_lua_script *s) {
-	free(s->path);
 }
 
 static bool di_lua_isproxy(lua_State *L, int index) {
@@ -603,7 +594,6 @@ static di_lua_state *lua_new_state(struct di_module *m) {
 	return L;
 }
 
-define_object_cleanup(di_lua_script);
 define_object_cleanup(di_lua_state);
 
 /// Load a lua script
@@ -615,7 +605,7 @@ define_object_cleanup(di_lua_state);
 /// - path path to the script
 ///
 /// Load and execute a lua script. Returns a handle to the script.
-static di_object *di_lua_load_script(di_object *obj, di_string path_) {
+static void di_lua_load_script(di_object *obj, di_string path_) {
 	/**
 	 * Reference count scheme for di_lua_script:
 	 *
@@ -628,14 +618,11 @@ static di_object *di_lua_load_script(di_object *obj, di_string path_) {
 	 *    become defunct
 	 */
 	if (!path_.data) {
-		return di_new_error("Path is null");
+		log_error("Path is null");
+		return;
 	}
 
-	char *path = di_string_to_chars_alloc(path_);
-	scopedp(di_lua_script) *s = di_new_object_with_type(struct di_lua_script);
-	di_set_type((di_object *)s, "deai.plugin.lua:LuaScript");
-	di_set_object_dtor((void *)s, (void *)di_lua_free_script);
-
+	scopedp(char) *path = di_string_to_chars_alloc(path_);
 	struct di_module *m = (void *)obj;
 	scopedp(di_lua_state) *L = NULL;
 	{
@@ -657,23 +644,15 @@ static di_object *di_lua_load_script(di_object *obj, di_string path_) {
 		DI_CHECK(L != NULL);
 	}
 
-	di_mgetm(m, log, di_new_error("Can't find log module"));
 	lua_pushstring(L->L, path);
 	lua_pushcclosure(L->L, di_lua_errfunc, 1);
 
 	if (luaL_loadfile(L->L, path)) {
 		const char *err = lua_tostring(L->L, -1);
-		di_log_va(logm, DI_LOG_ERROR, "Failed to load lua script %s: %s\n", path, err);
+		log_error("Failed to load lua script %s: %s\n", path, err);
 		lua_pop(L->L, 2);
-		// Create the error object before freeing the script object. Because after
-		// that the error string might be freed.
-		auto errobj = di_new_error("Failed to load lua script %s: %s\n", path, err);
-		free(path);
-		return errobj;
+		return;
 	}
-
-	s->path = path;
-	di_member_clone(s, "___di_lua_state", (di_object *)L);
 
 	int ret;
 	ret = lua_pcall(L->L, 0, 0, -2);
@@ -692,9 +671,8 @@ static di_object *di_lua_load_script(di_object *obj, di_string path_) {
 		// Pop the error, and converted error string
 		auto err = luaL_tolstring(L->L, -1, NULL);
 		lua_pop(L->L, 2);
-		return di_new_error("%s", err);
+		log_error("Error while running lua script: %s", err);
 	}
-	return di_ref_object((di_object *)s);
 }
 
 static int
@@ -1384,14 +1362,8 @@ static struct di_module *di_new_lua(struct deai *di, const char *self_path) {
 	const char *last_component = strrchr(self_path, '/');
 	scopedp(char) *dirname = strndup(self_path, last_component - self_path);
 	scoped_di_string builtin_path = di_string_printf("%s/builtin.lua", dirname);
-	scoped_di_object *ret = di_lua_load_script((void *)m, builtin_path);
+	di_lua_load_script((void *)m, builtin_path);
 
-	scoped_di_string errmsg = DI_STRING_INIT;
-	if (di_get(ret, "errmsg", errmsg) == 0) {
-		di_log_va(log_module, DI_LOG_ERROR, "Failed to load builtin lua script: %.*s",
-		          (int)errmsg.length, errmsg.data);
-		// The builtin script is not critical.
-	}
 	return m;
 }
 DEAI_PLUGIN_ENTRY_POINT2(di, plugin_path) {

@@ -1,4 +1,4 @@
-project('deai', ['c', 'cpp'], default_options: ['b_lundef=false', 'cpp_std=c++17'])
+project('deai', ['c', 'cpp'], default_options: ['b_lundef=false', 'cpp_std=c++20'])
 cc = meson.get_compiler('c')
 cpp = meson.get_compiler('cpp')
 if not cc.has_argument('-fvisibility=hidden') or not cc.has_argument('-fms-extensions')
