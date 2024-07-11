@@ -53,7 +53,7 @@ static bool load_plugin_impl(struct deai *p, char *sopath) {
 		return false;
 	}
 
-	init_fn(p);
+	init_fn(p, sopath);
 	return true;
 }
 
