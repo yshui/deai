@@ -545,17 +545,18 @@ void di_unref_object(di_object *_obj) {
 		print_stack_trace(0, 10);
 	}
 #endif
+	assert(obj->mark == 0 || obj->mark == 2 || obj->mark == 3);
 	if (obj->ref_count == 0) {
 		list_del_init(&obj->unreferred_siblings);
 		di_destroy_object(_obj);
-	} else if (!collecting_garbage) {
-		if (list_empty(&obj->unreferred_siblings)) {
-			if (unreferred_objects.next == NULL) {
-				INIT_LIST_HEAD(&unreferred_objects);
-			}
-			list_add(&obj->unreferred_siblings, &unreferred_objects);
+	} else if (list_empty(&obj->unreferred_siblings) && obj->mark == 0) {
+		if (unreferred_objects.next == NULL) {
+			INIT_LIST_HEAD(&unreferred_objects);
 		}
+		list_add(&obj->unreferred_siblings, &unreferred_objects);
 	}
+	// if obj->mark == 3 or 2, then the object is scheduled for destruction, we don't need
+	// to add it to `unreferred_objects` list. It is unnecessary and will cause use-after-free.
 }
 
 size_t di_min_return_size(size_t in) {
@@ -693,6 +694,9 @@ bool di_foreach_member_raw(di_object *obj_, di_member_cb cb, void *user_data) {
 	return false;
 }
 
+/// Restriction for destructors:
+///
+/// 1. They shouldn't assume any other member of `obj` is still valid.
 void di_set_object_dtor(di_object *nonnull obj, di_dtor_fn nullable dtor) {
 	auto internal = (di_object_internal *)obj;
 	internal->dtor = dtor;
@@ -1099,10 +1103,17 @@ static void di_scan_type(di_type type, di_value *value, int (*pre)(di_object_int
 	}
 }
 
+// Note about debug logging: we can call into the log module during garbage collection,
+// because it will ref/unref objects, which could mess things up. So for `TRACK_OBJECTS`
+// we use `fprintf(stderr, ...)` directly.
+
 // Stage 1, count all references reachable from the unreferenced root object. mark is set to 1
 static int di_collect_garbage_mark(di_object_internal *o, int _ unused) {
-	// fprintf(stderr, "\tmark %p %s %lu/%lu\n", o, di_get_type((void *)o),
-	//        o->ref_count_scan, o->ref_count);
+#ifdef TRACK_OBJECTS
+	fprintf(stderr, "\tmark %p %s %lu/%lu\n", o, di_get_type((void *)o),
+	        o->ref_count_scan, o->ref_count);
+#endif
+	list_del_init(&o->unreferred_siblings);
 	o->ref_count_scan += 1;
 	if (o->mark == 1) {
 		return -1;
@@ -1123,9 +1134,8 @@ static int di_collect_garbage_mark(di_object_internal *o, int _ unused) {
 // revived.
 static int di_collect_garbage_scan(di_object_internal *o, int revive) {
 	if (o->ref_count_scan > o->ref_count) {
-		di_log_va(log_module, DI_LOG_ERROR,
-		          "Object %p %s %lu/%lu reference count is too low", o,
-		          di_get_type((void *)o), o->ref_count_scan, o->ref_count);
+		fprintf(stderr, "Object %p %s %lu/%lu reference count is too low", o,
+		        di_get_type((void *)o), o->ref_count_scan, o->ref_count);
 #ifdef TRACK_OBJECTS
 		di_dump_objects();
 #endif
@@ -1135,7 +1145,10 @@ static int di_collect_garbage_scan(di_object_internal *o, int revive) {
 		if (o->mark == 0) {
 			return -1;
 		}
-		// fprintf(stderr, "\treviving %p\n", o);
+#ifdef TRACK_OBJECTS
+		fprintf(stderr, "\treviving %p, %lu/%lu %s\n", o, o->ref_count_scan,
+		        o->ref_count, di_get_type((void *)o));
+#endif
 		o->ref_count_scan = 0;
 		o->mark = 0;
 		return 1;
@@ -1145,8 +1158,10 @@ static int di_collect_garbage_scan(di_object_internal *o, int revive) {
 	}
 	o->mark = 2;
 	// all references to `o` are internal, so this object can be collected.
-	// fprintf(stderr, "\tcollecting %p, %lu/%lu %s\n", o, o->ref_count_scan,
-	//        o->ref_count, di_get_type((void *)o));
+#ifdef TRACK_OBJECTS
+	fprintf(stderr, "\tcollecting %p, %lu/%lu %s\n", o, o->ref_count_scan,
+	        o->ref_count, di_get_type((void *)o));
+#endif
 	return 0;
 }
 static int di_collect_garbage_collect_pre(di_object_internal *o, int _ unused) {
@@ -1154,56 +1169,72 @@ static int di_collect_garbage_collect_pre(di_object_internal *o, int _ unused) {
 		return -1;
 	}
 	// Make sure objects will not be finalized before we manually finalize them.
-	// fprintf(stderr, "\tpre-finalizing %p\n", o);
+	// fprintf(stderr, "\tpre-finalizing %p, %lu\n", o, o->ref_count);
 	di_ref_object((void *)o);
 	o->mark = 3;
 	return 0;
 }
 static void di_collect_garbage_collect_post(di_object_internal *o) {
 	assert(o->mark == 3);
-	// fprintf(stderr, "\tpost-finalizing %p\n", o);
+	// fprintf(stderr, "\tpost-finalizing %p, %lu\n", o, o->ref_count);
 	_di_finalize_object(o);
-
-	o->mark = 0;
 	di_unref_object((void *)o);
+	o->mark = 0;
 }
 /// Collect garbage in cyclic references
 void di_collect_garbage(void) {
-	collecting_garbage = true;
-	di_object_internal *i, *ni;
-	list_for_each_entry_safe (i, ni, &unreferred_objects, unreferred_siblings) {
-		// fprintf(stderr, "unref root: %p %lu/%lu %d, %s\n", i, i->ref_count_scan,
-		//        i->ref_count, i->mark, di_get_type((void *)i));
-		if (i->mark != 1) {
+	while (!list_empty(&unreferred_objects)) {
+		di_object_internal *i, *ni;
+		// While we scan, we need to remove roots that can be reached from other
+		// roots, so in the end we guarantee that no roots can reach each other.
+		// This is an important assumption we need when we finalize objects.
+
+		// Move scanned objects to a new list, so if finalizing some
+		// of the objects here cause some other objects to be unreferenced, they
+		// could be added to the list without disrupting the collection.
+		struct list_head isolated_roots;
+		INIT_LIST_HEAD(&isolated_roots);
+		while (!list_empty(&unreferred_objects)) {
+			i = list_first_entry(&unreferred_objects, di_object_internal,
+			                     unreferred_siblings);
+			// fprintf(stderr, "unref root: %p %lu/%lu %d, %s\n", i, i->ref_count_scan,
+			//        i->ref_count, i->mark, di_get_type((void *)i));
+
+			// di_collect_garbage_mark will remove all reached objects from unreferred_objects.
+			assert(i->mark == 0);
 			di_scan_type(DI_TYPE_OBJECT, (void *)&i, di_collect_garbage_mark, 0, NULL);
 			// unreferred_objects list doesn't constitute as a reference.
 			i->ref_count_scan -= 1;
-		} else {
-			// this node is reachable from another root, it doesn't need to be
-			// a root
-			list_del_init(&i->unreferred_siblings);
+			list_add(&i->unreferred_siblings, &isolated_roots);
+		}
+
+		list_for_each_entry (i, &isolated_roots, unreferred_siblings) {
+			// fprintf(stderr, "unref root: %p %lu/%lu %d, %s\n", i, i->ref_count_scan,
+			//        i->ref_count, i->mark, di_get_type((void *)i));
+			di_scan_type(DI_TYPE_OBJECT, (void *)&i, di_collect_garbage_scan, 0, NULL);
+		}
+
+		// First, remove all revived objects from the list. Because unreferring
+		// them will add them to the `unreferred_objects` list. If we don't remove
+		// them from this list first, this list will be corrupted.
+		list_for_each_entry_safe (i, ni, &isolated_roots, unreferred_siblings) {
+			assert(i->mark == 0 || i->mark == 2);
+			if (i->mark != 2) {
+				list_del_init(&i->unreferred_siblings);
+			}
+		}
+
+		while (!list_empty(&isolated_roots)) {
+			// fprintf(stderr, "unref root: %p %lu/%lu %d\n", i,
+			//         i->ref_count_scan, i->ref_count, i->mark);
+			i = list_first_entry(&isolated_roots, di_object_internal,
+			                     unreferred_siblings);
+			di_scan_type(DI_TYPE_OBJECT, (void *)&i, di_collect_garbage_collect_pre,
+			             0, di_collect_garbage_collect_post);
+
+			// `i` should have been freed at this point. and the last unref should have removed it from to_finalize.
 		}
 	}
-	list_for_each_entry (i, &unreferred_objects, unreferred_siblings) {
-		// fprintf(stderr, "unref root: %p %lu/%lu %d, %s\n", i, i->ref_count_scan,
-		//        i->ref_count, i->mark, di_get_type((void *)i));
-		di_scan_type(DI_TYPE_OBJECT, (void *)&i, di_collect_garbage_scan, 0, NULL);
-	}
-
-	// Strongly reference unreferred object roots. So they can't be freed while we are
-	// going through the list.
-	list_for_each_entry_safe (i, ni, &unreferred_objects, unreferred_siblings) {
-		di_ref_object((di_object *)i);
-	}
-	list_for_each_entry_safe (i, ni, &unreferred_objects, unreferred_siblings) {
-		// fprintf(stderr, "unref root: %p %lu/%lu %d, %s\n", i, i->ref_count_scan,
-		//        i->ref_count, i->mark, di_get_type((void *)i));
-		list_del_init(&i->unreferred_siblings);
-		di_scan_type(DI_TYPE_OBJECT, (void *)&i, di_collect_garbage_collect_pre,
-		             0, di_collect_garbage_collect_post);
-		di_unref_object((di_object *)i);
-	}
-	collecting_garbage = false;
 }
 
 bool di_is_empty_object(di_object *nonnull obj) {
@@ -1313,6 +1344,7 @@ void di_dump_objects(void) {
 		}
 	}
 
+	di_log_va(log_module, DI_LOG_DEBUG, "Reference count diagnostics:\n");
 	list_for_each_entry (i, &all_objects, siblings) {
 		const char *color = "";
 		if (i->ref_count_scan > 0) {
