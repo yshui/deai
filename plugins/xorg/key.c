@@ -384,7 +384,7 @@ static void handle_key(di_weak_object *weak_ext, xcb_generic_event_t *ev) {
 
 const int OPCODES[] = {XCB_KEY_PRESS, XCB_KEY_RELEASE, XCB_MAPPING_NOTIFY};
 bool key_register_listener(struct xorg_key *k) {
-	auto weak_k = di_weakly_ref_object((di_object *)k);
+	scoped_di_weak_object *weak_k = di_weakly_ref_object((di_object *)k);
 	scoped_di_object *handler = (void *)di_make_closure(handle_key, (weak_k), void *);
 	scoped_di_object *dc = NULL;
 	if (di_get(k, XORG_CONNECTION_MEMBER, dc) != 0) {
