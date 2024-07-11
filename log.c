@@ -84,8 +84,8 @@ static int di_log(di_object *o, di_type *rt, di_value *ret, di_tuple t) {
 		return 0;
 	}
 
-	scoped_di_object *ltgt = NULL;
-	if (di_get(l, "log_target", ltgt) != 0) {
+	di_object *ltgt = NULL;
+	if (di_rawget_borrowed(l, "log_target", ltgt) != 0) {
 		ret->nint = 0;
 		return 0;
 	}

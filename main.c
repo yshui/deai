@@ -464,7 +464,7 @@ void di_terminate(struct deai *p) {
 /// Add an named object as a root to keep it alive
 static bool di_add_root(di_object *di, di_string key, di_object *obj) {
 	char *buf;
-	asprintf(&buf, "__root_%.*s", (int)key.length, key.data);
+	asprintf(&buf, "___root_%.*s", (int)key.length, key.data);
 	int rc = di_add_member_clonev(di, di_string_borrow(buf), DI_TYPE_OBJECT, obj);
 	free(buf);
 	return rc == 0;
@@ -473,7 +473,7 @@ static bool di_add_root(di_object *di, di_string key, di_object *obj) {
 /// Remove an named root from roots
 static bool di_remove_root(di_object *di, di_string key) {
 	char *buf;
-	asprintf(&buf, "__root_%.*s", (int)key.length, key.data);
+	asprintf(&buf, "___root_%.*s", (int)key.length, key.data);
 	int rc = di_delete_member_raw(di, di_string_borrow(buf));
 	free(buf);
 	return rc == 0;
@@ -481,7 +481,7 @@ static bool di_remove_root(di_object *di, di_string key) {
 
 /// Remove all named roots
 static void di_clear_roots(di_object *di_) {
-	static const char *const root_prefix = "__root_";
+	static const char *const root_prefix = "___root_";
 	const size_t root_prefix_len = strlen(root_prefix);
 	auto di = (di_object_internal *)di_;
 	struct di_member *i, *tmp;
