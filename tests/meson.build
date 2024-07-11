@@ -38,6 +38,7 @@ core_test_cases = [
   'drop_event_source_when_listener_is_attached.c',
   'c++_test.cc',
   'lua_fail_test.cc',
+  'lua_return_test.cc',
 ]
 
 foreach t : core_test_cases

@@ -596,16 +596,42 @@ static di_lua_state *lua_new_state(struct di_module *m) {
 
 define_object_cleanup(di_lua_state);
 
+/// Convert N values from the lua stack to a di_tuple, starting from index `index`, ending
+/// at the top of the stack.
+static di_tuple di_lua_values_to_di_tuple(lua_State *L, int index) {
+	di_tuple t;
+	auto count = lua_gettop(L) - index + 1;
+	t.length = 0;
+	t.elements = tmalloc(struct di_variant, count);
+	for (int i = 0; i < count; i++) {
+		if (di_lua_type_to_di(L, i + index, &t.elements[t.length].type, NULL) != 0) {
+			continue;
+		}
+		if (t.elements[t.length].type == DI_TYPE_NIL) {
+			t.elements[t.length++].value = NULL;
+			continue;
+		}
+		t.elements[t.length].value = malloc(di_sizeof_type(t.elements[t.length].type));
+		if (di_lua_type_to_di(L, i + index, &t.elements[t.length].type,
+		                      t.elements[t.length].value) != 0) {
+			free(t.elements[t.length].value);
+			continue;
+		}
+		t.length++;
+	}
+	return t;
+}
+
 /// Load a lua script
 ///
-/// EXPORT: lua.load_script(path: :string): deai.plugin.lua:LuaScript
+/// EXPORT: lua.load_script(path: :string): :tuple
 ///
 /// Arguments:
 ///
 /// - path path to the script
 ///
-/// Load and execute a lua script. Returns a handle to the script.
-static void di_lua_load_script(di_object *obj, di_string path_) {
+/// Load and execute a lua script. Returns whatever the script returns as a tuple.
+static di_tuple di_lua_load_script(di_object *obj, di_string path_) {
 	/**
 	 * Reference count scheme for di_lua_script:
 	 *
@@ -619,7 +645,7 @@ static void di_lua_load_script(di_object *obj, di_string path_) {
 	 */
 	if (!path_.data) {
 		log_error("Path is null");
-		return;
+		return DI_TUPLE_INIT;
 	}
 
 	scopedp(char) *path = di_string_to_chars_alloc(path_);
@@ -651,14 +677,18 @@ static void di_lua_load_script(di_object *obj, di_string path_) {
 		const char *err = lua_tostring(L->L, -1);
 		log_error("Failed to load lua script %s: %s\n", path, err);
 		lua_pop(L->L, 2);
-		return;
+		return DI_TUPLE_INIT;
 	}
 
 	int ret;
-	ret = lua_pcall(L->L, 0, 0, -2);
+	ret = lua_pcall(L->L, 0, LUA_MULTRET, -2);
 
 	// Remove the errfunc
 	lua_remove(L->L, 1);
+	di_tuple func_ret = DI_TUPLE_INIT;
+	if (ret == 0) {
+		func_ret = di_lua_values_to_di_tuple(L->L, 1);
+	}
 
 	DI_CHECK_OK(luaL_loadstring(L->L, "collectgarbage()"));
 	DI_CHECK_OK(lua_pcall(L->L, 0, 0, 0));
@@ -673,6 +703,7 @@ static void di_lua_load_script(di_object *obj, di_string path_) {
 		lua_pop(L->L, 2);
 		log_error("Error while running lua script: %s", err);
 	}
+	return func_ret;
 }
 
 static int
@@ -1362,7 +1393,7 @@ static struct di_module *di_new_lua(struct deai *di, const char *self_path) {
 	const char *last_component = strrchr(self_path, '/');
 	scopedp(char) *dirname = strndup(self_path, last_component - self_path);
 	scoped_di_string builtin_path = di_string_printf("%s/builtin.lua", dirname);
-	di_lua_load_script((void *)m, builtin_path);
+	scoped_di_tuple ret = di_lua_load_script((void *)m, builtin_path);
 
 	return m;
 }
