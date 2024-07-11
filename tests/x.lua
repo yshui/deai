@@ -4,8 +4,7 @@ di.os.env.DISPLAY=":101"
 
 local listen_handles = {}
 table.insert(listen_handles, di.event:timer(0.2):on("elapsed", function()
-
-    -- wait a awhile for Xvfb to start
+    -- wait a while for Xvfb to start
     o = di.xorg:connect()
     assert(o.asdf == nil)
     if o.errmsg then

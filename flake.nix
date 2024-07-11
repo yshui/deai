@@ -10,7 +10,7 @@
     devShells.${system} = rec {
       default = deai.overrideAttrs (o: {
         nativeBuildInputs = (with pkgs; [
-          clippy clang-tools_17
+          clippy clang-tools_17 xdotool
         ]) ++ o.nativeBuildInputs;
         hardeningDisable = [ "all" ];
       });
