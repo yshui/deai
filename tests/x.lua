@@ -1,4 +1,3 @@
-di:load_plugin("./plugins/xorg/di_xorg.so")
 di.spawn:run({"Xvfb", ":101", "-screen", "0", "1600x1200x24+32"}, true)
 di.spawn:run({"Xvfb", ":102", "-screen", "0", "1600x1200x24+32"}, true)
 di.os.env.DISPLAY=":101"
@@ -65,13 +64,13 @@ table.insert(listen_handles, di.event:timer(0.2):on("elapsed", function()
     outs = o.randr.outputs
     for _, i in pairs(outs) do
         print(i.name, i.backlight, i.max_backlight)
-        local vc = i.view.config
+        local vc = i.current_view.config
         if vc then
             print(vc.x, vc.y, vc.width, vc.height, vc.rotation, vc.reflection)
-            i.view.config = {x=vc.x, y=vc.y, rotation=vc.rotation, reflection=vc.reflection, mode=modes[1].id}
+            i.current_view.config = {x=vc.x, y=vc.y, rotation=vc.rotation, reflection=vc.reflection, mode=modes[1].id}
         end
-        if i.view.outputs then
-            print(i.view.outputs[1].name)
+        if i.current_view.outputs then
+            print(i.current_view.outputs[1].name)
         end
     end
 
