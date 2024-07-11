@@ -14,3 +14,5 @@ deai.d
 .clangd
 /docs/scanner/target
 /docs/scanner/Cargo.lock
+.direnv
+/build*
