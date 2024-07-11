@@ -1418,7 +1418,7 @@ static di_object *di_lua_as_di_object(di_object * /*lua*/, di_object *obj) {
 /// Additionally, we don't know what exactly to do with an empty table. Should it be a
 /// table or an array? Right now, it's treated as a table, thus translates to an object in
 /// deai. So if you want to pass an empty array as argument, you would have to pass "nil".
-static struct di_module *di_new_lua(struct deai *di) {
+static struct di_module *di_new_lua(struct deai *di, const char *self_path) {
 	auto m = di_new_module(di);
 
 	di_method(m, "load_script", di_lua_load_script, di_string);
@@ -1427,9 +1427,10 @@ static struct di_module *di_new_lua(struct deai *di) {
 
 	// Load the builtin lua script. The returned object could safely die. The builtin
 	// script should register modules which should keep it alive.
-	scoped_di_object *ret = di_lua_load_script(
-	    (void *)m,
-	    di_string_borrow_literal(DI_PLUGIN_INSTALL_DIR "/lua/builtin.lua"));
+	const char *last_component = strrchr(self_path, '/');
+	scopedp(char) *dirname = strndup(self_path, last_component - self_path);
+	scoped_di_string builtin_path = di_string_printf("%s/builtin.lua", dirname);
+	scoped_di_object *ret = di_lua_load_script((void *)m, builtin_path);
 
 	scoped_di_string errmsg = DI_STRING_INIT;
 	if (di_get(ret, "errmsg", errmsg) == 0) {
@@ -1439,8 +1440,8 @@ static struct di_module *di_new_lua(struct deai *di) {
 	}
 	return m;
 }
-DEAI_PLUGIN_ENTRY_POINT(di) {
-	auto m = di_new_lua(di);
+DEAI_PLUGIN_ENTRY_POINT2(di, plugin_path) {
+	auto m = di_new_lua(di, plugin_path);
 	di_register_module(di, di_string_borrow("lua"), &m);
 	return 0;
 }
