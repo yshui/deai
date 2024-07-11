@@ -51,7 +51,7 @@ struct di_spawn {
 
 static void output_handler(struct child *c, int fd, int id, const char *ev) {
 	static char buf[4096];
-	int ret;
+	ssize_t ret;
 	while ((ret = read(fd, buf, sizeof(buf))) > 0) {
 		const char *pos = buf;
 		while (1) {
@@ -79,6 +79,11 @@ static void output_handler(struct child *c, int fd, int id, const char *ev) {
 				return;
 			}
 		}
+	}
+	if (ret == 0) {
+		// Remote end closed, stop listeners
+		scoped_di_string signal_member = di_string_printf("__signal_%s", ev);
+		di_delete_member((di_object *)c, signal_member);
 	}
 }
 
