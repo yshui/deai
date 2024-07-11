@@ -48,9 +48,9 @@ inline constexpr bool all_of_v = all_of<Bools...>::value;
 namespace c_api {
 extern "C" {
 #define __auto_type auto        // NOLINT
-#include "../object.h"
-#include "../error.h"
 #include "../callable.h"
+#include "../error.h"
+#include "../object.h"
 #undef __auto_type
 }
 }        // namespace c_api
@@ -413,13 +413,10 @@ auto raw_check_type(c_api::di_object *obj, const T * /*tag*/)
 struct Variant {
 private:
 	template <typename T, c_api::di_type Type = util::deai_typeof<T>::value>
-	static constexpr bool
-	    is_trivially_convertible = util::is_basic_deai_type(Type) &&
-	                               (Type != c_api::di_type::OBJECT) &&
-	                               (Type != c_api::di_type::NIL) &&
-	                               (Type != c_api::di_type::ANY) &&
-	                               (Type != c_api::di_type::DI_LAST_TYPE) &&
-	                               (Type != c_api::di_type::WEAK_OBJECT);
+	static constexpr bool is_trivially_convertible =
+	    util::is_basic_deai_type(Type) && (Type != c_api::di_type::OBJECT) &&
+	    (Type != c_api::di_type::NIL) && (Type != c_api::di_type::ANY) &&
+	    (Type != c_api::di_type::DI_LAST_TYPE) && (Type != c_api::di_type::WEAK_OBJECT);
 
 public:
 	c_api::di_type type;
@@ -512,8 +509,7 @@ public:
 		return to<T>().value();
 	}
 
-	template <typename T, c_api::di_type type = util::deai_typeof<
-	                          typename std::remove_cv<typename std::remove_reference<T>::type>::type>::value>
+	template <typename T, c_api::di_type type = util::deai_typeof<std::remove_cv_t<std::remove_reference_t<T>>>::value>
 	static auto from(T &&other) -> Variant {
 		auto v = util::to_owned_deai_value(std::forward<T>(other));
 		return Variant{v};
@@ -525,6 +521,11 @@ public:
 	auto object_ref() && -> std::optional<Ref<Object>>;
 	/// Get an object ref out of this variant. The value is copied.
 	auto object_ref() & -> std::optional<Ref<Object>>;
+
+	/// Unpack a tuple variant into an array of variants. If this variant is not
+	/// a tuple, then an array with a single element is returned. The current Variant
+	/// is invalidated after this operation.
+	auto unpack() && -> std::vector<Variant>;
 
 	template <typename T, c_api::di_type Type = util::deai_typeof<T>::value>
 	[[nodiscard]] auto is() const -> bool {
@@ -825,7 +826,7 @@ public:
 	/// Give up ownership of the object and return a raw di_object pointer. You will
 	/// only be able to call `raw`, the destructor, or assigning to this Ref after
 	/// this function. Result of calling other functions is undefined.
-	auto release() &&noexcept -> c_api::di_object * {
+	auto release() && noexcept -> c_api::di_object * {
 		return inner.inner.release();
 	}
 
@@ -1052,11 +1053,11 @@ static_assert(check_owned_type_transformations_v<std::string, c_api::di_object *
 
 }        // namespace deai
 
-#define DEAI_CPP_PLUGIN_ENTRY_POINT(arg)                                                       \
-	/* NOLINTNEXTLINE(bugprone-macro-parentheses) */                                       \
-	static auto di_cpp_plugin_init(::deai::Ref<::deai::Core> &&arg)->int;                  \
-	extern "C" visibility_default auto di_plugin_init(::deai::c_api::di_object *di)->int { \
-		return di_cpp_plugin_init(::deai::Ref<::deai::Core>{di});                      \
-	}                                                                                      \
-	/* NOLINTNEXTLINE(bugprone-macro-parentheses) */                                       \
-	static auto di_cpp_plugin_init(::deai::Ref<::deai::Core> &&arg)->int
+#define DEAI_CPP_PLUGIN_ENTRY_POINT(arg)                                                         \
+	/* NOLINTNEXTLINE(bugprone-macro-parentheses) */                                         \
+	static auto di_cpp_plugin_init(::deai::Ref<::deai::Core> &&arg) -> int;                  \
+	extern "C" visibility_default auto di_plugin_init(::deai::c_api::di_object *di) -> int { \
+		return di_cpp_plugin_init(::deai::Ref<::deai::Core>{di});                        \
+	}                                                                                        \
+	/* NOLINTNEXTLINE(bugprone-macro-parentheses) */                                         \
+	static auto di_cpp_plugin_init(::deai::Ref<::deai::Core> &&arg) -> int

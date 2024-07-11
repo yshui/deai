@@ -75,6 +75,20 @@ auto Variant::object_ref() & -> std::optional<Ref<Object>> {
 	return Variant{*this}.object_ref();
 }
 
+auto Variant::unpack() && -> std::vector<Variant> {
+	if (type != c_api::di_type::TUPLE) {
+		return {std::move(*this)};
+	}
+	std::vector<Variant> ret{};
+	ret.reserve(value.tuple.length);
+	for (size_t i = 0; i < value.tuple.length; i++) {
+		ret.emplace_back(value.tuple.elements[i]);
+	}
+	free(value.tuple.elements);
+	type = c_api::di_type::NIL;
+	return ret;
+}
+
 Variant::Variant(c_api::di_type type_, const c_api::di_value &value_)
     : type{type_}, value{value_} {
 	type_ = c_api::di_type::NIL;
