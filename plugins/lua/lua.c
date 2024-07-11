@@ -50,7 +50,6 @@
 #define tmalloc(type, nmem) (type *)calloc(nmem, sizeof(type))
 #define auto __auto_type
 
-#define DI_LUA_REGISTRY_SCRIPT_OBJECT_KEY "__deai.di_lua.script_object"
 #define DI_LUA_REGISTRY_STATE_OBJECT_KEY "__deai.di_lua.state_object"
 
 #define di_lua_get_state(L, s)                                                           \
@@ -59,24 +58,6 @@
 		lua_rawget((L), LUA_REGISTRYINDEX);                                      \
 		(s) = lua_touserdata((L), -1);                                           \
 		lua_pop(L, 1);                                                           \
-	} while (0)
-
-#define di_lua_get_env(L, s)                                                             \
-	do {                                                                             \
-		lua_pushliteral((L), DI_LUA_REGISTRY_SCRIPT_OBJECT_KEY);                 \
-		lua_rawget((L), LUA_REGISTRYINDEX);                                      \
-		(s) = lua_touserdata((L), -1);                                           \
-		lua_pop(L, 1);                                                           \
-	} while (0)
-
-#define di_lua_xchg_env(L, s)                                                            \
-	do {                                                                             \
-		void *tmp;                                                               \
-		di_lua_get_env(L, tmp);                                                  \
-		lua_pushliteral((L), DI_LUA_REGISTRY_SCRIPT_OBJECT_KEY);                 \
-		lua_pushlightuserdata((L), (s));                                         \
-		lua_rawset((L), LUA_REGISTRYINDEX);                                      \
-		s = tmp;                                                                 \
 	} while (0)
 
 /// A singleton for lua_State
@@ -129,15 +110,12 @@ static int di_lua_meta_newindex(lua_State *L);
 static int di_lua_errfunc(lua_State *L) {
 	/* Convert error to string, to prevent a follow-up error with lua_concat. */
 	auto err = luaL_tolstring(L, -1, NULL);
-
-	lua_pushliteral(L, DI_LUA_REGISTRY_SCRIPT_OBJECT_KEY);
-	lua_rawget(L, LUA_REGISTRYINDEX);
-	struct di_lua_script *o = lua_touserdata(L, -1);
+	auto path = luaL_tolstring(L, lua_upvalueindex(1), NULL);
 
 	char *error_prompt = NULL;
 	int error_prompt_len;
 	error_prompt_len =
-	    asprintf(&error_prompt, "Failed to run lua script %s: %s", o->path, err);
+	    asprintf(&error_prompt, "Failed to run lua script %s: %s", path, err);
 
 	// Get debug.traceback
 	lua_getglobal(L, "debug");
@@ -159,7 +137,7 @@ static int di_lua_errfunc(lua_State *L) {
 		                            "Failed to run lua script %s: %s\nstack "
 		                            "traceback:\n\t(Failed to generate stack "
 		                            "trace: %s)",
-		                            o->path, err, err2);
+		                            path, err, err2);
 		lua_pushlstring(L, error_prompt, error_prompt_len);
 		free(error_prompt);
 	}
@@ -203,13 +181,15 @@ static void **di_lua_checkproxy(lua_State *L, int index) {
 }
 
 static void lua_ref_dtor(struct di_lua_ref *t) {
-	scoped_di_object *script_obj = NULL;
 	scoped_di_object *state_obj = NULL;
-	DI_CHECK_OK(di_get(t, "___di_lua_script", script_obj));
-	if (di_get(script_obj, "___di_lua_state", state_obj) == 0) {
-		// The script object might already be finalized if we are part of
-		// a reference cycle.
-		auto state = (struct di_lua_state *)state_obj;
+	// The state object might already be finalized if we are part of
+	// a reference cycle.
+	if (di_get(t, "___di_lua_state", state_obj) != 0) {
+		return;
+	}
+
+	auto state = (struct di_lua_state *)state_obj;
+	if (state->L != NULL) {
 		luaL_unref(state->L, LUA_REGISTRYINDEX, t->tref);
 	}
 }
@@ -243,15 +223,11 @@ static int di_lua_di_getter(di_object *m, di_type *rt, di_value *ret, di_tuple t
 		return -EINVAL;
 	}
 
-	scoped_di_object *script_obj = NULL;
 	scoped_di_object *state_obj = NULL;
-	DI_CHECK_OK(di_get(t, "___di_lua_script", script_obj));
-	DI_CHECK_OK(di_get(script_obj, "___di_lua_state", state_obj));
+	DI_CHECK_OK(di_get(t, "___di_lua_state", state_obj));
 
-	auto script = (struct di_lua_script *)script_obj;
 	auto state = (struct di_lua_state *)state_obj;
 	lua_State *L = state->L;
-	di_lua_xchg_env(L, script);
 
 	lua_rawgeti(L, LUA_REGISTRYINDEX, t->tref);
 
@@ -269,8 +245,6 @@ static int di_lua_di_getter(di_object *m, di_type *rt, di_value *ret, di_tuple t
 		// nil in Lua means non-existent.
 		*rt = DI_LAST_TYPE;
 	}
-
-	di_lua_xchg_env(L, script);
 	return 0;
 }
 
@@ -290,15 +264,11 @@ static int di_lua_di_setter(di_object *m, di_type *rt, di_value *ret, di_tuple t
 		return -EINVAL;
 	}
 
-	scoped_di_object *script_obj = NULL;
 	scoped_di_object *state_obj = NULL;
-	DI_CHECK_OK(di_get(t, "___di_lua_script", script_obj));
-	DI_CHECK_OK(di_get(script_obj, "___di_lua_state", state_obj));
+	DI_CHECK_OK(di_get(t, "___di_lua_state", state_obj));
 
-	auto script = (struct di_lua_script *)script_obj;
 	auto state = (struct di_lua_state *)state_obj;
 	lua_State *L = state->L;
-	di_lua_xchg_env(L, script);
 
 	lua_rawgeti(L, LUA_REGISTRYINDEX, t->tref);
 
@@ -316,7 +286,6 @@ static int di_lua_di_setter(di_object *m, di_type *rt, di_value *ret, di_tuple t
 	lua_settable(L, -3);
 	lua_pop(L, 1);        // table
 
-	di_lua_xchg_env(L, script);
 	*rt = DI_TYPE_NIL;
 	return 0;
 }
@@ -324,19 +293,14 @@ static int di_lua_di_setter(di_object *m, di_type *rt, di_value *ret, di_tuple t
 static struct di_lua_ref *lua_type_to_di_object(lua_State *L, int i, void *call) {
 	// TODO(yshui): probably a good idea to make sure that same lua object get same
 	// di object?
-	struct di_lua_script *s;
-
-	// retrive the script object from lua registry
-	lua_pushliteral(L, DI_LUA_REGISTRY_SCRIPT_OBJECT_KEY);
-	lua_rawget(L, LUA_REGISTRYINDEX);
-	s = lua_touserdata(L, -1);
-	lua_pop(L, 1);        // pop the script object
+	di_object *state;
+	di_lua_get_state(L, state);
 
 	auto o = di_new_object_with_type(struct di_lua_ref);
 	di_set_type((di_object *)o, "deai.plugin.lua:LuaRef");
 	o->tref = luaL_ref(L, LUA_REGISTRYINDEX);        // this pops the table from
 	                                                 // stack, we need to put it back
-	di_member_clone(o, "___di_lua_script", (di_object *)s);
+	di_member_clone(o, "___di_lua_state", (di_object *)state);
 
 	// Restore the value onto the stack
 	lua_pushinteger(L, o->tref);
@@ -597,6 +561,7 @@ const luaL_Reg di_lua_di_methods[] = {
 
 static void lua_state_dtor(struct di_lua_state *obj) {
 	lua_close(obj->L);
+	obj->L = NULL;
 }
 
 static di_lua_state *lua_new_state(struct di_module *m) {
@@ -693,7 +658,8 @@ static di_object *di_lua_load_script(di_object *obj, di_string path_) {
 	}
 
 	di_mgetm(m, log, di_new_error("Can't find log module"));
-	lua_pushcfunction(L->L, di_lua_errfunc);
+	lua_pushstring(L->L, path);
+	lua_pushcclosure(L->L, di_lua_errfunc, 1);
 
 	if (luaL_loadfile(L->L, path)) {
 		const char *err = lua_tostring(L->L, -1);
@@ -710,11 +676,7 @@ static di_object *di_lua_load_script(di_object *obj, di_string path_) {
 	di_member_clone(s, "___di_lua_state", (di_object *)L);
 
 	int ret;
-	// load_script might be called by lua script,
-	// so preserve the current set script object.
-	di_lua_xchg_env(L->L, s);
 	ret = lua_pcall(L->L, 0, 0, -2);
-	di_lua_xchg_env(L->L, s);
 
 	// Remove the errfunc
 	lua_remove(L->L, 1);
@@ -836,21 +798,15 @@ static bool di_lua_checkarray(lua_State *L, int index, int *nelem, di_type *elem
 }
 
 static int call_lua_function(struct di_lua_ref *ref, di_type *rt, di_value *ret, di_tuple t) {
-	scoped_di_object *script_obj = NULL;
-	DI_CHECK_OK(di_get(ref, "___di_lua_script", script_obj));
-
 	struct di_variant *vars = t.elements;
 
-	auto script = (struct di_lua_script *)script_obj;
 	scoped_di_object *state_obj = NULL;
-	DI_CHECK_OK(di_get(script, "___di_lua_state", state_obj));
+	DI_CHECK_OK(di_get(ref, "___di_lua_state", state_obj));
 
 	auto state = (struct di_lua_state *)state_obj;
 	lua_State *L = state->L;
 
 	lua_pushcfunction(L, di_lua_errfunc);
-
-	di_lua_xchg_env(L, script);
 
 	// Get the function
 	lua_rawgeti(L, LUA_REGISTRYINDEX, ref->tref);
@@ -869,8 +825,6 @@ static int call_lua_function(struct di_lua_ref *ref, di_type *rt, di_value *ret,
 	}
 
 	lua_pop(L, 2);        // Pop (error or result) + errfunc
-
-	di_lua_xchg_env(L, script);
 
 	DI_CHECK_OK(luaL_loadstring(L, "collectgarbage(\"step\", 20)"));
 	DI_CHECK_OK(lua_pcall(L, 0, 0, 0));
