@@ -506,12 +506,12 @@ void di_xorg_add_signal(di_xorg_connection *xc) {
 	if (xc->nsignals != 1) {
 		return;
 	}
-	fprintf(stderr, "X start\n");
 	scoped_di_weak_object *weak_event = NULL;
 	DI_CHECK_OK(di_get(xc, "__weak_event_module", weak_event));
 	scoped_di_object *eventm = di_upgrade_weak_ref(weak_event);
 	if (eventm == NULL) {
 		// mostly likely deai is shutting down
+		log_info("cannot find event module");
 		return;
 	}
 
