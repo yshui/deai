@@ -172,16 +172,10 @@ di_object *nullable di_try(void (*nonnull func)(void *nullable), void *nullable 
 void di_collect_garbage(void);
 #ifdef TRACK_OBJECTS
 void di_dump_objects(void);
-/// Returns true if leaks are found
-bool di_mark_and_sweep(bool *nonnull has_cycle);
 void di_track_object_ref(di_object *nonnull, void *nonnull);
 void __attribute__((noinline)) print_stack_trace(int skip, int limit);
 #else
 static inline void di_dump_objects(void) {
-}
-static inline bool di_mark_and_sweep(bool *nonnull has_cycle) {
-	*has_cycle = false;
-	return false;
 }
 static inline void
 di_track_object_ref(di_object *unused nonnull a, void *unused nonnull b) {

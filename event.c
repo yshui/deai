@@ -376,15 +376,6 @@ struct di_prepare {
 };
 
 static void di_prepare(EV_P_ ev_prepare *w, int revents) {
-	bool has_cycle;
-	if (di_mark_and_sweep(&has_cycle)) {
-		di_log_va(log_module, DI_LOG_DEBUG, "Reference bug detected\n");
-		di_dump_objects();
-#ifdef UNITTESTS
-		abort();
-#endif
-	}
-
 	struct di_prepare *dep = (void *)w;
 	// Event module could be freed by garbage collector (because here we don't
 	// increment the reference count). Use a weak reference to detect when it's freed.

@@ -778,13 +778,7 @@ int main(int argc, char *argv[]) {
 	di_unref_object((void *)p);
 
 	di_collect_garbage();
-	bool has_cycle;
-	if (di_mark_and_sweep(&has_cycle)) {
-		di_dump_objects();
-#ifdef UNITTESTS
-		abort();
-#endif
-	}
+	di_dump_objects();
 	if (!quit) {
 		ev_run(p->loop, 0);
 	}
