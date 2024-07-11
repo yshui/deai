@@ -253,6 +253,11 @@ static void di_child_start_output_listener(di_object *p, int id) {
 }
 
 static void di_child_process_new_stdout_signal(di_object *p, di_object *sig) {
+	auto c = (struct child *)p;
+	if (c->fds[0] == -1) {
+		// ignore_output was true
+		return;
+	}
 	if (di_member_clone(p, "__signal_stdout_line", sig) != 0) {
 		return;
 	}
@@ -260,6 +265,11 @@ static void di_child_process_new_stdout_signal(di_object *p, di_object *sig) {
 }
 
 static void di_child_process_new_stderr_signal(di_object *p, di_object *sig) {
+	auto c = (struct child *)p;
+	if (c->fds[1] == -1) {
+		// ignore_output was true
+		return;
+	}
 	if (di_member_clone(p, "__signal_stderr_line", sig) != 0) {
 		return;
 	}

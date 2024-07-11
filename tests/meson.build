@@ -21,6 +21,7 @@ test_cases = [
   'cycle.lua',
   'twoway.lua',
   'promise_early_exit.lua',
+  'spawn.lua',
 ]
 foreach t : test_cases
   test(t, deai_exe, args: [
