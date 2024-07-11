@@ -15,8 +15,6 @@
 #include "uthash.h"
 #include "utils.h"
 
-struct di_xorg;
-
 struct di_atom_entry;
 struct di_xorg_ext;
 

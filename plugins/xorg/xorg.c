@@ -606,7 +606,7 @@ static di_object *di_xorg_new_clipboard(struct di_xorg *x) {
 /// Arguments:
 ///
 /// - display(:string) the display
-static di_object *di_xorg_connect_to(struct di_xorg *x, di_string displayname_) {
+static di_object *di_xorg_connect_to(di_object *x, di_string displayname_) {
 	int scrn;
 	scopedp(char) *displayname = NULL;
 	if (displayname_.length > 0) {
@@ -652,7 +652,7 @@ static di_object *di_xorg_connect_to(struct di_xorg *x, di_string displayname_) 
 ///
 /// Connect to the default X server, usually the one specified in the DISPLAY
 /// environment variable.
-static di_object *di_xorg_connect(struct di_xorg *x) {
+static di_object *di_xorg_connect(di_object *x) {
 	return di_xorg_connect_to(x, DI_STRING_INIT);
 }
 
