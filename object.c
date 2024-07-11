@@ -356,7 +356,7 @@ struct di_module *di_new_module_with_size(struct deai *di, size_t size) {
 
 	di_set_type((void *)pm, "deai:module");
 
-	di_member_clone(pm, "__deai", (di_object *)di);
+	di_member_clone(pm, DEAI_MEMBER_NAME_RAW, (di_object *)di);
 
 	return (void *)pm;
 }

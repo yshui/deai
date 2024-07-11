@@ -650,7 +650,7 @@ static di_array get_view_outputs(struct di_xorg_view *v) {
 		return ret;
 	}
 
-	auto r = xcb_randr_get_crtc_info_reply(
+	scopedp(xcb_randr_get_crtc_info_reply_t) *r = xcb_randr_get_crtc_info_reply(
 	    dc->c, xcb_randr_get_crtc_info(dc->c, v->id, v->rr->cts), NULL);
 
 	auto outputs = xcb_randr_get_crtc_info_outputs(r);
