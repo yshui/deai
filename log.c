@@ -124,8 +124,7 @@ static void file_target_dtor(struct log_file *lf) {
 /// EXPORT: log.file_target(filename: :string, overwrite: :bool): deai.builtin.log:FileTarget
 ///
 /// Create a log target that writes to a file.
-static di_object *
-file_target(struct di_log *l, di_string filename, bool overwrite) {
+static di_object *file_target(struct di_log *l, di_string filename, bool overwrite) {
 	char filename_str[PATH_MAX];
 	if (!di_string_to_chars(filename, filename_str, sizeof(filename_str))) {
 		return di_new_error("Filename too long for file target");
@@ -179,7 +178,7 @@ int di_log_va(di_object *o, int log_level, const char *fmt, ...) {
 		if (log_level > saved_log_level) {
 			return 0;
 		}
-		char *buf;
+		scopedp(char) * buf;
 		ret = vasprintf(&buf, fmt, ap);
 		if (buf[ret - 1] == '\n') {
 			ret = fprintf(stderr, "%s", buf);
