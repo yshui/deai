@@ -124,7 +124,7 @@ PUBLIC_DEAI_API int di_redirect_signal(di_object *nonnull us, struct di_weak_obj
 #define di_borrowm(di, modn, on_err)                                                     \
 	di_object *modn##m = NULL;                                                       \
 	do {                                                                             \
-		if (di_rawget_borrowed((di), #modn, modn##m) != 0) {                    \
+		if (di_rawget_borrowed((di), #modn, modn##m) != 0) {                     \
 			on_err;                                                          \
 		}                                                                        \
 	} while (0)
@@ -186,22 +186,21 @@ PUBLIC_DEAI_API int di_redirect_signal(di_object *nonnull us, struct di_weak_obj
 // to be a valid value for `type` at runtime. This is only meant to be used for compile
 // time metaprogramming
 #define TYPE_INIT(type)                                                                  \
-	_Generic((type *)0, \
-	di_array *: DI_ARRAY_INIT, \
-	di_tuple *: DI_TUPLE_INIT, \
-	di_variant *: DI_VARIANT_INIT, \
-	int *: 0, \
-	unsigned int *: 0, \
-	int64_t *: 0, \
-	uint64_t *: 0, \
-	di_string *: DI_STRING_INIT, \
-	const char **: NULL, \
-	di_object **: NULL, \
-	di_weak_object **: NULL, \
-	void **: NULL, \
-	double *: 0.0, \
-	bool *: false \
-	)
+	_Generic((type *)0,                                                              \
+	    di_array *: DI_ARRAY_INIT,                                                   \
+	    di_tuple *: DI_TUPLE_INIT,                                                   \
+	    di_variant *: DI_VARIANT_INIT,                                               \
+	    int *: 0,                                                                    \
+	    unsigned int *: 0,                                                           \
+	    int64_t *: 0,                                                                \
+	    uint64_t *: 0,                                                               \
+	    di_string *: DI_STRING_INIT,                                                 \
+	    const char **: NULL,                                                         \
+	    di_object **: NULL,                                                          \
+	    di_weak_object **: NULL,                                                     \
+	    void **: NULL,                                                               \
+	    double *: 0.0,                                                               \
+	    bool *: false)
 
 #define gen_args(...) LIST_APPLY(TYPE_INIT, SEP_COMMA, ##__VA_ARGS__)
 
@@ -366,12 +365,12 @@ static inline di_value as_di_value(di_type type, void *nonnull value) {
 }
 
 /// Get the array element at a given index, as a variant. This variant doesn't have
-/// ownership, and can't escaped
+/// ownership, and can't escape
 #define di_array_index(arr, index)                                                       \
 	((struct di_variant){                                                            \
-	    .type = arr.elem_type,                                                       \
+	    .type = (arr).elem_type,                                                     \
 	    .value = (di_value[]){as_di_value(                                           \
-	        arr.elem_type, arr.arr + di_sizeof_type(arr.elem_type) + index)}})
+	        (arr).elem_type, (arr).arr + di_sizeof_type((arr).elem_type) * (index))}})
 
 #define di_variant_of(v)                                                                 \
 	({                                                                               \
