@@ -118,7 +118,7 @@ Right now the only supported scripting language is Lua, so the examples will be 
 
   ```lua
   -- Map ctrl-a
-  xc.key:new({"ctrl"}, "a", false):on("pressed", function()
+  xc.key:new({"ctrl"}, "a", true):on("pressed", function()
       -- do something
   end)
   ```

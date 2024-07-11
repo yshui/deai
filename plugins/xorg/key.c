@@ -30,7 +30,7 @@ struct keybinding {
 	xcb_keycode_t *keycodes;
 	uint16_t modifiers;
 	struct list_head siblings;
-	bool replay;
+	bool intercept;
 };
 
 static const char *const modifier_names[] = {
@@ -204,9 +204,10 @@ static void keybinding_del_signal(const char *signal, di_object *obj) {
 	scoped_di_string keybinding_key = di_string_printf("___keybinding_%p", obj);
 	di_delete_member_raw(key_obj, keybinding_key);
 }
+
 /// Add a new key binding
 ///
-/// EXPORT: deai.plugin.xorg:Key.new(modifiers, key, replay): deai.plugin.xorg.key:Binding
+/// EXPORT: deai.plugin.xorg:Key.new(modifiers, key, intercept): deai.plugin.xorg.key:Binding
 ///
 /// Create a new event source that emits a signal when a given key binding is pressed or
 /// released.
@@ -214,11 +215,13 @@ static void keybinding_del_signal(const char *signal, di_object *obj) {
 /// Arguments:
 ///
 /// - modifiers([:string]) the modifier keys, valid ones are: mod1~5, shift, control, alt.
-/// - replay(:bool) whether the key press event will be passed on. If false, deai will
-///                 intercept the key press, otherwise it will behave like a normal key
-///                 press.
+/// - intercept(:bool) whether the key press event will be passed on. If true, deai will
+///                    intercept the key press, otherwise it will behave like a normal key
+///                    press. If multiple bindings are created for the same key combination,
+///                    then the key will be intercepted if any of the bindings have intercept
+///                    enabled.
 /// - key(:string)
-di_object *new_binding(struct xorg_key *k, di_array modifiers, di_string key, bool replay) {
+di_object *new_binding(struct xorg_key *k, di_array modifiers, di_string key, bool intercept) {
 	scoped_di_object *dc_obj = NULL;
 	if (di_get(k, XORG_CONNECTION_MEMBER, dc_obj) != 0) {
 		return di_new_error("Connection died");
@@ -248,7 +251,7 @@ di_object *new_binding(struct xorg_key *k, di_array modifiers, di_string key, bo
 	kb->modifiers = mod;
 	kb->keysym = ks;
 	di_set_object_dtor((void *)kb, (void *)binding_dtor);
-	kb->replay = replay;
+	kb->intercept = intercept;
 	list_add(&kb->siblings, &k->bindings);
 
 	di_signal_setter_deleter_with_signal_name(kb, "pressed", keybinding_new_signal,
@@ -349,7 +352,7 @@ static void handle_key(struct di_xorg_ext *ext, xcb_generic_event_t *ev) {
 		di_ref_object((void *)kb);
 	}
 
-	bool replay = true;
+	bool intercept = false;
 	list_for_each_entry_safe (kb, nkb, &k->bindings, siblings) {
 		__label__ match, end;
 		if (kb->modifiers != mod) {
@@ -364,12 +367,12 @@ static void handle_key(struct di_xorg_ext *ext, xcb_generic_event_t *ev) {
 		di_unref_object((void *)kb);
 		continue;
 	match:
-		replay = kb->replay;
+		intercept = intercept || kb->intercept;
 		di_emit(kb, event);
 		goto end;
 	}
 
-	if (replay) {
+	if (!intercept) {
 		xcb_allow_events(dc->c, XCB_ALLOW_REPLAY_KEYBOARD, XCB_CURRENT_TIME);
 	} else {
 		xcb_allow_events(dc->c, XCB_ALLOW_SYNC_KEYBOARD, XCB_CURRENT_TIME);

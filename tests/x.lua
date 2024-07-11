@@ -36,7 +36,7 @@ table.insert(listen_handles, di.event:timer(0.2):on("elapsed", function()
     local key_pressed = false
     local view_changed = false
     local output_changed = false
-    table.insert(listen_handles, o.key:new({"mod4"}, "d", false):on("pressed", function()
+    table.insert(listen_handles, o.key:new({"mod4"}, "d", true):on("pressed", function()
         print("pressed")
         key_pressed = true
     end))
