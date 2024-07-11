@@ -529,7 +529,6 @@ void di_xorg_del_signal(di_xorg_connection *xc) {
 	if (xc->nsignals != 0) {
 		return;
 	}
-	fprintf(stderr, "X stop\n");
 	// Drop the auto stop handle to stop the listener
 	di_delete_member_raw(
 	    (void *)xc, di_string_borrow_literal("__xcb_fd_event_read_listen_handle"));
@@ -566,7 +565,6 @@ void di_xorg_ext_signal_setter(const char *signal, di_object *obj, di_object *si
 
 	// Keep ext object alive while it has signals
 	struct di_xorg_ext *ext = (void *)obj;
-	fprintf(stderr, "ext signal setter %s\n", ext->extname);
 	ext->nsignals += 1;
 	if (ext->nsignals == 1) {
 		scoped_di_string strong_ext_member =
@@ -587,7 +585,6 @@ void di_xorg_ext_signal_deleter(const char *signal, di_object *obj) {
 		return;
 	}
 	struct di_xorg_ext *ext = (void *)obj;
-	fprintf(stderr, "delete ext signal %s\n", ext->extname);
 	ext->nsignals -= 1;
 	if (ext->nsignals == 0) {
 		scoped_di_string strong_ext_member =

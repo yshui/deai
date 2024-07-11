@@ -391,7 +391,6 @@ bool key_register_listener(struct xorg_key *k) {
 		return false;
 	}
 
-	fprintf(stderr, "reg\n");
 	for (int i = 0; i < ARRAY_SIZE(OPCODES); i++) {
 		scoped_di_string signal = di_string_printf("___raw_x_event_%d", OPCODES[i]);
 		auto lh = di_listen_to(dc, signal, handler);
@@ -412,7 +411,6 @@ void key_deregister_listener(struct xorg_key *k) {
 	if (di_get(k, XORG_CONNECTION_MEMBER, dc) != 0) {
 		return;
 	}
-	fprintf(stderr, "dereg\n");
 	for (int i = 0; i < ARRAY_SIZE(OPCODES); i++) {
 		scoped_di_string autolh_key =
 		    di_string_printf("___auto_handle_for_%d", OPCODES[i]);
