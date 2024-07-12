@@ -103,3 +103,7 @@ void di_xorg_ext_signal_setter(const char *nonnull signal, di_object *nonnull ob
 /// Decrement the signal count and stop fdevent when necessary
 void di_xorg_del_signal(struct di_xorg_connection *nonnull);
 void di_xorg_ext_signal_deleter(const char *nonnull signal, di_object *nonnull obj);
+
+void di_xorg_copy_from_builtins(di_object *nonnull target, const char *nonnull path,
+                                di_object *nonnull builtins);
+static const char builtin_member_name[] = "___builtins_lua";

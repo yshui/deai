@@ -597,6 +597,48 @@ void di_xorg_ext_signal_deleter(const char *signal, di_object *obj) {
 static di_object *di_xorg_new_clipboard(struct di_xorg *x) {
 }
 
+static void di_xorg_load_builtin_lua(di_object *x) {
+	di_object *builtin_lua = NULL;
+	if (di_rawget_borrowed(x, builtin_member_name, builtin_lua) == 0) {
+		// Already loaded
+		return;
+	}
+
+	di_string plugin_dir;
+	if (di_rawget_borrowed(x, "___plugin_dir", plugin_dir) != 0) {
+		return;
+	}
+
+	di_object *di = di_object_borrow_deai(x);
+	di_object *lua_module;
+	if (di_rawget_borrowed(di, "lua", lua_module) != 0) {
+		// lua not enabled or deai is shutting down
+		return;
+	}
+
+	scoped_di_string builtin_path =
+	    di_string_printf("%.*s/builtins.lua", (int)plugin_dir.length, plugin_dir.data);
+	di_tuple ret_values;
+	di_object *builtins = NULL;
+	if (di_callr(lua_module, "load_script", ret_values, builtin_path) != 0 ||
+	    ret_values.length == 0) {
+		log_warn("Failed to load builtins.lua for xorg plugin");
+	} else if (ret_values.length != 1 || ret_values.elements[0].type != DI_TYPE_OBJECT) {
+		di_free_value(DI_TYPE_TUPLE, (di_value *)&ret_values);
+		log_error("Unexpected return value from xorg builtins.lua");
+	} else {
+		builtins = ret_values.elements[0].value->object;
+		free(ret_values.elements);
+	}
+
+	if (builtins == NULL) {
+		// If we failed to load the builtins, create a dummy object so we won't
+		// repeatedly try to load it.
+		builtins = di_new_object_with_type(di_object);
+	}
+	di_member(x, builtin_member_name, builtins);
+}
+
 /// Connect to a X server
 ///
 /// EXPORT: xorg.connect_to(display): deai.plugin.xorg:Connection
@@ -607,6 +649,11 @@ static di_object *di_xorg_new_clipboard(struct di_xorg *x) {
 ///
 /// - display(:string) the display
 static di_object *di_xorg_connect_to(di_object *x, di_string displayname_) {
+	di_xorg_load_builtin_lua(x);
+
+	di_object *builtins = NULL;
+	DI_CHECK_OK(di_get(x, builtin_member_name, builtins));
+
 	int scrn;
 	scopedp(char) *displayname = NULL;
 	if (displayname_.length > 0) {
@@ -641,9 +688,50 @@ static di_object *di_xorg_connect_to(di_object *x, di_string displayname_) {
 	di_method(dc, "__get_clipboard", di_xorg_new_clipboard);
 	di_method(dc, "disconnect", di_finalize_object);
 
+	di_member(dc, builtin_member_name, builtins);
+
 	dc->xkb_ctx = xkb_context_new(XKB_CONTEXT_NO_FLAGS);
 
 	return (void *)dc;
+}
+
+void di_xorg_copy_from_builtins(di_object *target, const char *path, di_object *builtins) {
+	const char *pos = path;
+	scoped_di_object *source = di_ref_object(builtins);
+	while (pos && *pos) {
+		const char *next = strchr(pos, '.');
+		if (next == NULL) {
+			next = pos + strlen(pos);
+		}
+		scoped_di_string member = di_string_ndup(pos, next - pos);
+		di_object *value = NULL;
+		if (di_get2(builtins, member, value) == 0) {
+			di_unref_object(source);
+			source = value;
+		} else {
+			return;
+		}
+		pos = next;
+		if (*pos == '.') {
+			pos++;
+		}
+	}
+
+	scoped_di_string key = DI_STRING_INIT;
+	while (true) {
+		scoped_di_tuple member = di_object_next_member(source, key);
+		if (member.length < 2) {
+			break;
+		}
+		DI_CHECK(member.elements[0].type == DI_TYPE_STRING);
+		if (member.elements[1].type == DI_TYPE_OBJECT) {
+			di_add_member_move(target, member.elements[0].value->string,
+			                   &member.elements[1].type, member.elements[1].value);
+		}
+		di_string tmp = key;
+		key = member.elements[0].value->string;
+		member.elements[0].value->string = tmp;
+	}
 }
 
 /// Connect to a X server
@@ -667,8 +755,17 @@ static struct di_module *new_xorg_module(struct deai *di) {
 	return x;
 }
 
-DEAI_PLUGIN_ENTRY_POINT(di) {
+DEAI_PLUGIN_ENTRY_POINT2(di, plugin_path) {
 	auto x = new_xorg_module(di);
+
+	const char *last_component = strrchr(plugin_path, '/');
+	if (last_component != NULL) {
+		di_string dirname =
+		    last_component == plugin_path
+		        ? di_string_dup("/")
+		        : di_string_ndup(plugin_path, last_component - plugin_path);
+		di_member(x, "___plugin_dir", dirname);
+	}
 	di_register_module(di, di_string_borrow("xorg"), &x);
 	return 0;
 }

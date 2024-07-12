@@ -922,6 +922,9 @@ struct di_xorg_ext *new_randr(di_xorg_connection *dc) {
 		return NULL;
 	}
 
+	scoped_di_object *builtins = NULL;
+	DI_CHECK_OK(di_get(dc, builtin_member_name, builtins));
+
 	auto rr = di_new_object_with_type2(struct di_xorg_randr, "deai.plugin.xorg:"
 	                                                         "RandrExt");
 	rr->opcode = r->major_opcode;
@@ -939,6 +942,8 @@ struct di_xorg_ext *new_randr(di_xorg_connection *dc) {
 	di_signal_setter_deleter_with_signal_name(
 	    rr, "view-change", di_xorg_ext_signal_setter, di_xorg_ext_signal_deleter);
 	di_set_object_dtor((void *)rr, (void *)free_randr);
+
+	di_xorg_copy_from_builtins((di_object *)rr, "randr", builtins);
 
 	save_xorg_connection((struct di_xorg_ext *)rr, dc);
 
