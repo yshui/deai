@@ -1,3 +1,8 @@
 #!/bin/sh
 export DEAI_EXTRA_PLUGINS="@all_plugins@"
+
+if [ -z "$W" ]; then
 exec @deai_exe@ "$@"
+else
+exec $W @deai_exe@ "$@"
+fi
