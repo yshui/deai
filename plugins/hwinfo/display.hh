@@ -37,5 +37,7 @@ public:
 	}
 	static void init_object(Ref<::deai::Object> &obj);
 	auto get_model() const -> std::string;
+	auto get_make() const -> std::string;
+	auto get_serial() const -> std::string;
 };
 }        // namespace deai::plugins::hwinfo
