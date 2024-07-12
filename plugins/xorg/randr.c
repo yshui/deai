@@ -61,15 +61,16 @@ struct di_xorg_output_info {
 	///
 	/// EXPORT: deai.plugin.xorg.randr:OutputInfo.name: :string
 	const char *name;
-	/// Modes
-	///
-	/// EXPORT: deai.plugin.xorg.randr:OutputInfo.modes: [deai.plugin.xorg.randr:Mode]
-	di_array modes;
 	/// Number of preferred mode
 	///
 	/// EXPORT: deai.plugin.xorg.randr:OutputInfo.num_preferred: :unsigned
 	unsigned int num_preferred;
 };
+
+/// Modes
+///
+/// EXPORT: deai.plugin.xorg.randr:OutputInfo.modes: [deai.plugin.xorg.randr:Mode]
+void get_output_info_modes(di_object *); // Unused function for documentation
 
 // What xorg calls a crtc, we call a view.
 //
@@ -328,23 +329,26 @@ static di_object *get_output_info(struct di_xorg_output *o) {
 	ret->mm_width = r->mm_width;
 	ret->mm_height = r->mm_height;
 	ret->subpixel_order = r->subpixel_order;
-	ret->modes.elem_type = DI_TYPE_OBJECT;
+
+	di_array modes = {
+	    .elem_type = DI_TYPE_OBJECT,
+	    .length = 0,
+	};
 	if (r->num_modes > 0) {
-		ret->modes.length = 0;
-		ret->modes.arr = tmalloc(void *, r->num_modes);
-		auto arr = (di_object **)ret->modes.arr;
+		modes.arr = tmalloc(void *, r->num_modes);
+		auto arr = (di_object **)modes.arr;
 		auto mode_infos = xcb_randr_get_screen_resources_modes(resource_reply);
-		auto modes = xcb_randr_get_output_info_modes(r);
+		auto output_modes = xcb_randr_get_output_info_modes(r);
 		for (int i = 0; i < r->num_modes; i++) {
 			xcb_randr_mode_info_t *mode_info = NULL;
 			for (int j = 0; j < resource_reply->num_modes; j++) {
-				if (modes[i] == mode_infos[j].id) {
+				if (output_modes[i] == mode_infos[j].id) {
 					mode_info = &mode_infos[j];
 					break;
 				}
 			}
 			if (mode_info != NULL) {
-				arr[ret->modes.length++] = make_object_for_modes(rr, mode_info);
+				arr[modes.length++] = make_object_for_modes(rr, mode_info);
 			}
 		}
 	}
@@ -355,8 +359,8 @@ static di_object *get_output_info(struct di_xorg_output *o) {
 	di_field(ret, mm_height);
 	di_field(ret, name);
 	di_field(ret, subpixel_order);
-	di_field(ret, modes);
 	di_field(ret, num_preferred);
+	di_member(ret, "modes", modes);
 	di_set_object_dtor((void *)ret, free_output_info);
 
 	return (di_object *)ret;
