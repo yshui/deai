@@ -30,6 +30,7 @@ foreach t : test_cases
       's:' + (meson.current_source_dir() / t)
     ]
     , timeout: 3
+    , depends: builtin_scripts
     , env: ['DEAI_EXTRA_PLUGINS='+all_plugins_files])
 endforeach
 
@@ -46,5 +47,6 @@ foreach t : core_test_cases
   test_so = shared_library(t.underscorify(), t, c_args: base_c_args, cpp_args: base_cpp_args, name_prefix: '', include_directories: incs, link_with: [cpp_binding])
   test(t.underscorify()+'_test'
       , deai_exe, args: ['load_plugin', 's:' + test_so.full_path()]
+      , depends: builtin_scripts
       , env: ['DEAI_EXTRA_PLUGINS='+all_plugins_files])
 endforeach

@@ -97,6 +97,7 @@ libutils = static_library('libutils', ['string_buf.c'], include_directories: inc
 # in order to fix undefined symbol problem with UBSan
 cpp_dummy = static_library('cpp_dummy', ['dummy.cc'])
 all_plugins = []
+builtin_scripts = []
 subdir('plugins')
 
 core_src = [
