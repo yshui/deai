@@ -1477,7 +1477,7 @@ static struct di_module *di_new_lua(struct deai *di, const char *self_path) {
 	// script should register modules which should keep it alive.
 	const char *last_component = strrchr(self_path, '/');
 	scopedp(char) *dirname = strndup(self_path, last_component - self_path);
-	scoped_di_string builtin_path = di_string_printf("%s/builtin.lua", dirname);
+	scoped_di_string builtin_path = di_string_printf("%s/builtins.lua", dirname);
 	scoped_di_tuple ret = di_lua_load_script((void *)m, builtin_path);
 
 	return m;

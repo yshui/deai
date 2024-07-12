@@ -50,8 +50,8 @@ di_lua_lib = shared_library('di_lua', src,
   c_args: base_c_args + extra_c_args, name_prefix: '',
   install: true, install_dir: plugin_install_dir)
 
-install_data('builtin.lua', install_dir:  plugin_install_dir / 'lua', install_tag: 'runtime')
+install_data('builtins.lua', install_dir:  plugin_install_dir / 'lua', install_tag: 'runtime')
 
 # copy builtin.lua to builddir, so unittests can load it
-configure_file(input: 'builtin.lua', output: 'builtin.lua', copy: true)
+configure_file(input: 'builtins.lua', output: 'builtins.lua', copy: true)
 all_plugins += [ di_lua_lib ]
