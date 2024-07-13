@@ -171,10 +171,8 @@ static void di_disable_write(di_object *obj) {
 
 static void di_ioev_dtor(di_object *obj) {
 	// Normally the ev_io won't be running, but if someone removed us from the roots,
-	// e.g. by calling di:exit(), then ev_io could be running.
-	// Removing the signal objects, the deleter should stop it.
-	di_delete_member(obj, di_string_borrow_literal("__signal_read"));
-	di_delete_member(obj, di_string_borrow_literal("__signal_write"));
+	// e.g. by calling di:exit(), then ev_io could be running. Stop the event source
+	di_modify_ioev((struct di_ioev *)obj, 0);
 }
 
 /// File descriptor events
