@@ -628,6 +628,7 @@ static void di_xorg_load_builtin_lua(di_object *x) {
 		log_error("Unexpected return value from xorg builtins.lua");
 	} else {
 		builtins = ret_values.elements[0].value->object;
+		free(ret_values.elements[0].value);
 		free(ret_values.elements);
 	}
 
