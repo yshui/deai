@@ -100,6 +100,27 @@ all_plugins = []
 builtin_scripts = []
 subdir('plugins')
 
+
+fs = import('fs')
+ldoc = find_program('ldoc', required: false)
+if ldoc.found()
+  extra_doc_source = []
+  foreach script: builtin_scripts
+    name = fs.relative_to(script.full_path(), meson.current_build_dir()).underscorify()
+    extra_doc_source += custom_target(name+'.c'
+      , output: name+'.c'
+      , input: [script, files('build-support/ldoc2c.lua')]
+      , command: [ldoc, '--filter', 'ldoc2c.dump', '@INPUT0@']
+      , capture: true
+      , build_always: true
+      , env: ['LUA_PATH='+meson.current_source_dir()+'/build-support/?.lua'])
+  endforeach
+  # This is a dummy target to inject generated doc sources into the compile_commands.json
+  # database, so our doc scanner can find them. This is never meant to be built.
+  static_library('extra_doc_target', extra_doc_source, build_by_default: false)
+endif
+
+
 core_src = [
   'main.c'
 , 'object.c'

@@ -15,6 +15,7 @@
 , libunwind
 , llvmPackages_17
 , lua
+, luaPackages
 , systemdLibs
 , cargo
 , sphinx
@@ -36,7 +37,7 @@ in
 stdenv.mkDerivation {
   src = ./.;
   name = "deai";
-  nativeBuildInputs = [ meson ninja pkgconf cargo rustc python llvmPackages_17.clang xdotool ];
+  nativeBuildInputs = [ meson ninja pkgconf cargo rustc python llvmPackages_17.clang xdotool luaPackages.ldoc ];
   buildInputs = [
     libev libffi libxcb libXau libXdmcp xcbutilkeysyms libxkbcommon dbus systemdLibs lua libdisplay-info
     libunwind elfutils zlib zstd
