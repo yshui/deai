@@ -13,28 +13,6 @@
 #include <vector>
 
 namespace deai {
-namespace support {
-
-template <typename T>
-using remove_cvref_t = typename std::remove_cv<typename std::remove_reference<T>::type>::type;
-
-template <bool... Bools>
-struct all_of;
-
-template <>
-struct all_of<> {
-	static constexpr bool value = true;
-};
-
-template <bool Head, bool... Rest>
-struct all_of<Head, Rest...> {
-	static constexpr bool value = Head && all_of<Rest...>::value;
-};
-
-template <bool... Bools>
-inline constexpr bool all_of_v = all_of<Bools...>::value;
-
-}        // namespace support
 namespace c_api {
 extern "C" {
 #define __auto_type auto        // NOLINT
@@ -239,7 +217,7 @@ inline auto string_to_borrowed_deai_value(const std::string_view &str) {
 template <typename... Args>
 constexpr auto get_deai_types() {
 	return std::array<c_api::di_type, sizeof...(Args)>{
-	    deai_typeof<support::remove_cvref_t<Args>>::value...};
+	    deai_typeof<std::remove_cvref_t<Args>>::value...};
 }
 
 template <typename T, size_t length, c_api::di_type type = deai_typeof<T>::value>
@@ -290,9 +268,9 @@ inline auto string_to_owned_deai_value(std::string &&input) -> c_api::di_string 
 
 /// Convert an owned C++ value to an owned deai value. Mostly the same as the borrowed
 /// case, except for strings and arrays
-template <typename T, c_api::di_type type = deai_typeof<support::remove_cvref_t<T>>::value>
+template <typename T, c_api::di_type type = deai_typeof<std::remove_cvref_t<T>>::value>
 auto to_owned_deai_value(T &&input) {
-	if constexpr (is_verbatim_v<support::remove_cvref_t<T>>) {
+	if constexpr (is_verbatim_v<std::remove_cvref_t<T>>) {
 		return input;
 	} else if constexpr (type == c_api::di_type::VARIANT) {
 		return static_cast<c_api::di_variant>(std::forward<T>(input));
@@ -1027,14 +1005,14 @@ struct incompatible {};
 
 template <typename... Types>
 inline constexpr bool check_borrowed_type_transformations_v =
-    support::all_of_v<is_verbatim_v<to_borrowed_deai_type<Types>>...>;
+    (... && is_verbatim_v<to_borrowed_deai_type<Types>>);
 
 /// Make sure to_borrowed_deai_type does indeed produce di_* types
 static_assert(check_borrowed_type_transformations_v<std::string_view, std::string, c_api::di_object *>);
 
 template <typename... Types>
 inline constexpr bool check_owned_type_transformations_v =
-    support::all_of_v<is_verbatim_v<to_owned_deai_type<Types>>...>;
+    (... && is_verbatim_v<to_owned_deai_type<Types>>);
 
 /// Make sure to_owned_deai_type does indeed produce di_* types
 static_assert(check_owned_type_transformations_v<std::string, c_api::di_object *, Variant>);
