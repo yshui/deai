@@ -14,14 +14,17 @@
 #include "di_internal.h"
 #include "utils.h"
 
+struct di_raw_closure {
+	di_object_internal obj;
+	di_call_fn raw_fn;
+};
+
 struct di_closure {
-	di_object_internal;
+	struct di_raw_closure raw;
 	void (*nonnull fn)(void);
 
 	/// Number of actual arguments
 	int nargs;
-	/// Number of captured values
-	int nargs0;
 	/// Return type
 	di_type rtype;
 	ffi_cif cif;
@@ -43,31 +46,22 @@ static void di_call_ffi_call(void *args_) {
 	ffi_call(args->cif, args->fn, args->ret, args->xargs);
 }
 
-static int _di_typed_trampoline(ffi_cif *cif, void (*fn)(void), void *ret,
-                                const di_type *fnats, di_tuple args0, di_tuple args) {
+static int di_typed_trampoline(ffi_cif *cif, void (*fn)(void), void *ret,
+                               const di_type *fnats, di_tuple args) {
 	assert(args.length == 0 || args.elements != NULL);
-	assert(args0.length == 0 || args0.elements != NULL);
-	assert(args.length >= 0 && args0.length >= 0);
-	assert(args.length + args0.length <= MAX_NARGS);
+	assert(args.length >= 0);
+	assert(args.length <= MAX_NARGS);
 
 	struct di_variant *vars = args.elements;
-	di_value **xargs = alloca((args0.length + args.length) * sizeof(void *));
-	if (args0.elements != 0) {
-		for (int i = 0; i < args0.length; i++) {
-			xargs[i] = args0.elements[i].value;
-		}
-	}
-	memset(xargs + args0.length, 0, sizeof(void *) * args.length);
+	di_value **xargs = alloca(args.length * sizeof(void *));
 
 	int rc = 0;
-	for (int i = args0.length; i < args0.length + args.length; i++) {
+	for (int i = 0; i < args.length; i++) {
 		// Type check and implicit conversion
 		// conversion between all types of integers are allowed
 		// as long as there's no overflow
-		xargs[i] = alloca(di_sizeof_type(fnats[i - args0.length]));
-		rc = di_type_conversion(vars[i - args0.length].type,
-		                        vars[i - args0.length].value,
-		                        fnats[i - args0.length], xargs[i], true);
+		xargs[i] = alloca(di_sizeof_type(fnats[i]));
+		rc = di_type_conversion(vars[i].type, vars[i].value, fnats[i], xargs[i], true);
 		if (rc != 0) {
 			// Conversion failed
 			return rc;
@@ -104,13 +98,24 @@ static int closure_trampoline(di_object *o, di_type *rtype, di_value *ret, di_tu
 	}
 
 	*rtype = cl->rtype;
+	return di_typed_trampoline(&cl->cif, cl->fn, ret, cl->atypes, t);
+}
 
-	di_tuple captures;
-	DI_CHECK_OK(di_get(o, "captures", captures));
-	int rc =
-	    _di_typed_trampoline(&cl->cif, cl->fn, ret, cl->atypes + cl->nargs0, captures, t);
-	di_free_tuple(captures);
-	return rc;
+static int raw_closure_trampoline(di_object *o, di_type *rtype, di_value *ret, di_tuple t) {
+	struct di_raw_closure *cl = (void *)o;
+
+	di_tuple captures = DI_TUPLE_INIT;
+	di_rawget_borrowed(o, "captures", captures);
+
+	di_tuple args_with_captures = {
+	    .length = captures.length + t.length,
+	    .elements = alloca(sizeof(struct di_variant) * (captures.length + t.length)),
+	};
+	memcpy(args_with_captures.elements, captures.elements,
+	       sizeof(struct di_variant) * captures.length);
+	memcpy(args_with_captures.elements + captures.length, t.elements,
+	       sizeof(struct di_variant) * t.length);
+	return cl->raw_fn(o, rtype, ret, args_with_captures);
 }
 
 static void free_closure(di_object *o) {
@@ -118,6 +123,30 @@ static void free_closure(di_object *o) {
 
 	struct di_closure *cl = (void *)o;
 	free(cl->cif.arg_types);
+}
+
+/// Create a di_object that when called, calls the given function with the given captures
+/// prepended to the arguments
+struct di_raw_closure *
+di_create_raw_closure(di_call_fn fn, di_tuple captures, size_t size, size_t align) {
+	if (captures.length > MAX_NARGS) {
+		return ERR_PTR(-E2BIG);
+	}
+
+	for (int i = 0; i < captures.length; i++) {
+		if (di_sizeof_type(captures.elements[i].type) == 0) {
+			return ERR_PTR(-EINVAL);
+		}
+	}
+
+	struct di_raw_closure *cl = (void *)di_new_object(size, align);
+	cl->raw_fn = fn;
+	cl->obj.call = raw_closure_trampoline;
+
+	di_member_clone(cl, "captures", captures);
+	DI_OK_OR_RET_PTR(di_set_type((void *)cl, "deai:raw_closure"));
+
+	return cl;
 }
 
 struct di_closure *di_create_closure(void (*fn)(void), di_type rtype, di_tuple captures,
@@ -138,33 +167,29 @@ struct di_closure *di_create_closure(void (*fn)(void), di_type rtype, di_tuple c
 		}
 	}
 
-	struct di_closure *cl = (void *)di_new_object(
+	struct di_closure *cl = (void *)di_create_raw_closure(
+	    closure_trampoline, captures,
 	    sizeof(struct di_closure) + sizeof(di_type) * (captures.length + nargs),
 	    alignof(struct di_closure));
 
 	cl->rtype = rtype;
-	cl->call = closure_trampoline;
 	cl->fn = fn;
-	cl->dtor = free_closure;
-	cl->nargs = nargs;
-	cl->nargs0 = captures.length;
+	cl->nargs = nargs + (int)captures.length;
 
-	if (captures.length) {
-		for (int i = 0; i < captures.length; i++) {
-			cl->atypes[i] = captures.elements[i].type;
-		}
+	for (int i = 0; i < captures.length; i++) {
+		cl->atypes[i] = captures.elements[i].type;
 	}
 	if (nargs) {
 		memcpy(cl->atypes + captures.length, arg_types, sizeof(di_type) * nargs);
 	}
 
-	auto ffiret = di_ffi_prep_cif(&cl->cif, captures.length + nargs, cl->rtype, cl->atypes);
+	auto ffiret = di_ffi_prep_cif(&cl->cif, cl->nargs, cl->rtype, cl->atypes);
 	if (ffiret != FFI_OK) {
-		free(cl);
+		di_unref_object((di_object *)cl);
 		return ERR_PTR(-EINVAL);
 	}
 
-	di_member_clone(cl, "captures", captures);
+	cl->raw.obj.dtor = free_closure;
 	DI_OK_OR_RET_PTR(di_set_type((void *)cl, "deai:closure"));
 
 	return cl;
