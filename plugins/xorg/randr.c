@@ -70,7 +70,7 @@ struct di_xorg_output_info {
 /// Modes
 ///
 /// EXPORT: deai.plugin.xorg.randr:OutputInfo.modes: [deai.plugin.xorg.randr:Mode]
-void get_output_info_modes(di_object *); // Unused function for documentation
+void get_output_info_modes(di_object *);        // Unused function for documentation
 
 // What xorg calls a crtc, we call a view.
 //
@@ -362,6 +362,10 @@ static di_object *get_output_info(struct di_xorg_output *o) {
 	di_field(ret, num_preferred);
 	di_member(ret, "modes", modes);
 	di_set_object_dtor((void *)ret, free_output_info);
+
+	scoped_di_object *builtins = NULL;
+	DI_CHECK_OK(di_get(dc, builtin_member_name, builtins));
+	di_xorg_copy_from_builtins((di_object *)ret, "randr_output_info", builtins);
 
 	return (di_object *)ret;
 }
