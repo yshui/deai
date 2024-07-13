@@ -144,7 +144,7 @@ endif
 deai_exe = executable('deai', core_src, c_args: base_c_args
 , cpp_args: base_cpp_args
 , dependencies: core_deps
-, link_with: [ cpp_dummy, libutils ]
+, link_with: [ cpp_binding, libutils ]
 , include_directories: incs
 , export_dynamic: true
 , install: true)

@@ -44,13 +44,13 @@ static di_type dbus_type_to_di(int type) {
 }
 
 #define DESERIAL(typeid, type, tgt)                                                      \
-	case typeid:                                                                     \
-		do {                                                                     \
-			type __o;                                                        \
-			dbus_message_iter_get_basic(i, &__o);                            \
-			retp->tgt = __o;                                                 \
-			*otype = di_typeof(retp->tgt);                                   \
-		} while (0);                                                             \
+	case typeid:                                                                         \
+		do {                                                                             \
+			type __o;                                                                    \
+			dbus_message_iter_get_basic(i, &__o);                                        \
+			retp->tgt = __o;                                                             \
+			*otype = di_typeof(retp->tgt);                                               \
+		} while (0);                                                                     \
 		break
 
 static void
@@ -189,8 +189,7 @@ static void dbus_deserialize_one(DBusMessageIter *i, void *retp, di_type *otype,
 			int type3 = dbus_message_iter_get_arg_type(&i3);
 			if (type3 == DBUS_TYPE_STRING) {
 				*otype = DI_TYPE_OBJECT;
-				return dbus_deserialize_dict(
-				    &i2, retp, dbus_message_iter_get_element_count(i));
+				return dbus_deserialize_dict(&i2, retp, dbus_message_iter_get_element_count(i));
 			}
 		}
 
@@ -201,8 +200,7 @@ static void dbus_deserialize_one(DBusMessageIter *i, void *retp, di_type *otype,
 			*(di_array *)retp = DI_ARRAY_INIT;
 			return;
 		}
-		return dbus_deserialize_array(&i2, retp, type2,
-		                              dbus_message_iter_get_element_count(i));
+		return dbus_deserialize_array(&i2, retp, type2, dbus_message_iter_get_element_count(i));
 	}
 
 	if (type == DBUS_TYPE_STRUCT || type == DBUS_TYPE_DICT_ENTRY) {
@@ -244,16 +242,8 @@ static bool dbus_serialize_integer(DBusMessageIter *i, struct di_variant var, in
 	default:
 		return false;
 	}
-	int di_unsigned = is_unsigned(var.type);
-	if (di_unsigned == 2) {
-		return false;
-	}
-	int8_t di_bits = di_sizeof_type(var.type) * 8;
 	char buf[sizeof(intmax_t)];
-	if (!integer_conversion_impl(di_bits, var.value, dbus_bits, buf, di_unsigned == 1,
-	                             dbus_unsigned)) {
-		return false;
-	}
+	di_int_conversion(var.type, var.value, dbus_bits, dbus_unsigned, buf);
 	return dbus_message_iter_append_basic(i, dbus_type, buf);
 }
 
@@ -348,15 +338,14 @@ static int dbus_serialize_with_signature(DBusMessageIter *i, struct di_variant v
 		if (dbus_type_is_basic(atype) && atype != DBUS_TYPE_STRING &&
 		    atype == *si2.current.data) {
 			// Basic data type and no conversion needed
-			bool ret = dbus_message_iter_open_container(
-			    i, DBUS_TYPE_ARRAY, (char[]){(char)atype, 0}, &i2);
+			bool ret = dbus_message_iter_open_container(i, DBUS_TYPE_ARRAY,
+			                                            (char[]){(char)atype, 0}, &i2);
 			if (!ret) {
 				return -ENOMEM;
 			}
 
 			// append_fixed_array takes pointer to pointer, makes 0 sense
-			if (!dbus_message_iter_append_fixed_array(&i2, atype, &arr.arr,
-			                                          arr.length)) {
+			if (!dbus_message_iter_append_fixed_array(&i2, atype, &arr.arr, arr.length)) {
 				return -ENOMEM;
 			}
 			return dbus_message_iter_close_container(i, &i2) ? 0 : -ENOMEM;
@@ -390,8 +379,8 @@ static int dbus_serialize_with_signature(DBusMessageIter *i, struct di_variant v
 				return -EINVAL;
 			}
 			for (int i = 0; i < arr.length; i++) {
-				int ret = dbus_serialize_with_signature(
-				    &i2, di_array_index(arr, i), si.child[i]);
+				int ret =
+				    dbus_serialize_with_signature(&i2, di_array_index(arr, i), si.child[i]);
 				if (ret < 0) {
 					return ret;
 				}
@@ -404,8 +393,7 @@ static int dbus_serialize_with_signature(DBusMessageIter *i, struct di_variant v
 				return -EINVAL;
 			}
 			for (int i = 0; i < t.length; i++) {
-				int ret = dbus_serialize_with_signature(
-				    &i2, t.elements[i], si.child[i]);
+				int ret = dbus_serialize_with_signature(&i2, t.elements[i], si.child[i]);
 				if (ret < 0) {
 					return ret;
 				}

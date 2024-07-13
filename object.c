@@ -31,13 +31,13 @@ struct di_listener {
 	struct list_head siblings;
 };
 
-static const di_object_internal dead_weakly_referenced_object = {
+static di_object_internal dead_weakly_referenced_object = {
     .ref_count = 0,
     .weak_ref_count = 1,        // Keep this object from being freed
 };
 
-const struct di_weak_object *const dead_weak_ref =
-    (const struct di_weak_object *)&dead_weakly_referenced_object;
+struct di_weak_object *const dead_weak_ref =
+    (struct di_weak_object *)&dead_weakly_referenced_object;
 
 const void *null_ptr = NULL;
 // clang-format off
@@ -1415,22 +1415,22 @@ void di_dump_objects(void) {
 #endif
 
 const char *di_type_names[] = {
-	[DI_TYPE_NIL] = "nil",
-	[DI_TYPE_ANY] = "any",
-	[DI_TYPE_EMPTY_OBJECT] = "empty_object",
-	[DI_TYPE_BOOL] = "bool",
-	[DI_TYPE_NINT] = "nint",
-	[DI_TYPE_NUINT] = "nuint",
-	[DI_TYPE_INT] = "int",
-	[DI_TYPE_UINT] = "uint",
-	[DI_TYPE_FLOAT] = "float",
-	[DI_TYPE_POINTER] = "pointer",
-	[DI_TYPE_OBJECT] = "object",
-	[DI_TYPE_WEAK_OBJECT] = "weak_object",
-	[DI_TYPE_STRING] = "string",
-	[DI_TYPE_STRING_LITERAL] = "string_literal",
-	[DI_TYPE_ARRAY] = "array",
-	[DI_TYPE_TUPLE] = "tuple",
-	[DI_TYPE_VARIANT] = "variant",
-	[DI_LAST_TYPE] = "invalid",
+    [DI_TYPE_NIL] = "nil",
+    [DI_TYPE_ANY] = "any",
+    [DI_TYPE_EMPTY_OBJECT] = "empty_object",
+    [DI_TYPE_BOOL] = "bool",
+    [DI_TYPE_NINT] = "nint",
+    [DI_TYPE_NUINT] = "nuint",
+    [DI_TYPE_INT] = "int",
+    [DI_TYPE_UINT] = "uint",
+    [DI_TYPE_FLOAT] = "float",
+    [DI_TYPE_POINTER] = "pointer",
+    [DI_TYPE_OBJECT] = "object",
+    [DI_TYPE_WEAK_OBJECT] = "weak_object",
+    [DI_TYPE_STRING] = "string",
+    [DI_TYPE_STRING_LITERAL] = "string_literal",
+    [DI_TYPE_ARRAY] = "array",
+    [DI_TYPE_TUPLE] = "tuple",
+    [DI_TYPE_VARIANT] = "variant",
+    [DI_LAST_TYPE] = "invalid",
 };

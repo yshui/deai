@@ -1,9 +1,12 @@
 #pragma once
 
 #include <array>
+#include <cinttypes>
 #include <cstdint>
 #include <cstdlib>
 #include <cstring>
+#include <limits>
+#include <optional>
 #include <string>
 #include <typeinfo>
 
@@ -67,8 +70,7 @@ auto to_borrowed_deai_value(const T &input) {
 /// Borrow a C++ value into a deai variant
 template <typename T, c_api::di_type type = id::deai_typeof<typename std::remove_reference<T>::type>::value>
 auto to_borrowed_deai_variant(const T &input) -> c_api::di_variant {
-	auto *value_ptr =
-	    reinterpret_cast<c_api::di_value *>(::malloc(sizeof(c_api::di_value)));
+	auto *value_ptr = reinterpret_cast<c_api::di_value *>(::malloc(sizeof(c_api::di_value)));
 	auto value = to_borrowed_deai_value(input);
 	::memcpy(value_ptr, &value, sizeof(value));
 	return {.value = value, .type = type};
@@ -160,7 +162,7 @@ auto to_borrowed_deai_values(const Args &...args)
 /// Also, the deai value might be cloned nonetheless. For example, a di_array has to be
 /// cloned into a vector.
 template <typename T>
-        requires id::DeaiVerbatim<std::remove_reference_t<T>>
+    requires id::DeaiVerbatim<std::remove_reference_t<T>>
 auto to_borrowed_cpp_value(T &&arg) -> T {
 	return std::forward<T>(arg);
 }
@@ -219,5 +221,62 @@ inline auto to_borrowed_cpp_value(c_api::di_string arg) {
 	};
 	return DeaiStringConvert{arg};
 }
+
+/// Conversion between C API deai values
+namespace c_api {
+
+template <typename T>
+concept DeaiNumber =
+    std::is_same_v<T, int8_t> || std::is_same_v<T, uint8_t> || std::is_same_v<T, int16_t> ||
+    std::is_same_v<T, uint16_t> || std::is_same_v<T, int32_t> || std::is_same_v<T, uint32_t> ||
+    std::is_same_v<T, int64_t> || std::is_same_v<T, uint64_t> || std::is_same_v<T, double>;
+template <bool borrow>
+struct DeaiVariantConverter {
+	private:
+	template <typename T>
+	requires borrow
+	static auto ref_if_borrow() -> std::reference_wrapper<T>;
+	template <typename T>
+	requires(!borrow)
+	static auto ref_if_borrow() -> T;
+
+	using di_type = ::deai::c_api::di_type;
+	auto tuple_to_array() -> std::optional<::deai::c_api::di_array>;
+	auto array_to_tuple() -> std::optional<::deai::c_api::di_tuple>;
+	/// Unwrap the current converter, and return a converter for the inner variant.
+	/// The current converter will be emptied.
+	auto unwrap_variant() -> DeaiVariantConverter;
+	decltype(ref_if_borrow<::deai::c_api::di_value>()) value_;
+	di_type type;
+
+	auto value() -> ::deai::c_api::di_value & {
+		if constexpr (borrow) {
+			return value_.get();
+		} else {
+			return value_;
+		}
+	}
+
+	public:
+	DeaiVariantConverter(decltype(value_) value, di_type type)
+	    : value_(value), type(type) {
+	}
+	template <DeaiNumber T>
+	operator std::optional<T>();
+	operator std::optional<::deai::c_api::di_variant>();
+	operator std::optional<::deai::c_api::di_string>();
+	operator std::optional<const char *>();
+	operator std::optional<::deai::c_api::di_array>();
+	operator std::optional<::deai::c_api::di_tuple>();
+	operator std::optional<::deai::c_api::di_object *>();
+	operator std::optional<::deai::c_api::di_weak_object *>();
+	operator std::optional<void *>();
+	operator std::optional<bool>();
+};
+
+extern template struct DeaiVariantConverter<true>;
+extern template struct DeaiVariantConverter<false>;
+
+}        // namespace c_api
 
 }        // namespace deai::type::conv

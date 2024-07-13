@@ -454,14 +454,14 @@ static inline void unused di_free_variant(di_variant v) {
 	free(v.value);
 }
 
-/// Copy value of type `t` from `src` to `dst`. It's assumed that `dst` has enough memory
-/// space to hold a value of type `t`, and that `dst` doesn't contain a valid value
-/// beforehand
+/// Copy value of type `t` from `src` to `dst`. It's assumed that `dst` has enough
+/// memory space to hold a value of type `t`, and that `dst` doesn't contain a
+/// valid value beforehand
 PUBLIC_DEAI_API void di_copy_value(di_type t, void *nullable dst, const void *nullable src);
 
-/// Rename the signal object `old_member_name` to `new_member_name`. Both names have to
-/// start with "__signal_", getter/setter/deleters are not used. This takes care of
-/// updating the metadata fields in the signal object
+/// Rename the signal object `old_member_name` to `new_member_name`. Both names
+/// have to start with "__signal_", getter/setter/deleters are not used. This
+/// takes care of updating the metadata fields in the signal object
 PUBLIC_DEAI_API int di_rename_signal_member_raw(di_object *nonnull obj, di_string old_member_name,
                                                 di_string new_member_name);
 /// Duplicate null terminated string `str` into a di_string
@@ -506,8 +506,8 @@ static inline bool unused di_string_to_chars(di_string str, char *nonnull output
 	return true;
 }
 
-/// Split `str` at the first appearence of `sep`, returns if `sep` is found. If `sep` is
-/// not found, `head` and `rest` will not be touched
+/// Split `str` at the first appearence of `sep`, returns if `sep` is found. If
+/// `sep` is not found, `head` and `rest` will not be touched
 static inline bool unused di_string_split_once(di_string str, char sep, di_string *nonnull head,
                                                di_string *nonnull rest) {
 	const char *pos = (const char *)memchr(str.data, sep, str.length);
@@ -826,7 +826,7 @@ static inline void unused di_free_di_weak_objectpp(di_weak_object *nullable *non
 #define di_rawget_borrowed(o, prop, r) di_rawget_borrowed2(o, di_string_borrow(prop), r)
 
 /// A valid but non-upgradeable weak reference
-PUBLIC_DEAI_API extern const di_weak_object *const nonnull dead_weak_ref;
+PUBLIC_DEAI_API extern di_weak_object *const nonnull dead_weak_ref;
 
 #undef DI_LAST_TYPE
 #undef DI_TYPE_NAME
