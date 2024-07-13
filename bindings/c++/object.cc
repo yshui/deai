@@ -1,3 +1,5 @@
+#include <sstream>
+
 #include <deai/c++/object.hh>
 
 namespace deai {

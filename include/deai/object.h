@@ -156,7 +156,7 @@ using di_type = di_type;
 static_assert(sizeof(di_type) == sizeof(int), "di_type has wrong type");
 
 #endif
-
+PUBLIC_DEAI_API extern const char *nonnull di_type_names[];
 typedef struct di_object di_object;
 typedef struct di_tuple di_tuple;
 typedef struct di_variant di_variant;
