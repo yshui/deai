@@ -7,17 +7,17 @@ auto Display::from_edid(std::string_view edid) -> Ref<::deai::Object> {
 	DisplayInfo::init_object(obj);
 	return obj;
 }
-auto DisplayInfo::get_model() const -> std::string {
+auto DisplayInfo::get_model() const -> c_api::di_string {
 	auto *name = ::di_info_get_model(info.get());
-	return std::string{name};
+	return c_api::di_string_borrow(name);
 }
-auto DisplayInfo::get_make() const -> std::string {
+auto DisplayInfo::get_make() const -> c_api::di_string {
 	auto *name = ::di_info_get_make(info.get());
-	return std::string{name};
+	return c_api::di_string_borrow(name);
 }
-auto DisplayInfo::get_serial() const -> std::string {
+auto DisplayInfo::get_serial() const -> c_api::di_string {
 	auto *name = ::di_info_get_serial(info.get());
-	return std::string{name};
+	return c_api::di_string_borrow(name);
 }
 void DisplayInfo::init_object(Ref<::deai::Object> &obj) {
 	auto &self = util::unsafe_to_inner<DisplayInfo>(obj);

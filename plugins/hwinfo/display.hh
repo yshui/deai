@@ -36,8 +36,8 @@ public:
 	DisplayInfo(struct di_info *info) : info{info, di_info_destroy} {
 	}
 	static void init_object(Ref<::deai::Object> &obj);
-	auto get_model() const -> std::string;
-	auto get_make() const -> std::string;
-	auto get_serial() const -> std::string;
+	auto get_model() const -> c_api::di_string;
+	auto get_make() const -> c_api::di_string;
+	auto get_serial() const -> c_api::di_string;
 };
 }        // namespace deai::plugins::hwinfo
