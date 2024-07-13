@@ -567,7 +567,7 @@ auto unsafe_to_inner(const Ref<Object> &obj) -> T & {
 	                              object_allocation_info<T>::offset);
 }
 
-template <typename... Captures>
+template <auto func>
 struct make_wrapper {
 private:
 	template <typename R, typename... Args>
@@ -575,9 +575,8 @@ private:
 		/// Wrap a function that takes C++ values into a function that takes deai values. Because
 		/// args will go through a to_borrowed_cpp_type<to_borrowed_deai_type<T>> transformation,
 		/// and have to remain passable to the original function, they have to be borrow inversible.
-		template <R (*func)(Args...)>
-		static auto wrapper_impl(conv::to_deai_ctype<Args>... args)
-		    -> conv::to_owned_deai_type<R> {
+		static auto
+		wrapper(conv::to_deai_ctype<Args>... args) -> conv::to_owned_deai_type<R> {
 			if constexpr (id::deai_typeof<R>::value == c_api::di_type::NIL) {
 				// Special treatment for void
 				func(conv::to_borrowed_cpp_value(args)...);
@@ -593,13 +592,11 @@ private:
 
 	// Note: cannot be evaluated
 	template <typename R, typename... Args>
-	static constexpr auto inspect(R (*func)(Captures..., Args...)) -> factory<R, Args...>;
+	static constexpr auto inspect(R (*)(Args...)) -> factory<R, Args...>;
 
 public:
-	template <auto func>
-	static constexpr auto value = decltype(inspect(func))::template wrapper_impl<func>;
+	static constexpr auto value = decltype(inspect(func))::wrapper;
 
-	template <auto func>
 	struct info : decltype(inspect(func)) {};
 };
 
@@ -611,8 +608,8 @@ public:
 template <auto func, typename... Captures>
 auto to_di_closure(const Captures &...captures) -> Ref<Object> {
 	constexpr auto ncaptures = sizeof...(Captures);
-	using wrapper_info = typename make_wrapper<Captures...>::template info<func>;
-	constexpr auto function = make_wrapper<Captures...>::template value<func>;
+	using wrapper_info = typename make_wrapper<func>::info;
+	constexpr auto function = make_wrapper<func>::value;
 	constexpr auto nargs = wrapper_info::nargs;
 	c_api::di_variant elements[] = {conv::to_borrowed_deai_variant(captures)...};
 	c_api::di_tuple capture_tuple = {.length = ncaptures, .elements = elements};
