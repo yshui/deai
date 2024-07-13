@@ -145,67 +145,67 @@ static inline bool is_integer(di_type t) {
 	return t == DI_TYPE_INT || t == DI_TYPE_NINT || t == DI_TYPE_UINT || t == DI_TYPE_NUINT;
 }
 
-/// Convert value `inp` of type `inty` to type `outty`. The conversion operates in 2 mode:
+/// Convert value `from` of type `from_type` to type `to_type`. The conversion operates in 2 mode:
 ///
-///   If `inp`'s value is owned, it will be destructed during conversion, the ownership
-///   will be transferred to `outp`. There is no need to free `inp` afterwards, but `outp`
-///   is expected to be freed by the caller.
+///   - If `from`'s value is owned, it will be destructed during conversion, the ownership
+///     will be transferred to `to`. There is no need to free `from` afterwards, but `to`
+///     is expected to be freed by the caller.
 ///
-///   If `inp`'s value is not owned, the conversion will not touch `inp`, and `outp`
-///   will borrow the value in `inp`. `outp` must not be freed afterwards.
+///   - If `from`'s value is not owned, the conversion will not touch `from`, and `to`
+///     will borrow the value in `from` if needed. `to` must not be freed afterwards.
 ///
 /// Returns 0 on success, -EINVAL if the conversion is not possible, -ERANGE if source is
 /// a integer type and its value is out of range of the destination type. If the
-/// conversion fails, `outp` is left untouched.
+/// conversion fails, `to` is left untouched.
 ///
-/// @param[in] borrowing Whether the `inp` value is owned or borrowed. Some conversion can
+/// @param[in] borrowing Whether the `from` value is owned or borrowed. Some conversion can
 //                       not be performed if the caller owns the value, as that would
-//                       cause memory leakage. If `inp` is borrowed, `outp` must also be
+//                       cause memory leakage. If `from` is borrowed, `to` must also be
 //                       borrowed downstream as well.
-static inline int unused di_type_conversion(di_type inty, di_value *inp, di_type outty,
-                                            di_value *outp, bool borrowing) {
-	if (inty == outty) {
-		memcpy(outp, inp, di_sizeof_type(inty));
+static inline int unused di_type_conversion(di_type from_type, di_value *from,
+                                            di_type to_type, di_value *to, bool borrowing) {
+	if (from_type == to_type) {
+		memcpy(to, from, di_sizeof_type(from_type));
 		return 0;
 	}
 
-	if ((inty == DI_TYPE_OBJECT && outty == DI_TYPE_EMPTY_OBJECT) ||
-	    (inty == DI_TYPE_EMPTY_OBJECT && outty == DI_TYPE_OBJECT)) {
+	if ((from_type == DI_TYPE_OBJECT && to_type == DI_TYPE_EMPTY_OBJECT) ||
+	    (from_type == DI_TYPE_EMPTY_OBJECT && to_type == DI_TYPE_OBJECT)) {
 		// Note we don't check if an object is actually empty, because of getters,
 		// etc., it's impossible
-		outp->object = inp->object;
+		to->object = from->object;
 		return 0;
 	}
 
-	if (inty == DI_TYPE_EMPTY_OBJECT && outty == DI_TYPE_ARRAY) {
+	if (from_type == DI_TYPE_EMPTY_OBJECT && to_type == DI_TYPE_ARRAY) {
 		if (!borrowing) {
-			di_unref_object(inp->object);
+			di_unref_object(from->object);
 		}
-		outp->array = DI_ARRAY_INIT;
+		to->array = DI_ARRAY_INIT;
 		return 0;
 	}
 
-	if (inty == DI_TYPE_EMPTY_OBJECT && outty == DI_TYPE_TUPLE) {
+	if (from_type == DI_TYPE_EMPTY_OBJECT && to_type == DI_TYPE_TUPLE) {
 		if (!borrowing) {
-			di_unref_object(inp->object);
+			di_unref_object(from->object);
 		}
-		outp->tuple = DI_TUPLE_INIT;
+		to->tuple = DI_TUPLE_INIT;
 		return 0;
 	}
 
-	if (inty == DI_TYPE_NIL) {
-		switch (outty) {
+	if (from_type == DI_TYPE_NIL) {
+		switch (to_type) {
 		case DI_TYPE_WEAK_OBJECT:
-			outp->weak_object = (void *)&dead_weak_ref;
+			to->weak_object = (void *)&dead_weak_ref;
 			return 0;
 		case DI_TYPE_POINTER:
-			outp->pointer = NULL;
+			to->pointer = NULL;
 			return 0;
 		case DI_TYPE_ARRAY:
-			outp->array = DI_ARRAY_INIT;
+			to->array = DI_ARRAY_INIT;
 			return 0;
 		case DI_TYPE_TUPLE:
-			outp->tuple = DI_TUPLE_INIT;
+			to->tuple = DI_TUPLE_INIT;
 			return 0;
 		case DI_TYPE_ANY:
 		case DI_LAST_TYPE:
@@ -228,58 +228,58 @@ static inline int unused di_type_conversion(di_type inty, di_value *inp, di_type
 		}
 	}
 
-	if (outty == DI_TYPE_VARIANT) {
-		outp->variant.type = inty;
-		outp->variant.value = inp;
+	if (to_type == DI_TYPE_VARIANT) {
+		to->variant.type = from_type;
+		to->variant.value = from;
 		return 0;
 	}
 
-	if (inty == DI_TYPE_STRING_LITERAL && outty == DI_TYPE_STRING) {
+	if (from_type == DI_TYPE_STRING_LITERAL && to_type == DI_TYPE_STRING) {
 		if (borrowing) {
-			outp->string = (di_string){
-			    .data = inp->string_literal,
-			    .length = strlen(inp->string_literal),
+			to->string = (di_string){
+			    .data = from->string_literal,
+			    .length = strlen(from->string_literal),
 			};
 		} else {
 			// If downstream expect an owned string, they will try to
 			// free it, so we have to cloned the string literal
-			outp->string = (di_string){
-			    .data = strdup(inp->string_literal),
-			    .length = strlen(inp->string_literal),
+			to->string = (di_string){
+			    .data = strdup(from->string_literal),
+			    .length = strlen(from->string_literal),
 			};
 		}
 		return 0;
 	}
 
-	if (outty == DI_TYPE_NIL) {
+	if (to_type == DI_TYPE_NIL) {
 		if (!borrowing) {
-			di_free_value(inty, inp);
+			di_free_value(from_type, from);
 		}
 		return 0;
 	}
 
-	if (inty == DI_TYPE_VARIANT) {
-		int ret = di_type_conversion(inp->variant.type, inp->variant.value, outty,
-		                             outp, borrowing);
+	if (from_type == DI_TYPE_VARIANT) {
+		int ret = di_type_conversion(from->variant.type, from->variant.value,
+		                             to_type, to, borrowing);
 		if (ret != 0) {
 			return ret;
 		}
 		if (!borrowing) {
-			free(inp->variant.value);
+			free(from->variant.value);
 		}
 		return 0;
 	}
 
-	if (is_integer(inty)) {
-		if (is_integer(outty)) {
-			return integer_conversion(inty, inp, outty, outp);
+	if (is_integer(from_type)) {
+		if (is_integer(to_type)) {
+			return integer_conversion(from_type, from, to_type, to);
 		}
-		if (outty == DI_TYPE_FLOAT) {
+		if (to_type == DI_TYPE_FLOAT) {
 #define convert_case(srcfield)                                                           \
 	case di_typeof(((di_value *)0)->srcfield):                                       \
-		outp->float_ = (double)inp->srcfield;                                    \
+		to->float_ = (double)from->srcfield;                                     \
 		break;
-			switch (inty) {
+			switch (from_type) {
 				convert_case(nuint);
 				convert_case(nint);
 				convert_case(uint);
