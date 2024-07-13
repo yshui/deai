@@ -46,7 +46,7 @@ static void di_call_ffi_call(void *args_) {
 	ffi_call(args->cif, args->fn, args->ret, args->xargs);
 }
 
-static int di_typed_trampoline(ffi_cif *cif, void (*fn)(void), void *ret,
+static int di_typed_trampoline(ffi_cif *cif, void (*fn)(void), di_type *ret_type, void *ret,
                                const di_type *fnats, di_tuple args) {
 	assert(args.length == 0 || args.elements != NULL);
 	assert(args.length >= 0);
@@ -83,6 +83,7 @@ static int di_typed_trampoline(ffi_cif *cif, void (*fn)(void), void *ret,
 		fprintf(stderr, "%.*s\n", (int)err.length, err.data);
 		di_free_string(err);
 		di_unref_object(errobj);
+		*ret_type = DI_TYPE_NIL;
 	}
 	return rc;
 }
@@ -98,7 +99,7 @@ static int closure_trampoline(di_object *o, di_type *rtype, di_value *ret, di_tu
 	}
 
 	*rtype = cl->rtype;
-	return di_typed_trampoline(&cl->cif, cl->fn, ret, cl->atypes, t);
+	return di_typed_trampoline(&cl->cif, cl->fn, rtype, ret, cl->atypes, t);
 }
 
 static int raw_closure_trampoline(di_object *o, di_type *rtype, di_value *ret, di_tuple t) {
