@@ -4,23 +4,13 @@
 #include <cstring>
 #include <memory>
 #include <optional>
+#include <span>
 #include <sstream>
 #include <stdexcept>
 #include <string>
 #include <string_view>
 #include <variant>
 #include <vector>
-
-#if __cplusplus > 201703L
-#include <span>
-namespace deai::support {
-using std::span;
-
-}        // namespace deai::support
-#else
-#define TCB_SPAN_NAMESPACE_NAME deai::support
-#include "span.hpp"
-#endif
 
 namespace deai {
 namespace support {
@@ -653,7 +643,7 @@ private:
 public:
 	template <typename T, c_api::di_type type = util::deai_typeof<T>::value>
 	auto to_span()
-	    -> std::enable_if_t<util::is_verbatim_v<T>, std::optional<support::span<const T>>> {
+	    -> std::enable_if_t<util::is_verbatim_v<T>, std::optional<std::span<const T>>> {
 		if (inner.elem_type != type) {
 			return std::nullopt;
 		}
@@ -662,7 +652,7 @@ public:
 
 	template <typename T, c_api::di_type type = util::deai_typeof<T>::value,
 	          std::enable_if_t<util::is_verbatim_v<T>, int> = 0>
-	operator support::span<const T>() {
+	operator std::span<const T>() {
 		return to_span<T>().value();
 	}
 };
