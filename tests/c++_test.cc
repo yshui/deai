@@ -41,8 +41,10 @@ DEAI_CPP_PLUGIN_ENTRY_POINT(di) {
 
 	Ref<ListenHandle> lh = ([&]() {
 		// Drop closure after `.on`, to make sure it's indeed kept alive
-		auto closure = util::to_di_closure<test_function>();
+		auto closure = util::to_di_callable<test_function>();
 		assert(closure.call<int>(10) == 10);
+		// Test integer conversions
+		assert(closure.call<int>(static_cast<int64_t>(10)) == 10);
 
 		return object.on("test_signal", closure);
 	})();

@@ -570,8 +570,13 @@ auto unsafe_to_inner(const Ref<Object> &obj) -> T & {
 template <auto func>
 struct make_wrapper {
 private:
-	template <typename R, typename... Args>
-	struct factory {
+	template <typename Seq, typename R, typename... Args>
+	struct factory {};
+	template <typename R, typename... Args, size_t... Idx>
+	struct factory<std::index_sequence<Idx...>, R, Args...> {
+		static constexpr c_api::di_type return_type = id::deai_typeof<R>::value;
+		static constexpr auto nargs = sizeof...(Args);
+		static constexpr auto arg_types = id::get_deai_types<Args...>();
 		/// Wrap a function that takes C++ values into a function that takes deai values. Because
 		/// args will go through a to_borrowed_cpp_type<to_borrowed_deai_type<T>> transformation,
 		/// and have to remain passable to the original function, they have to be borrow inversible.
@@ -585,41 +590,42 @@ private:
 				    func(conv::to_borrowed_cpp_value(args)...));
 			}
 		}
-		static constexpr c_api::di_type return_type = id::deai_typeof<R>::value;
-		static constexpr auto nargs = sizeof...(Args);
-		static constexpr auto arg_types = id::get_deai_types<Args...>();
+		static inline auto
+		raw_wrapper(c_api::di_object *obj, c_api::di_type *ret_type,
+		            c_api::di_value *ret, c_api::di_tuple args) -> int {
+			if (args.length != nargs) {
+				return -EINVAL;
+			}
+			auto result = wrapper(type::conv::c_api::borrow_from_variant<conv::to_deai_ctype<Args>>(
+			    *args.elements[Idx].value, args.elements[Idx].type)...);
+			*ret_type = id::deai_typeof<R>::value;
+			::memcpy(ret, &result, c_api::di_sizeof_type(*ret_type));
+			return 0;
+		}
 	};
 
 	// Note: cannot be evaluated
 	template <typename R, typename... Args>
-	static constexpr auto inspect(R (*)(Args...)) -> factory<R, Args...>;
+	static constexpr auto inspect(R (*)(Args...))
+	    -> factory<std::index_sequence_for<Args...>, R, Args...>;
+	using exploded = decltype(inspect(func));
 
 public:
-	static constexpr auto value = decltype(inspect(func))::wrapper;
+	static constexpr auto value = exploded::wrapper;
+	static constexpr auto raw = exploded::raw_wrapper;
 
 	struct info : decltype(inspect(func)) {};
 };
 
-/// Wrap a C++ function into a di_closure. This function can have a list of captures,
-/// which are cloned and stored inside the closure. This function must take arguments like
-/// this: func(captures..., arguments...). Either or both of them can be empty.
+/// Wrap a C++ function into a di callable object.
 ///
 /// There are also a few restriction on your function, see `make_wrapper` for more.
-template <auto func, typename... Captures>
-auto to_di_closure(const Captures &...captures) -> Ref<Object> {
-	constexpr auto ncaptures = sizeof...(Captures);
-	using wrapper_info = typename make_wrapper<func>::info;
-	constexpr auto function = make_wrapper<func>::value;
-	constexpr auto nargs = wrapper_info::nargs;
-	c_api::di_variant elements[] = {conv::to_borrowed_deai_variant(captures)...};
-	c_api::di_tuple capture_tuple = {.length = ncaptures, .elements = elements};
-
-	// XXX passing a C++ function pointer to C... not the best thing to do. C++/C
-	// could have different ABIs in some cases. This seems to be OK currently, but ABI
-	// changes could break us.
-	return *Ref<Object>::take(reinterpret_cast<c_api::di_object *>(c_api::di_create_closure(
-	    reinterpret_cast<void (*)()>(function), wrapper_info::return_type,
-	    capture_tuple, nargs, wrapper_info::arg_types.data())));
+template<auto func>
+auto to_di_callable() -> Ref<Object> {
+	constexpr auto raw_function = make_wrapper<func>::raw;
+	auto *callable = c_api::di_new_object(sizeof(c_api::di_object), alignof(c_api::di_object));
+	c_api::di_set_object_call(callable, raw_function);
+	return *Ref<Object>::take(callable);
 }
 
 template <typename T>
@@ -647,7 +653,7 @@ public:
 template <auto func, typename T>
 auto add_method(T &obj_impl, std::string_view name) -> void {
 	constexpr auto wrapped_func = member_function_wrapper<T>::template value<func>;
-	auto closure = to_di_closure<wrapped_func>().release();
+	auto closure = to_di_callable<wrapped_func>().release();
 	auto *object_ref_raw = reinterpret_cast<c_api::di_object *>(
 	    reinterpret_cast<std::byte *>(&obj_impl) - object_allocation_info<T>::offset);
 

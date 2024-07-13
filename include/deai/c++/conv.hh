@@ -170,6 +170,12 @@ auto to_borrowed_cpp_value(T &&arg) -> T {
 inline auto to_borrowed_cpp_value(c_api::di_array arg);
 inline auto to_borrowed_cpp_value(c_api::di_string arg);
 
+template <typename T, c_api::di_type Type = id::deai_typeof<T>::value>
+auto variant_to_borrowed_cpp_value(void *ptr_) {
+	auto *ptr = reinterpret_cast<id::deai_ctype_t<Type> *>(ptr_);
+	return to_borrowed_cpp_value(*ptr);
+}
+
 struct DeaiArrayConvert {
 	c_api::di_array arg;
 	// If the target is a std::span of raw deai types, then we can convert it
@@ -183,17 +189,15 @@ struct DeaiArrayConvert {
 		if (arg.elem_type != Type) {
 			throw c_api::di_new_error(
 			    "Array element type mismatch, %s cannot be converted into %s",
-			    c_api::di_type_names[static_cast<int>(arg.elem_type)],
-			    typeid(T).name());
+			    c_api::di_type_names[static_cast<int>(arg.elem_type)], typeid(T).name());
 		}
 		std::vector<T> ret;
 		ret.reserve(arg.length);
 
 		auto elem_size = c_api::di_sizeof_type(Type);
 		for (size_t i = 0; i < arg.length; i++) {
-			auto *ptr = reinterpret_cast<id::deai_ctype_t<Type> *>(
-			    reinterpret_cast<std::byte *>(arg.arr) + i * elem_size);
-			ret.push_back(to_borrowed_cpp_value(*ptr));
+			auto *ptr = reinterpret_cast<std::byte *>(arg.arr) + i * elem_size;
+			ret.push_back(variant_to_borrowed_cpp_value<T>(ptr));
 		}
 		return ret;
 	}
@@ -276,6 +280,17 @@ struct DeaiVariantConverter {
 
 extern template struct DeaiVariantConverter<true>;
 extern template struct DeaiVariantConverter<false>;
+
+/// Convert a borrowed deai value one type to another. There is no copying or ownership
+/// changes involved.
+template <::deai::type::id::DeaiVerbatim S, ::deai::c_api::di_type Type = ::deai::type::id::deai_typeof<S>::value>
+auto borrow_from_variant(::deai::c_api::di_value &value, ::deai::c_api::di_type type) -> S {
+	if (type == Type) {
+		return *reinterpret_cast<S *>(&value);
+	}
+	DeaiVariantConverter<true> impl{std::ref(value), type};
+	return *static_cast<std::optional<S>>(impl);
+}
 
 }        // namespace c_api
 
