@@ -275,13 +275,7 @@ private:
 	}
 
 public:
-	DeaiVariantConverter(ctor_value_type in_value, move_if_not_borrow_t<di_type> in_type)
-	    : value_(in_value), type(in_type) {
-		if constexpr (!borrow) {
-			in_type = di_type::NIL;
-			::memset(&in_value, 0, ::di_sizeof_type(in_type));
-		}
-	}
+	DeaiVariantConverter(ctor_value_type in_value, move_if_not_borrow_t<di_type> in_type);
 	~DeaiVariantConverter() {
 		if constexpr (!borrow) {
 			::di_free_value(type, &value_);
@@ -299,6 +293,14 @@ public:
 	operator std::optional<void *>();
 	operator std::optional<bool>();
 };
+
+template <>
+DeaiVariantConverter<true>::DeaiVariantConverter(std::reference_wrapper<::deai::c_api::Value> in_value,
+                                                 ::deai::c_api::Type in_type);
+
+template <>
+DeaiVariantConverter<false>::DeaiVariantConverter(::deai::c_api::Value &&in_value,
+                                                  ::deai::c_api::Type &&in_type);
 
 extern template struct DeaiVariantConverter<true>;
 extern template struct DeaiVariantConverter<false>;

@@ -337,6 +337,20 @@ DeaiVariantConverter<borrow>::operator std::optional<bool>() {
 	}
 	return try_from_inner<bool>();
 }
+template <>
+DeaiVariantConverter<true>::DeaiVariantConverter(std::reference_wrapper<::deai::c_api::Value> in_value,
+                                                 ::deai::c_api::Type in_type)
+    : value_{in_value}, type{in_type} {
+}
+
+template <>
+DeaiVariantConverter<false>::DeaiVariantConverter(::deai::c_api::Value &&in_value,
+                                                  ::deai::c_api::Type &&in_type)
+    : value_{}, type{in_type} {
+	::memcpy(&value_, &in_value, ::deai::c_api::type::sizeof_(in_type));
+	in_type = di_type::NIL;
+	::memset(&in_value, 0, ::di_sizeof_type(in_type));
+}
 template struct DeaiVariantConverter<true>;
 template struct DeaiVariantConverter<false>;
 template DeaiVariantConverter<true>::operator std::optional<int>();
