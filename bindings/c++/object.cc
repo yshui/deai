@@ -1,6 +1,6 @@
-#include <sstream>
-
 #include <deai/c++/object.hh>
+// #include <iostream>
+#include <sstream>
 
 namespace deai {
 namespace exception {
@@ -84,7 +84,7 @@ auto Variant::unpack() && -> std::vector<Variant> {
 	std::vector<Variant> ret{};
 	ret.reserve(value.tuple.length);
 	for (size_t i = 0; i < value.tuple.length; i++) {
-		ret.emplace_back(value.tuple.elements[i]);
+		ret.emplace_back(std::move(value.tuple.elements[i]));
 	}
 	free(value.tuple.elements);
 	type = c_api::di_type::NIL;
