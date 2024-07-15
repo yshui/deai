@@ -115,7 +115,7 @@ if ldoc.found()
       , command: [ldoc, '--filter', 'ldoc2c.dump', '@INPUT0@']
       , capture: true
       , build_always: true
-      , env: ['LUA_PATH='+meson.current_source_dir()+'/build-support/?.lua'])
+      , env: ['LUA_PATH='+meson.current_source_dir()+'/build-support/?.lua;;'])
   endforeach
   # This is a dummy target to inject generated doc sources into the compile_commands.json
   # database, so our doc scanner can find them. This is never meant to be built.
