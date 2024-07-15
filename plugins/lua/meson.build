@@ -45,7 +45,7 @@ else
           'abiver: '+lua.get_pkgconfig_variable('abiver', default: ''))
 endif
 
-di_lua_lib = shared_library('di_lua', src,
+di_lua_lib = shared_module('di_lua', src,
   dependencies: lua, include_directories: incs,
   c_args: base_c_args + extra_c_args, name_prefix: '',
   install: true, install_dir: plugin_install_dir)

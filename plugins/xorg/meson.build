@@ -9,7 +9,7 @@ deps = [
 ]
 src = ['xorg.c', 'xinput.c', 'randr.c', 'key.c']
 local_inc = include_directories('.')
-di_xorg_lib = shared_library('di_xorg', src,
+di_xorg_lib = shared_module('di_xorg', src,
   include_directories: incs+[local_inc],
   dependencies: deps, c_args: base_c_args, name_prefix: '',
   link_with: [ libutils ], install: true, install_dir: plugin_install_dir)
