@@ -32,7 +32,8 @@ foreach t : test_cases
     ]
     , timeout: 3
     , depends: builtin_scripts
-    , env: ['DEAI_EXTRA_PLUGINS='+all_plugins_files])
+    , env: ['DEAI_EXTRA_PLUGINS='+all_plugins_files,
+            'DEAI_RESOURCES_DIR='+meson.current_build_dir() / '..' / 'plugins'])
 endforeach
 
 core_test_cases = [
@@ -49,5 +50,6 @@ foreach t : core_test_cases
   test(t.underscorify()+'_test'
       , deai_exe, args: ['load_plugin', 's:' + test_so.full_path()]
       , depends: builtin_scripts
-      , env: ['DEAI_EXTRA_PLUGINS='+all_plugins_files])
+      , env: ['DEAI_EXTRA_PLUGINS='+all_plugins_files,
+              'DEAI_RESOURCES_DIR='+meson.current_build_dir() / '..' / 'plugins'])
 endforeach

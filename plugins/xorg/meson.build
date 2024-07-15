@@ -14,7 +14,7 @@ di_xorg_lib = shared_module('di_xorg', src,
   dependencies: deps, c_args: base_c_args, name_prefix: '',
   link_with: [ libutils ], install: true, install_dir: plugin_install_dir)
 
-install_data('builtins.lua', install_dir:  plugin_install_dir / 'xorg', install_tag: 'runtime')
+install_data('builtins.lua', install_dir: resources_install_dir / 'xorg', install_tag: 'runtime')
 
 all_plugins += [ di_xorg_lib ]
 builtin_scripts += custom_target('builtins.lua', output: 'builtins.lua', input: 'builtins.lua', command: ['cp', '@INPUT@', '@OUTPUT@'])

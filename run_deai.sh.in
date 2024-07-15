@@ -1,5 +1,6 @@
 #!/bin/sh
 export DEAI_EXTRA_PLUGINS="@all_plugins@"
+export DEAI_RESOURCES_DIR="@resources_dir@"
 
 if [ -z "$W" ]; then
 exec @deai_exe@ "$@"

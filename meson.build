@@ -72,7 +72,8 @@ base_c_args = base_c_args + [ '-fvisibility=hidden', '-D_GNU_SOURCE' ]
 if get_option('unittests')
   base_c_args = base_c_args + [ '-DUNITTESTS' ]
 endif
-plugin_install_dir = get_option('libdir')+'/deai'
+plugin_install_dir = get_option('libdir') / 'deai'
+resources_install_dir = get_option('datadir') / 'deai'
 if host_machine.system() == 'linux'
   have_setproctitle = true
 else
@@ -86,7 +87,8 @@ incs = [deai_inc, include_directories('.')]
 conf = configuration_data()
 conf.set('HAVE_SETPROCTITLE', have_setproctitle)
 conf.set('TRACK_OBJECTS', get_option('track_objects'))
-conf.set('plugin_install_dir', get_option('prefix')+'/'+plugin_install_dir)
+conf.set('plugin_install_dir', get_option('prefix') / plugin_install_dir)
+conf.set('resources_dir', get_option('prefix') / resources_install_dir)
 configure_file(input: 'config.h.in', output: 'config.h', configuration: conf)
 subdir('scripts')
 subdir('bindings')
@@ -156,6 +158,7 @@ all_plugins_files = ':'.join(all_plugins_files)
 run_deai_data = configuration_data()
 run_deai_data.set('all_plugins', all_plugins_files)
 run_deai_data.set('deai_exe', deai_exe.full_path())
+run_deai_data.set('resources_dir', meson.current_build_dir() / 'plugins')
 configure_file(input: 'run_deai.sh.in', output: 'run_deai.sh', configuration: run_deai_data)
 subdir('tests')
 

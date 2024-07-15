@@ -45,8 +45,8 @@ static void xorg_disconnect(di_xorg_connection *xc) {
 	xc->nsignals = 0;
 
 	// Drop the auto stop handle to stop the signal listener
-	di_delete_member_raw(
-	    (void *)xc, di_string_borrow_literal("__xcb_fd_event_read_listen_handle"));
+	di_delete_member_raw((void *)xc,
+	                     di_string_borrow_literal("__xcb_fd_event_read_listen_handle"));
 
 	struct di_atom_entry *ae, *tae;
 	HASH_ITER (hh, xc->a_byatom, ae, tae) {
@@ -79,11 +79,9 @@ static void di_xorg_ioev(di_object *dc_obj) {
 			scoped_di_string event_name = DI_STRING_INIT;
 			if (ev->response_type == XCB_GE_GENERIC) {
 				auto gev = (xcb_ge_generic_event_t *)ev;
-				event_name =
-				    di_string_printf("___raw_x_event_ge_%d", gev->event_type);
+				event_name = di_string_printf("___raw_x_event_ge_%d", gev->event_type);
 			} else {
-				event_name =
-				    di_string_printf("___raw_x_event_%d", ev->response_type);
+				event_name = di_string_printf("___raw_x_event_%d", ev->response_type);
 			}
 			di_value tmp;
 			tmp.pointer = ev;
@@ -100,8 +98,7 @@ static void di_xorg_ioev(di_object *dc_obj) {
 
 		for (int i = 0; xext_reg[i].name != NULL; i++) {
 			// Only strongly referenced ext have signal listerners.
-			scoped_di_string ext_key =
-			    di_string_printf("___strong_x_ext_%s", xext_reg[i].name);
+			scoped_di_string ext_key = di_string_printf("___strong_x_ext_%s", xext_reg[i].name);
 			scoped_di_object *ext_obj = NULL;
 			if (di_get2(dc_obj, ext_key, ext_obj) != 0) {
 				continue;
@@ -157,8 +154,7 @@ di_xorg_intern_atom(di_xorg_connection *xc, di_string name, xcb_generic_error_t 
 		return ae->atom;
 	}
 
-	auto r = xcb_intern_atom_reply(
-	    xc->c, xcb_intern_atom(xc->c, 0, name.length, name.data), e);
+	auto r = xcb_intern_atom_reply(xc->c, xcb_intern_atom(xc->c, 0, name.length, name.data), e);
 	if (!r) {
 		di_log_va(log_module, DI_LOG_ERROR, "Cannot intern atom");
 		return 0;
@@ -211,9 +207,8 @@ static di_string di_xorg_get_resource(di_xorg_connection *xc) {
 static void di_xorg_set_resource(di_xorg_connection *xc, di_string rdb) {
 	auto scrn = screen_of_display(xc->c, xc->dflt_scrn);
 	scopedp(xcb_generic_error_t) *e = xcb_request_check(
-	    xc->c, xcb_change_property(xc->c, XCB_PROP_MODE_REPLACE, scrn->root,
-	                               XCB_ATOM_RESOURCE_MANAGER, XCB_ATOM_STRING, 8,
-	                               rdb.length, rdb.data));
+	    xc->c, xcb_change_property(xc->c, XCB_PROP_MODE_REPLACE, scrn->root, XCB_ATOM_RESOURCE_MANAGER,
+	                               XCB_ATOM_STRING, 8, rdb.length, rdb.data));
 	(void)e;
 }
 
@@ -241,8 +236,7 @@ static struct di_variant di_xorg_get_ext(di_xorg_connection *xc, di_string name)
 			break;
 		}
 		weak_ext = di_weakly_ref_object((void *)ext);
-		DI_CHECK_OK(di_add_member_clone((void *)xc, ext_member,
-		                                DI_TYPE_WEAK_OBJECT, &weak_ext));
+		DI_CHECK_OK(di_add_member_clone((void *)xc, ext_member, DI_TYPE_WEAK_OBJECT, &weak_ext));
 		return di_variant_of((di_object *)ext);
 	}
 	return (struct di_variant){.type = DI_LAST_TYPE, .value = NULL};
@@ -313,8 +307,7 @@ static struct {
 	for (int i = min; i <= max; i++) {
 		// Basically we press the key and see what modifier state changes
 		auto updates = xkb_state_update_key(state, i, XKB_KEY_DOWN);
-		updates &= (XKB_STATE_MODS_DEPRESSED | XKB_STATE_MODS_LATCHED |
-		            XKB_STATE_MODS_LOCKED);
+		updates &= (XKB_STATE_MODS_DEPRESSED | XKB_STATE_MODS_LATCHED | XKB_STATE_MODS_LOCKED);
 		if (!updates) {
 			xkb_state_update_key(state, i, XKB_KEY_UP);
 			continue;
@@ -323,8 +316,7 @@ static struct {
 		for (int j = 0; j < 8; j++) {
 			if (xkb_state_mod_name_is_active(state, modifier_names[j], updates)) {
 				// printf("%s %#x\n", modifier_names[j], i);
-				next_keycode_indices[total_keycodes] =
-				    modifier_keycode_head[j];
+				next_keycode_indices[total_keycodes] = modifier_keycode_head[j];
 				modifier_keycode_head[j] = total_keycodes;
 				keycodes[total_keycodes++] = i;
 				modifier_keycode_count[j]++;
@@ -385,8 +377,7 @@ static void set_keymap(di_xorg_connection *xc, di_object *o) {
 	                 variant = DI_STRING_INIT, options = DI_STRING_INIT;
 
 	if (!o || di_get(o, "layout", layout)) {
-		di_log_va(log_module, DI_LOG_ERROR,
-		          "Invalid keymap object, key \"layout\" is not set");
+		di_log_va(log_module, DI_LOG_ERROR, "Invalid keymap object, key \"layout\" is not set");
 		return;
 	}
 
@@ -461,9 +452,9 @@ static void set_keymap(di_xorg_connection *xc, di_object *o) {
 		}
 	}
 
-	auto r = xcb_request_check(xc->c, xcb_change_keyboard_mapping_checked(
-	                                      xc->c, (max_keycode - min_keycode + 1),
-	                                      min_keycode, keysym_per_keycode, keysyms));
+	auto r = xcb_request_check(
+	    xc->c, xcb_change_keyboard_mapping_checked(xc->c, (max_keycode - min_keycode + 1),
+	                                               min_keycode, keysym_per_keycode, keysyms));
 	if (r) {
 		di_log_va(log_module, DI_LOG_ERROR, "Failed to set keymap.");
 		free(r);
@@ -474,8 +465,7 @@ static void set_keymap(di_xorg_connection *xc, di_object *o) {
 	while (true) {
 		auto r2 = xcb_set_modifier_mapping_reply(
 		    xc->c,
-		    xcb_set_modifier_mapping(xc->c, modifiers.keycode_per_modifiers,
-		                             modifiers.keycodes),
+		    xcb_set_modifier_mapping(xc->c, modifiers.keycode_per_modifiers, modifiers.keycodes),
 		    NULL);
 		if (!r2 || r2->status == XCB_MAPPING_STATUS_FAILURE) {
 			di_log_va(log_module, DI_LOG_ERROR,
@@ -530,8 +520,8 @@ void di_xorg_del_signal(di_xorg_connection *xc) {
 		return;
 	}
 	// Drop the auto stop handle to stop the listener
-	di_delete_member_raw(
-	    (void *)xc, di_string_borrow_literal("__xcb_fd_event_read_listen_handle"));
+	di_delete_member_raw((void *)xc,
+	                     di_string_borrow_literal("__xcb_fd_event_read_listen_handle"));
 }
 
 void di_xorg_signal_setter(di_object *obj, di_string member, di_object *sig) {
@@ -598,17 +588,6 @@ static di_object *di_xorg_new_clipboard(struct di_xorg *x) {
 }
 
 static void di_xorg_load_builtin_lua(di_object *x) {
-	di_object *builtin_lua = NULL;
-	if (di_rawget_borrowed(x, builtin_member_name, builtin_lua) == 0) {
-		// Already loaded
-		return;
-	}
-
-	di_string plugin_dir;
-	if (di_rawget_borrowed(x, "___plugin_dir", plugin_dir) != 0) {
-		return;
-	}
-
 	di_object *di = di_object_borrow_deai(x);
 	di_object *lua_module;
 	if (di_rawget_borrowed(di, "lua", lua_module) != 0) {
@@ -616,8 +595,10 @@ static void di_xorg_load_builtin_lua(di_object *x) {
 		return;
 	}
 
-	scoped_di_string builtin_path =
-	    di_string_printf("%.*s/builtins.lua", (int)plugin_dir.length, plugin_dir.data);
+	scoped_di_string resources_dir = DI_STRING_INIT;
+	DI_CHECK_OK(di_get(di, "resources_dir", resources_dir));
+	scoped_di_string builtin_path = di_string_printf(
+	    "%.*s/xorg/builtins.lua", (int)resources_dir.length, resources_dir.data);
 	di_tuple ret_values;
 	di_object *builtins = NULL;
 	if (di_callr(lua_module, "load_script", ret_values, builtin_path) != 0 ||
@@ -668,8 +649,7 @@ static di_object *di_xorg_connect_to(di_object *x, di_string displayname_) {
 
 	di_mgetm(x, event, di_new_error("Can't get event module"));
 
-	auto dc =
-	    di_new_object_with_type2(di_xorg_connection, "deai.plugin.xorg:Connection");
+	auto dc = di_new_object_with_type2(di_xorg_connection, "deai.plugin.xorg:Connection");
 	dc->c = c;
 	dc->dflt_scrn = scrn;
 	dc->nsignals = 0;
@@ -756,17 +736,8 @@ static struct di_module *new_xorg_module(struct deai *di) {
 	return x;
 }
 
-DEAI_PLUGIN_ENTRY_POINT2(di, plugin_path) {
+DEAI_PLUGIN_ENTRY_POINT(di) {
 	auto x = new_xorg_module(di);
-
-	const char *last_component = strrchr(plugin_path, '/');
-	if (last_component != NULL) {
-		di_string dirname =
-		    last_component == plugin_path
-		        ? di_string_dup("/")
-		        : di_string_ndup(plugin_path, last_component - plugin_path);
-		di_member(x, "___plugin_dir", dirname);
-	}
 	di_register_module(di, di_string_borrow("xorg"), &x);
 	return 0;
 }

@@ -53,7 +53,7 @@ static bool load_plugin_impl(struct deai *p, char *sopath) {
 		return false;
 	}
 
-	init_fn(p, sopath);
+	init_fn(p);
 	return true;
 }
 
@@ -301,8 +301,7 @@ void di_dtor(struct deai *di) {
 
 	// Revert the changes we did to argv and environ
 	for (int i = 0; environ[i]; i++) {
-		if (environ[i] >= di->orig_proctitle &&
-		    environ[i] < di->orig_proctitle + proctitle_size) {
+		if (environ[i] >= di->orig_proctitle && environ[i] < di->orig_proctitle + proctitle_size) {
 			environ[i] += proctitle_offset;
 		}
 	}
@@ -609,6 +608,15 @@ int main(int argc, char *argv[]) {
 	if (argc < 2) {
 		printf("Usage: %s <module>.<method> <arg1> <arg2> ...\n", argv[0]);
 		exit(1);
+	}
+
+	char *resources_dir = getenv("DEAI_RESOURCES_DIR");
+	if (resources_dir) {
+		di_string resources_dir_str = di_string_dup(resources_dir);
+		DI_CHECK_OK(di_member(p, "resources_dir", resources_dir_str));
+	} else {
+		const char *builtin_resources_dir = DI_RESOURCES_DIR;
+		DI_CHECK_OK(di_member(p, "resources_dir", builtin_resources_dir));
 	}
 
 	DI_CHECK_OK(di_method(p, "load_plugin_from_dir", load_plugin_from_dir, di_string));

@@ -39,7 +39,7 @@ static inline bool IS_ERR_OR_NULL(const void *ptr) {
 	return unlikely(!ptr) || IS_ERR_VALUE((unsigned long)ptr);
 }
 
-typedef void (*init_fn_t)(struct deai *, const char *);
+typedef void (*init_fn_t)(struct deai *);
 
 PUBLIC_DEAI_API struct di_module *di_new_module(struct deai *);
 PUBLIC_DEAI_API int di_register_module(struct deai *, di_string, struct di_module **);
@@ -48,12 +48,7 @@ PUBLIC_DEAI_API int di_register_module(struct deai *, di_string, struct di_modul
 #define di_new_object_with_type2(type, di_type)                                          \
 	(type *)di_new_object_with_type_name(sizeof(type), alignof(type), di_type)
 
-/// Define a entry point for a deai plugin. Your entry point function will take 2 arguments:
+/// Define a entry point for a deai plugin. Your entry point function will take a single argument:
 ///   - `arg`, which points to the core deai object.
-///   - `plugin_path`, which is the path to your plugin file itself.
-#define DEAI_PLUGIN_ENTRY_POINT2(arg, plugin_path)                                       \
-	visibility_default int di_plugin_init(struct deai *arg, const char *plugin_path)
-
-/// Simpler version of `DEAI_PLUGIN_ENTRY_POINT2` if your plugin doesn't need the plugin path.
 #define DEAI_PLUGIN_ENTRY_POINT(arg)                                                     \
-	visibility_default int di_plugin_init(struct deai *arg, const char * /*plugin_path*/)
+	visibility_default int di_plugin_init(struct deai *arg)

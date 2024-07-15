@@ -1,5 +1,6 @@
 #pragma once
 #define DI_PLUGIN_INSTALL_DIR "@plugin_install_dir@"
+#define DI_RESOURCES_DIR "@resources_dir@"
 
 #mesondefine HAVE_SETPROCTITLE
 #mesondefine DI_REFCOUNT_DEBUG
