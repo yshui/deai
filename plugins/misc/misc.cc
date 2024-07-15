@@ -14,6 +14,52 @@ class Module {
 public:
 	static constexpr const char *type [[maybe_unused]] = "deai.plugin.utils:Module";
 
+	/// Find maximum unweighted bipartite match.
+	///
+	/// EXPORT: utils.bipartite_match(graph: [[:int]]) -> [:int]
+	///
+	/// The input is a list of edges. There is one list of each node on the left,
+	/// containing the indices of the nodes on the right that it is connected to.
+	///
+	/// Returns a list of integers, the indices of the nodes on the right that each
+	/// node on the left is connected to. Or -1 if it is not matched
+	auto bipartite_match(const std::vector<std::vector<int64_t>> &graph) const
+	    -> std::vector<int64_t> {
+		std::vector<int64_t> ret(graph.size(), -1);
+		std::vector<int64_t> right;
+		std::vector<uint8_t> visited(graph.size(), 0);
+		for (unsigned int i = 0; i < graph.size(); i++) {
+			for (const auto &j : graph[i]) {
+				if (j < 0) {
+					throw std::invalid_argument("Invalid graph, index out of bounds");
+				}
+				if (j >= right.size()) {
+					right.resize(j + 1, -1);
+				}
+			}
+		}
+
+		std::function<bool(unsigned int)> dfs = [&](unsigned int curr) -> bool {
+			for (const auto &j : graph[curr]) {
+				if (visited[j] == 1) {
+					continue;
+				}
+				visited[j] = 1;
+				if (right[j] == -1 || dfs(right[j])) {
+					ret[curr] = j;
+					right[j] = curr;
+					return true;
+				}
+			}
+			return false;
+		};
+		for (unsigned int i = 0; i < graph.size(); i++) {
+			std::fill(visited.begin(), visited.end(), 0);
+			dfs(i);
+		}
+		return ret;
+	}
+
 	/// Solve a system of difference constraints.
 	///
 	/// EXPORT: utils.difference_constraints(constraints: [[:int]]) -> [:int]
@@ -106,6 +152,7 @@ auto di_new_utils(Ref<Core> &di) -> Ref<Object> {
 	auto obj = util::new_object<Module>();
 	auto &module = util::unsafe_to_inner<Module>(obj);
 	util::add_method<&Module::difference_constraints>(module, "difference_constraints");
+	util::add_method<&Module::bipartite_match>(module, "bipartite_match");
 	return obj;
 }
 DEAI_CPP_PLUGIN_ENTRY_POINT(di) {

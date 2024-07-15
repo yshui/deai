@@ -23,6 +23,7 @@ test_cases = [
   'promise_early_exit.lua',
   'spawn.lua',
   'next.lua',
+  'bipartite.lua',
 ]
 foreach t : test_cases
   test(t, deai_exe, args: [
