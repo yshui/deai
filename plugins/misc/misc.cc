@@ -76,12 +76,6 @@ public:
 	///	constraints.
 	auto difference_constraints(const std::vector<std::vector<int64_t>> &constraints_list) const
 	    -> std::vector<int64_t> {
-		for (const auto &constraint : constraints_list) {
-			for (const auto &value : constraint) {
-				std::cout << value << " ";
-			}
-			std::cout << "\n";
-		}
 		std::vector<int64_t> ret(constraints_list.size(), 0);
 		std::vector<uint8_t> is_inqueue(constraints_list.size(), 1);
 		std::queue<unsigned int> queue;
