@@ -80,6 +80,10 @@ auto Variant::object_ref() & -> std::optional<Ref<Object>> {
 	return Variant{*this}.object_ref();
 }
 
+Variant::operator std::optional<Ref<Object>>() && {
+	return std::move(*this).object_ref();
+}
+
 auto Variant::unpack() && -> std::vector<Variant> {
 	if (type != c_api::di_type::TUPLE) {
 		return {std::move(*this)};
@@ -171,9 +175,8 @@ Variant::operator di_variant() & {
 	return copy;
 }
 
-template <typename T, c_api::di_type Type>
-auto Variant::to() && -> std::enable_if_t<std::is_same_v<T, WeakRef<Object>>, std::optional<WeakRef<Object>>> {
-	if (type != Type) {
+Variant::operator std::optional<WeakRef<Object>>() && {
+	if (type != c_api::di_type::WEAK_OBJECT) {
 		return std::nullopt;
 	}
 	type = c_api::di_type::NIL;
@@ -183,9 +186,6 @@ auto Variant::to() && -> std::enable_if_t<std::is_same_v<T, WeakRef<Object>>, st
 Variant::operator std::optional<deai::type::Variant>() && {
 	return {std::move(*this)};
 }
-
-template auto
-Variant::to<WeakRef<Object>, c_api::di_type::WEAK_OBJECT>() && -> std::optional<WeakRef<Object>>;
 
 template <bool raw_>
 ObjectMemberProxy<raw_>::operator std::optional<Variant>() const {

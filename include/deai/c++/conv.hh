@@ -1,16 +1,14 @@
 #pragma once
 
 #include <array>
-#include <cinttypes>
 #include <cstdint>
 #include <cstdlib>
 #include <cstring>
-#include <limits>
 #include <optional>
 #include <string>
 #include <typeinfo>
 
-#include "c_api.hh"
+#include "c_api.hh"        // IWYU pragma: keep
 #include "typeinfo.hh"
 
 namespace deai::type::conv {
@@ -176,7 +174,7 @@ auto variant_to_borrowed_cpp_value(void *ptr_) {
 	return to_borrowed_cpp_value(*ptr);
 }
 
-struct DeaiArrayConvert {
+struct DeaiBorrowedArrayConverter {
 	c_api::di_array arg;
 	// If the target is a std::span of raw deai types, then we can convert it
 	// directly. Otherwise we have to create a std::vector and copy each element.
@@ -207,7 +205,7 @@ struct DeaiArrayConvert {
 };
 
 inline auto to_borrowed_cpp_value(c_api::di_array arg) {
-	return DeaiArrayConvert{arg};
+	return DeaiBorrowedArrayConverter{arg};
 }
 
 inline auto to_borrowed_cpp_value(c_api::di_string arg) {

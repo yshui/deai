@@ -5,12 +5,13 @@
 #include <variant>
 #include <vector>
 
-#include "c_api.hh"
+#include "c_api.hh"        // IWYU pragma: keep
 
 namespace deai::type {
-template <typename T, typename = void>
-struct Ref;
 struct Object;
+template <typename T>
+    requires std::derived_from<T, type::Object>
+struct Ref;
 template <typename T>
 struct WeakRef;
 struct Variant;
@@ -19,7 +20,7 @@ namespace id {
 template <c_api::di_type type>
 struct deai_ctype {};
 
-template <typename T, typename = void>
+template <typename T>
 struct deai_typeof {};
 
 constexpr auto is_basic_deai_type(c_api::di_type type) -> bool {
@@ -84,7 +85,8 @@ struct deai_typeof<void *> {
 	static constexpr auto value = c_api::di_type::POINTER;
 };
 template <typename T>
-struct deai_typeof<type::Ref<T>, std::enable_if_t<std::is_base_of_v<type::Object, T>, void>> {
+    requires std::derived_from<T, type::Object>
+struct deai_typeof<type::Ref<T>> {
 	static constexpr auto value = c_api::di_type::OBJECT;
 };
 template <>
@@ -120,7 +122,8 @@ struct deai_typeof<c_api::di_array> {
 	static constexpr auto value = c_api::di_type::ARRAY;
 };
 template <typename T, size_t length>
-struct deai_typeof<std::array<T, length>, std::enable_if_t<is_basic_deai_type(deai_typeof<T>::value), void>> {
+    requires(is_basic_deai_type(deai_typeof<T>::value))
+struct deai_typeof<std::array<T, length>> {
 	static constexpr auto value = c_api::di_type::ARRAY;
 };
 template <>
@@ -256,5 +259,12 @@ constexpr auto get_deai_types() {
 	return std::array<c_api::di_type, sizeof...(Args)>{
 	    id::deai_typeof<std::remove_cvref_t<Args>>::value...};
 }
+template <typename T, c_api::di_type Type = id::deai_typeof<T>::value>
+static constexpr bool is_trivially_convertible =
+    id::is_basic_deai_type(Type) && (Type != c_api::di_type::OBJECT) &&
+    (Type != c_api::di_type::NIL) && (Type != c_api::di_type::ANY) &&
+    (Type != c_api::di_type::DI_LAST_TYPE) && (Type != c_api::di_type::WEAK_OBJECT);
+template <typename T>
+concept TriviallyConvertible = is_trivially_convertible<T>;
 }        // namespace id
 }        // namespace deai::type

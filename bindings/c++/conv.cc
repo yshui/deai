@@ -1,3 +1,4 @@
+#include <limits>
 #include <deai/c++/conv.hh>
 
 namespace {

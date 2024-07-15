@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MPL-2.0
 
 #pragma once
-#include <cstdlib>
+#include <cstdlib>        // IWYU pragma: keep
 
 namespace deai::c_api {
 extern "C" {

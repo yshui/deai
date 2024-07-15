@@ -1,5 +1,4 @@
 #pragma once
-#include <cassert>
 #include <cstdlib>
 #include <cstring>
 #include <format>
@@ -44,7 +43,8 @@ struct Object {
 	Object(c_api::di_object *obj);
 
 	static auto unsafe_ref(c_api::di_object *obj) -> Object;
-	template <typename, typename>
+	template <typename T>
+	    requires std::derived_from<T, Object>
 	friend struct Ref;
 
 	public:
@@ -63,20 +63,12 @@ inline auto raw_check_type(c_api::di_object *obj, const Object * /*tag*/) -> boo
 }
 
 template <typename T>
-auto raw_check_type(c_api::di_object *obj, const T * /*tag*/)
-    -> std::enable_if_t<std::is_base_of_v<Object, T>, bool> {
+    requires std::derived_from<T, Object>
+auto raw_check_type(c_api::di_object *obj, const T * /*tag*/) -> bool {
 	return c_api::di_check_type(obj, T::type);
 }
 
 struct Variant {
-private:
-	template <typename T, c_api::di_type Type = id::deai_typeof<T>::value>
-	static constexpr bool is_trivially_convertible =
-	    id::is_basic_deai_type(Type) && (Type != c_api::di_type::OBJECT) &&
-	    (Type != c_api::di_type::NIL) && (Type != c_api::di_type::ANY) &&
-	    (Type != c_api::di_type::DI_LAST_TYPE) && (Type != c_api::di_type::WEAK_OBJECT);
-
-public:
 	c_api::di_type type;
 	c_api::di_value value;
 
@@ -111,63 +103,81 @@ public:
 
 	operator Ref<Object>();
 
-	// Conversion for all the by-value types
-	template <typename T, c_api::di_type Type = id::deai_typeof<T>::value>
-	auto
-	to() const & -> std::enable_if_t<Variant::is_trivially_convertible<T>, std::optional<T>> {
-		if (Type != type) {
-			return std::nullopt;
-		}
-		if constexpr (Type == c_api::di_type::BOOL) {
-			return value.bool_;
-		}
-		if constexpr (Type == c_api::di_type::INT) {
-			return value.int_;
-		}
-		if constexpr (Type == c_api::di_type::UINT) {
-			return value.uint;
-		}
-		if constexpr (Type == c_api::di_type::NINT) {
-			return value.nint;
-		}
-		if constexpr (Type == c_api::di_type::NUINT) {
-			return value.nuint;
-		}
-		if constexpr (Type == c_api::di_type::FLOAT) {
-			return value.float_;
-		}
-		if constexpr (Type == c_api::di_type::STRING_LITERAL) {
-			return value.string_literal;
-		}
-		if constexpr (Type == c_api::di_type::STRING) {
-			return std::string{value.string.data, value.string.length};
-		}
-		if constexpr (Type == c_api::di_type::POINTER) {
-			return value.pointer;
-		}
-		unreachable();
-	}
-
 	operator c_api::di_variant() &&;
 	operator c_api::di_variant() &;
 
-	template <typename T, c_api::di_type Type = id::deai_typeof<T>::value>
-	auto
-	to() && -> std::enable_if_t<std::is_same_v<T, WeakRef<Object>>, std::optional<WeakRef<Object>>>;
+	// `to -> T` and `operator std::optional<T>` are two different flavors of conversion.
+	// `operator std::optional<T>` converts straight from a deai type to its corresponding
+	// C++ type, no type conversions are performed otherwise. While for `to -> T`, if `T`
+	// doesn't match the deai type of the variant, a conversion between deai types will be
+	// attempted, before converting to the C++ type.
 
-	template <typename T, c_api::di_type Type = id::deai_typeof<T>::value>
-	auto
-	to() & -> std::enable_if_t<!Variant::is_trivially_convertible<T>, std::optional<T>> {
+	template <id::DeaiConvertible T>
+	auto to() && -> std::optional<T> {
+		// std::cerr << "Moving to, self type " << c_api::di_type_names[static_cast<int>(type)]
+		//           << " target type: " << typeid(T).name() << " this: " << this << "\n";
+		static constexpr c_api::di_type Type = id::deai_typeof<T>::value;
+		/// Special casing conversion to Variant. Don't wrap another layer of Variant,
+		/// instead just move from this.
+		if (Type == type || Type == c_api::di_type::VARIANT) {
+			return std::move(*this);
+		}
+
+		std::optional<id::deai_ctype_t<Type>> c_value =
+		    conv::c_api::DeaiVariantConverter<false>{std::move(value), std::move(type)};
+		c_api::di_value tmp{};
+		c_api::di_type tmp_type = Type;
+		::memcpy(&tmp, &c_value.value(), c_api::di_sizeof_type(Type));
+		return Variant{std::move(tmp_type), std::move(tmp)};
+	}
+
+	template <id::DeaiConvertible T>
+	auto to() & -> std::optional<T> {
+		// std::cerr << "Copying to, self type " << c_api::di_type_names[static_cast<int>(type)]
+		//           << " target type: " << typeid(T).name() << " this: " << this << "\n";
+		static constexpr c_api::di_type Type = id::deai_typeof<T>::value;
+		if (Type == type || Type == c_api::di_type::VARIANT) {
+			return *this;
+		}
 		// Try to use the move conversion
-		auto copy = *this;
-		return std::move(copy).to<T>();
+		return std::move(*this).to<T>();
 	}
 
-	template <typename T, c_api::di_type type = id::deai_typeof<T>::value>
-	operator T() {
-		return to<T>().value();
+	template <id::DeaiVerbatim T>
+	operator std::optional<T>() const & {
+		static constexpr c_api::di_type Type = id::deai_typeof<T>::value;
+		if (Type != type) {
+			return std::nullopt;
+		}
+		T value;
+		::memcpy(&value, &this->value, c_api::di_sizeof_type(Type));
+		return value;
 	}
 
+	operator std::optional<std::string_view>() & {
+		if (type == c_api::di_type::STRING) {
+			return {std::string_view{value.string.data, value.string.length}};
+		}
+		if (type == c_api::di_type::STRING_LITERAL) {
+			return {value.string_literal};
+		}
+		return std::nullopt;
+	}
+	operator std::optional<std::string>() const & {
+		if (type == c_api::di_type::STRING) {
+			return {{value.string.data, value.string.length}};
+		}
+		if (type == c_api::di_type::STRING_LITERAL) {
+			return {value.string_literal};
+		}
+		return std::nullopt;
+	}
+	operator std::optional<WeakRef<Object>>() &&;
+	operator std::optional<Ref<Object>>() &&;
+	template <id::DeaiConvertible T>
+	operator std::optional<T>() & {
+		return Variant{*this};
+	}
 	operator std::optional<Variant>() &&;
 
 	template <typename T, c_api::di_type type = id::deai_typeof<std::remove_cv_t<std::remove_reference_t<T>>>::value>
@@ -201,7 +211,8 @@ struct ObjectMemberProxy {
 	c_api::di_object *const target;
 	const std::string_view key;
 	static constexpr bool raw = raw_;
-	template <typename, typename>
+	template <typename T>
+	    requires std::derived_from<T, Object>
 	friend struct Ref;
 	friend struct ObjectMembersRawGetter;
 	ObjectMemberProxy(c_api::di_object *target_, std::string_view key_)
@@ -234,14 +245,17 @@ struct ObjectMembersRawGetter {
 	private:
 	c_api::di_object *const target;
 	ObjectMembersRawGetter(c_api::di_object *target_);
-	template <typename, typename>
+	template <typename T>
+	    requires std::derived_from<T, Object>
 	friend struct Ref;
 
 	public:
 	auto operator[](const std::string_view &key) -> ObjectMemberProxy<true>;
 };
 
-struct ListenHandle;
+struct ListenHandle : public Object {
+	static constexpr const char *type = "deai:ListenHandle";
+};
 
 struct WeakRefDeleter {
 	void operator()(c_api::di_weak_object *ptr) {
@@ -254,7 +268,8 @@ struct WeakRefBase {
 	std::unique_ptr<c_api::di_weak_object, WeakRefDeleter> inner;
 
 	WeakRefBase(c_api::di_weak_object *ptr);
-	template <typename, typename>
+	template <typename T>
+	    requires std::derived_from<T, Object>
 	friend struct Ref;
 
 	public:
@@ -266,7 +281,6 @@ struct WeakRefBase {
 
 template <typename T>
 struct WeakRef : public WeakRefBase {
-	template <std::enable_if_t<std::is_same_v<T, Object>, int> = 0>
 	WeakRef(c_api::di_weak_object *weak) : WeakRefBase{weak} {
 	}
 	[[nodiscard]] auto upgrade() const -> std::optional<Ref<T>> {
@@ -285,8 +299,9 @@ struct WeakRef : public WeakRefBase {
 /// This is to create C++ wrappers of di_object that were not defined in C++, if the
 /// di_object already originated from C++, there is no need to use this.
 template <typename T>
-struct Ref<T, std::enable_if_t<std::is_base_of_v<Object, T>, void>> {
-protected:
+    requires std::derived_from<T, Object>
+struct Ref {
+	protected:
 	T inner;
 	friend struct WeakRef<T>;
 
@@ -323,7 +338,8 @@ protected:
 		return {T{obj}};
 	}
 
-	template <typename Other, std::enable_if_t<std::is_base_of_v<T, Other>, int> = 0>
+	template <typename Other>
+	    requires std::derived_from<Other, T>
 	auto downcast() && -> std::optional<Ref<Other>> {
 		if (c_api::di_check_type(raw(), Other::type)) {
 			return Ref<Other>::take(inner.inner.release());
@@ -367,14 +383,13 @@ protected:
 		if constexpr (std::is_same_v<Return, void>) {
 			return;
 		} else {
-			return Variant{std::move(return_type), std::move(return_value)};
+			return Variant{std::move(return_type), std::move(return_value)}.to<Return>().value();
 		}
 	}
 
 	/// Call the method `method_name` of this object
-	template <typename Return, typename... Args>
-	auto method_call(std::string_view method_name, const Args &...args)
-	    -> std::enable_if_t<(id::deai_typeof<Return>::value, true), Return> {
+	template <id::DeaiConvertible Return, typename... Args>
+	auto method_call(std::string_view method_name, const Args &...args) -> Return {
 		std::optional<Variant> method = (*this)[method_name];
 		if (!method.has_value()) {
 			throw std::out_of_range("method not found in object");
@@ -415,30 +430,24 @@ protected:
 	/// Listen to signal on this object
 
 	template <typename Other>
-	auto on(const std::string_view &signal, const Ref<Other> &handler)
-	    -> std::enable_if_t<std::is_base_of_v<Object, Other>, Ref<ListenHandle>>;
+	    requires std::is_base_of_v<Other, Object>
+	auto on(const std::string_view &signal, const Ref<Other> &handler) -> Ref<ListenHandle>;
 
 	auto operator[](const std::string_view &key) const -> ObjectMemberProxy<false> {
 		return {raw(), key};
 	}
 };        // namespace type
-
-struct ListenHandle : Object {
-	static constexpr const char *type = "deai:ListenHandle";
-};
 template <typename T>
+    requires std::derived_from<T, Object>
 template <typename Other>
-auto Ref<T, std::enable_if_t<std::is_base_of_v<Object, T>, void>>::on(const std::string_view &signal,
-                                                                      const Ref<Other> &handler)
-    -> std::enable_if_t<std::is_base_of_v<Object, Other>, Ref<ListenHandle>> {
+    requires std::is_base_of_v<Other, Object>
+auto Ref<T>::on(const std::string_view &signal, const Ref<Other> &handler)
+    -> Ref<ListenHandle> {
 	return Ref<ListenHandle>::take(
 	           c_api::di_listen_to(raw(), conv::string_to_borrowed_deai_value(signal),
 	                               handler.raw()))
 	    .value();
 }
-
-extern template auto
-Variant::to<WeakRef<Object>, c_api::di_type::WEAK_OBJECT>() && -> std::optional<WeakRef<Object>>;
 
 }        // namespace type
 
@@ -446,9 +455,9 @@ using namespace type;
 
 namespace type::util {
 
-template <typename Return, typename... Args>
-auto call_raw(c_api::di_object *raw_ref, const std::string_view &method_name, const Args &...args)
-    -> std::enable_if_t<(id::deai_typeof<Return>::value, true), Return> {
+template <id::DeaiConvertible Return, typename... Args>
+auto call_raw(c_api::di_object *raw_ref, const std::string_view &method_name,
+              const Args &...args) -> Return {
 	auto ref = Ref<Object>{raw_ref};
 	return ref.method_call<Return>(method_name, args...);
 }
@@ -457,8 +466,7 @@ template <typename T>
 struct object_allocation_info {
 	static constexpr auto alignment = std::max(alignof(c_api::di_object), alignof(T));
 	// Round up the sizeof di_object to multiple of alignment
-	static constexpr auto offset =
-	    (sizeof(c_api::di_object) + (alignment - 1)) & (-alignment);
+	static constexpr auto offset = (sizeof(c_api::di_object) + (alignment - 1)) & (-alignment);
 };
 
 template <typename T>
@@ -514,7 +522,7 @@ auto unsafe_to_inner(const Ref<Object> &obj) -> T & {
 
 template <auto func>
 struct make_wrapper {
-private:
+	private:
 	template <typename Seq, typename R, typename... Args>
 	struct factory {};
 	template <typename R, typename... Args, size_t... Idx>
@@ -525,24 +533,22 @@ private:
 		/// Wrap a function that takes C++ values into a function that takes deai values. Because
 		/// args will go through a to_borrowed_cpp_type<to_borrowed_deai_type<T>> transformation,
 		/// and have to remain passable to the original function, they have to be borrow inversible.
-		static auto
-		wrapper(conv::to_deai_ctype<Args>... args) -> conv::to_owned_deai_type<R> {
+		static auto wrapper(conv::to_deai_ctype<Args>... args) -> conv::to_owned_deai_type<R> {
 			if constexpr (id::deai_typeof<R>::value == c_api::di_type::NIL) {
 				// Special treatment for void
 				func(conv::to_borrowed_cpp_value(args)...);
 			} else {
-				return conv::to_owned_deai_value(
-				    func(conv::to_borrowed_cpp_value(args)...));
+				return conv::to_owned_deai_value(func(conv::to_borrowed_cpp_value(args)...));
 			}
 		}
-		static inline auto
-		raw_wrapper(c_api::di_object *obj, c_api::di_type *ret_type,
-		            c_api::di_value *ret, c_api::di_tuple args) -> int {
+		static inline auto raw_wrapper(c_api::di_object *obj, c_api::di_type *ret_type,
+		                               c_api::di_value *ret, c_api::di_tuple args) -> int {
 			if (args.length != nargs) {
 				return -EINVAL;
 			}
-			auto result = wrapper(type::conv::c_api::borrow_from_variant<conv::to_deai_ctype<Args>>(
-			    *args.elements[Idx].value, args.elements[Idx].type)...);
+			auto result =
+			    wrapper(type::conv::c_api::borrow_from_variant<conv::to_deai_ctype<Args>>(
+			        *args.elements[Idx].value, args.elements[Idx].type)...);
 			*ret_type = id::deai_typeof<R>::value;
 			::memcpy(ret, &result, c_api::di_sizeof_type(*ret_type));
 			return 0;
@@ -551,11 +557,11 @@ private:
 
 	// Note: cannot be evaluated
 	template <typename R, typename... Args>
-	static constexpr auto inspect(R (*)(Args...))
-	    -> factory<std::index_sequence_for<Args...>, R, Args...>;
+	static constexpr auto
+	    inspect(R (*)(Args...)) -> factory<std::index_sequence_for<Args...>, R, Args...>;
 	using exploded = decltype(inspect(func));
 
-public:
+	public:
 	static constexpr auto value = exploded::wrapper;
 	static constexpr auto raw = exploded::raw_wrapper;
 
@@ -565,7 +571,7 @@ public:
 /// Wrap a C++ function into a di callable object.
 ///
 /// There are also a few restriction on your function, see `make_wrapper` for more.
-template<auto func>
+template <auto func>
 auto to_di_callable() -> Ref<Object> {
 	constexpr auto raw_function = make_wrapper<func>::raw;
 	auto *callable = c_api::di_new_object(sizeof(c_api::di_object), alignof(c_api::di_object));
@@ -575,7 +581,7 @@ auto to_di_callable() -> Ref<Object> {
 
 template <typename T>
 struct member_function_wrapper {
-private:
+	private:
 	template <typename R, typename... Args>
 	struct factory {
 		template <auto func>
@@ -590,7 +596,7 @@ private:
 	template <typename R, typename... Args>
 	static constexpr auto inspect(R (T::*func)(Args...) const) -> factory<R, Args...>;
 
-public:
+	public:
 	template <auto func>
 	static constexpr auto value = decltype(inspect(func))::template wrapper_impl<func>;
 };
@@ -646,17 +652,16 @@ struct formatter<deai::c_api::di_type, CharT> {
 
 	template <class FormatContext>
 	auto format(deai::c_api::di_type type, FormatContext &ctx) {
-		return format_to(ctx.out(), "{}",
-		                 deai::c_api::di_type_names[static_cast<int>(type)]);
+		return format_to(ctx.out(), "{}", deai::c_api::di_type_names[static_cast<int>(type)]);
 	}
 };
 }        // namespace std
 
-#define DEAI_CPP_PLUGIN_ENTRY_POINT(arg)                                                         \
+#define DEAI_CPP_PLUGIN_ENTRY_POINT(arg)                                                     \
 	/* NOLINTNEXTLINE(bugprone-macro-parentheses) */                                         \
 	static auto di_cpp_plugin_init(::deai::Ref<::deai::Core> &&arg) -> int;                  \
 	extern "C" visibility_default auto di_plugin_init(::deai::c_api::di_object *di) -> int { \
-		return di_cpp_plugin_init(::deai::Ref<::deai::Core>{di});                        \
+		return di_cpp_plugin_init(::deai::Ref<::deai::Core>{di});                            \
 	}                                                                                        \
 	/* NOLINTNEXTLINE(bugprone-macro-parentheses) */                                         \
 	static auto di_cpp_plugin_init(::deai::Ref<::deai::Core> &&arg) -> int

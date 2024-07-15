@@ -45,6 +45,7 @@ DEAI_CPP_PLUGIN_ENTRY_POINT(di) {
 		assert(closure.call<int>(10) == 10);
 		// Test integer conversions
 		assert(closure.call<int>(static_cast<int64_t>(10)) == 10);
+		assert(closure.call<int64_t>(static_cast<int>(10)) == 10);
 
 		return object.on("test_signal", closure);
 	})();
