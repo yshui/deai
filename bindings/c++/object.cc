@@ -46,8 +46,8 @@ auto Object::unsafe_ref(c_api::di_object *obj) -> Object {
 }
 
 auto Object::create() -> Ref<Object> {
-	return Ref<Object>{Object{
-	    c_api::di_new_object(sizeof(c_api::di_object), alignof(c_api::di_object))}};
+	return Ref<Object>{
+	    Object{c_api::di_new_object(sizeof(c_api::di_object), alignof(c_api::di_object))}};
 }
 
 Variant::~Variant() {
@@ -91,9 +91,13 @@ auto Variant::unpack() && -> std::vector<Variant> {
 	return ret;
 }
 
-Variant::Variant(c_api::di_type type_, const c_api::di_value &value_)
+Variant::Variant(c_api::di_type &&type_, c_api::di_value &&value_)
     : type{type_}, value{value_} {
+	// std::cerr << "Creating variant, raw value ctor, inner type "
+	//           << deai::c_api::di_type_names[static_cast<int>(type)] << " this: " << this
+	//           << "\n";
 	type_ = c_api::di_type::NIL;
+	::memset(&value_, 0, sizeof(value_));
 }
 Variant::Variant(const c_api::di_variant &var) : type{var.type} {
 	memcpy(&value, var.value, c_api::di_sizeof_type(type));

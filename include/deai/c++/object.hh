@@ -3,6 +3,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <format>
+// #include <iostream>
 #include <memory>
 #include <optional>
 #include <stdexcept>
@@ -18,11 +19,11 @@ namespace deai {
 
 namespace exception {
 struct OtherError : std::exception {
-private:
+	private:
 	int errno_;
 	std::string message;
 
-public:
+	public:
 	[[nodiscard]] auto what() const noexcept -> const char * override;
 	OtherError(int errno_);
 };
@@ -36,17 +37,17 @@ struct ObjectRefDeleter {
 	void operator()(c_api::di_object *obj);
 };
 struct Object {
-protected:
+	protected:
 	std::unique_ptr<c_api::di_object, ObjectRefDeleter> inner;
 
-private:
+	private:
 	Object(c_api::di_object *obj);
 
 	static auto unsafe_ref(c_api::di_object *obj) -> Object;
 	template <typename, typename>
 	friend struct Ref;
 
-public:
+	public:
 	static constexpr const char *type = "deai:object";
 	static auto create() -> Ref<Object>;
 	auto operator=(const Object &other) -> Object &;
@@ -83,9 +84,10 @@ public:
 
 	/// Takes ownership of `value_`. `value_` should be discarded without being freed
 	/// after this
-	Variant(c_api::di_type type_, const c_api::di_value &value_);
+	Variant(c_api::di_type &&type_, c_api::di_value &&value_);
 
-	/// Takes ownership of a plain deai value
+	/// When given a plain deai value, we just memcpy it directly. The will take ownership of the value.
+	/// Note this doesn't cover `di_variant`, which is covered by the specialized constructor below.
 	template <id::DeaiVerbatim T, c_api::di_type Type = id::deai_typeof<std::remove_reference_t<T>>::value>
 	Variant(T value_) : type{Type} {
 		std::memcpy(&value, &value_, c_api::di_sizeof_type(type));
@@ -192,7 +194,7 @@ struct ObjectMembersRawGetter;
 
 template <bool raw_>
 struct ObjectMemberProxy {
-protected:
+	protected:
 	c_api::di_object *const target;
 	const std::string_view key;
 	static constexpr bool raw = raw_;
@@ -203,7 +205,7 @@ protected:
 	    : target{target_}, key{key_} {
 	}
 
-public:
+	public:
 	/// Remove this member from the object
 	void erase() const {
 		if constexpr (raw) {
@@ -290,13 +292,13 @@ public:
 	}
 };
 struct ObjectMembersRawGetter {
-private:
+	private:
 	c_api::di_object *const target;
 	ObjectMembersRawGetter(c_api::di_object *target_);
 	template <typename, typename>
 	friend struct Ref;
 
-public:
+	public:
 	auto operator[](const std::string_view &key) -> ObjectMemberProxy<true>;
 };
 
@@ -309,14 +311,14 @@ struct WeakRefDeleter {
 };
 
 struct WeakRefBase {
-protected:
+	protected:
 	std::unique_ptr<c_api::di_weak_object, WeakRefDeleter> inner;
 
 	WeakRefBase(c_api::di_weak_object *ptr);
 	template <typename, typename>
 	friend struct Ref;
 
-public:
+	public:
 	WeakRefBase(const WeakRefBase &other);
 	auto operator=(const WeakRefBase &other) -> WeakRefBase &;
 
@@ -349,7 +351,7 @@ protected:
 	T inner;
 	friend struct WeakRef<T>;
 
-public:
+	public:
 	Ref(const Ref &other) = default;
 	auto operator=(const Ref &other) -> Ref & = default;
 	Ref(Ref &&other) noexcept = default;
@@ -402,12 +404,12 @@ public:
 			di_args.elements[i].value = &values[i];
 			di_args.elements[i].type = types[i];
 		}
-		exception::throw_deai_error(c_api::di_emitn(
-		    raw(), conv::string_to_borrowed_deai_value(signal), di_args));
+		exception::throw_deai_error(
+		    c_api::di_emitn(raw(), conv::string_to_borrowed_deai_value(signal), di_args));
 	}
 
 	template <typename Return, typename... Args>
-	auto call(const Args &...args) const {
+	auto call(const Args &...args) const -> Return {
 		constexpr auto types = id::get_deai_types<Args...>();
 		auto values = conv::to_borrowed_deai_values(args...);
 		std::array<c_api::di_variant, sizeof...(Args)> vars;
@@ -423,7 +425,11 @@ public:
 		c_api::di_value return_value;
 		exception::throw_deai_error(
 		    c_api::di_call_objectt(raw(), &return_type, &return_value, di_args));
-		return static_cast<Return>(Variant{return_type, return_value});
+		if constexpr (std::is_same_v<Return, void>) {
+			return;
+		} else {
+			return Variant{std::move(return_type), std::move(return_value)};
+		}
 	}
 
 	/// Call the method `method_name` of this object
