@@ -178,27 +178,12 @@ struct DeaiBorrowedArrayConverter {
 	c_api::di_array arg;
 	// If the target is a std::span of raw deai types, then we can convert it
 	// directly. Otherwise we have to create a std::vector and copy each element.
-	template <id::DeaiVerbatim T, c_api::di_type Type = id::deai_typeof<T>::value>
+	template <id::DeaiVerbatim T>
 	operator std::span<T>() {
 		return {static_cast<T *>(arg.arr), arg.length};
 	}
-	template <id::DeaiConvertible T, c_api::di_type Type = id::deai_typeof<T>::value>
-	operator std::vector<T>() const {
-		if (arg.elem_type != Type) {
-			throw c_api::di_new_error(
-			    "Array element type mismatch, %s cannot be converted into %s",
-			    c_api::di_type_names[static_cast<int>(arg.elem_type)], typeid(T).name());
-		}
-		std::vector<T> ret;
-		ret.reserve(arg.length);
-
-		auto elem_size = c_api::di_sizeof_type(Type);
-		for (size_t i = 0; i < arg.length; i++) {
-			auto *ptr = reinterpret_cast<std::byte *>(arg.arr) + i * elem_size;
-			ret.push_back(variant_to_borrowed_cpp_value<T>(ptr));
-		}
-		return ret;
-	}
+	template <id::DeaiConvertible T>
+	operator std::vector<T>() const;
 	operator c_api::di_array() const {
 		return arg;
 	}
@@ -239,7 +224,7 @@ concept DeaiNumber =
 /// type. Otherwise, the input value will be borrowed.
 template <bool borrow>
 struct DeaiVariantConverter {
-	private:
+private:
 	template <typename T>
 	    requires borrow
 	static auto ref_if_borrow() -> std::reference_wrapper<T>;
@@ -285,7 +270,7 @@ struct DeaiVariantConverter {
 		}
 	}
 
-	public:
+public:
 	DeaiVariantConverter(ctor_value_type in_value, move_if_not_borrow_t<di_type> in_type)
 	    : value_(in_value), type(in_type) {
 		if constexpr (!borrow) {
@@ -326,5 +311,31 @@ auto borrow_from_variant(::deai::c_api::di_value &value, ::deai::c_api::di_type 
 }
 
 }        // namespace c_api
+
+template <id::DeaiConvertible T>
+DeaiBorrowedArrayConverter::operator std::vector<T>() const {
+	static constexpr ::deai::c_api::di_type Type = id::deai_typeof<T>::value;
+	std::vector<T> ret;
+	ret.reserve(arg.length);
+
+	auto elem_size = ::deai::c_api::di_sizeof_type(arg.elem_type);
+	for (size_t i = 0; i < arg.length; i++) {
+		auto *ptr = reinterpret_cast<std::byte *>(arg.arr) + i * elem_size;
+		if (arg.elem_type != Type) {
+			std::optional<id::deai_ctype_t<Type>> converted = c_api::DeaiVariantConverter<true>{
+			    *reinterpret_cast<::deai::c_api::di_value *>(ptr), arg.elem_type};
+			if (!converted.has_value()) {
+				throw ::deai::c_api::di_new_error(
+				    "Array element type mismatch, %s cannot be converted into %s",
+				    ::deai::c_api::di_type_names[static_cast<int>(arg.elem_type)],
+				    typeid(T).name());
+			}
+			ret.push_back(variant_to_borrowed_cpp_value<T>(&converted.value()));
+		} else {
+			ret.push_back(variant_to_borrowed_cpp_value<T>(ptr));
+		}
+	}
+	return ret;
+}
 
 }        // namespace deai::type::conv
