@@ -47,10 +47,16 @@ local function print_type(item)
 	print("struct Type"..function_count)
 	print("{")
 	for _, param in ipairs(item.params) do
-		s = item.params.map[param]:gsub("^%s+", "")
-		print("\t/// "..s)
+		lines = item.params.map[param]:gmatch("[^\r\n]+")
+		summary = lines():gsub("^%s+", "")
+		print("\t/// "..summary)
 		print("\t///")
 		print("\t/// EXPORT: "..item.name.."."..param..": "..item.modifiers.field[param].type)
+		print("\t///")
+		for s in lines do
+			s = s:gsub("^%s+", "")
+			print("\t/// "..s)
+		end
 		print("\tvoid * "..param..";")
 	end
 	print("};")
