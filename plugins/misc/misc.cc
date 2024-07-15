@@ -17,11 +17,11 @@ public:
 	///
 	/// EXPORT: misc.bipartite_match(graph: [[:int]]): [:int]
 	///
-	/// The input is a list of edges. There is one list of each node on the left,
+	/// The input is a list of edges. There is one list for each node on the left,
 	/// containing the indices of the nodes on the right that it is connected to.
 	///
 	/// Returns a list of integers, the indices of the nodes on the right that each
-	/// node on the left is connected to. Or -1 if it is not matched
+	/// node on the left is matched to. Or -1 if it is not matched
 	auto bipartite_match(const std::vector<std::vector<int64_t>> &graph) const
 	    -> std::vector<int64_t> {
 		std::vector<int64_t> ret(graph.size(), -1);
