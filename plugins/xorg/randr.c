@@ -937,6 +937,61 @@ static di_array rr_modes(struct di_xorg_randr *rr) {
 	return ret;
 }
 
+static di_object *rr_screen_resources(di_object *rr) {
+	scopedp(di_xorg_connection) *dc = NULL;
+	if (get_xorg_connection((struct di_xorg_ext *)rr, &dc) != 0) {
+		return di_new_error("no X connection");
+	}
+
+	auto scrn = screen_of_display(dc->c, dc->dflt_scrn);
+	scopedp(xcb_randr_get_screen_resources_reply_t) *sr = xcb_randr_get_screen_resources_reply(
+	    dc->c, xcb_randr_get_screen_resources(dc->c, scrn->root), NULL);
+	if (!sr) {
+		return di_new_error("failed to get screen resources");
+	}
+
+	auto ret = di_new_object_with_type(di_object);
+	di_set_type(ret, "deai.plugin.xorg.randr:ScreenResources");
+
+	di_array modes = DI_ARRAY_INIT;
+	modes.length = xcb_randr_get_screen_resources_modes_length(sr);
+	if (modes.length != 0) {
+		modes.elem_type = DI_TYPE_OBJECT;
+		auto rr_modes = xcb_randr_get_screen_resources_modes(sr);
+		di_object **arr = modes.arr = tmalloc(di_object *, modes.length);
+		for (int i = 0; i < modes.length; i++) {
+			arr[i] = make_object_for_modes((struct di_xorg_randr *)rr, &rr_modes[i]);
+		}
+		di_member(ret, "modes", modes);
+	}
+
+	di_array outputs = DI_ARRAY_INIT;
+	outputs.length = xcb_randr_get_screen_resources_outputs_length(sr);
+	if (outputs.length != 0) {
+		outputs.elem_type = DI_TYPE_OBJECT;
+		auto rr_outputs = xcb_randr_get_screen_resources_outputs(sr);
+		di_object **arr = outputs.arr = tmalloc(di_object *, outputs.length);
+		for (int i = 0; i < outputs.length; i++) {
+			arr[i] = make_object_for_output((struct di_xorg_randr *)rr, rr_outputs[i]);
+		}
+		di_member(ret, "outputs", outputs);
+	}
+
+	di_array views = DI_ARRAY_INIT;
+	views.length = xcb_randr_get_screen_resources_crtcs_length(sr);
+	if (views.length != 0) {
+		views.elem_type = DI_TYPE_OBJECT;
+		auto rr_views = xcb_randr_get_screen_resources_crtcs(sr);
+		di_object **arr = views.arr = tmalloc(di_object *, views.length);
+		for (int i = 0; i < views.length; i++) {
+			arr[i] = make_object_for_view((struct di_xorg_randr *)rr, rr_views[i]);
+		}
+		di_member(ret, "views", views);
+	}
+
+	return ret;
+}
+
 static void free_randr(di_object *x) {
 	auto rr = (struct di_xorg_randr *)x;
 	rr_select_input(rr, 0);
@@ -979,6 +1034,7 @@ struct di_xorg_ext *new_randr(di_xorg_connection *dc) {
 
 	di_getter(rr, outputs, rr_outputs);
 	di_getter(rr, modes, rr_modes);
+	di_getter(rr, screen_resources, rr_screen_resources);
 
 	di_signal_setter_deleter_with_signal_name(
 	    rr, "output-change", di_xorg_ext_signal_setter, di_xorg_ext_signal_deleter);
