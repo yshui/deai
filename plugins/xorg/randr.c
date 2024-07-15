@@ -6,6 +6,7 @@
 
 #include <deai/builtins/log.h>
 #include <deai/helper.h>
+#include <deai/type.h>
 
 #include "xorg.h"
 
@@ -143,6 +144,11 @@ struct di_xorg_view_config {
 	///
 	/// Bit 1 means reflection along the X axis, bit 2 means the Y axis.
 	uint64_t rotation, reflection;
+
+	/// EXPORT: deai.plugin.xorg.randr:ViewConfig.outputs: [:unsigned]
+	///
+	/// Outputs
+	di_array outputs;
 };
 
 define_trivial_cleanup(xcb_randr_get_screen_resources_reply_t);
@@ -201,8 +207,7 @@ static di_variant output_props_getter(di_object *this, di_string prop) {
 
 	scopedp(xcb_randr_get_output_property_reply_t) *r = xcb_randr_get_output_property_reply(
 	    dc->c,
-	    xcb_randr_get_output_property(dc->c, oid, atom, XCB_ATOM_ANY, 0, UINT_MAX, 0, 0),
-	    &e);
+	    xcb_randr_get_output_property(dc->c, oid, atom, XCB_ATOM_ANY, 0, UINT_MAX, 0, 0), &e);
 	if (e) {
 		free(e);
 		return DI_VARIANT_INIT;
@@ -214,9 +219,8 @@ static di_variant output_props_getter(di_object *this, di_string prop) {
 		    .type = DI_TYPE_STRING,
 		};
 
-		ret.value->string =
-		    di_string_ndup((char *)xcb_randr_get_output_property_data(r),
-		                   xcb_randr_get_output_property_data_length(r));
+		ret.value->string = di_string_ndup((char *)xcb_randr_get_output_property_data(r),
+		                                   xcb_randr_get_output_property_data_length(r));
 		return ret;
 	}
 	if (r->type == XCB_ATOM_INTEGER) {
@@ -314,8 +318,7 @@ static di_object *get_output_info(struct di_xorg_output *o) {
 	scopedp(xcb_randr_get_screen_resources_reply_t) *resource_reply =
 	    xcb_randr_get_screen_resources_reply(
 	        dc->c,
-	        xcb_randr_get_screen_resources(
-	            dc->c, screen_of_display(dc->c, dc->dflt_scrn)->root),
+	        xcb_randr_get_screen_resources(dc->c, screen_of_display(dc->c, dc->dflt_scrn)->root),
 	        NULL);
 	if (!resource_reply) {
 		return di_new_object_with_type(di_object);
@@ -448,6 +451,17 @@ static di_object *get_view_config(struct di_xorg_view *v) {
 	ret->y = cr->y;
 	ret->width = cr->width;
 	ret->height = cr->height;
+	ret->outputs = DI_ARRAY_INIT;
+
+	if (cr->num_outputs != 0) {
+		auto outputs = xcb_randr_get_crtc_info_outputs(cr);
+		unsigned int *arr = ret->outputs.arr = tmalloc(unsigned int, cr->num_outputs);
+		ret->outputs.length = cr->num_outputs;
+		ret->outputs.elem_type = DI_TYPE_NUINT;
+		for (int i = 0; i < cr->num_outputs; i++) {
+			arr[i] = outputs[i];
+		}
+	}
 
 	if (cr->rotation & XCB_RANDR_ROTATION_ROTATE_0) {
 		ret->rotation = 0;
