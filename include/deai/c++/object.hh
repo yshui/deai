@@ -95,6 +95,7 @@ public:
 
 	/// Takes ownership of `var`, `var` should be discarded without being freed after
 	/// this
+	Variant(c_api::di_variant &&var);
 	Variant(const c_api::di_variant &var);
 
 	auto operator=(const Variant &other);

@@ -51,6 +51,9 @@ auto Object::create() -> Ref<Object> {
 }
 
 Variant::~Variant() {
+	// std::cerr << "Freeing variant, inner type "
+	//           << deai::c_api::di_type_names[static_cast<int>(type)] << " this: " << this
+	//           << "\n";
 	if (type != c_api::di_type::NIL && type != c_api::di_type::DI_LAST_TYPE) {
 		c_api::di_free_value(type, &value);
 	}
@@ -99,9 +102,20 @@ Variant::Variant(c_api::di_type &&type_, c_api::di_value &&value_)
 	type_ = c_api::di_type::NIL;
 	::memset(&value_, 0, sizeof(value_));
 }
-Variant::Variant(const c_api::di_variant &var) : type{var.type} {
-	memcpy(&value, var.value, c_api::di_sizeof_type(type));
+Variant::Variant(c_api::di_variant &&var) : type{var.type} {
+	// std::cerr << "Creating variant, variant value ctor, inner type "
+	//           << deai::c_api::di_type_names[static_cast<int>(type)] << " this: " << this
+	//           << "\n";
+	::memcpy(&value, var.value, c_api::di_sizeof_type(type));
 	std::free(var.value);
+	var.value = nullptr;
+	var.type = c_api::di_type::NIL;
+}
+Variant::Variant(const c_api::di_variant &var) : type{var.type} {
+	// std::cerr << "Creating variant, const variant value ctor, inner type "
+	//           << deai::c_api::di_type_names[static_cast<int>(type)] << " this: " << this
+	//           << "\n";
+	c_api::di_copy_value(type, &value, var.value);
 }
 auto Variant::operator=(const Variant &other) {
 	type = other.type;
