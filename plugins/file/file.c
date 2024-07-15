@@ -4,14 +4,14 @@
 
 /* Copyright (c) 2017, Yuxuan Shui <yshuiv7@gmail.com> */
 
-#include <limits.h> // IWYU pragma: keep
+#include <limits.h>        // IWYU pragma: keep
 #include <sys/inotify.h>
 #include <unistd.h>
 
 #include <deai/builtins/event.h>
 #include <deai/deai.h>
-#include <deai/helper.h>
 #include <deai/error.h>
+#include <deai/helper.h>
 #include <deai/object.h>
 
 #include "common.h"
@@ -99,10 +99,10 @@ static int di_file_ioev(struct di_weak_object *weak) {
 			goto next;
 		}
 #define emit(m, name)                                                                    \
-	do {                                                                             \
-		if (ev->mask & (m)) {                                                    \
-			di_emit(fw, name, we->fname, path);                              \
-		}                                                                        \
+	do {                                                                                 \
+		if (ev->mask & (m)) {                                                            \
+			di_emit(fw, name, we->fname, path);                                          \
+		}                                                                                \
 	} while (0)
 		emit(IN_CREATE, "create");
 		emit(IN_ACCESS, "access");
@@ -210,7 +210,8 @@ static int di_file_rm_watch(struct di_file_watch *fw, di_string path) {
 	return 0;
 }
 
-static void stop_file_watcher(struct di_file_watch *fw) {
+static void stop_file_watcher(di_object *obj) {
+	auto fw = (struct di_file_watch *)obj;
 	close(fw->fd);
 
 	struct di_file_watch_entry *we, *twe;
@@ -247,8 +248,7 @@ static void di_file_new_signal(di_object *fw_, di_string member_name, di_object 
 		DI_CHECK_OK(di_callr(event_module, "fdevent", fdevent, fw->fd));
 
 		scoped_di_closure *cl = di_make_closure(di_file_ioev, ((di_object *)fw));
-		auto listen_handle =
-		    di_listen_to(fdevent, di_string_borrow("read"), (void *)cl);
+		auto listen_handle = di_listen_to(fdevent, di_string_borrow("read"), (void *)cl);
 		DI_CHECK_OK(di_call(listen_handle, "auto_stop", true));
 		di_member(fw, "__inotify_fd_event_read_listen_handle", listen_handle);
 	}
@@ -267,8 +267,8 @@ static void di_file_delete_signal(di_object *fw_, di_string member_name) {
 	fw->nsignals -= 1;
 	if (fw->nsignals == 0) {
 		// Drop listen handle to stop it
-		di_delete_member_raw(
-		    fw_, di_string_borrow("__inotify_fd_event_read_listen_handle"));
+		di_delete_member_raw(fw_,
+		                     di_string_borrow("__inotify_fd_event_read_listen_handle"));
 	}
 }
 

@@ -3,8 +3,8 @@
 #include <deai/builtins/event.h>
 #include <deai/builtins/log.h>
 #include <deai/deai.h>
-#include <deai/helper.h>
 #include <deai/error.h>
+#include <deai/helper.h>
 #include <dbus/dbus.h>
 #include <uthash.h>
 
@@ -174,8 +174,8 @@ static bool dbus_toggle_watch_impl(DBusWatch *w, void *ud, bool enabled) {
 	if (!enabled) {
 		// Remove the listen handles: they are auto stop handles so this is enough
 		if (flags & DBUS_WATCH_READABLE) {
-			scoped_di_string listen_handle_name = di_string_printf(
-			    "__dbus_ioev_read_listen_handle_for_watch_%p", w);
+			scoped_di_string listen_handle_name =
+			    di_string_printf("__dbus_ioev_read_listen_handle_for_watch_%p", w);
 			di_delete_member_raw((void *)oc, listen_handle_name);
 		}
 		if (flags & DBUS_WATCH_WRITABLE) {
@@ -238,8 +238,8 @@ static DBusHandlerResult dbus_filter(DBusConnection *conn, DBusMessage *msg, voi
 static inline void di_dbus_nsignal_inc(di_dbus_connection *c) {
 	c->nsignals += 1;
 	if (c->nsignals == 1) {
-		dbus_connection_set_watch_functions(
-		    c->conn, dbus_add_watch, dbus_remove_watch, dbus_toggle_watch, c, NULL);
+		dbus_connection_set_watch_functions(c->conn, dbus_add_watch, dbus_remove_watch,
+		                                    dbus_toggle_watch, c, NULL);
 		dbus_connection_add_filter(c->conn, dbus_filter, c, NULL);
 	}
 }
@@ -398,11 +398,11 @@ static char *to_dbus_match_rule(di_string path, di_string interface, di_string s
 		asprintf(&match,
 		         "type='signal',path='%.*s',interface='%.*s'"
 		         ",member='%.*s'",
-		         (int)path.length, path.data, (int)interface.length,
-		         interface.data, (int)signal.length, signal.data);
+		         (int)path.length, path.data, (int)interface.length, interface.data,
+		         (int)signal.length, signal.data);
 	} else {
-		asprintf(&match, "type='signal',path='%.*s',member='%.*s'",
-		         (int)path.length, path.data, (int)signal.length, signal.data);
+		asprintf(&match, "type='signal',path='%.*s',member='%.*s'", (int)path.length,
+		         path.data, (int)signal.length, signal.data);
 	}
 	return match;
 }
@@ -538,9 +538,9 @@ static int64_t di_dbus_send_message(di_object *o, di_string type, di_string bus_
 
 static void di_dbus_name_changed(di_object *conn, di_string well_known,
                                  di_string old_owner, di_string new_owner) {
-	fprintf(stderr, "DBus name changed for %.*s: %.*s -> %.*s\n",
-	        (int)well_known.length, well_known.data, (int)old_owner.length,
-	        old_owner.data, (int)new_owner.length, new_owner.data);
+	fprintf(stderr, "DBus name changed for %.*s: %.*s -> %.*s\n", (int)well_known.length,
+	        well_known.data, (int)old_owner.length, old_owner.data, (int)new_owner.length,
+	        new_owner.data);
 	if (di_string_starts_with(well_known, ":")) {
 		// Not a well-known name
 		return;
@@ -598,21 +598,19 @@ static void di_dbus_name_changed(di_object *conn, di_string well_known,
 			peer = di_new_object_with_type(di_object);
 
 			scoped_di_weak_object *weak_peer = di_weakly_ref_object(peer);
-			DI_CHECK_OK(di_add_member_clonev(conn, peer_object_name,
-			                                 DI_TYPE_WEAK_OBJECT, weak_peer));
+			DI_CHECK_OK(di_add_member_clonev(conn, peer_object_name, DI_TYPE_WEAK_OBJECT,
+			                                 weak_peer));
 		}
 		DI_CHECK_OK(di_rawsetx(directory, di_string_borrow_literal("___owner"),
 		                       DI_TYPE_OBJECT, (void *)&peer));
 
 		scoped_di_weak_object *weak_directory = di_weakly_ref_object(directory);
-		DI_CHECK_OK(di_rawsetx(peer, well_known, DI_TYPE_WEAK_OBJECT,
-		                       (void *)&weak_directory));
+		DI_CHECK_OK(di_rawsetx(peer, well_known, DI_TYPE_WEAK_OBJECT, (void *)&weak_directory));
 	} else {
 		di_log_va(log_module, DI_LOG_DEBUG, "dbus: name %.*s unowned",
 		          (int)well_known.length, well_known.data);
 		di_delete_member_raw(directory, di_string_borrow_literal("___owner"));
-		di_delete_member_raw(directory,
-		                     di_string_borrow_literal("___owner_name"));
+		di_delete_member_raw(directory, di_string_borrow_literal("___owner_name"));
 	}
 }
 
@@ -686,11 +684,10 @@ static di_object *di_dbus_set_property(di_object *dobj, di_string property, di_v
 	DI_CHECK_OK(di_get(dobj, "___object_path", obj));
 	DI_CHECK_OK(di_get(dobj, "___bus_name", bus));
 	DI_CHECK_OK(di_get(dobj, "___interface", interface));
-	auto serial = di_dbus_send_message(conn, di_string_borrow_literal("method"), bus, obj,
-	                     di_string_borrow_literal(DBUS_INTERFACE_PROPERTIES),
-	                     di_string_borrow_literal("Set"),
-			     di_string_borrow_literal("ssv"),
-	                     di_make_tuple(interface, property, value));
+	auto serial = di_dbus_send_message(
+	    conn, di_string_borrow_literal("method"), bus, obj,
+	    di_string_borrow_literal(DBUS_INTERFACE_PROPERTIES), di_string_borrow_literal("Set"),
+	    di_string_borrow_literal("ssv"), di_make_tuple(interface, property, value));
 	if (serial < 0) {
 		return di_new_error("DBus error");
 	}
@@ -759,15 +756,14 @@ di_dbus_get_object(di_object *o, di_string bus, di_string obj, di_string interfa
 	di_member_clone(ret, "___object_cache", object_cache);
 
 	struct di_weak_object *weak_object = di_weakly_ref_object(ret);
-	di_add_member_move(object_cache, obj_and_interface,
-	                   (di_type[]){DI_TYPE_WEAK_OBJECT}, &weak_object);
+	di_add_member_move(object_cache, obj_and_interface, (di_type[]){DI_TYPE_WEAK_OBJECT},
+	                   &weak_object);
 
 	// Do way know the owner of the well-known name yet?
 	scoped_di_string owner = DI_STRING_INIT;
 	if (di_get(object_cache, "___owner", owner) != 0) {
 		auto serial = di_dbus_send_message(
-		    o, di_string_borrow_literal("method"),
-		    di_string_borrow_literal(DBUS_SERVICE_DBUS),
+		    o, di_string_borrow_literal("method"), di_string_borrow_literal(DBUS_SERVICE_DBUS),
 		    di_string_borrow_literal(DBUS_PATH_DBUS),
 		    di_string_borrow_literal(DBUS_INTERFACE_DBUS),
 		    di_string_borrow_literal("GetNameOwner"), di_string_borrow_literal("s"),
@@ -786,8 +782,8 @@ di_dbus_get_object(di_object *o, di_string bus, di_string obj, di_string interfa
 		}
 
 		{
-			scoped_di_closure *set_owner = di_make_closure(
-			    di_dbus_object_set_owner, ((di_object *)ret), di_tuple);
+			scoped_di_closure *set_owner =
+			    di_make_closure(di_dbus_object_set_owner, ((di_object *)ret), di_tuple);
 			scoped_di_object *promise = di_dbus_add_promise_for(o, eventm, serial);
 			// We don't care about the promise returned by `then`
 			di_unref_object(di_promise_then(promise, (void *)set_owner));
@@ -818,7 +814,8 @@ static int di_dbus_drop_root(di_object *self_, di_type *rtype, di_value *unused 
 	return 0;
 }
 
-static void di_dbus_shutdown(di_dbus_connection *conn) {
+static void di_dbus_shutdown(di_object *obj) {
+	auto conn = (di_dbus_connection *)obj;
 	if (!conn->conn) {
 		return;
 	}
@@ -912,8 +909,7 @@ static DBusHandlerResult dbus_filter(DBusConnection *conn, DBusMessage *msg, voi
 		    strcmp(dbus_message_get_interface(msg), DBUS_INTERFACE_DBUS) == 0) {
 			// Handle name change
 			if (t.length != 3 || t.elements[0].type != DI_TYPE_STRING ||
-			    t.elements[1].type != DI_TYPE_STRING ||
-			    t.elements[2].type != DI_TYPE_STRING) {
+			    t.elements[1].type != DI_TYPE_STRING || t.elements[2].type != DI_TYPE_STRING) {
 				// DBus sends signals for name changes with wrong payload type?
 				return DBUS_HANDLER_RESULT_NOT_YET_HANDLED;
 			}
@@ -939,19 +935,15 @@ static DBusHandlerResult dbus_filter(DBusConnection *conn, DBusMessage *msg, voi
 		    .args = t,
 		};
 		if (bus_name[0] == ':') {
-			scoped_di_string peer_object_name =
-			    di_string_printf("peer_%s", bus_name);
-			scoped_di_object *peer =
-			    di_get_object_via_weak((void *)c, peer_object_name);
+			scoped_di_string peer_object_name = di_string_printf("peer_%s", bus_name);
+			scoped_di_object *peer = di_get_object_via_weak((void *)c, peer_object_name);
 
 			if (peer != NULL) {
 				di_foreach_member_raw(peer, di_peer_foreach_cb, &info);
 			}
 		} else {
-			scoped_di_string directory_name =
-			    di_string_printf("object_cache_%s", bus_name);
-			scoped_di_object *directory =
-			    di_get_object_via_weak((void *)c, directory_name);
+			scoped_di_string directory_name = di_string_printf("object_cache_%s", bus_name);
+			scoped_di_object *directory = di_get_object_via_weak((void *)c, directory_name);
 			if (directory) {
 				di_emit_signal_for(directory, &info);
 			}
@@ -961,8 +953,7 @@ static DBusHandlerResult dbus_filter(DBusConnection *conn, DBusMessage *msg, voi
 
 	if (type == DBUS_MESSAGE_TYPE_ERROR || type == DBUS_MESSAGE_TYPE_METHOD_RETURN) {
 		auto serial = dbus_message_get_reply_serial(msg);
-		scoped_di_string promise_name =
-		    di_string_printf("promise_for_request_%u", serial);
+		scoped_di_string promise_name = di_string_printf("promise_for_request_%u", serial);
 		bool is_error = (type == DBUS_MESSAGE_TYPE_ERROR);
 		di_object *promise = NULL;
 		if (di_rawget_borrowed2(ud, promise_name, promise) == 0) {
@@ -1061,16 +1052,14 @@ static di_object *di_dbus_connect(di_object *o, di_string address) {
 		return ret;
 	}
 	scoped_di_object *ret = di_dbus_connection_to_di((void *)o, conn);
-	auto serial = di_dbus_send_message((void *)ret, di_string_borrow_literal("method"),
-	                                   di_string_borrow_literal(DBUS_SERVICE_DBUS),
-	                                   di_string_borrow_literal(DBUS_PATH_DBUS),
-	                                   di_string_borrow_literal(DBUS_INTERFACE_DBUS),
-	                                   di_string_borrow_literal("Hello"),
-	                                   DI_STRING_INIT, DI_TUPLE_INIT);
+	auto serial = di_dbus_send_message(
+	    (void *)ret, di_string_borrow_literal("method"),
+	    di_string_borrow_literal(DBUS_SERVICE_DBUS), di_string_borrow_literal(DBUS_PATH_DBUS),
+	    di_string_borrow_literal(DBUS_INTERFACE_DBUS), di_string_borrow_literal("Hello"),
+	    DI_STRING_INIT, DI_TUPLE_INIT);
 	DI_CHECK(serial >= 0);
 	scoped_di_object *promise = di_dbus_add_promise_for(ret, eventm, serial);
-	scoped_di_closure *handler =
-	    di_make_closure(di_dbus_handle_hello_reply, (ret), di_string);
+	scoped_di_closure *handler = di_make_closure(di_dbus_handle_hello_reply, (ret), di_string);
 	return di_promise_then(promise, (void *)handler);
 }
 
