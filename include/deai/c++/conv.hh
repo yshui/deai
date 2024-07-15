@@ -275,7 +275,7 @@ public:
 	    : value_(in_value), type(in_type) {
 		if constexpr (!borrow) {
 			in_type = di_type::NIL;
-			::memset(&in_value, 0, sizeof(in_value));
+			::memset(&in_value, 0, ::deai::c_api::di_sizeof_type(in_type));
 		}
 	}
 	~DeaiVariantConverter() {
