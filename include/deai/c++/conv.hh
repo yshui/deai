@@ -317,6 +317,9 @@ DeaiBorrowedArrayConverter::operator std::vector<T>() const {
 	static constexpr ::deai::c_api::di_type Type = id::deai_typeof<T>::value;
 	std::vector<T> ret;
 	ret.reserve(arg.length);
+	if (arg.length == 0) {
+		return ret;
+	}
 
 	auto elem_size = ::deai::c_api::di_sizeof_type(arg.elem_type);
 	for (size_t i = 0; i < arg.length; i++) {

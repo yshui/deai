@@ -53,11 +53,11 @@
 #define DI_LUA_REGISTRY_STATE_OBJECT_KEY "__deai.di_lua.state_object"
 
 #define di_lua_get_state(L, s)                                                           \
-	do {                                                                             \
-		lua_pushliteral((L), DI_LUA_REGISTRY_STATE_OBJECT_KEY);                  \
-		lua_rawget((L), LUA_REGISTRYINDEX);                                      \
-		(s) = lua_touserdata((L), -1);                                           \
-		lua_pop(L, 1);                                                           \
+	do {                                                                                 \
+		lua_pushliteral((L), DI_LUA_REGISTRY_STATE_OBJECT_KEY);                          \
+		lua_rawget((L), LUA_REGISTRYINDEX);                                              \
+		(s) = lua_touserdata((L), -1);                                                   \
+		lua_pop(L, 1);                                                                   \
 	} while (0)
 
 /// A singleton for lua_State
@@ -110,8 +110,7 @@ static int di_lua_errfunc(lua_State *L) {
 
 	char *error_prompt = NULL;
 	int error_prompt_len;
-	error_prompt_len =
-	    asprintf(&error_prompt, "Failed to run lua script %s: %s", path, err);
+	error_prompt_len = asprintf(&error_prompt, "Failed to run lua script %s: %s", path, err);
 
 	// Get debug.traceback
 	lua_getglobal(L, "debug");
@@ -186,16 +185,16 @@ static void lua_ref_dtor(struct di_lua_ref *t) {
 	}
 }
 
-static int di_lua_type_to_di(lua_State *L, int i, di_type *t, di_value *ret);
+static int di_lua_type_to_di(lua_State *L, int i, di_type type_hint, di_type *t, di_value *ret);
 
 static inline int di_lua_type_to_di_variant(lua_State *L, int i, struct di_variant *var) {
-	int rc = di_lua_type_to_di(L, i, &var->type, NULL);
+	int rc = di_lua_type_to_di(L, i, DI_TYPE_ANY, &var->type, NULL);
 	if (rc != 0) {
 		return rc;
 	}
 
 	var->value = malloc(di_sizeof_type(var->type));
-	di_lua_type_to_di(L, i, &var->type, var->value);
+	di_lua_type_to_di(L, i, DI_TYPE_ANY, &var->type, var->value);
 	return 0;
 }
 
@@ -231,7 +230,7 @@ static int di_lua_di_getter(di_object *m, di_type *rt, di_value *ret, di_tuple t
 	}
 	lua_gettable(L, -2);
 
-	DI_OK_OR_RET(di_lua_type_to_di(L, -1, rt, ret));
+	DI_OK_OR_RET(di_lua_type_to_di(L, -1, DI_TYPE_ANY, rt, ret));
 
 	if (*rt == DI_TYPE_NIL) {
 		// nil in Lua means non-existent.
@@ -348,12 +347,12 @@ static struct di_lua_ref *lua_type_to_di_object(lua_State *L, int i, void *call)
 
 	auto getter = di_new_object_with_type(di_object);
 	di_set_object_call((void *)getter, di_lua_di_getter);
-	di_add_member_move((void *)o, di_string_borrow("__get"),
-	                   (di_type[]){DI_TYPE_OBJECT}, (void **)&getter);
+	di_add_member_move((void *)o, di_string_borrow("__get"), (di_type[]){DI_TYPE_OBJECT},
+	                   (void **)&getter);
 	auto setter = di_new_object_with_type(di_object);
 	di_set_object_call((void *)setter, di_lua_di_setter);
-	di_add_member_move((void *)o, di_string_borrow("__set"),
-	                   (di_type[]){DI_TYPE_OBJECT}, (void **)&setter);
+	di_add_member_move((void *)o, di_string_borrow("__set"), (di_type[]){DI_TYPE_OBJECT},
+	                   (void **)&setter);
 	di_set_object_dtor((void *)o, (void *)lua_ref_dtor);
 	di_set_object_call((void *)o, call);
 
@@ -658,7 +657,7 @@ static di_tuple di_lua_values_to_di_tuple(lua_State *L, int index) {
 	t.length = 0;
 	t.elements = tmalloc(struct di_variant, count);
 	for (int i = 0; i < count; i++) {
-		if (di_lua_type_to_di(L, i + index, &t.elements[t.length].type, NULL) != 0) {
+		if (di_lua_type_to_di(L, i + index, DI_TYPE_ANY, &t.elements[t.length].type, NULL) != 0) {
 			continue;
 		}
 		if (t.elements[t.length].type == DI_TYPE_NIL) {
@@ -666,7 +665,7 @@ static di_tuple di_lua_values_to_di_tuple(lua_State *L, int index) {
 			continue;
 		}
 		t.elements[t.length].value = malloc(di_sizeof_type(t.elements[t.length].type));
-		if (di_lua_type_to_di(L, i + index, &t.elements[t.length].type,
+		if (di_lua_type_to_di(L, i + index, DI_TYPE_ANY, &t.elements[t.length].type,
 		                      t.elements[t.length].value) != 0) {
 			free(t.elements[t.length].value);
 			continue;
@@ -717,8 +716,7 @@ static di_tuple di_lua_load_script(di_object *obj, di_string path_) {
 
 		if (L == NULL) {
 			// __lua_state not found, or lua_state has been dropped
-			di_delete_member_raw((di_object *)m,
-			                     di_string_borrow("__lua_state"));
+			di_delete_member_raw((di_object *)m, di_string_borrow("__lua_state"));
 			L = lua_new_state(m);
 		}
 		DI_CHECK(L != NULL);
@@ -762,6 +760,12 @@ static di_tuple di_lua_load_script(di_object *obj, di_string path_) {
 
 static int
 di_lua_table_to_array(lua_State *L, int index, int nelem, di_type elemt, di_array *ret) {
+	if (nelem == 0) {
+		ret->length = 0;
+		ret->arr = NULL;
+		ret->elem_type = elemt;
+		return 0;
+	}
 	ret->elem_type = elemt;
 
 	size_t sz = di_sizeof_type(elemt);
@@ -773,7 +777,7 @@ di_lua_table_to_array(lua_State *L, int index, int nelem, di_type elemt, di_arra
 		lua_rawgeti(L, index, i);
 
 		di_value retd;
-		di_lua_type_to_di(L, -1, &t, &retd);
+		di_lua_type_to_di(L, -1, elemt, &t, &retd);
 		lua_pop(L, 1);
 		if (t != elemt) {
 			// Auto convert int to double
@@ -815,7 +819,7 @@ static bool di_lua_checkarray(lua_State *L, int index, int *nelem, di_type *elem
 
 	// get the type of the first element
 	di_value ret;
-	di_lua_type_to_di(L, -1, elemt, &ret);
+	di_lua_type_to_di(L, -1, DI_TYPE_ANY, elemt, &ret);
 	di_free_value(*elemt, &ret);
 	// Pop 2 value, top of stack is the key
 	lua_pop(L, 2);
@@ -833,7 +837,7 @@ static bool di_lua_checkarray(lua_State *L, int index, int *nelem, di_type *elem
 
 		// Get the type of the i-th element
 		di_type t;
-		di_lua_type_to_di(L, -1, &t, &ret);
+		di_lua_type_to_di(L, -1, *elemt, &t, &ret);
 		di_free_value(t, &ret);
 		// pop 2 value (lua_next and lua_rawgeti)
 		lua_pop(L, 2);
@@ -841,6 +845,10 @@ static bool di_lua_checkarray(lua_State *L, int index, int *nelem, di_type *elem
 		if (t != *elemt) {
 			if (t == DI_TYPE_FLOAT && *elemt == DI_TYPE_INT) {
 				*elemt = DI_TYPE_FLOAT;
+			} else if ((t == DI_TYPE_ARRAY || t == DI_TYPE_TUPLE) &&
+			           *elemt == DI_TYPE_EMPTY_OBJECT) {
+				// Empty objects can be treated as empty arrays/tuples
+				*elemt = t;
 			} else if (t != DI_TYPE_INT || *elemt != DI_TYPE_FLOAT) {
 				// Non-uniform element type, cannot be an array
 				// pop 1 key
@@ -884,7 +892,7 @@ static int call_lua_function(struct di_lua_ref *ref, di_type *rt, di_value *ret,
 		ret->object = di_new_error("%s", err);
 		*rt = DI_TYPE_OBJECT;
 	} else {
-		di_lua_type_to_di(L, -1, rt, ret);
+		di_lua_type_to_di(L, -1, DI_TYPE_ANY, rt, ret);
 	}
 
 	lua_pop(L, 2);        // Pop (error or result) + errfunc
@@ -897,22 +905,22 @@ static int call_lua_function(struct di_lua_ref *ref, di_type *rt, di_value *ret,
 /// Convert lua value at index `i` to a deai value.
 /// The value is not popped. If `ret` is NULL, the value is not returned, but the type
 /// will always be returned
-static int di_lua_type_to_di(lua_State *L, int i, di_type *t, di_value *ret) {
+static int di_lua_type_to_di(lua_State *L, int i, di_type type_hint, di_type *t, di_value *ret) {
 #define ret_arg(i, field, gfn)                                                           \
-	do {                                                                             \
-		*t = di_typeof(ret->field);                                              \
-		if (ret != NULL) {                                                       \
-			ret->field = gfn(L, i);                                          \
-		}                                                                        \
-		return 0;                                                                \
+	do {                                                                                 \
+		*t = di_typeof(ret->field);                                                      \
+		if (ret != NULL) {                                                               \
+			ret->field = gfn(L, i);                                                      \
+		}                                                                                \
+		return 0;                                                                        \
 	} while (0)
 #define tostringdup(L, i) strdup(lua_tostring(L, i))
 #define todiobj(L, i) (di_object *)lua_type_to_di_object(L, i, call_lua_function)
 #define toobjref(L, i)                                                                   \
-	({                                                                               \
-		di_object *x = *(void **)lua_touserdata(L, i);                           \
-		di_ref_object(x);                                                        \
-		x;                                                                       \
+	({                                                                                   \
+		di_object *x = *(void **)lua_touserdata(L, i);                                   \
+		di_ref_object(x);                                                                \
+		x;                                                                               \
 	})
 	int nelem;
 	di_type elemt;
@@ -950,12 +958,13 @@ static int di_lua_type_to_di(lua_State *L, int i, di_type *t, di_value *ret) {
 				ret->object = (void *)lua_type_to_di_object(L, i, NULL);
 			}
 		} else {
-			// Empty table should be pushed as unit, because empty tables can
-			// either be interpreted as an empty di_array or an empty
-			// di_object.
-			// We pass unit for it because di_typed_trampoline knows how to
-			// convert unit to either array or object as required.
-			if (!nelem) {
+			// Empty table are treated differently, because empty tables can
+			// either be interpreted as an empty array or an empty table. This
+			// is an inherent ambiguity in lua. And since emtpy arrays can be
+			// represented in deai as empty di_arrays or di_tuples, whereas
+			// an empty table should be represented as an di_object.
+			// So we creates a special type DI_TYPE_EMPTY_OBJECT for this case.
+			if (!nelem && type_hint != DI_TYPE_ARRAY) {
 				assert(elemt == DI_TYPE_ANY);
 				*t = DI_TYPE_EMPTY_OBJECT;
 				if (ret) {
@@ -1033,9 +1042,8 @@ static int di_lua_add_listener(lua_State *L) {
 	auto handler = (di_object *)lua_type_to_di_object(L, -1, call_lua_function);
 
 	if (once) {
-		auto wrapped_handler =
-		    di_new_object_with_type2(struct di_signal_handler_wrapper,
-		                             "deai.plugin.lua:OnceSignalHandler");
+		auto wrapped_handler = di_new_object_with_type2(
+		    struct di_signal_handler_wrapper, "deai.plugin.lua:OnceSignalHandler");
 		di_set_object_call((di_object *)wrapped_handler, call_lua_signal_handler_once);
 		di_member(wrapped_handler, "wrapped", handler);
 		handler = (di_object *)wrapped_handler;
@@ -1062,8 +1070,7 @@ static int di_lua_add_listener(lua_State *L) {
 /// free it after this call.
 static int di_lua_pushvariant(lua_State *L, const char *name, struct di_variant var) {
 	// Check for nil
-	if (var.type == DI_TYPE_OBJECT || var.type == DI_TYPE_STRING ||
-	    var.type == DI_TYPE_POINTER) {
+	if (var.type == DI_TYPE_OBJECT || var.type == DI_TYPE_STRING || var.type == DI_TYPE_POINTER) {
 		// TODO(yshui) objects and strings cannot be NULL
 		void *ptr = var.value->pointer;
 		if (ptr == NULL) {
@@ -1126,8 +1133,7 @@ static int di_lua_pushvariant(lua_State *L, const char *name, struct di_variant 
 		step = di_sizeof_type(arr->elem_type);
 		lua_createtable(L, arr->length, 0);
 		for (int i = 0; i < arr->length; i++) {
-			di_lua_pushvariant(
-			    L, NULL, (struct di_variant){arr->arr + step * i, arr->elem_type});
+			di_lua_pushvariant(L, NULL, (struct di_variant){arr->arr + step * i, arr->elem_type});
 			lua_rawseti(L, -2, i + 1);
 		}
 		return 1;
@@ -1271,7 +1277,7 @@ static di_variant di_lua_globals_getter(di_object *globals, di_string key) {
 
 	di_type t;
 	di_value *ret = tmalloc(di_value, 1);
-	di_lua_type_to_di(L->L, -1, &t, ret);
+	di_lua_type_to_di(L->L, -1, DI_TYPE_ANY, &t, ret);
 	lua_pop(L->L, 1);        // Top of stack is the value
 	return (struct di_variant){.value = ret, .type = t};
 }
@@ -1365,7 +1371,7 @@ static int di_lua_meta_newindex(lua_State *L) {
 	di_type vt;
 
 	di_value val;
-	int rc = di_lua_type_to_di(L, 3, &vt, &val);
+	int rc = di_lua_type_to_di(L, 3, DI_TYPE_ANY, &vt, &val);
 	if (rc != 0) {
 		return luaL_error(L, "unhandled lua type");
 	}
