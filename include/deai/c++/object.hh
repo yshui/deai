@@ -168,6 +168,8 @@ public:
 		return to<T>().value();
 	}
 
+	operator std::optional<Variant>() &&;
+
 	template <typename T, c_api::di_type type = id::deai_typeof<std::remove_cv_t<std::remove_reference_t<T>>>::value>
 	static auto from(T &&other) -> Variant {
 		auto v = conv::to_owned_deai_value(std::forward<T>(other));

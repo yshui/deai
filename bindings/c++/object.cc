@@ -118,13 +118,22 @@ Variant::Variant(const c_api::di_variant &var) : type{var.type} {
 	c_api::di_copy_value(type, &value, var.value);
 }
 auto Variant::operator=(const Variant &other) {
+	// std::cerr << "Copying variant, inner type "
+	//           << deai::c_api::di_type_names[static_cast<int>(other.type)]
+	//           << " this: " << this << " other: " << &other << "\n";
 	type = other.type;
 	c_api::di_copy_value(type, &value, &other.value);
 }
 Variant::Variant(const Variant &other) {
+	// std::cerr << "Creating variant, copy ctor, inner type "
+	//           << deai::c_api::di_type_names[static_cast<int>(other.type)]
+	//           << " this: " << this << " other: " << &other << "\n";
 	*this = other;
 }
 auto Variant::operator=(Variant &&other) noexcept {
+	// std::cerr << "Moving variant, inner type "
+	//           << deai::c_api::di_type_names[static_cast<int>(other.type)]
+	//           << " this: " << this << " other: " << &other << "\n";
 	type = other.type;
 	value = other.value;
 
@@ -132,6 +141,9 @@ auto Variant::operator=(Variant &&other) noexcept {
 	other.value = {};
 }
 Variant::Variant(Variant &&other) noexcept {
+	// std::cerr << "Creating variant, move ctor, inner type "
+	//           << deai::c_api::di_type_names[static_cast<int>(other.type)]
+	//           << " this: " << this << " other: " << &other << "\n";
 	*this = std::move(other);
 }
 auto Variant::nil() -> Variant {
@@ -166,6 +178,10 @@ auto Variant::to() && -> std::enable_if_t<std::is_same_v<T, WeakRef<Object>>, st
 	}
 	type = c_api::di_type::NIL;
 	return {WeakRef<Object>{value.weak_object}};
+}
+
+Variant::operator std::optional<deai::type::Variant>() && {
+	return {std::move(*this)};
 }
 
 template auto
