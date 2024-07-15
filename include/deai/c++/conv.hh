@@ -280,6 +280,11 @@ struct DeaiVariantConverter {
 			::memset(&in_value, 0, sizeof(in_value));
 		}
 	}
+	~DeaiVariantConverter() {
+		if constexpr (!borrow) {
+			::deai::c_api::di_free_value(type, &value_);
+		}
+	}
 	template <DeaiNumber T>
 	operator std::optional<T>();
 	operator std::optional<::deai::c_api::di_variant>();

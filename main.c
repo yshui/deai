@@ -761,8 +761,6 @@ int main(int argc, char *argv[]) {
 			quit = true;
 		}
 		di_unref_object(retobj);
-	} else {
-		di_free_value(rt, &retd);
 	}
 	free(method);
 	free(modname);
