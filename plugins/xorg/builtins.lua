@@ -55,12 +55,14 @@ MonitorInfo = {}
 function exports.randr:monitor_info()
 	local info = {}
 	for _, output in pairs(self.outputs) do
+		local name = output.info.name -- Seems like EDID isn't populated until we get output.info.
+		                              -- Classic Xorg
 		edid = output.props["EDID"]
 		if edid ~= nil then
 			edid = di.hwinfo.display:from_edid(edid)
 		end
 		if edid ~= nil then
-			info[output.info.name] = {
+			info[name] = {
 				model = edid.model,
 				make = edid.make,
 				serial = edid.serial,
