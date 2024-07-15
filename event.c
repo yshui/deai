@@ -409,8 +409,7 @@ static int di_promise_dispatch(di_promise *promise) {
 	DI_CHECK_OK(di_get(promise, "___n_handlers", nhandlers));
 
 	// Reset number of handlers
-	di_setx((void *)promise, di_string_borrow("___n_handlers"), DI_TYPE_UINT,
-	        (uint64_t[]){0});
+	di_setx((void *)promise, di_string_borrow("___n_handlers"), DI_TYPE_UINT, (uint64_t[]){0});
 	auto handlers = tmalloc(di_object *, nhandlers);
 	auto then_promises = tmalloc(di_object *, nhandlers);
 
@@ -454,12 +453,10 @@ static int di_promise_dispatch(di_promise *promise) {
 		}
 		if (return_type == DI_TYPE_OBJECT &&
 		    strcmp(di_get_type(return_value.object), "deai:Promise") == 0) {
-			di_promise_then_impl((void *)return_value.object,
-			                     (void *)then_promises[i], NULL);
+			di_promise_then_impl((void *)return_value.object, (void *)then_promises[i], NULL);
 		} else {
-			di_resolve_promise(
-			    (void *)then_promises[i],
-			    (struct di_variant){.type = return_type, .value = &return_value});
+			di_resolve_promise((void *)then_promises[i],
+			                   (struct di_variant){.type = return_type, .value = &return_value});
 		}
 		di_unref_object((void *)then_promises[i]);
 		di_free_value(return_type, &return_value);
@@ -685,8 +682,7 @@ void di_idle_cb(EV_P_ ev_idle *w, int revents) {
 		}
 
 		// Pop the promise with the highest index
-		scoped_di_string key =
-		    di_string_printf("pending_promise_%d", pending_count - 1);
+		scoped_di_string key = di_string_printf("pending_promise_%d", pending_count - 1);
 		scoped_di_object *promise = NULL;
 		DI_CHECK_OK(di_get2(eventm, key, promise));
 		DI_CHECK_OK(di_delete_member_raw((void *)eventm, key));
@@ -747,8 +743,7 @@ void di_init_event(struct deai *di) {
 
 	ev_idle_init(&eventp->idlew, di_idle_cb);
 
-	di_rawsetx((void *)em, di_string_borrow_literal("pending_count"), DI_TYPE_NINT,
-	           (int[]){0});
+	di_rawsetx((void *)em, di_string_borrow_literal("pending_count"), DI_TYPE_NINT, (int[]){0});
 	di_set_object_dtor((void *)em, di_event_module_dtor);
 	di_register_module(di, di_string_borrow("event"), &em);
 }

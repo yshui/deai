@@ -187,6 +187,93 @@ Variant::operator std::optional<deai::type::Variant>() && {
 template auto
 Variant::to<WeakRef<Object>, c_api::di_type::WEAK_OBJECT>() && -> std::optional<WeakRef<Object>>;
 
+template <bool raw_>
+ObjectMemberProxy<raw_>::operator std::optional<Variant>() const {
+	c_api::di_type type;
+	c_api::di_value ret;
+	if constexpr (raw) {
+		if (c_api::di_rawgetx(target, conv::string_to_borrowed_deai_value(key), &type, &ret) != 0) {
+			return std::nullopt;
+		}
+	} else {
+		if (c_api::di_getx(target, conv::string_to_borrowed_deai_value(key), &type, &ret) != 0) {
+			return std::nullopt;
+		}
+	}
+
+	// NOLINTNEXTLINE(performance-move-const-arg)
+	return std::optional{Variant{std::move(type), std::move(ret)}};
+}
+
+template <bool raw_>
+void ObjectMemberProxy<raw_>::erase() const {
+	if constexpr (raw) {
+		c_api::di_delete_member_raw(target, conv::string_to_borrowed_deai_value(key));
+	} else {
+		c_api::di_delete_member(target, conv::string_to_borrowed_deai_value(key));
+	}
+}
+template <bool raw_>
+[[nodiscard]] auto ObjectMemberProxy<raw_>::has_value() const -> bool {
+	return static_cast<std::optional<Variant>>(*this).has_value();
+}
+template <bool raw_>
+[[nodiscard]] auto ObjectMemberProxy<raw_>::value() const -> Variant {
+	return static_cast<std::optional<Variant>>(*this).value();
+}
+template <bool raw_>
+auto ObjectMemberProxy<raw_>::operator->() const -> std::optional<Variant> {
+	return *this;
+}
+
+template <bool raw_>
+auto ObjectMemberProxy<raw_>::operator*() const -> Variant {
+	return *static_cast<std::optional<Variant>>(*this);
+}
+
+template <bool raw_>
+auto ObjectMemberProxy<raw_>::operator=(const std::optional<Variant> &new_value) const
+    -> const ObjectMemberProxy & {
+	if constexpr (raw) {
+		erase();
+		if (new_value.has_value()) {
+			int unused rc =
+			    c_api::di_add_member_clone(target, conv::string_to_borrowed_deai_value(key),
+			                               new_value->type, &new_value->value);
+			assert(rc == 0);
+		}
+	} else {
+		if (!new_value.has_value()) {
+			erase();
+		} else {
+			// the setter/deleter should handle the deletion
+			exception::throw_deai_error(
+			    c_api::di_setx(target, conv::string_to_borrowed_deai_value(key),
+			                   new_value->type, &new_value->value));
+		}
+	}
+	return *this;
+}
+template <bool raw_>
+auto ObjectMemberProxy<raw_>::operator=(std::optional<Variant> &&new_value) const
+    -> const ObjectMemberProxy & {
+	erase();
+
+	auto moved = std::move(new_value);
+	if constexpr (raw) {
+		if (moved.has_value()) {
+			exception::throw_deai_error(c_api::di_add_member_move(
+			    target, conv::string_to_borrowed_deai_value(key), &moved->type, &moved->value));
+		}
+		return *this;
+	} else {
+		return *this = moved;
+	}
+}
+
+template struct ObjectMemberProxy<true>;
+template struct ObjectMemberProxy<false>;
+
 auto ObjectMembersRawGetter::operator[](const std::string_view &key) -> ObjectMemberProxy<true> {
 	return {target, key};
 }
