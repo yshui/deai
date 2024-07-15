@@ -628,6 +628,12 @@ static inline void unused di_free_di_tuplep(di_tuple *nonnull t) {
 	t->length = 0;
 }
 
+static inline void unused di_free_di_arrayp(di_array *nonnull a) {
+	di_free_array(*a);
+	a->arr = NULL;
+	a->length = 0;
+}
+
 static inline unused size_t di_sizeof_type(di_type t) {
 	switch (t) {
 	case DI_TYPE_NAME(NIL):
@@ -730,6 +736,7 @@ static inline void unused di_free_di_weak_objectpp(di_weak_object *nullable *non
 #define scoped_di_weak_object scopedp(di_weak_object)
 #define scoped_di_string scoped(di_string)
 #define scoped_di_tuple scoped(di_tuple)
+#define scoped_di_array scoped(di_array)
 
 #define di_has_member(o, name)                                                           \
 	(di_lookup((di_object *)(o), di_string_borrow(name)) != NULL)
