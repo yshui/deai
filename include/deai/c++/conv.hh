@@ -234,15 +234,27 @@ concept DeaiNumber =
     std::is_same_v<T, int8_t> || std::is_same_v<T, uint8_t> || std::is_same_v<T, int16_t> ||
     std::is_same_v<T, uint16_t> || std::is_same_v<T, int32_t> || std::is_same_v<T, uint32_t> ||
     std::is_same_v<T, int64_t> || std::is_same_v<T, uint64_t> || std::is_same_v<T, double>;
+
+/// Convert a deai variant into another deai type. This converter either moves or borrows,
+/// depending on the template parameter. If doing moving conversion, the input value will
+/// be moved into the converter first, and then moved into the output value of the desired
+/// type. Otherwise, the input value will be borrowed.
 template <bool borrow>
 struct DeaiVariantConverter {
 	private:
 	template <typename T>
-	requires borrow
+	    requires borrow
 	static auto ref_if_borrow() -> std::reference_wrapper<T>;
 	template <typename T>
-	requires(!borrow)
+	    requires(!borrow)
 	static auto ref_if_borrow() -> T;
+
+	template <typename T>
+	    requires borrow
+	static auto move_if_not_borrow() -> const T;
+	template <typename T>
+	    requires(!borrow)
+	static auto move_if_not_borrow() -> T &&;
 
 	using di_type = ::deai::c_api::di_type;
 	auto tuple_to_array() -> std::optional<::deai::c_api::di_array>;
@@ -262,8 +274,13 @@ struct DeaiVariantConverter {
 	}
 
 	public:
-	DeaiVariantConverter(decltype(value_) value, di_type type)
-	    : value_(value), type(type) {
+	DeaiVariantConverter(decltype(move_if_not_borrow<decltype(value_)>()) in_value,
+	                     decltype(move_if_not_borrow<di_type>()) in_type)
+	    : value_(in_value), type(in_type) {
+		if constexpr (!borrow) {
+			in_type = di_type::NIL;
+			::memset(&in_value, 0, sizeof(in_value));
+		}
 	}
 	template <DeaiNumber T>
 	operator std::optional<T>();

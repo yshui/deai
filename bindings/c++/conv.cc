@@ -161,7 +161,7 @@ auto DeaiVariantConverter<borrow>::unwrap_variant() -> DeaiVariantConverter {
 		::deai::c_api::di_value new_value{};
 		::memcpy(&new_value, tmp.value, ::deai::c_api::di_sizeof_type(tmp.type));
 		::free(tmp.value);
-		return DeaiVariantConverter{new_value, tmp.type};
+		return DeaiVariantConverter{std::move(new_value), std::move(tmp.type)};
 	} else {
 		return DeaiVariantConverter{std::ref(*v.variant.value), v.variant.type};
 	}
@@ -354,9 +354,8 @@ using ::deai::c_api::di_type;
 using ::deai::c_api::di_value;
 using ::deai::type::conv::c_api::DeaiVariantConverter;
 template <bool borrow>
-auto di_type_conversion_impl(di_type from_type, di_value &from, di_type to_type, di_value &to)
-    -> int {
-	DeaiVariantConverter<borrow> converter{from, from_type};
+auto di_type_conversion_impl(DeaiVariantConverter<borrow> &&converter, di_type to_type,
+                             di_value &to) -> int {
 #define CONVERT_TO(T, field)                                                             \
 	case di_type::T: {                                                                   \
 		std::optional<decltype(to.field)> tmp = converter;                               \
@@ -405,13 +404,15 @@ auto di_type_conversion(di_type from_type, di_value *from, di_type to_type, di_v
 		return 0;
 	}
 	if (borrowing) {
-		return di_type_conversion_impl<true>(from_type, *from, to_type, *to);
+		return di_type_conversion_impl<true>(
+		    DeaiVariantConverter<true>{std::ref(*from), from_type}, to_type, *to);
 	}
-	return di_type_conversion_impl<false>(from_type, *from, to_type, *to);
+	return di_type_conversion_impl<false>(
+	    DeaiVariantConverter<false>{std::move(*from), std::move(from_type)}, to_type, *to);
 }
 auto di_int_conversion(di_type from_type, di_value *from, int to_bits, bool to_unsigned,
                        void *to) -> int {
-	deai::type::conv::c_api::DeaiVariantConverter<false> converter{*from, from_type};
+	deai::type::conv::c_api::DeaiVariantConverter<true> converter{std::ref(*from), from_type};
 
 #define EXPAND                                                                           \
 	X(8, P);                                                                             \
