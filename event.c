@@ -421,15 +421,15 @@ static int di_promise_dispatch(di_promise *promise) {
 		str = di_string_printf("___then_handler_%lu", i);
 		handlers[i] = NULL;
 		if (di_remove_member_raw((void *)promise, str, &var) == 0) {
-			di_type_conversion(DI_TYPE_VARIANT, (di_value *)&var,
-			                   DI_TYPE_OBJECT, (di_value *)&handlers[i], false);
+			DI_CHECK_OK(di_type_conversion(DI_TYPE_VARIANT, (di_value *)&var, DI_TYPE_OBJECT,
+			                               (di_value *)&handlers[i], false));
 		}
 		di_free_string(str);
 
 		str = di_string_printf("___then_promise_%lu", i);
 		DI_CHECK_OK(di_remove_member_raw((void *)promise, str, &var));
-		di_type_conversion(DI_TYPE_VARIANT, (di_value *)&var, DI_TYPE_OBJECT,
-		                   (di_value *)&then_promises[i], false);
+		DI_CHECK_OK(di_type_conversion(DI_TYPE_VARIANT, (di_value *)&var, DI_TYPE_OBJECT,
+		                               (di_value *)&then_promises[i], false));
 	}
 
 	for (uint64_t i = 0; i < nhandlers; i++) {
