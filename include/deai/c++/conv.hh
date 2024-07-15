@@ -246,6 +246,7 @@ struct DeaiVariantConverter {
 	template <typename T>
 	    requires(!borrow)
 	static auto ref_if_borrow() -> T;
+	using value_type = decltype(ref_if_borrow<::deai::c_api::di_value>());
 
 	template <typename T>
 	    requires borrow
@@ -253,14 +254,27 @@ struct DeaiVariantConverter {
 	template <typename T>
 	    requires(!borrow)
 	static auto move_if_not_borrow() -> T &&;
+	template <typename T>
+	using move_if_not_borrow_t = decltype(move_if_not_borrow<T>());
+	using ctor_value_type = move_if_not_borrow_t<value_type>;
 
 	using di_type = ::deai::c_api::di_type;
 	auto tuple_to_array() -> std::optional<::deai::c_api::di_array>;
 	auto array_to_tuple() -> std::optional<::deai::c_api::di_tuple>;
-	/// Unwrap the current converter, and return a converter for the inner variant.
+
+	/// Unwrap the current converter, and continue the conversion with the inner value.
 	/// The current converter will be emptied.
-	auto unwrap_variant() -> DeaiVariantConverter;
-	decltype(ref_if_borrow<::deai::c_api::di_value>()) value_;
+	///
+	/// Unwrappable types are:
+	///
+	/// - A variant
+	/// - A tuple with a single element
+	/// - An array with a single element
+	template <typename T>
+	    requires id::DeaiVerbatim<T> || DeaiNumber<T>
+	auto try_from_inner() -> std::optional<T>;
+
+	value_type value_;
 	di_type type;
 
 	auto value() -> ::deai::c_api::di_value & {
@@ -272,8 +286,7 @@ struct DeaiVariantConverter {
 	}
 
 	public:
-	DeaiVariantConverter(decltype(move_if_not_borrow<decltype(value_)>()) in_value,
-	                     decltype(move_if_not_borrow<di_type>()) in_type)
+	DeaiVariantConverter(ctor_value_type in_value, move_if_not_borrow_t<di_type> in_type)
 	    : value_(in_value), type(in_type) {
 		if constexpr (!borrow) {
 			in_type = di_type::NIL;
@@ -301,14 +314,14 @@ struct DeaiVariantConverter {
 extern template struct DeaiVariantConverter<true>;
 extern template struct DeaiVariantConverter<false>;
 
-/// Convert a borrowed deai value one type to another. There is no copying or ownership
-/// changes involved.
+/// Convert a borrowed deai value one type to another. There is no copying or
+/// ownership changes involved.
 template <::deai::type::id::DeaiVerbatim S, ::deai::c_api::di_type Type = ::deai::type::id::deai_typeof<S>::value>
 auto borrow_from_variant(::deai::c_api::di_value &value, ::deai::c_api::di_type type) -> S {
 	if (type == Type) {
 		return *reinterpret_cast<S *>(&value);
 	}
-	DeaiVariantConverter<true> impl{std::ref(value), type};
+	DeaiVariantConverter<true> impl{value, type};
 	return *static_cast<std::optional<S>>(impl);
 }
 

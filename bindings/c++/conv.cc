@@ -1,5 +1,5 @@
-#include <limits>
 #include <deai/c++/conv.hh>
+#include <limits>
 
 namespace {
 
@@ -150,21 +150,46 @@ auto DeaiVariantConverter<borrow>::array_to_tuple() -> std::optional<::deai::c_a
 	type = di_type::NIL;
 	return ::deai::c_api::di_tuple{array.length, elements};
 }
-/// Unwrap the current converter, and return a converter for the inner variant.
+/// Unwrap the current converter, and continue the conversion with the inner value.
 /// The current converter will be emptied.
+///
+/// Unwrappable types are:
+///
+/// - A variant
+/// - A tuple with a single element
+/// - An array with a single element
 template <bool borrow>
-auto DeaiVariantConverter<borrow>::unwrap_variant() -> DeaiVariantConverter {
-	// UNSAFE! value.type must be di_type::VARIANT
+template <typename T>
+    requires id::DeaiVerbatim<T> || DeaiNumber<T>
+auto DeaiVariantConverter<borrow>::try_from_inner() -> std::optional<T> {
+	using ::deai::c_api::di_value;
 	auto &v = value();
+	di_value *tmp_value = nullptr;
+	di_type tmp_type = di_type::NIL;
+	if (type == di_type::VARIANT) {
+		tmp_value = v.variant.value;
+		tmp_type = v.variant.type;
+	} else if (type == di_type::TUPLE && v.tuple.length == 1) {
+		tmp_value = v.tuple.elements[0].value;
+		tmp_type = v.tuple.elements[0].type;
+	} else if (type == di_type::ARRAY && v.array.length == 1) {
+		tmp_value = reinterpret_cast<::deai::c_api::di_value *>(v.array.arr);
+		tmp_type = v.array.elem_type;
+	} else {
+		return std::nullopt;
+	}
 	if constexpr (!borrow) {
-		auto tmp = v.variant;
+		if (type == di_type::TUPLE) {
+			::free(v.tuple.elements);
+		}
 		::memset(&v, 0, sizeof(v));
 		type = di_type::NIL;
 
-		::deai::c_api::di_value new_value{};
-		::memcpy(&new_value, tmp.value, ::deai::c_api::di_sizeof_type(tmp.type));
-		::free(tmp.value);
-		return DeaiVariantConverter{std::move(new_value), std::move(tmp.type)};
+		di_value new_value{};
+		// Have to use memcpy instead of assigning, because `tmp_value` might not be "full sized".
+		::memcpy(&new_value, tmp_value, ::deai::c_api::di_sizeof_type(tmp_type));
+		::free(tmp_value);
+		return DeaiVariantConverter{std::move(new_value), std::move(tmp_type)};
 	} else {
 		return DeaiVariantConverter{std::ref(*v.variant.value), v.variant.type};
 	}
@@ -188,11 +213,10 @@ DeaiVariantConverter<borrow>::operator std::optional<T>() {
 			return value().float_;
 		}
 		return std::nullopt;
-	case di_type::VARIANT:
-		return unwrap_variant();
 	default:
-		return std::nullopt;
+		break;
 	}
+	return try_from_inner<T>();
 #pragma GCC diagnostic pop
 }
 
@@ -210,9 +234,6 @@ DeaiVariantConverter<borrow>::operator std::optional<::deai::c_api::di_variant>(
 }
 template <bool borrow>
 DeaiVariantConverter<borrow>::operator std::optional<::deai::c_api::di_string>() {
-	if (type == di_type::VARIANT) {
-		return unwrap_variant();
-	}
 	if (type == di_type::STRING) {
 		type = di_type::NIL;
 		return value().string;
@@ -220,23 +241,17 @@ DeaiVariantConverter<borrow>::operator std::optional<::deai::c_api::di_string>()
 	if (type == di_type::STRING_LITERAL) {
 		return DeaiStringLiteralConverter<borrow>(value().string_literal);
 	}
-	return std::nullopt;
+	return try_from_inner<::deai::c_api::di_string>();
 }
 template <bool borrow>
 DeaiVariantConverter<borrow>::operator std::optional<const char *>() {
-	if (type == di_type::VARIANT) {
-		return unwrap_variant();
-	}
 	if (type == di_type::STRING_LITERAL) {
 		return value().string_literal;
 	}
-	return std::nullopt;
+	return try_from_inner<const char *>();
 }
 template <bool borrow>
 DeaiVariantConverter<borrow>::operator std::optional<::deai::c_api::di_array>() {
-	if (type == di_type::VARIANT) {
-		return unwrap_variant();
-	}
 	if (type == di_type::ARRAY) {
 		type = di_type::NIL;
 		return value().array;
@@ -250,16 +265,13 @@ DeaiVariantConverter<borrow>::operator std::optional<::deai::c_api::di_array>() 
 	if (type == di_type::TUPLE) {
 		return tuple_to_array();
 	}
-	return std::nullopt;
+	return try_from_inner<::deai::c_api::di_array>();
 }
 template <bool borrow>
 DeaiVariantConverter<borrow>::operator std::optional<::deai::c_api::di_tuple>() {
 	if (type == di_type::TUPLE) {
 		type = di_type::NIL;
 		return value().tuple;
-	}
-	if (type == di_type::VARIANT) {
-		return unwrap_variant();
 	}
 	if (type == di_type::NIL) {
 		return ::deai::c_api::di_tuple{0, nullptr};
@@ -270,7 +282,7 @@ DeaiVariantConverter<borrow>::operator std::optional<::deai::c_api::di_tuple>() 
 	if (type == di_type::ARRAY) {
 		return array_to_tuple();
 	}
-	return std::nullopt;
+	return try_from_inner<::deai::c_api::di_tuple>();
 }
 template <bool borrow>
 DeaiVariantConverter<borrow>::operator std::optional<::deai::c_api::di_object *>() {
@@ -287,10 +299,7 @@ DeaiVariantConverter<borrow>::operator std::optional<::deai::c_api::di_object *>
 			return ret;
 		}
 	}
-	if (type == di_type::VARIANT) {
-		return unwrap_variant();
-	}
-	return std::nullopt;
+	return try_from_inner<::deai::c_api::di_object *>();
 }
 template <bool borrow>
 DeaiVariantConverter<borrow>::operator std::optional<::deai::c_api::di_weak_object *>() {
@@ -307,33 +316,24 @@ DeaiVariantConverter<borrow>::operator std::optional<::deai::c_api::di_weak_obje
 	if (type == di_type::NIL) {
 		return ::deai::c_api::dead_weak_ref;
 	}
-	if (type == di_type::VARIANT) {
-		return unwrap_variant();
-	}
-	return std::nullopt;
+	return try_from_inner<::deai::c_api::di_weak_object *>();
 }
 template <bool borrow>
 DeaiVariantConverter<borrow>::operator std::optional<void *>() {
 	if (type == di_type::NIL) {
 		return nullptr;
 	}
-	if (type == di_type::VARIANT) {
-		return unwrap_variant();
-	}
 	if (type == di_type::POINTER) {
 		return value().pointer;
 	}
-	return std::nullopt;
+	return try_from_inner<void *>();
 }
 template <bool borrow>
 DeaiVariantConverter<borrow>::operator std::optional<bool>() {
 	if (type == di_type::BOOL) {
 		return value().bool_;
 	}
-	if (type == di_type::VARIANT) {
-		return unwrap_variant();
-	}
-	return std::nullopt;
+	return try_from_inner<bool>();
 }
 template struct DeaiVariantConverter<true>;
 template struct DeaiVariantConverter<false>;

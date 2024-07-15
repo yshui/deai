@@ -23,21 +23,30 @@ struct deai_ctype {};
 template <typename T>
 struct deai_typeof {};
 
+template <typename T>
+concept DeaiConvertible = requires { deai_typeof<T>::value; };
+
 constexpr auto is_basic_deai_type(c_api::di_type type) -> bool {
 	return (type != c_api::di_type::ARRAY) && (type != c_api::di_type::TUPLE) &&
 	       (type != c_api::di_type::VARIANT);
 }
 
 /// Whether T is a c_api di_* type
-template <typename T, c_api::di_type type = deai_typeof<T>::value>
+template <typename T>
 struct is_verbatim {
+	static constexpr bool value = false;
+};
+
+template <DeaiConvertible T>
+struct is_verbatim<T> {
+private:
+	static constexpr auto type = deai_typeof<T>::value;
+
+public:
 	static constexpr bool value =
 	    is_basic_deai_type(type) && type != c_api::di_type::OBJECT &&
 	    type != c_api::di_type::WEAK_OBJECT && type != c_api::di_type::STRING;
 };
-
-template <typename T>
-concept DeaiConvertible = requires { deai_typeof<T>::value; };
 
 template <typename T>
 inline constexpr bool is_verbatim_v = is_verbatim<T>::value;
@@ -152,32 +161,32 @@ struct deai_typeof<std::vector<T>> {
 static_assert(deai_typeof<Ref<Object>>::value == c_api::di_type::OBJECT);
 
 template <>
-struct is_verbatim<c_api::di_string, c_api::di_type::STRING> {
+struct is_verbatim<c_api::di_string> {
 	static constexpr bool value = true;
 };
 
 template <>
-struct is_verbatim<c_api::di_array, c_api::di_type::ARRAY> {
+struct is_verbatim<c_api::di_array> {
 	static constexpr bool value = true;
 };
 
 template <>
-struct is_verbatim<c_api::di_tuple, c_api::di_type::TUPLE> {
+struct is_verbatim<c_api::di_tuple> {
 	static constexpr bool value = true;
 };
 
 template <>
-struct is_verbatim<c_api::di_variant, c_api::di_type::VARIANT> {
+struct is_verbatim<c_api::di_variant> {
 	static constexpr bool value = true;
 };
 
 template <>
-struct is_verbatim<c_api::di_object *, c_api::di_type::OBJECT> {
+struct is_verbatim<c_api::di_object *> {
 	static constexpr bool value = true;
 };
 
 template <>
-struct is_verbatim<c_api::di_weak_object *, c_api::di_type::WEAK_OBJECT> {
+struct is_verbatim<c_api::di_weak_object *> {
 	static constexpr bool value = true;
 };
 
