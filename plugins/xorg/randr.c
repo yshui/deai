@@ -11,8 +11,8 @@
 
 #include "xorg.h"
 
-#include <limits.h>
 #include <assert.h>
+#include <limits.h>
 #include <math.h>
 #include <stdio.h>
 #include <xcb/randr.h>
@@ -145,12 +145,11 @@ struct di_xorg_view_config {
 	/// Reflection
 	///
 	/// Bit 1 means reflection along the X axis, bit 2 means the Y axis.
-	uint64_t rotation, reflection;
-
+	///
 	/// EXPORT: deai.plugin.xorg.randr:ViewConfig.outputs: [:unsigned]
 	///
 	/// Outputs
-	di_array outputs;
+	uint64_t rotation, reflection;
 };
 
 define_trivial_cleanup(xcb_randr_get_screen_resources_reply_t);
@@ -453,15 +452,15 @@ static di_object *get_view_config(struct di_xorg_view *v) {
 	ret->y = cr->y;
 	ret->width = cr->width;
 	ret->height = cr->height;
-	ret->outputs = DI_ARRAY_INIT;
+	di_array outputs = DI_ARRAY_INIT;
 
 	if (cr->num_outputs != 0) {
-		auto outputs = xcb_randr_get_crtc_info_outputs(cr);
-		unsigned int *arr = ret->outputs.arr = tmalloc(unsigned int, cr->num_outputs);
-		ret->outputs.length = cr->num_outputs;
-		ret->outputs.elem_type = DI_TYPE_NUINT;
+		auto rr_outputs = xcb_randr_get_crtc_info_outputs(cr);
+		unsigned int *arr = outputs.arr = tmalloc(unsigned int, cr->num_outputs);
+		outputs.length = cr->num_outputs;
+		outputs.elem_type = DI_TYPE_NUINT;
 		for (int i = 0; i < cr->num_outputs; i++) {
-			arr[i] = outputs[i];
+			arr[i] = rr_outputs[i];
 		}
 	}
 
@@ -493,6 +492,7 @@ static di_object *get_view_config(struct di_xorg_view *v) {
 	di_field(ret, height);
 	di_field(ret, rotation);
 	di_field(ret, reflection);
+	di_member(ret, "outputs", outputs);
 	return (void *)ret;
 }
 

@@ -66,6 +66,7 @@ table.insert(listen_handles, di.event:timer(0.2):on("elapsed", function()
         local vc = i.current_view.config
         if vc then
             print(vc.x, vc.y, vc.width, vc.height, vc.rotation, vc.reflection)
+            print("#outputs: " .. #vc.outputs)
             i.current_view.config = {x=vc.x, y=vc.y, rotation=vc.rotation, reflection=vc.reflection, mode=modes[1].id}
         end
         if i.current_view.outputs then
