@@ -7,11 +7,11 @@
 #include <deai/builtins/log.h>
 #include <deai/helper.h>
 #include <deai/object.h>
+#include <deai/error.h>
 #include <xcb/xcb.h>
 #include <xcb/xcb_keysyms.h>
 #include <xkbcommon/xkbcommon-names.h>
 #include <xkbcommon/xkbcommon.h>
-#include "list.h"
 #include "string_buf.h"
 #include "xorg.h"
 
@@ -99,7 +99,8 @@ static char *describe_keybinding(struct keybinding *kb) {
 	return ret;
 }
 
-static void binding_dtor(struct keybinding *kb) {
+static void binding_dtor(di_object *obj) {
+	auto kb = (struct keybinding *)obj;
 	if (kb->keycodes) {
 		ungrab(kb);
 	}

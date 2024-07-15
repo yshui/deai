@@ -6,16 +6,10 @@
 
 #pragma once
 #include <stdbool.h>
-#include <stdint.h>
-#include <stdlib.h>
 
-#include "callable.h"
 #include "common.h"
 #include "compiler.h"
-#include "error.h"
 #include "object.h"
-
-struct deai;
 
 #define MAX_ERRNO 4095
 
@@ -39,10 +33,10 @@ static inline bool IS_ERR_OR_NULL(const void *ptr) {
 	return unlikely(!ptr) || IS_ERR_VALUE((unsigned long)ptr);
 }
 
-typedef void (*init_fn_t)(struct deai *);
+typedef void (*init_fn_t)(di_object *);
 
-PUBLIC_DEAI_API struct di_module *di_new_module(struct deai *);
-PUBLIC_DEAI_API int di_register_module(struct deai *, di_string, struct di_module **);
+PUBLIC_DEAI_API struct di_module *di_new_module(di_object *);
+PUBLIC_DEAI_API int di_register_module(di_object *, di_string, struct di_module **);
 
 #define di_new_object_with_type(type) (type *)di_new_object(sizeof(type), alignof(type))
 #define di_new_object_with_type2(type, di_type)                                          \
@@ -51,4 +45,4 @@ PUBLIC_DEAI_API int di_register_module(struct deai *, di_string, struct di_modul
 /// Define a entry point for a deai plugin. Your entry point function will take a single argument:
 ///   - `arg`, which points to the core deai object.
 #define DEAI_PLUGIN_ENTRY_POINT(arg)                                                     \
-	visibility_default int di_plugin_init(struct deai *arg)
+	visibility_default void di_plugin_init(di_object *arg)

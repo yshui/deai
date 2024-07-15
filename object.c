@@ -9,13 +9,13 @@
 #include <deai/helper.h>
 #include <deai/object.h>
 #include <deai/type.h>
+#include <deai/error.h>
 #include <assert.h>
 #include <ev.h>
 #include <stdalign.h>
 #include <stdarg.h>
 #include <stdio.h>
 #include <sys/mman.h>
-#include "config.h"
 #include "di_internal.h"
 #include "utils.h"
 
@@ -342,7 +342,7 @@ di_object *di_new_object(size_t sz, size_t alignment) {
 	return (di_object *)obj;
 }
 
-struct di_module *di_new_module_with_size(struct deai *di, size_t size) {
+struct di_module *di_new_module_with_size(di_object *di, size_t size) {
 	if (size < sizeof(struct di_module)) {
 		return NULL;
 	}
@@ -351,12 +351,12 @@ struct di_module *di_new_module_with_size(struct deai *di, size_t size) {
 
 	di_set_type((void *)pm, "deai:module");
 
-	di_member_clone(pm, DEAI_MEMBER_NAME_RAW, (di_object *)di);
+	di_member_clone(pm, DEAI_MEMBER_NAME_RAW, di);
 
 	return (void *)pm;
 }
 
-struct di_module *di_new_module(struct deai *di) {
+struct di_module *di_new_module(di_object *di) {
 	return di_new_module_with_size(di, sizeof(struct di_module));
 }
 

@@ -166,7 +166,7 @@ static inline ffi_status unused di_ffi_prep_cif(ffi_cif *nonnull cif, unsigned i
 	return ret;
 }
 
-struct di_module *nullable di_new_module_with_size(struct deai *nonnull di, size_t size);
+struct di_module *nullable di_new_module_with_size(di_object *nonnull di, size_t size);
 
 di_object *nullable di_try(void (*nonnull func)(void *nullable), void *nullable args);
 void di_collect_garbage(void);

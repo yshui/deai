@@ -1,17 +1,16 @@
-#include <assert.h>
 #include <stdio.h>
 
 #include <deai/builtins/event.h>
 #include <deai/builtins/log.h>
 #include <deai/deai.h>
 #include <deai/helper.h>
+#include <deai/error.h>
 #include <dbus/dbus.h>
 #include <uthash.h>
 
 #include "common.h"
 #include "list.h"
 #include "sedes.h"
-#include "signature.h"
 
 #define DBUS_INTROSPECT_IFACE "org.freedesktop.DBus.Introspectable"
 
@@ -1147,7 +1146,7 @@ static void di_dbus_unit_tests(di_object *unused obj) {
 /// fail. To have complete support, we need to call Introspect and parse the XML
 /// to get the method signature. This is not yet implemented.
 ///
-struct di_module *new_dbus_module(struct deai *di) {
+struct di_module *new_dbus_module(di_object *di) {
 	auto m = di_new_module(di);
 #ifdef UNITTESTS
 	di_method(m, "run_unit_tests", di_dbus_unit_tests);
@@ -1160,5 +1159,4 @@ struct di_module *new_dbus_module(struct deai *di) {
 DEAI_PLUGIN_ENTRY_POINT(di) {
 	auto m = new_dbus_module(di);
 	di_register_module(di, di_string_borrow("dbus"), &m);
-	return 0;
 }

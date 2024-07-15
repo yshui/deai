@@ -42,6 +42,4 @@ DEAI_CPP_PLUGIN_ENTRY_POINT(di) {
 	luam.method_call<void>("load_script", "../tests/invalid.lua"sv);
 	std::cout << log_target_impl.log << '\n';
 	assert(log_target_impl.log == expected_error_log);
-
-	return 0;
 }

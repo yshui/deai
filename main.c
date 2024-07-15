@@ -21,6 +21,7 @@
 
 #include <deai/builtins/log.h>
 #include <deai/deai.h>
+#include <deai/error.h>
 #include <deai/helper.h>
 #include <deai/type.h>
 
@@ -32,7 +33,6 @@
 #include "os.h"
 #include "spawn.h"
 #include "uthash.h"
-#include "utils.h"
 
 static bool load_plugin_impl(struct deai *p, char *sopath) {
 	if (*sopath != '/') {
@@ -53,7 +53,7 @@ static bool load_plugin_impl(struct deai *p, char *sopath) {
 		return false;
 	}
 
-	init_fn(p);
+	init_fn((di_object *)p);
 	return true;
 }
 
@@ -290,7 +290,8 @@ static void kill_all_descendants(void) {
 }
 #endif
 
-void di_dtor(struct deai *di) {
+void di_dtor(di_object *obj) {
+	auto di = (struct deai *)obj;
 	*di->quit = true;
 
 #ifdef HAVE_SETPROCTITLE
@@ -418,8 +419,8 @@ static di_array di_get_argv(struct deai *p) {
 	return ret;
 }
 
-int di_register_module(struct deai *p, di_string name, struct di_module **m) {
-	int ret = di_add_member_move((void *)p, name, (di_type[]){DI_TYPE_OBJECT}, (void **)m);
+int di_register_module(di_object *p, di_string name, struct di_module **m) {
+	int ret = di_add_member_move(p, name, (di_type[]){DI_TYPE_OBJECT}, (void **)m);
 	return ret;
 }
 
@@ -594,16 +595,16 @@ int main(int argc, char *argv[]) {
 	p->loop = EV_DEFAULT;
 	p->exit_code = &exit_code;
 	p->quit = &quit;
-	p->dtor = (void *)di_dtor;
+	p->dtor = di_dtor;
 
 	// We want to be our own process group leader
 	setpgid(0, 0);
 
 	// (1) Initialize builtin modules first
-	di_init_event(p);
-	di_init_log(p);
-	di_init_os(p);
-	di_init_spawn(p);
+	di_init_event((di_object *)p);
+	di_init_log((di_object *)p);
+	di_init_os((di_object *)p);
+	di_init_spawn((di_object *)p);
 
 	if (argc < 2) {
 		printf("Usage: %s <module>.<method> <arg1> <arg2> ...\n", argv[0]);

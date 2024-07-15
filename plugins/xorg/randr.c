@@ -5,11 +5,13 @@
 /* Copyright (c) 2017, Yuxuan Shui <yshuiv7@gmail.com> */
 
 #include <deai/builtins/log.h>
+#include <deai/error.h>
 #include <deai/helper.h>
 #include <deai/type.h>
 
 #include "xorg.h"
 
+#include <limits.h>
 #include <assert.h>
 #include <math.h>
 #include <stdio.h>

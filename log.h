@@ -5,4 +5,5 @@
 /* Copyright (c) 2017, Yuxuan Shui <yshuiv7@gmail.com> */
 
 #pragma once
-void di_init_log(struct deai *di);
+typedef struct di_object di_object;
+void di_init_log(di_object *di);

@@ -38,6 +38,5 @@ auto di_new_hwinfo(Ref<Core> &di) -> Ref<Object> {
 DEAI_CPP_PLUGIN_ENTRY_POINT(di) {
 	auto obj = di_new_hwinfo(di);
 	static_cast<void>(di->register_module("hwinfo", obj));
-	return 0;
 }
 }        // namespace deai::plugins::hwinfo

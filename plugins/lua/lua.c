@@ -41,11 +41,11 @@
 
 #include <deai/builtins/log.h>
 #include <deai/deai.h>
+#include <deai/error.h>
 #include <deai/helper.h>
 
+#include "common.h"
 #include "compat.h"
-#include "config.h"
-#include "utils.h"
 
 #define tmalloc(type, nmem) (type *)calloc(nmem, sizeof(type))
 #define auto __auto_type
@@ -171,7 +171,8 @@ static void **di_lua_checkproxy(lua_State *L, int index) {
 	unreachable();
 }
 
-static void lua_ref_dtor(struct di_lua_ref *t) {
+static void lua_ref_dtor(di_object *obj) {
+	auto t = (struct di_lua_ref *)obj;
 	scoped_di_object *state_obj = NULL;
 	// The state object might already be finalized if we are part of
 	// a reference cycle.
@@ -603,7 +604,8 @@ const luaL_Reg di_lua_di_methods[] = {
     {0, 0},
 };
 
-static void lua_state_dtor(struct di_lua_state *obj) {
+static void lua_state_dtor(di_object *obj_) {
+	auto obj = (struct di_lua_state *)obj_;
 	lua_close(obj->L);
 	obj->L = NULL;
 }
@@ -868,7 +870,8 @@ static bool di_lua_checkarray(lua_State *L, int index, int *nelem, di_type *elem
 	return true;
 }
 
-static int call_lua_function(struct di_lua_ref *ref, di_type *rt, di_value *ret, di_tuple t) {
+static int call_lua_function(di_object *ref_, di_type *rt, di_value *ret, di_tuple t) {
+	auto ref = (struct di_lua_ref *)ref_;
 	struct di_variant *vars = t.elements;
 
 	scoped_di_object *state_obj = NULL;
@@ -1472,7 +1475,7 @@ static di_object *di_lua_as_di_object(di_object * /*lua*/, di_object *obj) {
 /// Additionally, we don't know what exactly to do with an empty table. Should it be a
 /// table or an array? Right now, it's treated as a table, thus translates to an object in
 /// deai. So if you want to pass an empty array as argument, you would have to pass "nil".
-static struct di_module *di_new_lua(struct deai *di) {
+static struct di_module *di_new_lua(di_object *di) {
 	auto m = di_new_module(di);
 
 	di_method(m, "load_script", di_lua_load_script, di_string);
@@ -1492,5 +1495,4 @@ static struct di_module *di_new_lua(struct deai *di) {
 DEAI_PLUGIN_ENTRY_POINT(di) {
 	auto m = di_new_lua(di);
 	di_register_module(di, di_string_borrow("lua"), &m);
-	return 0;
 }

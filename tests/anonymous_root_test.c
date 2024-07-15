@@ -1,6 +1,5 @@
 #include <deai/deai.h>
 #include <deai/helper.h>
-#include <assert.h>
 
 #include "common.h"
 
@@ -26,5 +25,4 @@ DEAI_PLUGIN_ENTRY_POINT(di) {
 	DI_CHECK(object == NULL);
 
 	di_drop_weak_ref(&weak);
-	return 0;
 }

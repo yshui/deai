@@ -12,11 +12,11 @@
 
 #include <deai/builtins/log.h>
 #include <deai/deai.h>
+#include <deai/error.h>
 #include <deai/helper.h>
 
 #include "di_internal.h"
 #include "log.h"
-#include "utils.h"
 
 struct di_log {
 	struct di_module;
@@ -115,8 +115,8 @@ static int file_target_write(struct log_file *lf, di_string log) {
 	return rc;
 }
 
-static void file_target_dtor(struct log_file *lf) {
-	fclose(lf->f);
+static void file_target_dtor(di_object *lf) {
+	fclose(((struct log_file *)lf)->f);
 }
 
 /// Log target for file
@@ -190,9 +190,8 @@ int di_log_va(di_object *o, int log_level, const char *fmt, ...) {
 		di_type return_type;
 		di_value return_value;
 		const char *level_string = level_tostring(log_level);
-		di_call_object(o, &return_type, &return_value, DI_TYPE_OBJECT, o,
-		               DI_TYPE_STRING_LITERAL, level_string, DI_TYPE_STRING, log,
-		               DI_LAST_TYPE);
+		di_call_object(o, &return_type, &return_value, DI_TYPE_OBJECT, o, DI_TYPE_STRING_LITERAL,
+		               level_string, DI_TYPE_STRING, log, DI_LAST_TYPE);
 		DI_CHECK(return_type == DI_TYPE_NINT);
 		ret = return_value.nint;
 	}
@@ -244,7 +243,7 @@ void log_dtor(di_object *unused _) {
 /// :code:`write(string)` method could work. This module provides :lua:meth:`file_target`
 /// and :lua:meth:`stderr_target` for creating log targets that log to a file and stderr
 /// respectively.
-void di_init_log(struct deai *di) {
+void di_init_log(di_object *di) {
 	auto lm = di_new_module_with_size(di, sizeof(struct di_log));
 	if (!lm) {
 		return;

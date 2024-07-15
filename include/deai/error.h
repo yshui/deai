@@ -1,5 +1,6 @@
 #pragma once
 #include "common.h"
+typedef struct di_object di_object;
 
 PUBLIC_DEAI_API di_object *ret_nonnull di_new_error(const char *nonnull fmt, ...);
 PUBLIC_DEAI_API bool di_is_error(di_object *nonnull obj);

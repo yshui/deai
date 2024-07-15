@@ -1,8 +1,7 @@
 #include <deai/deai.h>
 #include <deai/helper.h>
-#include <assert.h>
-
-#include "common.h"
+#include <deai/object.h>
+#include "common.h" // IWYU pragma: keep
 
 DEAI_PLUGIN_ENTRY_POINT(di) {
 	auto object = di_new_object_with_type(di_object);
@@ -13,5 +12,4 @@ DEAI_PLUGIN_ENTRY_POINT(di) {
 	di_unref_object(handler);
 	di_unref_object(object);
 	di_unref_object(listen_handle);
-	return 0;
 }

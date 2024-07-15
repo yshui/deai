@@ -51,5 +51,4 @@ DEAI_CPP_PLUGIN_ENTRY_POINT(di) {
 	})();
 	object.emit("test_signal", 20);        // NOLINT
 	assert(result == 20);
-	return 0;
 }

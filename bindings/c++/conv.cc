@@ -4,14 +4,14 @@
 namespace {
 
 struct DeaiCheckedIntConverter {
-	private:
+private:
 	union {
 		uint64_t u;
 		int64_t i;
 	};
 	bool is_unsigned;
 
-	public:
+public:
 	DeaiCheckedIntConverter(int64_t value) : i(value), is_unsigned(false) {
 	}
 	DeaiCheckedIntConverter(uint64_t value) : u(value), is_unsigned(true) {
@@ -78,13 +78,13 @@ struct DeaiStringLiteralConverter {
 	operator const char *() const {
 		return value;
 	}
-	operator ::deai::c_api::di_string() const {
+	operator ::deai::c_api::String() const {
 		if constexpr (borrow) {
-			return ::deai::c_api::di_string_borrow(value);
+			return ::deai::c_api::string::borrow(value);
 		}
 		// string literal doesn't have a transferrable ownership,
 		// so we have to create a fully owned copy if we want to move it.
-		return ::deai::c_api::di_string_ndup(value, ::strlen(value));
+		return ::deai::c_api::string::ndup(value, ::strlen(value));
 	}
 };
 
@@ -93,27 +93,27 @@ struct DeaiStringLiteralConverter {
 namespace deai::type::conv::c_api {
 
 template <bool borrow>
-auto DeaiVariantConverter<borrow>::tuple_to_array() -> std::optional<::deai::c_api::di_array> {
+auto DeaiVariantConverter<borrow>::tuple_to_array() -> std::optional<::di_array> {
 	// UNSAFE! this->type must be di_type::TUPLE
 	auto &tuple = value().tuple;
 	if (tuple.length == 0) {
-		return ::deai::c_api::di_array{0, nullptr, di_type::NIL};
+		return ::di_array{0, nullptr, di_type::NIL};
 	}
 	if (tuple.length == 1) {
-		return ::deai::c_api::di_array{1, tuple.elements[0].value, tuple.elements[0].type};
+		return ::di_array{1, tuple.elements[0].value, tuple.elements[0].type};
 	}
 	if constexpr (borrow) {
 		return std::nullopt;
 	}
 	auto elem_type = tuple.elements[0].type;
-	const auto elem_size = ::deai::c_api::di_sizeof_type(elem_type);
+	const auto elem_size = ::deai::c_api::type::sizeof_(elem_type);
 	for (size_t i = 1; i < tuple.length; i++) {
 		auto elem_i_type = tuple.elements[i].type;
 		if (elem_i_type != elem_type) {
 			return std::nullopt;
 		}
 	}
-	::deai::c_api::di_array ret{tuple.length, nullptr, elem_type};
+	::di_array ret{tuple.length, nullptr, elem_type};
 	ret.arr = ::malloc(tuple.length * elem_size);
 	for (size_t i = 0; i < tuple.length; i++) {
 		auto *ptr = static_cast<std::byte *>(ret.arr) + i * elem_size;
@@ -127,28 +127,28 @@ auto DeaiVariantConverter<borrow>::tuple_to_array() -> std::optional<::deai::c_a
 	return ret;
 }
 template <bool borrow>
-auto DeaiVariantConverter<borrow>::array_to_tuple() -> std::optional<::deai::c_api::di_tuple> {
+auto DeaiVariantConverter<borrow>::array_to_tuple() -> std::optional<::di_tuple> {
 	// UNSAFE! this->type must be di_type::ARRAY
 	auto &array = value().array;
 	if (array.length == 0) {
-		return ::deai::c_api::di_tuple{0, nullptr};
+		return ::di_tuple{0, nullptr};
 	}
 	if constexpr (borrow) {
 		return std::nullopt;
 	}
 	auto elem_type = array.elem_type;
-	auto elem_size = ::deai::c_api::di_sizeof_type(elem_type);
-	auto *elements = static_cast<::deai::c_api::di_variant *>(
-	    ::malloc(array.length * sizeof(::deai::c_api::di_variant)));
+	auto elem_size = ::deai::c_api::type::sizeof_(elem_type);
+	auto *elements =
+	    static_cast<::di_variant *>(::malloc(array.length * sizeof(::di_variant)));
 	for (size_t i = 0; i < array.length; i++) {
 		auto *ptr = reinterpret_cast<std::byte *>(array.arr) + i * elem_size;
-		auto *ptr_cloned = reinterpret_cast<::deai::c_api::di_value *>(::malloc(elem_size));
+		auto *ptr_cloned = reinterpret_cast<::di_value *>(::malloc(elem_size));
 		::memcpy(ptr_cloned, ptr, elem_size);
-		elements[i] = ::deai::c_api::di_variant{ptr_cloned, elem_type};
+		elements[i] = ::di_variant{ptr_cloned, elem_type};
 	}
 	::free(array.arr);
 	type = di_type::NIL;
-	return ::deai::c_api::di_tuple{array.length, elements};
+	return ::di_tuple{array.length, elements};
 }
 /// Unwrap the current converter, and continue the conversion with the inner value.
 /// The current converter will be emptied.
@@ -160,9 +160,9 @@ auto DeaiVariantConverter<borrow>::array_to_tuple() -> std::optional<::deai::c_a
 /// - An array with a single element
 template <bool borrow>
 template <typename T>
-    requires id::DeaiVerbatim<T> || DeaiNumber<T>
+    requires typeinfo::Verbatim<T> || DeaiNumber<T>
 auto DeaiVariantConverter<borrow>::try_from_inner() -> std::optional<T> {
-	using ::deai::c_api::di_value;
+	using ::di_value;
 	auto &v = value();
 	di_value *tmp_value = nullptr;
 	di_type tmp_type = di_type::NIL;
@@ -173,7 +173,7 @@ auto DeaiVariantConverter<borrow>::try_from_inner() -> std::optional<T> {
 		tmp_value = v.tuple.elements[0].value;
 		tmp_type = v.tuple.elements[0].type;
 	} else if (type == di_type::ARRAY && v.array.length == 1) {
-		tmp_value = reinterpret_cast<::deai::c_api::di_value *>(v.array.arr);
+		tmp_value = reinterpret_cast<::deai::c_api::Value *>(v.array.arr);
 		tmp_type = v.array.elem_type;
 	} else {
 		return std::nullopt;
@@ -186,8 +186,11 @@ auto DeaiVariantConverter<borrow>::try_from_inner() -> std::optional<T> {
 		type = di_type::NIL;
 
 		di_value new_value{};
-		// Have to use memcpy instead of assigning, because `tmp_value` might not be "full sized".
-		::memcpy(&new_value, tmp_value, ::deai::c_api::di_sizeof_type(tmp_type));
+		auto type_size = ::deai::c_api::type::sizeof_(tmp_type);
+		if (type_size > 0) {
+			// Have to use memcpy instead of assigning, because `tmp_value` might not be "full sized".
+			::memcpy(&new_value, tmp_value, type_size);
+		}
 		::free(tmp_value);
 		return DeaiVariantConverter{std::move(new_value), std::move(tmp_type)};
 	} else {
@@ -221,19 +224,18 @@ DeaiVariantConverter<borrow>::operator std::optional<T>() {
 }
 
 template <bool borrow>
-DeaiVariantConverter<borrow>::operator std::optional<::deai::c_api::di_variant>() {
+DeaiVariantConverter<borrow>::operator std::optional<::di_variant>() {
 	if constexpr (borrow) {
-		return ::deai::c_api::di_variant{&value(), type};
+		return ::di_variant{&value(), type};
 	}
 
-	::deai::c_api::di_variant ret{nullptr, type};
-	ret.value = reinterpret_cast<::deai::c_api::di_value *>(
-	    ::malloc(::deai::c_api::di_sizeof_type(type)));
-	::memcpy(ret.value, &value(), ::deai::c_api::di_sizeof_type(type));
+	::di_variant ret{nullptr, type};
+	ret.value = reinterpret_cast<::di_value *>(::malloc(::deai::c_api::type::sizeof_(type)));
+	::memcpy(ret.value, &value(), ::deai::c_api::type::sizeof_(type));
 	return ret;
 }
 template <bool borrow>
-DeaiVariantConverter<borrow>::operator std::optional<::deai::c_api::di_string>() {
+DeaiVariantConverter<borrow>::operator std::optional<::deai::c_api::String>() {
 	if (type == di_type::STRING) {
 		type = di_type::NIL;
 		return value().string;
@@ -241,7 +243,7 @@ DeaiVariantConverter<borrow>::operator std::optional<::deai::c_api::di_string>()
 	if (type == di_type::STRING_LITERAL) {
 		return DeaiStringLiteralConverter<borrow>(value().string_literal);
 	}
-	return try_from_inner<::deai::c_api::di_string>();
+	return try_from_inner<::deai::c_api::String>();
 }
 template <bool borrow>
 DeaiVariantConverter<borrow>::operator std::optional<const char *>() {
@@ -251,72 +253,72 @@ DeaiVariantConverter<borrow>::operator std::optional<const char *>() {
 	return try_from_inner<const char *>();
 }
 template <bool borrow>
-DeaiVariantConverter<borrow>::operator std::optional<::deai::c_api::di_array>() {
+DeaiVariantConverter<borrow>::operator std::optional<::di_array>() {
 	if (type == di_type::ARRAY) {
 		type = di_type::NIL;
 		return value().array;
 	}
 	if (type == di_type::NIL) {
-		return ::deai::c_api::di_array{0, nullptr, di_type::NIL};
+		return ::di_array{0, nullptr, di_type::NIL};
 	}
 	if (type == di_type::EMPTY_OBJECT) {
-		return ::deai::c_api::di_array{0, nullptr, di_type::NIL};
+		return ::di_array{0, nullptr, di_type::NIL};
 	}
 	if (type == di_type::TUPLE) {
 		return tuple_to_array();
 	}
-	return try_from_inner<::deai::c_api::di_array>();
+	return try_from_inner<::di_array>();
 }
 template <bool borrow>
-DeaiVariantConverter<borrow>::operator std::optional<::deai::c_api::di_tuple>() {
+DeaiVariantConverter<borrow>::operator std::optional<::di_tuple>() {
 	if (type == di_type::TUPLE) {
 		type = di_type::NIL;
 		return value().tuple;
 	}
 	if (type == di_type::NIL) {
-		return ::deai::c_api::di_tuple{0, nullptr};
+		return ::di_tuple{0, nullptr};
 	}
 	if (type == di_type::EMPTY_OBJECT) {
-		return ::deai::c_api::di_tuple{0, nullptr};
+		return ::di_tuple{0, nullptr};
 	}
 	if (type == di_type::ARRAY) {
 		return array_to_tuple();
 	}
-	return try_from_inner<::deai::c_api::di_tuple>();
+	return try_from_inner<::di_tuple>();
 }
 template <bool borrow>
-DeaiVariantConverter<borrow>::operator std::optional<::deai::c_api::di_object *>() {
+DeaiVariantConverter<borrow>::operator std::optional<::di_object *>() {
 	if (type == di_type::OBJECT || type == di_type::EMPTY_OBJECT) {
 		type = di_type::NIL;
 		return value().object;
 	}
 	if (type == di_type::WEAK_OBJECT) {
 		if constexpr (!borrow) {
-			auto ret = ::deai::c_api::di_upgrade_weak_ref(value().weak_object);
+			auto ret = ::di_upgrade_weak_ref(value().weak_object);
 			if (ret == nullptr) {
 				return std::nullopt;
 			}
 			return ret;
 		}
 	}
-	return try_from_inner<::deai::c_api::di_object *>();
+	return try_from_inner<::di_object *>();
 }
 template <bool borrow>
-DeaiVariantConverter<borrow>::operator std::optional<::deai::c_api::di_weak_object *>() {
+DeaiVariantConverter<borrow>::operator std::optional<::di_weak_object *>() {
 	if (type == di_type::WEAK_OBJECT) {
 		type = di_type::NIL;
 		return value().weak_object;
 	}
 	if (type == di_type::OBJECT || type == di_type::EMPTY_OBJECT) {
 		if constexpr (borrow) {
-			return reinterpret_cast<::deai::c_api::di_weak_object *>(value().object);
+			return reinterpret_cast<::di_weak_object *>(value().object);
 		}
-		return ::deai::c_api::di_weakly_ref_object(value().object);
+		return ::di_weakly_ref_object(value().object);
 	}
 	if (type == di_type::NIL) {
-		return ::deai::c_api::dead_weak_ref;
+		return ::dead_weak_ref;
 	}
-	return try_from_inner<::deai::c_api::di_weak_object *>();
+	return try_from_inner<::di_weak_object *>();
 }
 template <bool borrow>
 DeaiVariantConverter<borrow>::operator std::optional<void *>() {
@@ -350,12 +352,10 @@ template DeaiVariantConverter<false>::operator std::optional<double>();
 }        // namespace deai::type::conv::c_api
 
 namespace {
-using ::deai::c_api::di_type;
-using ::deai::c_api::di_value;
 using ::deai::type::conv::c_api::DeaiVariantConverter;
 template <bool borrow>
-auto di_type_conversion_impl(DeaiVariantConverter<borrow> &&converter, di_type to_type,
-                             di_value &to) -> int {
+auto di_type_conversion_impl(DeaiVariantConverter<borrow> &&converter, ::di_type to_type,
+                             ::di_value &to) -> int {
 #define CONVERT_TO(T, field)                                                             \
 	case di_type::T: {                                                                   \
 		std::optional<decltype(to.field)> tmp = converter;                               \
@@ -395,12 +395,10 @@ auto di_type_conversion_impl(DeaiVariantConverter<borrow> &&converter, di_type t
 }        // namespace
 
 extern "C" {
-using ::deai::c_api::di_type;
-using ::deai::c_api::di_value;
 auto di_type_conversion(di_type from_type, di_value *from, di_type to_type, di_value *to,
                         bool borrowing) -> int {
 	if (from_type == to_type) {
-		::memcpy(to, from, ::deai::c_api::di_sizeof_type(from_type));
+		::memcpy(to, from, ::deai::c_api::type::sizeof_(from_type));
 		return 0;
 	}
 	if (borrowing) {

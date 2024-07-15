@@ -8,6 +8,7 @@
 #include <deai/builtins/log.h>
 #include <deai/deai.h>
 #include <deai/helper.h>
+#include <deai/error.h>
 
 #include <assert.h>
 #include <stdio.h>
@@ -34,7 +35,8 @@ define_trivial_cleanup(xcb_generic_error_t);
 /// Disconnecting from the X server will stop all related event sources. All objects
 /// coming from this connection will stop generating any events after this.
 /// You should stop using the Connection object after you have called disconnect.
-static void xorg_disconnect(di_xorg_connection *xc) {
+static void xorg_disconnect(di_object *obj) {
+	auto xc = (di_xorg_connection *)obj;
 	if (xc->xkb_ctx) {
 		xkb_context_unref(xc->xkb_ctx);
 	}
@@ -728,7 +730,7 @@ static di_object *di_xorg_connect(di_object *x) {
 /// Xorg
 ///
 /// EXPORT: xorg: deai:module
-static struct di_module *new_xorg_module(struct deai *di) {
+static struct di_module *new_xorg_module(di_object *di) {
 	auto x = di_new_module(di);
 
 	di_method(x, "connect", di_xorg_connect);
@@ -739,5 +741,4 @@ static struct di_module *new_xorg_module(struct deai *di) {
 DEAI_PLUGIN_ENTRY_POINT(di) {
 	auto x = new_xorg_module(di);
 	di_register_module(di, di_string_borrow("xorg"), &x);
-	return 0;
 }

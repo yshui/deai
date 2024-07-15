@@ -2,9 +2,6 @@
 
 #include <libudev.h>
 
-#include "common.h"
-
-using namespace ::deai::c_api;
 using namespace ::deai;
 
 namespace {
@@ -151,6 +148,5 @@ auto di_new_udev(::deai::Ref<::deai::Core> &di) {
 DEAI_CPP_PLUGIN_ENTRY_POINT(di) {
 	auto obj = di_new_udev(di);
 	static_cast<void>(di->register_module("udev", obj));
-	return 0;
 }
 }        // namespace

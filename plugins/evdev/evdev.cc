@@ -9,7 +9,6 @@
 #include "common.h"
 
 namespace {
-using namespace ::deai::c_api;
 using namespace ::deai;
 
 struct Device {
@@ -22,8 +21,7 @@ struct Device {
 	Device(const std::string &dev_node) : fd(::open(dev_node.c_str(), O_RDONLY)) {
 		auto object_ref = util::unsafe_to_object_ref(*this);
 		if (fd < 0) {
-			object_ref["errmsg"] =
-			    Variant::from(std::string{"Failed to open device"});
+			object_ref["errmsg"] = Variant::from(std::string{"Failed to open device"});
 		} else {
 			util::add_method<&Device::id>(*this, "__get_id");
 			util::add_method<&Device::name>(*this, "__get_name");
@@ -88,7 +86,7 @@ public:
 auto Device::id() const -> Ref<Object> {
 	::input_id id;
 	if (::ioctl(fd, EVIOCGID, &id) < 0) {
-		return di_new_error("Failed to get device id information");
+		return ::di_new_error("Failed to get device id information");
 	}
 	return util::new_object<InputId>(id);
 }
@@ -101,7 +99,7 @@ auto Device::name() const -> Variant {
 	while (true) {
 		auto copied = ::ioctl(fd, EVIOCGNAME(buf.size()), buf.data());
 		if (copied < 0) {
-			return Variant::from(di_new_error("Failed to get device name"));
+			return Variant::from(::di_new_error("Failed to get device name"));
 		}
 		// Expand the buffer until the name fits
 		if (static_cast<size_t>(copied) == buf.size()) {
@@ -143,6 +141,5 @@ auto di_new_evdev(::deai::Ref<::deai::Core> &di) {
 DEAI_CPP_PLUGIN_ENTRY_POINT(di) {
 	auto obj = di_new_evdev(di);
 	static_cast<void>(di->register_module("evdev", obj));
-	return 0;
 }
 }        // namespace

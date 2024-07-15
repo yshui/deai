@@ -16,13 +16,12 @@
 #endif
 
 #include <deai/builtins/spawn.h>
+#include <deai/error.h>
 #include <deai/helper.h>
 
 #include "di_internal.h"
 #include "spawn.h"
 #include "string_buf.h"
-#include "uthash.h"
-#include "utils.h"
 
 /// Object type: ChildProcess
 ///
@@ -413,7 +412,7 @@ di_object *di_spawn_run(struct di_spawn *p, di_array argv, bool ignore_output) {
 /// Spawn child processes
 ///
 /// EXPORT: spawn: deai:module
-void di_init_spawn(struct deai *di) {
+void di_init_spawn(di_object *di) {
 	// Become subreaper
 #ifdef __FreeBSD__
 	int ret = procctl(P_PID, getpid(), PROC_REAP_ACQUIRE, NULL);

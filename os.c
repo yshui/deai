@@ -10,9 +10,9 @@
 
 #include <deai/deai.h>
 #include <deai/helper.h>
-#include "common.h"
+#include <deai/object.h>
 
-#include "os.h"
+#include "common.h"        // IWYU pragma: keep
 
 static struct di_variant di_env_get(struct di_module *m, di_string name_) {
 	struct di_variant ret = {
@@ -93,7 +93,7 @@ static di_array di_listdir(di_object *o unused, di_string path) {
 /// This object exposes environment variables as its members. You can get/set environment
 /// variables by reading/changing its member. This will affect subsequently spawned
 /// processes.
-void di_init_os(struct deai *di) {
+void di_init_os(di_object *di) {
 	struct di_module *m = di_new_module(di);
 
 	di_object *o = di_new_object_with_type(di_object);

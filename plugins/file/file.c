@@ -4,16 +4,18 @@
 
 /* Copyright (c) 2017, Yuxuan Shui <yshuiv7@gmail.com> */
 
-#include <limits.h>
+#include <limits.h> // IWYU pragma: keep
 #include <sys/inotify.h>
 #include <unistd.h>
 
 #include <deai/builtins/event.h>
 #include <deai/deai.h>
 #include <deai/helper.h>
+#include <deai/error.h>
+#include <deai/object.h>
 
+#include "common.h"
 #include "uthash.h"
-#include "utils.h"
 
 struct di_file_watch_entry {
 	const char *fname;
@@ -318,7 +320,7 @@ static di_object *di_file_new_watch(struct di_module *f, di_array paths) {
 /// EXPORT: file: deai:module
 ///
 /// This module allows you to create event sources for monitoring file changes.
-static struct di_module *di_new_file(struct deai *di) {
+static struct di_module *di_new_file(di_object *di) {
 	auto fm = di_new_module(di);
 	di_method(fm, "watch", di_file_new_watch, di_array);
 	return fm;
@@ -326,5 +328,4 @@ static struct di_module *di_new_file(struct deai *di) {
 DEAI_PLUGIN_ENTRY_POINT(di) {
 	auto fm = di_new_file(di);
 	di_register_module(di, di_string_borrow("file"), &fm);
-	return 0;
 }

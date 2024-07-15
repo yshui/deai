@@ -4,7 +4,6 @@
 
 #include <deai/c++/deai.hh>
 
-using namespace deai::c_api;
 using namespace deai;
 
 namespace {
@@ -151,6 +150,5 @@ auto di_new_utils(Ref<Core> &di) -> Ref<Object> {
 DEAI_CPP_PLUGIN_ENTRY_POINT(di) {
 	auto obj = di_new_utils(di);
 	static_cast<void>(di->register_module("misc", obj));
-	return 0;
 }
 }        // namespace

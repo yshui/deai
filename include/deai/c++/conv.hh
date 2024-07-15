@@ -24,88 +24,93 @@ constexpr auto array_cat(std::array<Element, length1> a, std::array<Element, len
 }
 
 inline auto string_to_borrowed_deai_value(const std::string &str) {
-	return c_api::di_string{str.c_str(), str.size()};
+	return ::deai::c_api::String{str.c_str(), str.size()};
 }
 
-inline auto string_to_borrowed_deai_value(const c_api::di_string &str) {
+inline auto string_to_borrowed_deai_value(const ::deai::c_api::String &str) {
 	return str;
 }
 
 inline auto string_to_borrowed_deai_value(const std::string_view &str) {
-	return c_api::di_string{str.data(), str.size()};
+	return ::deai::c_api::String{str.data(), str.size()};
 }
 
-template <typename T, size_t length, c_api::di_type type = id::deai_typeof<T>::value>
-auto array_to_borrowed_deai_value(const std::array<T, length> &arr)
-    -> std::enable_if<id::is_basic_deai_type(type), c_api::di_array> {
-	return c_api::di_array{length, arr.data(), type};
+template <typename T, size_t length>
+    requires(typeinfo::is_basic_deai_type(typeinfo::of<T>::value))
+auto array_to_borrowed_deai_value(const std::array<T, length> &arr) -> ::deai::c_api::Array {
+	return ::deai::c_api::Array{length, arr.data(), typeinfo::of<T>::value};
 }
 
-template <id::DeaiVerbatim T, c_api::di_type type = id::deai_typeof<T>::value>
-auto array_to_borrowed_deai_value(const std::vector<T> &arr) -> c_api::di_array {
-	return c_api::di_array{arr.size(), arr.data(), type};
+template <typeinfo::Verbatim T>
+auto array_to_borrowed_deai_value(const std::vector<T> &arr) -> ::deai::c_api::Array {
+	return ::deai::c_api::Array{arr.size(), arr.data(), typeinfo::of<T>::value};
 }
 
-inline auto array_to_borrowed_deai_value(const c_api::di_array &arr) {
+inline auto array_to_borrowed_deai_value(const ::deai::c_api::Array &arr) {
 	return arr;
 }
 
 /// Borrow a C++ value into a deai value
-template <typename T, c_api::di_type type = id::deai_typeof<typename std::remove_reference<T>::type>::value>
+template <typename T>
 auto to_borrowed_deai_value(const T &input) {
-	if constexpr (id::is_verbatim_v<typename std::remove_reference<T>::type>) {
+	static constexpr auto type = typeinfo::of<std::remove_cvref_t<T>>::value;
+	if constexpr (typeinfo::is_verbatim_v<std::remove_cvref_t<T>>) {
 		return input;
-	} else if constexpr (type == c_api::di_type::OBJECT) {
+	} else if constexpr (type == c_api::Type::OBJECT) {
 		return input.raw();
-	} else if constexpr (type == c_api::di_type::ARRAY) {
+	} else if constexpr (type == c_api::Type::ARRAY) {
 		return array_to_borrowed_deai_value(input);
-	} else if constexpr (type == c_api::di_type::STRING) {
+	} else if constexpr (type == c_api::Type::STRING) {
 		return string_to_borrowed_deai_value(input);
 	}
 	unreachable();
 }
 
 /// Borrow a C++ value into a deai variant
-template <typename T, c_api::di_type type = id::deai_typeof<typename std::remove_reference<T>::type>::value>
-auto to_borrowed_deai_variant(const T &input) -> c_api::di_variant {
-	auto *value_ptr = reinterpret_cast<c_api::di_value *>(::malloc(sizeof(c_api::di_value)));
+template <typename T>
+auto to_borrowed_deai_variant(const T &input) -> ::di_variant {
+	static constexpr auto type = typeinfo::of<std::remove_cvref_t<T>>::value;
+	auto *value_ptr = reinterpret_cast<::di_value *>(::malloc(sizeof(::di_value)));
 	auto value = to_borrowed_deai_value(input);
 	::memcpy(value_ptr, &value, sizeof(value));
 	return {.value = value, .type = type};
 }
 
-inline auto string_to_owned_deai_value(std::string &&input) -> c_api::di_string {
+inline auto string_to_owned_deai_value(std::string &&input) -> ::deai::c_api::String {
 	auto moved = std::move(input);
-	return c_api::di_string_ndup(moved.c_str(), moved.size());
+	return ::deai::c_api::string::ndup(moved.c_str(), moved.size());
 }
 
-template <id::DeaiConvertible T, c_api::di_type Type = id::deai_typeof<T>::value>
-inline auto array_to_owned_deai_value(std::vector<T> arr) -> c_api::di_array;
+template <typeinfo::Convertible T>
+inline auto array_to_owned_deai_value(std::vector<T> arr) -> ::deai::c_api::Array;
 
 /// Convert an owned C++ value to an owned deai value. Mostly the same as the borrowed
 /// case, except for strings and arrays
-template <typename T, c_api::di_type type = id::deai_typeof<std::remove_cvref_t<T>>::value>
+template <typename T>
+    requires typeinfo::Convertible<std::remove_cvref_t<T>>
 auto to_owned_deai_value(T &&input) {
-	if constexpr (id::is_verbatim_v<std::remove_cvref_t<T>>) {
+	static constexpr auto type = typeinfo::of<std::remove_cvref_t<T>>::value;
+	if constexpr (typeinfo::is_verbatim_v<std::remove_cvref_t<T>>) {
 		return input;
-	} else if constexpr (type == c_api::di_type::VARIANT) {
-		return static_cast<c_api::di_variant>(std::forward<T>(input));
-	} else if constexpr (type == c_api::di_type::OBJECT || type == c_api::di_type::WEAK_OBJECT) {
+	} else if constexpr (type == c_api::Type::VARIANT) {
+		return static_cast<::di_variant>(std::forward<T>(input));
+	} else if constexpr (type == c_api::Type::OBJECT || type == c_api::Type::WEAK_OBJECT) {
 		auto tmp_object = std::forward<T>(input);        // Copy or move the object
 		return std::move(tmp_object).release();
-	} else if constexpr (type == c_api::di_type::STRING) {
+	} else if constexpr (type == c_api::Type::STRING) {
 		return string_to_owned_deai_value(std::forward<T>(input));
-	} else if constexpr (type == c_api::di_type::ARRAY) {
+	} else if constexpr (type == c_api::Type::ARRAY) {
 		return array_to_owned_deai_value(input);
 	}
 	unreachable();
 }
-template <id::DeaiConvertible T, c_api::di_type Type>
-inline auto array_to_owned_deai_value(std::vector<T> arr) -> c_api::di_array {
+template <typeinfo::Convertible T>
+inline auto array_to_owned_deai_value(std::vector<T> arr) -> c_api::Array {
+	static constexpr auto type = typeinfo::of<T>::value;
 	if (arr.empty()) {
-		return c_api::di_array{0, nullptr, c_api::di_type::NIL};
+		return ::deai::c_api::Array{0, nullptr, ::di_type::NIL};
 	}
-	auto elem_size = c_api::di_sizeof_type(Type);
+	auto elem_size = c_api::type::sizeof_(type);
 	auto data = ::malloc(arr.size() * elem_size);
 	if (data == nullptr) {
 		throw std::bad_alloc();
@@ -115,7 +120,7 @@ inline auto array_to_owned_deai_value(std::vector<T> arr) -> c_api::di_array {
 		auto value = to_owned_deai_value(std::move(arr[i]));
 		::memcpy(ptr, &value, elem_size);
 	}
-	return c_api::di_array{arr.size(), data, Type};
+	return ::deai::c_api::Array{arr.size(), data, type};
 }
 
 template <typename T>
@@ -133,22 +138,21 @@ struct to_owned_deai_type_helper<void> {
 
 template <typename T>
 using to_deai_ctype =
-    typename id::deai_ctype_t<id::deai_typeof<std::remove_cvref_t<T>>::value>;
+    typename typeinfo::deai_ctype_t<typeinfo::of<std::remove_cvref_t<T>>::value>;
 
 template <typename T>
 using to_owned_deai_type = typename to_owned_deai_type_helper<T>::type;
 
 template <typename T>
-auto to_borrowed_deai_value_union(const T &input) -> c_api::di_value {
-	c_api::di_value ret;
+auto to_borrowed_deai_value_union(const T &input) -> ::di_value {
+	::di_value ret;
 	auto tmp = to_borrowed_deai_value(input);
 	std::memcpy(&ret, &tmp, sizeof(tmp));
 	return ret;
 }
 
 template <typename... Args>
-auto to_borrowed_deai_values(const Args &...args)
-    -> std::array<c_api::di_value, sizeof...(Args)> {
+auto to_borrowed_deai_values(const Args &...args) -> std::array<::di_value, sizeof...(Args)> {
 	return std::array{to_borrowed_deai_value_union(args)...};
 }
 
@@ -160,49 +164,49 @@ auto to_borrowed_deai_values(const Args &...args)
 /// Also, the deai value might be cloned nonetheless. For example, a di_array has to be
 /// cloned into a vector.
 template <typename T>
-    requires id::DeaiVerbatim<std::remove_reference_t<T>>
+    requires typeinfo::Verbatim<std::remove_reference_t<T>>
 auto to_borrowed_cpp_value(T &&arg) -> T {
 	return std::forward<T>(arg);
 }
 
-inline auto to_borrowed_cpp_value(c_api::di_array arg);
-inline auto to_borrowed_cpp_value(c_api::di_string arg);
+inline auto to_borrowed_cpp_value(::deai::c_api::Array arg);
+inline auto to_borrowed_cpp_value(::deai::c_api::String arg);
 
-template <typename T, c_api::di_type Type = id::deai_typeof<T>::value>
+template <typeinfo::Convertible T>
 auto variant_to_borrowed_cpp_value(void *ptr_) {
-	auto *ptr = reinterpret_cast<id::deai_ctype_t<Type> *>(ptr_);
+	auto *ptr = reinterpret_cast<to_deai_ctype<T> *>(ptr_);
 	return to_borrowed_cpp_value(*ptr);
 }
 
 struct DeaiBorrowedArrayConverter {
-	c_api::di_array arg;
+	::deai::c_api::Array arg;
 	// If the target is a std::span of raw deai types, then we can convert it
 	// directly. Otherwise we have to create a std::vector and copy each element.
-	template <id::DeaiVerbatim T>
+	template <typeinfo::Verbatim T>
 	operator std::span<T>() {
 		return {static_cast<T *>(arg.arr), arg.length};
 	}
-	template <id::DeaiConvertible T>
+	template <typeinfo::Convertible T>
 	operator std::vector<T>() const;
-	operator c_api::di_array() const {
+	operator ::deai::c_api::Array() const {
 		return arg;
 	}
 };
 
-inline auto to_borrowed_cpp_value(c_api::di_array arg) {
+inline auto to_borrowed_cpp_value(::deai::c_api::Array arg) {
 	return DeaiBorrowedArrayConverter{arg};
 }
 
-inline auto to_borrowed_cpp_value(c_api::di_string arg) {
+inline auto to_borrowed_cpp_value(::deai::c_api::String arg) {
 	struct DeaiStringConvert {
-		c_api::di_string arg;
+		::deai::c_api::String arg;
 		operator std::string_view() const {
 			return {arg.data, arg.length};
 		}
 		operator std::string() const {
 			return {arg.data, arg.length};
 		}
-		operator c_api::di_string() const {
+		operator ::deai::c_api::String() const {
 			return arg;
 		}
 	};
@@ -231,7 +235,7 @@ private:
 	template <typename T>
 	    requires(!borrow)
 	static auto ref_if_borrow() -> T;
-	using value_type = decltype(ref_if_borrow<::deai::c_api::di_value>());
+	using value_type = decltype(ref_if_borrow<::di_value>());
 
 	template <typename T>
 	    requires borrow
@@ -243,9 +247,9 @@ private:
 	using move_if_not_borrow_t = decltype(move_if_not_borrow<T>());
 	using ctor_value_type = move_if_not_borrow_t<value_type>;
 
-	using di_type = ::deai::c_api::di_type;
-	auto tuple_to_array() -> std::optional<::deai::c_api::di_array>;
-	auto array_to_tuple() -> std::optional<::deai::c_api::di_tuple>;
+	using di_type = ::di_type;
+	auto tuple_to_array() -> std::optional<::deai::c_api::Array>;
+	auto array_to_tuple() -> std::optional<::di_tuple>;
 
 	/// Unwrap the current converter, and continue the conversion with the inner value.
 	/// The current converter will be emptied.
@@ -256,13 +260,13 @@ private:
 	/// - A tuple with a single element
 	/// - An array with a single element
 	template <typename T>
-	    requires id::DeaiVerbatim<T> || DeaiNumber<T>
+	    requires typeinfo::Verbatim<T> || DeaiNumber<T>
 	auto try_from_inner() -> std::optional<T>;
 
 	value_type value_;
 	di_type type;
 
-	auto value() -> ::deai::c_api::di_value & {
+	auto value() -> ::di_value & {
 		if constexpr (borrow) {
 			return value_.get();
 		} else {
@@ -275,23 +279,23 @@ public:
 	    : value_(in_value), type(in_type) {
 		if constexpr (!borrow) {
 			in_type = di_type::NIL;
-			::memset(&in_value, 0, ::deai::c_api::di_sizeof_type(in_type));
+			::memset(&in_value, 0, ::di_sizeof_type(in_type));
 		}
 	}
 	~DeaiVariantConverter() {
 		if constexpr (!borrow) {
-			::deai::c_api::di_free_value(type, &value_);
+			::di_free_value(type, &value_);
 		}
 	}
 	template <DeaiNumber T>
 	operator std::optional<T>();
-	operator std::optional<::deai::c_api::di_variant>();
-	operator std::optional<::deai::c_api::di_string>();
+	operator std::optional<::deai::c_api::Variant>();
+	operator std::optional<::deai::c_api::String>();
 	operator std::optional<const char *>();
-	operator std::optional<::deai::c_api::di_array>();
-	operator std::optional<::deai::c_api::di_tuple>();
-	operator std::optional<::deai::c_api::di_object *>();
-	operator std::optional<::deai::c_api::di_weak_object *>();
+	operator std::optional<::deai::c_api::Array>();
+	operator std::optional<::deai::c_api::Tuple>();
+	operator std::optional<::deai::c_api::Object *>();
+	operator std::optional<::deai::c_api::WeakObject *>();
 	operator std::optional<void *>();
 	operator std::optional<bool>();
 };
@@ -301,9 +305,10 @@ extern template struct DeaiVariantConverter<false>;
 
 /// Convert a borrowed deai value one type to another. There is no copying or
 /// ownership changes involved.
-template <::deai::type::id::DeaiVerbatim S, ::deai::c_api::di_type Type = ::deai::type::id::deai_typeof<S>::value>
-auto borrow_from_variant(::deai::c_api::di_value &value, ::deai::c_api::di_type type) -> S {
-	if (type == Type) {
+template <typeinfo::Verbatim S>
+auto borrow_from_variant(::di_value &value, ::di_type type) -> S {
+	static constexpr auto target_type = typeinfo::of<S>::value;
+	if (type == target_type) {
 		return *reinterpret_cast<S *>(&value);
 	}
 	DeaiVariantConverter<true> impl{value, type};
@@ -312,26 +317,25 @@ auto borrow_from_variant(::deai::c_api::di_value &value, ::deai::c_api::di_type 
 
 }        // namespace c_api
 
-template <id::DeaiConvertible T>
+template <typeinfo::Convertible T>
 DeaiBorrowedArrayConverter::operator std::vector<T>() const {
-	static constexpr ::deai::c_api::di_type Type = id::deai_typeof<T>::value;
+	static constexpr auto Type = typeinfo::of<T>::value;
 	std::vector<T> ret;
 	ret.reserve(arg.length);
 	if (arg.length == 0) {
 		return ret;
 	}
 
-	auto elem_size = ::deai::c_api::di_sizeof_type(arg.elem_type);
+	auto elem_size = ::di_sizeof_type(arg.elem_type);
 	for (size_t i = 0; i < arg.length; i++) {
 		auto *ptr = reinterpret_cast<std::byte *>(arg.arr) + i * elem_size;
 		if (arg.elem_type != Type) {
-			std::optional<id::deai_ctype_t<Type>> converted = c_api::DeaiVariantConverter<true>{
-			    *reinterpret_cast<::deai::c_api::di_value *>(ptr), arg.elem_type};
+			std::optional<to_deai_ctype<T>> converted = c_api::DeaiVariantConverter<true>{
+			    *reinterpret_cast<::di_value *>(ptr), arg.elem_type};
 			if (!converted.has_value()) {
-				throw ::deai::c_api::di_new_error(
+				throw ::di_new_error(
 				    "Array element type mismatch, %s cannot be converted into %s",
-				    ::deai::c_api::di_type_names[static_cast<int>(arg.elem_type)],
-				    typeid(T).name());
+				    ::di_type_names[static_cast<int>(arg.elem_type)], typeid(T).name());
 			}
 			ret.push_back(variant_to_borrowed_cpp_value<T>(&converted.value()));
 		} else {

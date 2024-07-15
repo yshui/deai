@@ -1,10 +1,8 @@
 #include <deai/deai.h>
 #include <deai/helper.h>
 #include <deai/type.h>
-#include <assert.h>
 
 #include "common.h"
-#include "utils.h"
 
 static void takes_string(const char *str unused) {
 }
@@ -34,5 +32,4 @@ DEAI_PLUGIN_ENTRY_POINT(di) {
 	                           DI_TYPE_STRING_LITERAL, "string literal", DI_LAST_TYPE));
 	DI_CHECK(retty == DI_TYPE_STRING);
 	di_free_string(val.string);
-	return 0;
 }

@@ -7,6 +7,7 @@
 #include <deai/builtins/event.h>
 #include <deai/builtins/log.h>
 #include <deai/deai.h>
+#include <deai/error.h>
 #include <deai/helper.h>
 #include <deai/type.h>
 
@@ -15,7 +16,6 @@
 
 #include "di_internal.h"
 #include "event.h"
-#include "utils.h"
 
 struct di_ioev {
 	di_object_internal;
@@ -724,7 +724,7 @@ di_object *di_ready_promise(di_object *event_module, di_variant value) {
 ///
 /// Fundament event sources exposed by deai. This is the building blocks of other event
 /// sources.
-void di_init_event(struct deai *di) {
+void di_init_event(di_object *di) {
 	auto em = di_new_module_with_size(di, sizeof(di_event_module));
 	auto eventp = (di_event_module *)em;
 
@@ -739,7 +739,7 @@ void di_init_event(struct deai *di) {
 	auto dep = tmalloc(struct di_prepare, 1);
 	dep->evm = em;
 	ev_prepare_init(dep, di_prepare);
-	ev_prepare_start(di->loop, (ev_prepare *)dep);
+	ev_prepare_start(((struct deai *)di)->loop, (ev_prepare *)dep);
 
 	ev_idle_init(&eventp->idlew, di_idle_cb);
 
