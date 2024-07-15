@@ -386,7 +386,7 @@ mod parsers {
     }
     // No nested array types
     fn array_type(s: &str) -> IResult<&str, Type> {
-        delimited(tag2("["), base_type, tag2("]"))(s).map(|(i, o)| (i, Type::Array(Box::new(o))))
+        delimited(tag2("["), alt((base_type, array_type)), tag2("]"))(s).map(|(i, o)| (i, Type::Array(Box::new(o))))
     }
 
     fn param_detail_line(s: &str) -> IResult<&str, Parameter> {

@@ -26,8 +26,13 @@ local function print_function(item)
 		print("/// Arguments:")
 		print("///")
 		for _, arg in ipairs(item.params) do
-			s = item.params.map[arg]:gsub("^%s+", "")
+			local lines = item.params.map[arg]:gmatch("[^\r\n]+")
+			s = lines():gsub("^%s+", "")
 			print("/// - "..arg.." "..s)
+			for s in lines do
+				s = s:gsub("^%s+", "")
+				print("///   "..s)
+			end
 		end
 	end
 	print("void func"..function_count.."();")

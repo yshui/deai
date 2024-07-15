@@ -88,8 +88,8 @@ end
 --- Find the output that corresponds to a monitor.
 -- The argument is a :lua:mod:`~deai.plugin.xorg.randr.MonitorInfo` object. But not
 -- all of its fields need to be filled in. Only the fields present will be used in
--- the search. If there are multiple outputs that match the information given, any of
--- them may be returned.
+-- the search, and the `output` field will be ignored. If there are multiple outputs
+-- that match the information given, any of them may be returned.
 -- @function deai.plugin.xorg:RandrExt.find_output
 -- @tparam deai.plugin.xorg.randr:MonitorInfo monitor_info The monitor information.
 -- This can also be a string, in which case it is treated as the name of the output.
@@ -100,21 +100,20 @@ end
 
 if di.misc ~= nil then
 
---- Output configuration
+--- Output configuration.
 -- Note all fields except `match` are optional.
 -- @table deai.plugin.xorg.randr:OutputConfig
 -- @tfield deai.plugin.xorg.randr:MonitorInfo match The monitor or output this configuration applies to.
--- Can also be a string, in which case it is treated as the name of the output, otherwise, the monitor
--- is matched as described in :lua:mod:`~deai.plugin.xorg.RandrExt.find_output`
+-- Monitor are matched the same way as described in :lua:mod:`~deai.plugin.xorg.RandrExt.find_output`
 -- @tfield [deai.plugin.xorg.randr:MonitorInfo] left The monitor to the left of the matched monitor.
--- Same rules as for `match`, meaning it can be a MonitorInfo object or a string.
+-- An array of `MonitorInfo`. They are used the same way as `match. The same applies to `right`, `up`, and `down`.
 -- @tfield [deai.plugin.xorg.randr:MonitorInfo] right The monitor to the right of the matched monitor.
 -- @tfield [deai.plugin.xorg.randr:MonitorInfo] up The monitor above the matched monitor.
 -- @tfield [deai.plugin.xorg.randr:MonitorInfo] down The monitor below the matched monitor.
--- @tfield :integer width The width of the output in pixels. When either `width` or `height` is not
--- specified, the preferred mode is used.
--- @tfield :integer height The height of the output in pixels. When either `width` or `height` is not
--- specified, the preferred mode is used.
+-- @tfield :integer width The width of the output in pixels.
+-- When either `width` or `height` is not specified, the preferred mode is used.
+-- @tfield :integer height The height of the output in pixels.
+-- When either `width` or `height` is not specified, the preferred mode is used.
 -- @tfield :integer x The x coordinate of the top-left corner of the output in pixels.
 -- @tfield :integer y The y coordinate of the top-left corner of the output in pixels.
 output_config = {}

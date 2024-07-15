@@ -1,6 +1,5 @@
 #include <format>
 #include <functional>
-#include <iostream>
 #include <queue>
 
 #include <deai/c++/deai.hh>
@@ -10,13 +9,13 @@ using namespace deai;
 
 namespace {
 
-class Module {
+struct Module {
 public:
 	static constexpr const char *type [[maybe_unused]] = "deai.plugin.utils:Module";
 
 	/// Find maximum unweighted bipartite match.
 	///
-	/// EXPORT: utils.bipartite_match(graph: [[:int]]) -> [:int]
+	/// EXPORT: misc.bipartite_match(graph: [[:int]]): [:int]
 	///
 	/// The input is a list of edges. There is one list of each node on the left,
 	/// containing the indices of the nodes on the right that it is connected to.
@@ -62,7 +61,7 @@ public:
 
 	/// Solve a system of difference constraints.
 	///
-	/// EXPORT: utils.difference_constraints(constraints: [[:int]]) -> [:int]
+	/// EXPORT: misc.difference_constraints(constraints: [[:int]]): [:int]
 	///
 	/// The input is a list of constraints, which are formatted as a array of
 	/// arrays of integers, array of integers at index :math:`i` describes the
@@ -72,8 +71,8 @@ public:
 	/// the second is :math:`k`, then the constraint is :math:`x_j - x_i <= k`,
 	/// note the order of the variables.
 	///
-	///	Returns a list of integers, the values of the variables that satisfy the
-	///	constraints.
+	/// Returns a list of integers, the values of the variables that satisfy the
+	/// constraints.
 	auto difference_constraints(const std::vector<std::vector<int64_t>> &constraints_list) const
 	    -> std::vector<int64_t> {
 		std::vector<int64_t> ret(constraints_list.size(), 0);
@@ -137,9 +136,9 @@ public:
 	}
 };
 
-/// utils
+/// misc
 ///
-/// EXPORT: utils: deai:module
+/// EXPORT: misc: deai:module
 ///
 /// Collection of tools that don't fit anywhere else.
 auto di_new_utils(Ref<Core> &di) -> Ref<Object> {
