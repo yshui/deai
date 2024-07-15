@@ -937,6 +937,23 @@ static di_array rr_modes(struct di_xorg_randr *rr) {
 	return ret;
 }
 
+static void rr_set_screen_size(di_object *rr, di_object *size) {
+	scopedp(di_xorg_connection) *dc = NULL;
+	if (get_xorg_connection((struct di_xorg_ext *)rr, &dc) != 0) {
+		return;
+	}
+
+	auto scrn = screen_of_display(dc->c, dc->dflt_scrn);
+	int width, height, width_mm, height_mm;
+	di_gets(size, "width", width);
+	di_gets(size, "height", height);
+	di_gets(size, "mm_width", width_mm);
+	di_gets(size, "mm_height", height_mm);
+
+	xcb_randr_set_screen_size(dc->c, scrn->root, width, height, width_mm, height_mm);
+	xcb_flush(dc->c);
+}
+
 static di_object *rr_screen_resources(di_object *rr) {
 	scopedp(di_xorg_connection) *dc = NULL;
 	if (get_xorg_connection((struct di_xorg_ext *)rr, &dc) != 0) {
@@ -1035,6 +1052,7 @@ struct di_xorg_ext *new_randr(di_xorg_connection *dc) {
 	di_getter(rr, outputs, rr_outputs);
 	di_getter(rr, modes, rr_modes);
 	di_getter(rr, screen_resources, rr_screen_resources);
+	di_setter(rr, screen_size, rr_set_screen_size, di_object *);
 
 	di_signal_setter_deleter_with_signal_name(
 	    rr, "output-change", di_xorg_ext_signal_setter, di_xorg_ext_signal_deleter);
