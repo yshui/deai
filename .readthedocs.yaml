@@ -20,6 +20,7 @@ build:
     - liblua5.3-dev
     - libudev-dev
     - libdisplay-info-dev
+    - lua-ldoc
 sphinx:
   configuration: docs/conf.py
 python:
