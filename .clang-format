@@ -39,4 +39,4 @@ SortIncludes: true
 ForEachMacros:   [ list_for_each_entry, list_for_each_entry_safe, HASH_ITER ]
 
 AlwaysBreakTemplateDeclarations: Yes
-AccessModifierOffset: -8
+AccessModifierOffset: -4
