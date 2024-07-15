@@ -14,7 +14,11 @@ sys.path.append(str(Path(__file__).resolve().parent / "sphinx-exts"))
 extensions = ['luadomain']
 
 os.environ['RUST_LOG'] = 'info'
-subprocess.run(["meson", "setup", "../build", ".."])
+
+if not os.path.isdir('../build'):
+    subprocess.run(["meson", "setup", "../build", ".."])
+    subprocess.run(["ninja", "-C", "../build", "libextra_doc_target.a"])
+
 try:
     os.symlink("build/compile_commands.json", "../compile_commands.json")
 except:
