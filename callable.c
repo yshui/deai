@@ -34,18 +34,6 @@ struct di_closure {
 
 static_assert(sizeof(di_value) >= sizeof(ffi_arg), "ffi_arg is too big");
 
-struct ffi_call_args {
-	ffi_cif *cif;
-	void (*fn)(void);
-	void *ret;
-	void *xargs;
-};
-
-static void di_call_ffi_call(void *args_) {
-	struct ffi_call_args *args = args_;
-	ffi_call(args->cif, args->fn, args->ret, args->xargs);
-}
-
 static int di_typed_trampoline(ffi_cif *cif, void (*fn)(void), di_type *ret_type,
                                void *ret, const di_type *fnats, di_tuple args) {
 	assert(args.length == 0 || args.elements != NULL);
@@ -68,23 +56,7 @@ static int di_typed_trampoline(ffi_cif *cif, void (*fn)(void), di_type *ret_type
 		}
 	}
 
-	struct ffi_call_args ffi_args = {
-	    .cif = cif,
-	    .fn = fn,
-	    .ret = ret,
-	    .xargs = (void *)xargs,
-	};
-
-	di_object *errobj = di_try(di_call_ffi_call, &ffi_args);
-	if (errobj != NULL) {
-		fprintf(stderr, "Caught error from di closure, it says:\n");
-		di_string err = DI_STRING_INIT;
-		DI_CHECK_OK(di_get(errobj, "errmsg", err));
-		fprintf(stderr, "%.*s\n", (int)err.length, err.data);
-		di_free_string(err);
-		di_unref_object(errobj);
-		*ret_type = DI_TYPE_NIL;
-	}
+	ffi_call(cif, fn, ret, (void **)xargs);
 	return rc;
 }
 static const char closure_type[] = "deai:closure";

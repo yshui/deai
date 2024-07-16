@@ -108,7 +108,16 @@ static int di_call_internal(di_object *self, di_object *method_, di_type *rt,
 	}
 
 gen_callx(di_callx, di_getxt);
-gen_callx(di_rawcallxn, di_rawgetxt);
+/// Fetch member object `name` from object `o`, then call the member object with `args`.
+///
+/// # Errors
+///
+/// * EINVAL: if the member object is not callable.
+/// * ENOENT: if the member object doesn't exist.
+///
+/// @param[out] rt The return type of the function
+/// @param[out] ret The return value, MUST BE a pointer to a full di_value
+static gen_callx(di_rawcallxn, di_rawgetxt);
 
 /// Call "<prefix>_<name>" with "<prefix>" as fallback
 ///
@@ -1015,25 +1024,25 @@ static void di_signal_dispatch(di_object *sig_, di_tuple args) {
 	for (int i = 0; i < cnt; i++) {
 		di_type rtype;
 		di_value ret;
-		int rc = di_call_object(handlers[i], &rtype, &ret, args);
-
+		scoped_di_object *err_obj = NULL;
+		int rc = di_call_object_catch(handlers[i], &rtype, &ret, args, &err_obj);
 		di_unref_object(handlers[i]);
 
-		if (rc == 0) {
-			if (rtype == DI_TYPE_OBJECT) {
-				di_string errmsg;
-				if (di_get(ret.object, "errmsg", errmsg) == 0) {
-					di_log_va(log_module, DI_LOG_ERROR,
-					          "Error arose when calling signal "
-					          "handler: %.*s\n",
-					          (int)errmsg.length, errmsg.data);
-					di_free_string(errmsg);
-				}
-			}
-			di_free_value(rtype, &ret);
-		} else {
+		if (rc != 0) {
 			di_log_va(log_module, DI_LOG_ERROR, "Failed to call a signal handler: %s\n",
 			          strerror(-rc));
+			continue;
+		}
+
+		// Type conversion also frees the return value if conversion fails.
+		scoped_di_object *ret_obj = NULL;
+		di_type_conversion(rtype, &ret, DI_TYPE_OBJECT, (di_value *)&ret_obj, false);
+
+		scoped_di_string errmsg = DI_STRING_INIT;
+		if ((err_obj != NULL && di_get(err_obj, "errmsg", errmsg) == 0) ||
+		    (ret_obj != NULL && di_get(ret_obj, "errmsg", errmsg) == 0)) {
+			di_log_va(log_module, DI_LOG_ERROR, "Error arose when calling signal handler: %.*s\n",
+			          (int)errmsg.length, errmsg.data);
 		}
 	}
 	free(handlers);

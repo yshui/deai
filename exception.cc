@@ -1,5 +1,5 @@
-#include <exception>
 #include <deai/c++/deai.hh>
+#include <exception>
 
 extern "C" {
 void noret di_throw(di_object *obj) {
@@ -15,5 +15,20 @@ auto di_try(void (*func)(void *), void *args) -> di_object * {
 		return ::di_new_error("Other C++ exceptions: %s", e.what());
 	}
 	return nullptr;
+}
+
+auto di_call_object_catch(di_object *obj, di_type *rt, di_value *ret, di_tuple args,
+                          di_object **err) -> int {
+	*err = nullptr;
+	try {
+		return di_call_object(obj, rt, ret, args);
+	} catch (di_object *&e) {
+		*err = e;
+		*rt = deai::c_api::Type::NIL;
+	} catch (std::exception &e) {
+		*err = ::di_new_error("Other C++ exceptions: %s", e.what());
+		*rt = deai::c_api::Type::NIL;
+	}
+	return 0;
 }
 }

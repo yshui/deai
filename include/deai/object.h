@@ -239,6 +239,9 @@ union di_value {
 PUBLIC_DEAI_API di_object *nonnull di_get_roots(void);
 
 /// Fetch member object `name` from object `o`, then call the member object with `args`.
+/// The member object may be fetched by calling the getter functions.
+///
+/// You shouldn't use this function directly, use the `di_call` macro if you are using C.
 ///
 /// # Errors
 ///
@@ -247,14 +250,6 @@ PUBLIC_DEAI_API di_object *nonnull di_get_roots(void);
 ///
 /// @param[out] rt The return type of the function
 /// @param[out] ret The return value, MUST BE a pointer to a full di_value
-PUBLIC_DEAI_API int di_rawcallxn(di_object *nonnull o, di_string name, di_type *nonnull rt,
-                                 di_value *nonnull ret, di_tuple args, bool *nonnull called);
-
-/// Like `di_rawcallxn`, but also calls getter functions to fetch the member object. And
-/// the arguments are pass as variadic arguments. Arguments are passed as pairs of type
-/// ids and values, end with DI_LAST_TYPE.
-///
-/// You shouldn't use this function directly, use the `di_call` macro if you are using C.
 PUBLIC_DEAI_API int di_callx(di_object *nonnull o, di_string name, di_type *nonnull rt,
                              di_value *nonnull ret, di_tuple args, bool *nonnull called);
 

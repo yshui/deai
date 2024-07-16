@@ -659,130 +659,138 @@ int main(int argc, char *argv[]) {
 	ev_signal_init(&sigtermw, di_sighandler, SIGTERM);
 	ev_signal_start(p->loop, (void *)&sigtermw);
 
-	// (2) Parse commandline
-	char *modname = NULL;
-	char *method = strchr(argv[1], '.');
-	if (method) {
-		modname = strndup(argv[1], method - argv[1]);
-		method = strdup(method + 1);
-	} else {
-		method = strdup(argv[1]);
-	}
+	// Create a scope so everything in here will be freed
+	// before we start the mainloop
+	{
+		// (2) Parse commandline
+		scopedp(char) *modname = NULL;
+		scopedp(char) *method = strchr(argv[1], '.');
+		if (method) {
+			modname = strndup(argv[1], method - argv[1]);
+			method = strdup(method + 1);
+		} else {
+			method = strdup(argv[1]);
+		}
 
-	auto di_args = tmalloc(struct di_variant, argc - 2);
-	int nargs = 0;
-	for (int i = 2; i < argc; i++) {
-		if (strcmp(argv[i], "--") == 0) {
-			break;
+		scoped_di_tuple args = DI_TUPLE_INIT;
+		args.elements = tmalloc(struct di_variant, argc - 1);
+		args.elements[0].type = DI_TYPE_OBJECT;
+		args.length = argc - 1;
+		int nargs = 1;        // The first argument is the module object
+		for (int i = 2; i < argc; i++) {
+			if (strcmp(argv[i], "--") == 0) {
+				break;
+			}
+			if (argv[i][1] != ':') {
+				fprintf(stderr, "Invalid argument: %s\n", argv[i]);
+				exit(EXIT_FAILURE);
+				return 1;
+			}
+			switch (argv[i][0]) {
+			case 'i':        // Integer
+				args.elements[nargs].value = malloc(sizeof(int64_t));
+				args.elements[nargs].type = DI_TYPE_INT;
+				args.elements[nargs].value->int_ = atoll(argv[i] + 2);
+				break;
+			case 's':        // String
+				args.elements[nargs].value = malloc(sizeof(di_string));
+				args.elements[nargs].type = DI_TYPE_STRING;
+				args.elements[nargs].value->string = di_string_dup(argv[i] + 2);
+				break;
+			case 'f':        // Float
+				args.elements[nargs].value = malloc(sizeof(double));
+				args.elements[nargs].type = DI_TYPE_FLOAT;
+				args.elements[nargs].value->float_ = atof(argv[i] + 2);
+				break;
+			default:
+				fprintf(stderr, "Invalid argument type: %s\n", argv[i]);
+				exit(EXIT_FAILURE);
+			}
+			nargs++;
 		}
-		if (argv[i][1] != ':') {
-			fprintf(stderr, "Invalid argument: %s\n", argv[i]);
-			exit(EXIT_FAILURE);
-			return 1;
-		}
-		switch (argv[i][0]) {
-		case 'i':        // Integer
-			di_args[nargs].value = malloc(sizeof(int64_t));
-			di_args[nargs].type = DI_TYPE_INT;
-			di_args[nargs].value->int_ = atoll(argv[i] + 2);
-			break;
-		case 's':        // String
-			di_args[nargs].value = malloc(sizeof(const char *));
-			di_args[nargs].type = DI_TYPE_STRING_LITERAL;
-			di_args[nargs].value->string_literal = argv[i] + 2;
-			break;
-		case 'f':        // Float
-			di_args[nargs].value = malloc(sizeof(double));
-			di_args[nargs].type = DI_TYPE_FLOAT;
-			di_args[nargs].value->float_ = atof(argv[i] + 2);
-			break;
-		default:
-			fprintf(stderr, "Invalid argument type: %s\n", argv[i]);
-			exit(EXIT_FAILURE);
-		}
-		nargs++;
-	}
 
-	setproctitle_init(argc, argv, p);
+		setproctitle_init(argc, argv, p);
 
-	// (3) Load default plugins
-	int ret = load_plugin_from_dir_impl(p, DI_PLUGIN_INSTALL_DIR);
-	if (ret != 0) {
-		fprintf(stderr, "Failed to load plugins from \"%s\".\n", DI_PLUGIN_INSTALL_DIR);
-	}
-	const char *additional_plugin_dirs = getenv("DEAI_EXTRA_PLUGIN_DIRS");
-	while (additional_plugin_dirs) {
-		const char *next = strchr(additional_plugin_dirs, ':');
-		if (!next) {
-			next = additional_plugin_dirs + strlen(additional_plugin_dirs);
-		}
-		char *dir = strndup(additional_plugin_dirs, next - additional_plugin_dirs);
-		if (load_plugin_from_dir_impl(p, dir) != 0) {
-			fprintf(stderr, "Failed to load plugins from \"%s\".\n", dir);
-		}
-		free(dir);
-		additional_plugin_dirs = *next ? next + 1 : NULL;
-	}
-	const char *additional_plugins = getenv("DEAI_EXTRA_PLUGINS");
-	while (additional_plugins) {
-		const char *next = strchr(additional_plugins, ':');
-		if (!next) {
-			next = additional_plugins + strlen(additional_plugins);
-		}
-		char *plugin = strndup(additional_plugins, next - additional_plugins);
-		if (!load_plugin_impl(p, plugin)) {
-			fprintf(stderr, "Failed to load plugin \"%s\".\n", plugin);
-		}
-		free(plugin);
-		additional_plugins = *next ? next + 1 : NULL;
-	}
-
-	di_object *mod = NULL;
-	if (modname) {
-		ret = di_get(p, modname, mod);
+		// (3) Load default plugins
+		int ret = load_plugin_from_dir_impl(p, DI_PLUGIN_INSTALL_DIR);
 		if (ret != 0) {
-			fprintf(stderr, "Module \"%s\" not found\n", modname);
-			exit(EXIT_FAILURE);
+			fprintf(stderr, "Failed to load plugins from \"%s\".\n", DI_PLUGIN_INSTALL_DIR);
 		}
-	} else {
-		mod = di_ref_object((di_object *)p);
-	}
+		const char *additional_plugin_dirs = getenv("DEAI_EXTRA_PLUGIN_DIRS");
+		while (additional_plugin_dirs) {
+			const char *next = strchr(additional_plugin_dirs, ':');
+			if (!next) {
+				next = additional_plugin_dirs + strlen(additional_plugin_dirs);
+			}
+			char *dir = strndup(additional_plugin_dirs, next - additional_plugin_dirs);
+			if (load_plugin_from_dir_impl(p, dir) != 0) {
+				fprintf(stderr, "Failed to load plugins from \"%s\".\n", dir);
+			}
+			free(dir);
+			additional_plugin_dirs = *next ? next + 1 : NULL;
+		}
+		const char *additional_plugins = getenv("DEAI_EXTRA_PLUGINS");
+		while (additional_plugins) {
+			const char *next = strchr(additional_plugins, ':');
+			if (!next) {
+				next = additional_plugins + strlen(additional_plugins);
+			}
+			char *plugin = strndup(additional_plugins, next - additional_plugins);
+			if (!load_plugin_impl(p, plugin)) {
+				fprintf(stderr, "Failed to load plugin \"%s\".\n", plugin);
+			}
+			free(plugin);
+			additional_plugins = *next ? next + 1 : NULL;
+		}
 
-	di_type rt;
-	di_value retd;
-	bool called;
-	ret = di_rawcallxn(mod, di_string_borrow(method), &rt, &retd,
-	                   (di_tuple){nargs, di_args}, &called);
-	if (ret != 0) {
-		fprintf(stderr, "Failed to call \"%s.%s\"\n", modname ? modname : "", method);
-		exit_code = EXIT_FAILURE;
-		quit = true;
-	}
+		scoped_di_object *mod = NULL;
+		if (modname) {
+			ret = di_get(p, modname, mod);
+			if (ret != 0) {
+				fprintf(stderr, "Module \"%s\" not found\n", modname);
+				exit(EXIT_FAILURE);
+			}
+		} else {
+			mod = di_ref_object((di_object *)p);
+		}
 
-	di_object *retobj = NULL;
-	if (di_type_conversion(rt, &retd, DI_TYPE_OBJECT, (void *)&retobj, false) == 0) {
-		di_string errmsg;
-		if (di_get(retobj, "errmsg", errmsg) == 0) {
-			fprintf(stderr, "The function you called returned an error message:\n%.*s\n",
-			        (int)errmsg.length, errmsg.data);
-			di_free_string(errmsg);
+		di_type rt;
+		di_value retd;
+		di_object *method_obj = NULL;
+		scoped_di_object *error_obj = NULL;
+		int rc;
+		args.elements[0].value = (di_value *)tmalloc(di_object *, 1);
+		args.elements[0].value->object = di_ref_object(mod);
+		if (di_rawget_borrowed(mod, method, method_obj) != 0) {
+			if (modname != NULL) {
+				fprintf(stderr, "Method \"%s\" not found in module \"%s\"\n", method, modname);
+			} else {
+				fprintf(stderr, "Method \"%s\" not found in main module\n", method);
+			}
 			exit_code = EXIT_FAILURE;
 			quit = true;
+		} else if ((rc = di_call_object_catch(method_obj, &rt, &retd, args, &error_obj)) != 0) {
+			fprintf(stderr, "Failed to call \"%s.%s\": %d\n", modname ? modname : "", method, rc);
+			exit_code = EXIT_FAILURE;
+			quit = true;
+		} else {
+			scoped_di_object *retobj = NULL;
+			scoped_di_string errmsg = DI_STRING_INIT;
+
+			// Try converting the return value to an object. This will also free whatever
+			// the return value is if it fails to convert.
+			di_type_conversion(rt, &retd, DI_TYPE_OBJECT, (void *)&retobj, false);
+			if ((error_obj != NULL && di_get(error_obj, "errmsg", errmsg) == 0) ||
+			    (retobj != NULL && di_get(retobj, "errmsg", errmsg) == 0)) {
+				fprintf(stderr, "The function you called returned an error message:\n%.*s\n",
+				        (int)errmsg.length, errmsg.data);
+				exit_code = EXIT_FAILURE;
+				quit = true;
+			}
 		}
-		di_unref_object(retobj);
+		di_unref_object((void *)p);
 	}
-	free(method);
-	free(modname);
-
-	for (int i = 0; i < nargs; i++) {
-		di_free_value(DI_TYPE_VARIANT, (di_value *)&di_args[i]);
-	}
-	free(di_args);
-
-	di_unref_object(mod);
-
 	// (4) Start mainloop
-	di_unref_object((void *)p);
 
 	di_collect_garbage();
 	di_dump_objects();
