@@ -200,7 +200,7 @@ int di_log_va(di_object *o, int log_level, const char *fmt, ...) {
 		        },
 		};
 
-		di_call_objectt(o, &return_type, &return_value, args);
+		di_call_object(o, &return_type, &return_value, args);
 		DI_CHECK(return_type == DI_TYPE_NINT);
 		ret = return_value.nint;
 	}

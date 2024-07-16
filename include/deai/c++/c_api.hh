@@ -36,7 +36,7 @@ constexpr auto add_member_move = ::di_add_member_move;
 constexpr auto add_member_clone = ::di_add_member_clone;
 constexpr auto set_call = ::di_set_object_call;
 constexpr auto set_dtor = ::di_set_object_dtor;
-constexpr auto call = ::di_call_objectt;
+constexpr auto call = ::di_call_object;
 constexpr auto init = ::di_init_object;
 constexpr auto set_type = ::di_set_type;
 }        // namespace object

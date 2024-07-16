@@ -251,7 +251,7 @@ di_object *di_new_field_getter(di_type type, ptrdiff_t offset) {
 	return obj;
 }
 
-int di_call_objectt(di_object *obj, di_type *rt, di_value *ret, di_tuple args) {
+int di_call_object(di_object *obj, di_type *rt, di_value *ret, di_tuple args) {
 	auto internal = (di_object_internal *)obj;
 	return internal->call(obj, rt, ret, args);
 }

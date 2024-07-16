@@ -384,7 +384,7 @@ static int di_lua_method_handler_impl(lua_State *L, const char *name, di_object 
 
 	di_value ret;
 	di_type rtype;
-	int rc = di_call_objectt(m, &rtype, &ret, t);
+	int rc = di_call_object(m, &rtype, &ret, t);
 
 	if (rc == 0) {
 		int nret = di_lua_pushvariant(L, NULL, (struct di_variant){&ret, rtype});
@@ -1253,7 +1253,7 @@ call_lua_signal_handler_once(di_object *obj, di_type *rt, di_value *ret, di_tupl
 	// Stop the listener first, in case the signal is emitted again during the
 	// handler call.
 	DI_CHECK_OK(di_call(listen_handle, "stop"));
-	return di_call_objectt(handler, rt, ret, t);
+	return di_call_object(handler, rt, ret, t);
 }
 
 static di_variant di_lua_globals_getter(di_object *globals, di_string key) {

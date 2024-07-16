@@ -1015,7 +1015,7 @@ static void di_signal_dispatch(di_object *sig_, di_tuple args) {
 	for (int i = 0; i < cnt; i++) {
 		di_type rtype;
 		di_value ret;
-		int rc = di_call_objectt(handlers[i], &rtype, &ret, args);
+		int rc = di_call_object(handlers[i], &rtype, &ret, args);
 
 		di_unref_object(handlers[i]);
 

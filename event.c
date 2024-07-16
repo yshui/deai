@@ -441,7 +441,7 @@ static int di_promise_dispatch(di_promise *promise) {
 		di_type return_type;
 		int ret = 0;
 		if (handlers[i]) {
-			ret = di_call_objectt(handlers[i], &return_type, &return_value, handler_args);
+			ret = di_call_object(handlers[i], &return_type, &return_value, handler_args);
 			di_unref_object(handlers[i]);
 			handlers[i] = NULL;
 		} else {
