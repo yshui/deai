@@ -43,6 +43,7 @@
 #include <deai/deai.h>
 #include <deai/error.h>
 #include <deai/helper.h>
+#include <deai/type.h>
 
 #include "common.h"
 #include "compat.h"
@@ -364,18 +365,22 @@ static struct di_lua_ref *lua_type_to_di_object(lua_State *L, int i, void *call)
 }
 
 static int di_lua_method_handler_impl(lua_State *L, const char *name, di_object *m) {
+	// Note lua_error uses setjmp/longjmp, so we can't rely on cleanup
+	// attribute here
 	if (!di_is_object_callable(m)) {
 		return luaL_error(L, "Object %s is not callable\n", name);
 	}
 
 	int nargs = lua_gettop(L);
 
-	scoped_di_tuple t;
+	di_tuple t;
 	t.elements = tmalloc(struct di_variant, nargs - 1);
 	t.length = nargs - 1;
 	// Translate lua arguments
 	for (int i = 2; i <= nargs; i++) {
 		if (di_lua_type_to_di_variant(L, i, &t.elements[i - 2]) != 0) {
+			t.length = i - 2;
+			di_free_tuple(t);
 			return luaL_argerror(L, i, "Unhandled lua type");
 		}
 	}
@@ -384,15 +389,43 @@ static int di_lua_method_handler_impl(lua_State *L, const char *name, di_object 
 
 	di_value ret;
 	di_type rtype;
-	int rc = di_call_object(m, &rtype, &ret, t);
-
-	if (rc == 0) {
-		int nret = di_lua_pushvariant(L, NULL, (struct di_variant){&ret, rtype});
-		di_free_value(rtype, &ret);
-		return nret;
+	di_object *error = NULL;
+	di_object *ret_object = NULL;
+	int rc = di_call_object_catch(m, &rtype, &ret, t, &error);
+	di_free_tuple(t);
+	if (rc != 0) {
+		return luaL_error(L, "Failed to call function \"%s\": %s", name, strerror(-rc));
 	}
 
-	return luaL_error(L, "Failed to call function \"%s\": %s", name, strerror(-rc));
+	di_string errmsg = DI_STRING_INIT;
+	bool has_error = false;
+	int nret = 0;
+	if ((error != NULL && di_get(error, "errmsg", errmsg) == 0) ||
+	    (di_type_conversion(rtype, &ret, DI_TYPE_OBJECT, (di_value *)&ret_object, true) == 0 &&
+	     di_get(ret_object, "errmsg", errmsg) == 0)) {
+		scopedp(char) *buf = NULL;
+		int len = asprintf(&buf, "Failed to call function \"%s\": %.*s", name,
+		                   (int)errmsg.length, errmsg.data);
+		if (len < 0) {
+			lua_pushlstring(L, errmsg.data, errmsg.length);
+		} else {
+			lua_pushlstring(L, buf, len);
+		}
+		di_free_string(errmsg);
+		has_error = true;
+	} else {
+		nret = di_lua_pushvariant(L, NULL, (struct di_variant){&ret, rtype});
+	}
+
+	di_free_value(rtype, &ret);
+	if (error != NULL) {
+		di_unref_object(error);
+	}
+
+	if (has_error) {
+		return lua_error(L);
+	}
+	return nret;
 }
 
 static int di_lua_method_handler(lua_State *L) {
@@ -755,7 +788,7 @@ static di_tuple di_lua_load_script(di_object *obj, di_string path_) {
 		// Pop the error, and converted error string
 		auto err = luaL_tolstring(L->L, -1, NULL);
 		lua_pop(L->L, 2);
-		log_error("Error while running lua script: %s", err);
+		di_throw(di_new_error("Error while running lua script: %s", err));
 	}
 	return func_ret;
 }
@@ -892,8 +925,8 @@ static int call_lua_function(di_object *ref_, di_type *rt, di_value *ret, di_tup
 	if (lua_pcall(L, t.length, 1, -(int)t.length - 2) != 0) {
 		auto err = luaL_tolstring(L, -1, NULL);
 		lua_pop(L, 1);        // Pop the converted error string
-		ret->object = di_new_error("%s", err);
-		*rt = DI_TYPE_OBJECT;
+		*rt = DI_TYPE_NIL;
+		di_throw(di_new_error("%s", err));
 	} else {
 		di_lua_type_to_di(L, -1, DI_TYPE_ANY, rt, ret);
 	}
