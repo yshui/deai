@@ -24,6 +24,7 @@ test_cases = [
   'spawn.lua',
   'next.lua',
   'bipartite.lua',
+  'catch_exception.lua',
 ]
 foreach t : test_cases
   test(t, deai_exe, args: [
