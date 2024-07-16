@@ -32,38 +32,24 @@ void throw_deai_error(int errno_);
 }        // namespace exception
 
 namespace type {
-struct ObjectRefDeleter {
-	void operator()(c_api::Object *obj);
-};
+using ObjectBase = c_api::Object;
 struct Object {
-protected:
-	std::unique_ptr<c_api::Object, ObjectRefDeleter> inner;
-
-private:
-	Object(c_api::Object *obj);
-
-	static auto unsafe_ref(c_api::Object *obj) -> Object;
-	template <typename T>
-	    requires std::derived_from<T, Object>
-	friend struct Ref;
-
-public:
 	static constexpr const char *type = "deai:object";
-	static auto create() -> Ref<Object>;
-	auto operator=(const Object &other) -> Object &;
-	Object(const Object &other);
-
-	Object(Object &&other) = default;
-	auto operator=(Object &&other) -> Object & = default;
+	ObjectBase base;
 };
+struct ListenHandle {
+	static constexpr const char *type = "deai:ListenHandle";
+	c_api::Object base;
+};
+}        // namespace type
 
+namespace type {
 /// Every object is an Object
 inline auto raw_check_type(c_api::Object *obj, const Object * /*tag*/) -> bool {
 	return true;
 }
 
-template <typename T>
-    requires std::derived_from<T, Object>
+template <typeinfo::DerivedObject T>
 auto raw_check_type(c_api::Object *obj, const T * /*tag*/) -> bool {
 	return c_api::type::check(obj, T::type);
 }
@@ -212,8 +198,7 @@ protected:
 	c_api::Object *const target;
 	const std::string_view key;
 	static constexpr bool raw = raw_;
-	template <typename T>
-	    requires std::derived_from<T, Object>
+	template <typeinfo::DerivedObject T>
 	friend struct Ref;
 	friend struct ObjectMembersRawGetter;
 	ObjectMemberProxy(c_api::Object *target_, std::string_view key_)
@@ -246,16 +231,11 @@ struct ObjectMembersRawGetter {
 private:
 	c_api::Object *const target;
 	ObjectMembersRawGetter(c_api::Object *target_);
-	template <typename T>
-	    requires std::derived_from<T, Object>
+	template <typeinfo::DerivedObject T>
 	friend struct Ref;
 
 public:
 	auto operator[](const std::string_view &key) -> ObjectMemberProxy<true>;
-};
-
-struct ListenHandle : public Object {
-	static constexpr const char *type = "deai:ListenHandle";
 };
 
 struct WeakRefDeleter {
@@ -269,8 +249,7 @@ protected:
 	std::unique_ptr<c_api::WeakObject, WeakRefDeleter> inner;
 
 	WeakRefBase(c_api::WeakObject *ptr);
-	template <typename T>
-	    requires std::derived_from<T, Object>
+	template <typeinfo::DerivedObject T>
 	friend struct Ref;
 
 public:
@@ -280,7 +259,7 @@ public:
 	auto release() && -> c_api::WeakObject *;
 };
 
-template <typename T>
+template <typeinfo::DerivedObject T>
 struct WeakRef : public WeakRefBase {
 	WeakRef(c_api::WeakObject *weak) : WeakRefBase{weak} {
 	}
@@ -299,11 +278,24 @@ struct WeakRef : public WeakRefBase {
 ///
 /// This is to create C++ wrappers of di_object that were not defined in C++, if the
 /// di_object already originated from C++, there is no need to use this.
-template <typename T>
-    requires std::derived_from<T, Object>
+template <typeinfo::DerivedObject T>
 struct Ref {
+private:
+	struct ObjectRefDeleter {
+		void operator()(T *obj) {
+			::di_unref_object(&obj->base);
+		}
+	};
+	Ref(std::unique_ptr<T, ObjectRefDeleter> &&inner) : inner{std::move(inner)} {
+	}
+
+	/// Get the raw object reference, the reference count is not changed.
+	[[nodiscard]] auto raw() const -> c_api::Object * {
+		return &inner->base;
+	}
+
 protected:
-	T inner;
+	std::unique_ptr<T, ObjectRefDeleter> inner;
 	friend struct WeakRef<T>;
 
 public:
@@ -315,37 +307,57 @@ public:
 	Ref(T &&obj) : inner{std::move(obj)} {
 	}
 
-	/// Create an owning Object reference from a borrowed  object reference.
+	Ref(T &obj) : inner{reinterpret_cast<T *>(c_api::object::ref(&obj.base))} {
+	}
+
+	/// Create an owning Object reference from a borrowed object reference.
 	/// This is the default when you create a Ref from di_object *, because usually
 	/// this is used when you receive a function call, and doesn't own the object
 	/// reference.
 	///
-	/// If you indeed want to create a Ref from a di_object * you DO own, use
+	/// If you indeed want to create a Ref from a `di_object *` you DO own, use
 	/// Ref::take instead.
-	Ref(c_api::Object *obj) : inner{T::unsafe_ref(di_ref_object(obj))} {
-		T *ptr = nullptr;
-		if (!raw_check_type(raw(), ptr)) {
-			throw std::invalid_argument("trying to create Ref with wrong "
-			                            "kind of object");
+	Ref(c_api::Object *obj) {
+		if constexpr (!std::is_same_v<T, Object>) {
+			T *ptr = nullptr;
+			if (!raw_check_type(obj, ptr)) {
+				throw std::invalid_argument("trying to create Ref with wrong "
+				                            "kind of object");
+			}
 		}
+		inner = std::unique_ptr<T, ObjectRefDeleter>{
+		    reinterpret_cast<T *>(c_api::object::ref(obj))};
 	}
 
-	/// Take ownership of a di_object, and create a ObjectRef
+	/// Explicitly clone this Ref.
+	auto clone() const -> Ref<T> {
+		return Ref<T>{std::unique_ptr<T, ObjectRefDeleter>{
+		    reinterpret_cast<T *>(c_api::object::ref(&inner->base))}};
+	}
+
+	/// Take ownership of a di_object, and create a ObjectRef. The caller must own
+	/// the object reference, and must not call di_unref_object on it after this.
 	static auto take(c_api::Object *obj) -> std::optional<Ref<T>> {
-		T *ptr = nullptr;
-		if (!raw_check_type(obj, ptr)) {
-			return std::nullopt;
+		if constexpr (!std::is_same_v<T, Object>) {
+			T *ptr = nullptr;
+			if (!raw_check_type(obj, ptr)) {
+				return std::nullopt;
+			}
 		}
-		return {T{obj}};
+		return Ref{std::unique_ptr<T, ObjectRefDeleter>{reinterpret_cast<T *>(obj)}};
 	}
 
-	template <typename Other>
-	    requires std::derived_from<Other, T>
+	template <typeinfo::DerivedObject Other>
 	auto downcast() && -> std::optional<Ref<Other>> {
 		if (c_api::type::check(raw(), Other::type)) {
-			return Ref<Other>::take(inner.inner.release());
+			return Ref<Other>::take(&inner.release()->base);
 		}
 		return std::nullopt;
+	}
+
+	/// Upcasting to base object
+	auto cast() && -> Ref<Object> {
+		return *Ref<Object>::take(&inner.release()->base);
 	}
 
 	template <typename... Args>
@@ -379,7 +391,8 @@ public:
 
 		c_api::Type return_type;
 		c_api::Value return_value;
-		exception::throw_deai_error(::di_call_objectt(raw(), &return_type, &return_value, di_args));
+		exception::throw_deai_error(
+		    c_api::object::call(raw(), &return_type, &return_value, di_args));
 		if constexpr (std::is_same_v<Return, void>) {
 			return;
 		} else {
@@ -403,24 +416,22 @@ public:
 		return {raw()};
 	}
 
-	/// Get the raw object reference, the reference count is not changed.
-	[[nodiscard]] auto raw() const -> c_api::Object * {
-		return inner.inner.get();
-	}
-
 	auto operator->() const -> const T * {
-		return &inner;
+		return inner.get();
+	}
+	auto operator->() -> T * {
+		return inner.get();
 	}
 
-	auto set_raw_dtor(void (*dtor)(c_api::Object *)) {
-		c_api::object::set_dtor(raw(), dtor);
+	auto as_ref() -> T & {
+		return *inner.get();
 	}
 
 	/// Give up ownership of the object and return a raw di_object pointer. You will
 	/// only be able to call `raw`, the destructor, or assigning to this Ref after
 	/// this function. Result of calling other functions is undefined.
 	auto release() && noexcept -> c_api::Object * {
-		return inner.inner.release();
+		return &inner.release()->base;
 	}
 
 	[[nodiscard]] auto downgrade() const -> WeakRef<T> {
@@ -429,20 +440,16 @@ public:
 
 	/// Listen to signal on this object
 
-	template <typename Other>
-	    requires std::is_base_of_v<Other, Object>
+	template <typeinfo::DerivedObject Other>
 	auto on(const std::string_view &signal, const Ref<Other> &handler) -> Ref<ListenHandle>;
 
 	auto operator[](const std::string_view &key) const -> ObjectMemberProxy<false> {
 		return {raw(), key};
 	}
 };        // namespace type
-template <typename T>
-    requires std::derived_from<T, Object>
-template <typename Other>
-    requires std::is_base_of_v<Other, Object>
-auto Ref<T>::on(const std::string_view &signal, const Ref<Other> &handler)
-    -> Ref<ListenHandle> {
+template <typeinfo::DerivedObject T>
+template <typeinfo::DerivedObject Other>
+auto Ref<T>::on(const std::string_view &signal, const Ref<Other> &handler) -> Ref<ListenHandle> {
 	return Ref<ListenHandle>::take(
 	           ::di_listen_to(raw(), conv::string_to_borrowed_deai_value(signal), handler.raw()))
 	    .value();
@@ -455,68 +462,44 @@ using namespace type;
 namespace type::util {
 
 template <typeinfo::Convertible Return, typename... Args>
-auto call_raw(c_api::Object *raw_ref, const std::string_view &method_name, const Args &...args)
-    -> Return {
+auto call_raw(c_api::Object *raw_ref, const std::string_view &method_name,
+              const Args &...args) -> Return {
 	auto ref = Ref<Object>{raw_ref};
 	return ref.method_call<Return>(method_name, args...);
 }
 
 template <typename T>
-struct object_allocation_info {
-	static constexpr auto alignment = std::max(alignof(c_api::Object), alignof(T));
-	// Round up the sizeof di_object to multiple of alignment
-	static constexpr auto offset = (sizeof(c_api::Object) + (alignment - 1)) & (-alignment);
-};
-
-template <typename T>
 auto call_cpp_dtor_for_object(c_api::Object *obj) {
-	auto *data = reinterpret_cast<std::byte *>(obj);
-	reinterpret_cast<T *>(data + object_allocation_info<T>::offset)->~T();
+	auto *data = reinterpret_cast<T *>(obj);
+	data->~T();
 }
 
 /// Create a deai object from a C++ class. The constructor and destructor of this class
 /// will be called accordingly.
-template <typename T, typename... Args>
-auto new_object(Args &&...args) -> Ref<Object> {
+template <typeinfo::DerivedObject T, typename... Args>
+auto new_object(Args &&...args) -> Ref<T> {
 	// Allocate the object with a di_object attached to its front
-	auto obj = *Ref<Object>::take(
-	    c_api::object::new_with_type_name(object_allocation_info<T>::offset + sizeof(T),
-	                                      object_allocation_info<T>::alignment, T::type));
-
-	// Call C++ destructor on object destruction
-	obj.set_raw_dtor(call_cpp_dtor_for_object<T>);
+	T *obj;
+	if (posix_memalign(reinterpret_cast<void **>(&obj), alignof(T), sizeof(T)) != 0) {
+		throw std::bad_alloc();
+	}
 
 	// Call constructor
-	new (reinterpret_cast<std::byte *>(obj.raw()) + object_allocation_info<T>::offset)
-	    T(std::forward<Args>(args)...);
-	return obj;
+	new (obj) T(std::forward<Args>(args)...);
+	::memset(&obj->base, 0, sizeof(obj->base));
+	c_api::object::init(&obj->base);
+
+	// Call C++ destructor on object destruction
+	c_api::object::set_dtor(&obj->base, call_cpp_dtor_for_object<T>);
+	c_api::object::set_type(&obj->base, T::type);
+
+	return Ref<T>::take(&obj->base).value();
 }
 
-/// Get the container object of type T. The T must have been created with new_object<T>.
-/// Can be used in member function of T to get a `Ref<Object>` from `*this`, this is
-/// usable in the constructor of the object too.
-template <typename T>
-auto unsafe_to_object_ref(T &obj) -> Ref<Object> {
-	return {reinterpret_cast<c_api::Object *>(reinterpret_cast<std::byte *>(&obj) -
-	                                          object_allocation_info<T>::offset)};
-}
-
-/// Get the interior object of a deai object reference. This object reference must have
-/// been created with new_object<T>, otherwise behavior is undefeind.
-///
-/// You MUST NEVER copy out of the returned reference! You will get an unusable object if
-/// you do so.
-template <typename T>
-auto unsafe_to_inner(c_api::Object *obj) -> T & {
-	return *reinterpret_cast<T *>(reinterpret_cast<std::byte *>(obj) +
-	                              object_allocation_info<T>::offset);
-}
-
-/// ditto
-template <typename T>
-auto unsafe_to_inner(const Ref<Object> &obj) -> T & {
-	return *reinterpret_cast<T *>(reinterpret_cast<std::byte *>(obj.raw()) +
-	                              object_allocation_info<T>::offset);
+template <typename... Args>
+auto new_error(std::format_string<Args...> fmt, Args &&...args) -> Ref<Object> {
+	auto err = c_api::object::new_error(std::format(fmt, std::forward<Args>(args)...).c_str());
+	return *Ref<Object>::take(err);
 }
 
 template <auto func>
@@ -564,7 +547,7 @@ public:
 	static constexpr auto value = exploded::wrapper;
 	static constexpr auto raw = exploded::raw_wrapper;
 
-	struct info : decltype(inspect(func)) {};
+	struct info : decltype(inspect(func)){};
 };
 
 /// Wrap a C++ function into a di callable object.
@@ -578,14 +561,14 @@ auto to_di_callable() -> Ref<Object> {
 	return *Ref<Object>::take(callable);
 }
 
-template <typename T>
+template <typeinfo::DerivedObject T>
 struct member_function_wrapper {
 private:
 	template <typename R, typename... Args>
 	struct factory {
 		template <auto func>
 		static auto wrapper_impl(c_api::Object *obj, Args &&...args) {
-			auto &this_ = unsafe_to_inner<T>(obj);
+			auto &this_ = *reinterpret_cast<T *>(obj);
 			return (this_.*func)(std::forward<Args>(args)...);
 		}
 	};
@@ -600,48 +583,25 @@ public:
 	static constexpr auto value = decltype(inspect(func))::template wrapper_impl<func>;
 };
 
-template <auto func, typename T>
+template <auto func, typeinfo::DerivedObject T>
 auto add_method(T &obj_impl, std::string_view name) -> void {
 	constexpr auto wrapped_func = member_function_wrapper<T>::template value<func>;
 	auto closure = to_di_callable<wrapped_func>().release();
-	auto *object_ref_raw = reinterpret_cast<c_api::Object *>(
-	    reinterpret_cast<std::byte *>(&obj_impl) - object_allocation_info<T>::offset);
 
 	c_api::Type type = c_api::Type::OBJECT;
 	exception::throw_deai_error(c_api::object::add_member_move(
-	    object_ref_raw, conv::string_to_borrowed_deai_value(name), &type, &closure));
+	    &obj_impl.base, conv::string_to_borrowed_deai_value(name), &type, &closure));
+}
+
+template <auto func, typeinfo::DerivedObject T>
+auto add_method(Ref<T> &obj, std::string_view name) -> void {
+	add_method<func, T>(obj.as_ref(), name);
 }
 
 }        // namespace type::util
-
-namespace _compile_time_checks {
-using namespace type;
-using namespace util;
-
-/// Assign this to a variable you want to know the type of, to have the compiler reveal it
-/// to you.
-struct incompatible {};
-
-template <typename... Types>
-inline constexpr bool check_borrowed_type_transformations_v =
-    (... && typeinfo::is_verbatim_v<conv::to_borrowed_deai_type<Types>>);
-
-/// Make sure to_borrowed_deai_type does indeed produce di_* types
-static_assert(check_borrowed_type_transformations_v<std::string_view, std::string, c_api::Object *>);
-
-template <typename... Types>
-inline constexpr bool check_owned_type_transformations_v =
-    (... && typeinfo::is_verbatim_v<conv::to_owned_deai_type<Types>>);
-
-/// Make sure to_owned_deai_type does indeed produce di_* types
-static_assert(check_owned_type_transformations_v<std::string, c_api::Object *, Variant>);
-
-}        // namespace _compile_time_checks
-
 }        // namespace deai
 
 namespace std {
-
 template <class CharT>
 struct formatter<deai::c_api::Type, CharT> {
 	template <class ParseContext>

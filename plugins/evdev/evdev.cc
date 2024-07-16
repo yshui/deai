@@ -9,31 +9,17 @@
 #include "common.h"
 
 namespace {
+struct InputId;
+struct Device;
+struct Module;
+}        // namespace
+
+namespace {
 using namespace ::deai;
 
-struct Device {
-	static constexpr const char *type [[maybe_unused]] = "deai.plugin.evdev:Device";
-	int fd;
-
-	[[nodiscard]] auto id() const -> Ref<Object>;
-	[[nodiscard]] auto name() const -> Variant;
-
-	Device(const std::string &dev_node) : fd(::open(dev_node.c_str(), O_RDONLY)) {
-		auto object_ref = util::unsafe_to_object_ref(*this);
-		if (fd < 0) {
-			object_ref["errmsg"] = Variant::from(std::string{"Failed to open device"});
-		} else {
-			util::add_method<&Device::id>(*this, "__get_id");
-			util::add_method<&Device::name>(*this, "__get_name");
-		}
-	}
-	~Device() {
-		close(fd);
-	}
-};
-
 struct InputId {
-private:
+	static constexpr const char *type = "deai.plugin.evdev:InputId";
+	ObjectBase base;
 	/// Vendor
 	///
 	/// EXPORT: deai.plugin.evdev:InputId.vendor: :integer
@@ -51,9 +37,6 @@ private:
 	/// EXPORT: deai.plugin.evdev:InputId.version: :integer
 	uint16_t version_;
 
-public:
-	static constexpr const char *type [[maybe_unused]] = "deai.plugin.evdev:"
-	                                                     "InputId";
 	[[nodiscard]] auto vendor() const -> int {
 		return vendor_;
 	}
@@ -71,12 +54,30 @@ public:
 
 	InputId(uint16_t v, uint16_t p, uint16_t b, uint16_t ver)
 	    : vendor_{v}, product_{p}, bustype_{b}, version_{ver} {
-		util::add_method<&InputId::vendor>(*this, "__get_vendor");
-		util::add_method<&InputId::product>(*this, "__get_product");
-		util::add_method<&InputId::bustype>(*this, "__get_bustype");
-		util::add_method<&InputId::version>(*this, "__get_version");
 	}
 	InputId(::input_id id) : InputId{id.vendor, id.product, id.bustype, id.version} {
+	}
+};
+
+struct Device {
+	static constexpr const char *type = "deai.plugin.evdev:Device";
+	ObjectBase base;
+	int fd;
+
+	[[nodiscard]] auto id() const -> Ref<Object>;
+	[[nodiscard]] auto name() const -> Variant;
+
+	Device(const std::string &dev_node) : fd(::open(dev_node.c_str(), O_RDONLY)) {
+		auto object_ref = Ref<Device>{*this};
+		if (fd < 0) {
+			object_ref["errmsg"] = Variant::from(std::string{"Failed to open device"});
+		} else {
+			util::add_method<&Device::id>(*this, "__get_id");
+			util::add_method<&Device::name>(*this, "__get_name");
+		}
+	}
+	~Device() {
+		close(fd);
 	}
 };
 
@@ -86,9 +87,14 @@ public:
 auto Device::id() const -> Ref<Object> {
 	::input_id id;
 	if (::ioctl(fd, EVIOCGID, &id) < 0) {
-		return ::di_new_error("Failed to get device id information");
+		return util::new_error("Failed to get device id information");
 	}
-	return util::new_object<InputId>(id);
+	auto obj = util::new_object<InputId>(id);
+	util::add_method<&InputId::vendor>(obj, "__get_vendor");
+	util::add_method<&InputId::product>(obj, "__get_product");
+	util::add_method<&InputId::bustype>(obj, "__get_bustype");
+	util::add_method<&InputId::version>(obj, "__get_version");
+	return std::move(obj).cast();
 }
 
 /// Device name
@@ -115,13 +121,12 @@ auto Device::name() const -> Variant {
 }
 
 struct Module {
-private:
-public:
-	static constexpr const char *type [[maybe_unused]] = "deai.plugin.evdev:Module";
+	static constexpr const char *type = "deai.plugin.evdev:Module";
+	ObjectBase base;
 	/// Open a device node
 	///
 	/// EXPORT: evdev.open(path: :string): deai.plugin.evdev:Device
-	auto device_from_dev_node(const std::string &dev_node) -> Ref<Object> {
+	auto device_from_dev_node(const std::string &dev_node) -> Ref<Device> {
 		static_cast<void>(this);        // slient "this functino could be static" warning
 		return util::new_object<Device>(dev_node);
 	}
@@ -133,13 +138,12 @@ public:
 ///
 /// Interface to the Linux evdev subsystem.
 auto di_new_evdev(::deai::Ref<::deai::Core> &di) {
-	auto obj = util::new_object<Module>();
-	auto &module = util::unsafe_to_inner<Module>(obj);
+	auto module = util::new_object<Module>();
 	util::add_method<&Module::device_from_dev_node>(module, "open");
-	return obj;
+	return module;
 }
 DEAI_CPP_PLUGIN_ENTRY_POINT(di) {
 	auto obj = di_new_evdev(di);
-	static_cast<void>(di->register_module("evdev", obj));
+	static_cast<void>(di->register_module("evdev", std::move(obj).cast()));
 }
 }        // namespace

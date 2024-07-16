@@ -1,14 +1,16 @@
 #pragma once
 #include "deai.hh"
 
-namespace deai::builtin {
+namespace deai {
+namespace builtin {
 namespace log {
-struct Log : public Object {
-public:
+struct Log {
 	static constexpr const char *type = "deai.builtin:LogModule";
-	[[nodiscard]] auto
-	file_target(const std::string &filename, bool overwrite) const -> Ref<Object>;
+	type::ObjectBase base;
+	[[nodiscard]] auto file_target(const std::string &filename, bool overwrite) -> Ref<Object>;
 };
 }        // namespace log
 namespace event {}
-}        // namespace deai::builtin
+}        // namespace builtin
+
+}        // namespace deai

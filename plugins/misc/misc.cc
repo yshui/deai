@@ -9,9 +9,8 @@ using namespace deai;
 namespace {
 
 struct Module {
-public:
-	static constexpr const char *type [[maybe_unused]] = "deai.plugin.utils:Module";
-
+	static constexpr const char *type = "deai.plugin.utils:Module";
+	type::ObjectBase base;
 	/// Find maximum unweighted bipartite match.
 	///
 	/// EXPORT: misc.bipartite_match(graph: [[:int]]): [:int]
@@ -134,21 +133,22 @@ public:
 		return ret;
 	}
 };
+}        // namespace
 
+namespace {
 /// misc
 ///
 /// EXPORT: misc: deai:module
 ///
 /// Collection of tools that don't fit anywhere else.
-auto di_new_utils(Ref<Core> &di) -> Ref<Object> {
-	auto obj = util::new_object<Module>();
-	auto &module = util::unsafe_to_inner<Module>(obj);
+auto di_new_utils(Ref<Core> &di) -> Ref<Module> {
+	auto module = util::new_object<Module>();
 	util::add_method<&Module::difference_constraints>(module, "difference_constraints");
 	util::add_method<&Module::bipartite_match>(module, "bipartite_match");
-	return obj;
+	return module;
 }
 DEAI_CPP_PLUGIN_ENTRY_POINT(di) {
 	auto obj = di_new_utils(di);
-	static_cast<void>(di->register_module("misc", obj));
+	static_cast<void>(di->register_module("misc", std::move(obj).cast()));
 }
 }        // namespace

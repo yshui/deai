@@ -28,25 +28,6 @@ void throw_deai_error(int errno_) {
 }
 }        // namespace exception
 namespace type {
-void ObjectRefDeleter::operator()(di_object *obj) {
-	::di_unref_object(obj);
-}
-auto Object::operator=(const Object &other) -> Object & {
-	inner.reset(::di_ref_object(other.inner.get()));
-	return *this;
-}
-Object::Object(const Object &other) {
-	*this = other;
-}
-Object::Object(c_api::Object *obj) : inner{obj} {
-}
-auto Object::unsafe_ref(c_api::Object *obj) -> Object {
-	return Object{obj};
-}
-
-auto Object::create() -> Ref<Object> {
-	return Ref<Object>{Object{::di_new_object(sizeof(c_api::Object), alignof(c_api::Object))}};
-}
 
 Variant::~Variant() {
 	// std::cerr << "Freeing variant, inner type "
@@ -250,8 +231,7 @@ auto ObjectMemberProxy<raw_>::operator=(const std::optional<Variant> &new_value)
 	return *this;
 }
 template <bool raw_>
-auto ObjectMemberProxy<raw_>::operator=(std::optional<Variant> &&new_value) const
-    -> const ObjectMemberProxy & {
+auto ObjectMemberProxy<raw_>::operator=(std::optional<Variant> &&new_value) const -> const ObjectMemberProxy & {
 	erase();
 
 	auto moved = std::move(new_value);
@@ -289,4 +269,30 @@ auto WeakRefBase::release() && -> c_api::WeakObject * {
 	return inner.release();
 }
 }        // namespace type
+
+namespace compile_time_checks {
+using namespace type;
+using namespace util;
+
+/// Assign this to a variable you want to know the type of, to have the compiler reveal it
+/// to you.
+struct incompatible {};
+
+template <typename... Types>
+inline constexpr bool check_borrowed_type_transformations_v =
+    (... && typeinfo::is_verbatim_v<conv::to_borrowed_deai_type<Types>>);
+
+/// Make sure to_borrowed_deai_type does indeed produce di_* types
+static_assert(check_borrowed_type_transformations_v<std::string_view, std::string, c_api::Object *>);
+
+template <typename... Types>
+inline constexpr bool check_owned_type_transformations_v =
+    (... && typeinfo::is_verbatim_v<conv::to_owned_deai_type<Types>>);
+
+/// Make sure to_owned_deai_type does indeed produce di_* types
+static_assert(check_owned_type_transformations_v<std::string, c_api::Object *, Variant>);
+
+static_assert(typeinfo::of<type::Ref<type::Object>>::value == c_api::Type::OBJECT);
+
+}        // namespace compile_time_checks
 }        // namespace deai

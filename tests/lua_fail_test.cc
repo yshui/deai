@@ -10,9 +10,9 @@ using namespace deai::type;
 using namespace deai::util;
 using namespace std::literals;
 
-class StringLogTarget {
-public:
+struct StringLogTarget {
 	static constexpr const char *type = "deai.tests:StringLogTarget";
+	ObjectBase base;
 	std::string log;
 	auto write(std::string_view message) -> int {
 		int written = (int)message.size();
@@ -32,14 +32,13 @@ static constexpr const char *expected_error_log =
 
 DEAI_CPP_PLUGIN_ENTRY_POINT(di) {
 	auto log_target = util::new_object<StringLogTarget>();
-	auto &log_target_impl = util::unsafe_to_inner<StringLogTarget>(log_target);
-	util::add_method<&StringLogTarget::write>(log_target_impl, "write");
+	util::add_method<&StringLogTarget::write>(log_target, "write");
 
-	di["log"]->object_ref().value()["log_target"] = Variant::from(log_target);
+	di["log"]->object_ref().value()["log_target"] = Variant::from(log_target.clone());
 
 	auto luam = di["lua"]->object_ref().value();
 
 	luam.method_call<void>("load_script", "../tests/invalid.lua"sv);
-	std::cout << log_target_impl.log << '\n';
-	assert(log_target_impl.log == expected_error_log);
+	std::cout << log_target->log << '\n';
+	assert(log_target->log == expected_error_log);
 }

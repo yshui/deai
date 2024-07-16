@@ -314,17 +314,8 @@ struct di_ref_tracked_object *ref_tracked;
 thread_local struct list_head unreferred_objects;
 thread_local bool collecting_garbage = false;
 
-di_object *di_new_object(size_t sz, size_t alignment) {
-	if (sz < sizeof(di_object)) {
-		return NULL;
-	}
-	if (alignment < alignof(di_object)) {
-		return NULL;
-	}
-
-	di_object_internal *obj;
-	DI_CHECK_OK(posix_memalign((void **)&obj, alignment, sz));
-	memset(obj, 0, sz);
+void di_init_object(di_object *obj_) {
+	di_object_internal *obj = (di_object_internal *)obj_;
 	obj->ref_count = 1;
 
 	// non-zero strong references will implicitly hold a weak refrence. that reference
@@ -338,7 +329,20 @@ di_object *di_new_object(size_t sz, size_t alignment) {
 	list_add(&obj->siblings, &all_objects);
 #endif
 	INIT_LIST_HEAD(&obj->unreferred_siblings);
+}
 
+di_object *di_new_object(size_t sz, size_t alignment) {
+	if (sz < sizeof(di_object)) {
+		return NULL;
+	}
+	if (alignment < alignof(di_object)) {
+		return NULL;
+	}
+
+	di_object_internal *obj;
+	DI_CHECK_OK(posix_memalign((void **)&obj, alignment, sz));
+	memset(obj, 0, sz);
+	di_init_object((di_object *)obj);
 	return (di_object *)obj;
 }
 

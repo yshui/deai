@@ -1,7 +1,7 @@
 #include <cassert>
-#include <string>
 #include <deai/c++/builtins.hh>
 #include <deai/c++/deai.hh>
+#include <string>
 
 #include <unistd.h>
 #include <climits>
@@ -33,7 +33,7 @@ DEAI_CPP_PLUGIN_ENTRY_POINT(di) {
 
 	std::array<char, PATH_MAX> path;
 	assert(strcmp(getcwd(path.data(), path.size()), "/tmp") == 0);
-	auto object = deai::Object::create();
+	auto object = util::new_object<Object>();
 
 	// Test move assignment
 	object["test_member"] = std::optional{Variant::from("test_member_value"s)};

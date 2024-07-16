@@ -1,4 +1,5 @@
 #pragma once
+#include <stdbool.h>
 #include "common.h"
 typedef struct di_object di_object;
 

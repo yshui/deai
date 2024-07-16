@@ -7,37 +7,38 @@ extern "C" {
 
 #include <deai/c++/deai.hh>
 
-namespace deai::plugins::hwinfo {
+namespace deai {
+namespace plugins::hwinfo {
 /// Hardware information module for display devices.
 ///
 /// TYPE: deai.plugin.hwinfo.display:Module
-class Display {
-public:
-	static constexpr const char *type [[maybe_unused]] =
-	    "deai.plugin.hwinfo.display:Module";
-
-	/// Create a display info object by parsing binary EDID data.
-	///
-	/// EXPORT: hwinfo.display.from_edid(edid: :string): deai.plugin.hwinfo.display:DisplayInfo
-	auto from_edid(std::string_view edid) -> Ref<::deai::Object>;
-};
-
+struct Display;
 /// Information about a display device.
 ///
 /// TYPE: deai.plugin.hwinfo.display:DisplayInfo
-class DisplayInfo {
-private:
-	std::unique_ptr<struct di_info, void (*)(struct di_info *)> info;
+struct DisplayInfo;
+}        // namespace plugins::hwinfo
 
-public:
-	static constexpr const char *type [[maybe_unused]] =
-	    "deai.plugin.hwinfo.display:DisplayInfo";
+namespace plugins::hwinfo {
+struct DisplayInfo {
+	static constexpr const char *type = "deai.plugin.hwinfo.display:DisplayInfo";
+	type::ObjectBase base;
+	std::unique_ptr<struct di_info, void (*)(struct di_info *)> info;
 
 	DisplayInfo(struct di_info *info) : info{info, di_info_destroy} {
 	}
-	static void init_object(Ref<::deai::Object> &obj);
 	auto get_model() const -> c_api::String;
 	auto get_make() const -> c_api::String;
 	auto get_serial() const -> c_api::String;
 };
-}        // namespace deai::plugins::hwinfo
+struct Display {
+	static constexpr const char *type = "deai.plugin.hwinfo.display:Module";
+	type::ObjectBase base;
+	/// Create a display info object by parsing binary EDID data.
+	///
+	/// EXPORT: hwinfo.display.from_edid(edid: :string): deai.plugin.hwinfo.display:DisplayInfo
+	auto from_edid(std::string_view edid) -> Ref<DisplayInfo>;
+};
+
+}        // namespace plugins::hwinfo
+}        // namespace deai

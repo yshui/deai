@@ -8,16 +8,33 @@
 #include "c_api.hh"        // IWYU pragma: keep
 
 namespace deai {
+
 namespace type {
 struct Object;
-template <typename T>
-    requires std::derived_from<T, type::Object>
-struct Ref;
-template <typename T>
-struct WeakRef;
 struct Variant;
-}        // namespace type
+}
+
 namespace typeinfo {
+
+/// A type that is "derived" from the c_api::Object
+template <typename T>
+concept DerivedObject = requires(T t) {
+	// requires std::is_standard_layout_v<T>;
+	{ &t.base } -> std::same_as<c_api::Object *>;
+	requires offsetof(T, base) == 0;
+	{ T::type } -> std::same_as<const char * const&>;
+};
+}        // namespace typeinfo
+
+namespace type {
+template <typeinfo::DerivedObject T>
+struct Ref;
+template <typeinfo::DerivedObject T>
+struct WeakRef;
+}        // namespace type
+
+namespace typeinfo {
+
 template <c_api::Type type>
 struct deai_ctype {};
 
@@ -94,13 +111,12 @@ template <>
 struct of<void *> {
 	static constexpr auto value = c_api::Type::POINTER;
 };
-template <typename T>
-    requires std::derived_from<T, type::Object>
+template <DerivedObject T>
 struct of<type::Ref<T>> {
 	static constexpr auto value = c_api::Type::OBJECT;
 };
 template <>
-struct of<::di_object *> {
+struct of<c_api::Object *> {
 	static constexpr auto value = c_api::Type::OBJECT;
 };
 template <typename T>
@@ -108,7 +124,7 @@ struct of<type::WeakRef<T>> {
 	static constexpr auto value = c_api::Type::WEAK_OBJECT;
 };
 template <>
-struct of<::di_weak_object *> {
+struct of<c_api::WeakObject *> {
 	static constexpr auto value = c_api::Type::WEAK_OBJECT;
 };
 template <>
@@ -124,11 +140,11 @@ struct of<std::string_view> {
 	static constexpr auto value = c_api::Type::STRING;
 };
 template <>
-struct of<::di_string> {
+struct of<c_api::String> {
 	static constexpr auto value = c_api::Type::STRING;
 };
 template <>
-struct of<::di_array> {
+struct of<c_api::Array> {
 	static constexpr auto value = c_api::Type::ARRAY;
 };
 template <typename T, size_t length>
@@ -159,35 +175,33 @@ struct of<std::vector<T>> {
 	static constexpr auto value = c_api::Type::ARRAY;
 };
 
-static_assert(of<type::Ref<type::Object>>::value == c_api::Type::OBJECT);
-
 template <>
-struct is_verbatim<::di_string> {
+struct is_verbatim<c_api::String> {
 	static constexpr bool value = true;
 };
 
 template <>
-struct is_verbatim<::di_array> {
+struct is_verbatim<c_api::Array> {
 	static constexpr bool value = true;
 };
 
 template <>
-struct is_verbatim<::di_tuple> {
+struct is_verbatim<c_api::Tuple> {
 	static constexpr bool value = true;
 };
 
 template <>
-struct is_verbatim<::di_variant> {
+struct is_verbatim<c_api::Variant> {
 	static constexpr bool value = true;
 };
 
 template <>
-struct is_verbatim<::di_object *> {
+struct is_verbatim<c_api::Object *> {
 	static constexpr bool value = true;
 };
 
 template <>
-struct is_verbatim<::di_weak_object *> {
+struct is_verbatim<c_api::WeakObject *> {
 	static constexpr bool value = true;
 };
 
@@ -228,7 +242,7 @@ struct deai_ctype<c_api::Type::STRING_LITERAL> {
 
 template <>
 struct deai_ctype<c_api::Type::STRING> {
-	using type = ::di_string;
+	using type = c_api::String;
 };
 
 template <>
@@ -238,27 +252,27 @@ struct deai_ctype<c_api::Type::POINTER> {
 
 template <>
 struct deai_ctype<c_api::Type::OBJECT> {
-	using type = ::di_object *;
+	using type = c_api::Object *;
 };
 
 template <>
 struct deai_ctype<c_api::Type::WEAK_OBJECT> {
-	using type = ::di_weak_object *;
+	using type = c_api::WeakObject *;
 };
 
 template <>
 struct deai_ctype<c_api::Type::ARRAY> {
-	using type = ::di_array;
+	using type = c_api::Array;
 };
 
 template <>
 struct deai_ctype<c_api::Type::TUPLE> {
-	using type = ::di_tuple;
+	using type = c_api::Tuple;
 };
 
 template <>
 struct deai_ctype<c_api::Type::VARIANT> {
-	using type = ::di_variant;
+	using type = c_api::Variant;
 };
 
 template <c_api::Type type>
@@ -277,5 +291,6 @@ static constexpr bool is_trivially_convertible = [](c_api::Type type) {
 }(typeinfo::of<T>::value);
 template <typename T>
 concept TriviallyConvertible = is_trivially_convertible<T>;
+
 }        // namespace typeinfo
 }        // namespace deai

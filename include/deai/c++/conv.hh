@@ -57,7 +57,7 @@ auto to_borrowed_deai_value(const T &input) {
 	if constexpr (typeinfo::is_verbatim_v<std::remove_cvref_t<T>>) {
 		return input;
 	} else if constexpr (type == c_api::Type::OBJECT) {
-		return input.raw();
+		return &input->base;
 	} else if constexpr (type == c_api::Type::ARRAY) {
 		return array_to_borrowed_deai_value(input);
 	} else if constexpr (type == c_api::Type::STRING) {
