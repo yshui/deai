@@ -1058,7 +1058,7 @@ static int di_lua_add_listener(lua_State *L) {
 	}
 	di_unref_object((di_object *)handler);
 
-	if (di_check_type(listen_handle, "deai:Error")) {
+	if (di_is_error(listen_handle)) {
 		scoped_di_string errmsg;
 		DI_CHECK_OK(di_get(listen_handle, "errmsg", errmsg));
 		return luaL_error(L, "failed to add listener %.*s", errmsg.length, errmsg.data);

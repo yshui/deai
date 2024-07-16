@@ -46,8 +46,8 @@ static void di_call_ffi_call(void *args_) {
 	ffi_call(args->cif, args->fn, args->ret, args->xargs);
 }
 
-static int di_typed_trampoline(ffi_cif *cif, void (*fn)(void), di_type *ret_type, void *ret,
-                               const di_type *fnats, di_tuple args) {
+static int di_typed_trampoline(ffi_cif *cif, void (*fn)(void), di_type *ret_type,
+                               void *ret, const di_type *fnats, di_tuple args) {
 	assert(args.length == 0 || args.elements != NULL);
 	assert(args.length >= 0);
 	assert(args.length <= MAX_NARGS);
@@ -87,9 +87,9 @@ static int di_typed_trampoline(ffi_cif *cif, void (*fn)(void), di_type *ret_type
 	}
 	return rc;
 }
-
+static const char closure_type[] = "deai:closure";
 static int closure_trampoline(di_object *o, di_type *rtype, di_value *ret, di_tuple t) {
-	if (!di_check_type(o, "deai:closure")) {
+	if (!di_check_type(o, closure_type)) {
 		return -EINVAL;
 	}
 
@@ -120,7 +120,7 @@ static int raw_closure_trampoline(di_object *o, di_type *rtype, di_value *ret, d
 }
 
 static void free_closure(di_object *o) {
-	assert(di_check_type(o, "deai:closure"));
+	assert(di_check_type(o, closure_type));
 
 	struct di_closure *cl = (void *)o;
 	free(cl->cif.arg_types);
@@ -191,7 +191,7 @@ struct di_closure *di_create_closure(void (*fn)(void), di_type rtype, di_tuple c
 	}
 
 	cl->raw.obj.dtor = free_closure;
-	DI_OK_OR_RET_PTR(di_set_type((void *)cl, "deai:closure"));
+	DI_OK_OR_RET_PTR(di_set_type((void *)cl, closure_type));
 
 	return cl;
 }
@@ -259,10 +259,10 @@ struct di_field_getter {
 	di_type type;
 	ptrdiff_t offset;
 };
-
+static const char field_getter_type[] = "deai:FieldGetter";
 static int
 di_field_getter_call(di_object *getter, di_type *rtype, di_value *ret, di_tuple args) {
-	DI_CHECK(di_check_type(getter, "deai:FieldGetter"));
+	DI_CHECK(di_check_type(getter, field_getter_type));
 
 	if (args.elements[0].type != DI_TYPE_OBJECT) {
 		DI_ASSERT(false, "first argument to getter is not an object");
@@ -283,7 +283,7 @@ di_object *di_new_field_getter(di_type type, ptrdiff_t offset) {
 	ret->offset = offset;
 	ret->type = type;
 	ret->call = di_field_getter_call;
-	di_set_type(obj, "deai:FieldGetter");
+	di_set_type(obj, field_getter_type);
 	return obj;
 }
 

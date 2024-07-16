@@ -599,7 +599,7 @@ static void di_promise_join_handler(int index, di_object *storage,
 		di_call(then_promise, "resolve", results);
 	}
 }
-
+static const char promise_type[] = "deai:Promise";
 /// Create a promise that resolves when all given promises resolve. Returns a promises
 /// that resolves into an array, which stores the results of the promises.
 ///
@@ -612,7 +612,7 @@ di_object *di_join_promises(di_object *event_module, di_array promises) {
 	}
 	di_object **arr = promises.arr;
 	for (int i = 0; i < promises.length; i++) {
-		if (!di_check_type(arr[i], "deai:Promise")) {
+		if (!di_check_type(arr[i], promise_type)) {
 			return di_new_error("not all objects are promise");
 		}
 	}
@@ -649,7 +649,7 @@ di_object *di_any_promise(di_object *event_module, di_array promises) {
 	}
 	di_object **arr = promises.arr;
 	for (int i = 0; i < promises.length; i++) {
-		if (!di_check_type(arr[i], "deai:Promise")) {
+		if (!di_check_type(arr[i], promise_type)) {
 			return di_new_error("not all objects are promise");
 		}
 	}

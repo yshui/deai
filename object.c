@@ -6,10 +6,10 @@
 
 #include <deai/builtins/log.h>
 #include <deai/callable.h>
+#include <deai/error.h>
 #include <deai/helper.h>
 #include <deai/object.h>
 #include <deai/type.h>
-#include <deai/error.h>
 #include <assert.h>
 #include <ev.h>
 #include <stdalign.h>
@@ -47,6 +47,7 @@ static_assert(alignof(di_object) == alignof(di_object_internal),
               "di_object alignment mismatch");
 // clang-format on
 
+static const char error_type[] = "deai:Error";
 di_object *di_new_error(const char *fmt, ...) {
 	va_list ap;
 	va_start(ap, fmt);
@@ -60,14 +61,13 @@ di_object *di_new_error(const char *fmt, ...) {
 	}
 
 	auto err = di_new_object_with_type(di_object);
-	di_set_type(err, "deai:Error");
+	di_set_type(err, error_type);
 
 	di_member(err, "errmsg", errmsg);
 	return err;
 }
-
 bool di_is_error(di_object *obj) {
-	return di_check_type(obj, "deai:Error");
+	return di_check_type(obj, error_type);
 }
 
 static int di_call_internal(di_object *self, di_object *method_, di_type *rt,
@@ -96,15 +96,15 @@ static int di_call_internal(di_object *self, di_object *method_, di_type *rt,
 }
 
 #define gen_callx(fnname, getter)                                                        \
-	int fnname(di_object *self, di_string name, di_type *rt, di_value *ret,          \
-	           di_tuple args, bool *called) {                                        \
-		di_object *val;                                                          \
-		*called = false;                                                         \
-		int rc = getter(self, name, DI_TYPE_OBJECT, (di_value *)&val);           \
-		if (rc != 0) {                                                           \
-			return rc;                                                       \
-		}                                                                        \
-		return di_call_internal(self, val, rt, ret, args, called);               \
+	int fnname(di_object *self, di_string name, di_type *rt, di_value *ret,              \
+	           di_tuple args, bool *called) {                                            \
+		di_object *val;                                                                  \
+		*called = false;                                                                 \
+		int rc = getter(self, name, DI_TYPE_OBJECT, (di_value *)&val);                   \
+		if (rc != 0) {                                                                   \
+			return rc;                                                                   \
+		}                                                                                \
+		return di_call_internal(self, val, rt, ret, args, called);                       \
 	}
 
 gen_callx(di_callx, di_getxt);
@@ -167,16 +167,15 @@ int di_setx(di_object *o, di_string prop, di_type type, const void *val) {
 	// If a setter is present, we just call that and we are done.
 	bool handler_found;
 	int rc = call_handler_with_fallback(o, "__set", prop,
-	                                    (struct di_variant){(di_value *)val, type},
-	                                    NULL, NULL, &handler_found);
+	                                    (struct di_variant){(di_value *)val, type}, NULL,
+	                                    NULL, &handler_found);
 	if (handler_found) {
 		return rc;
 	}
 
 	// Call the deleter if present
-	rc = call_handler_with_fallback(o, "__delete", prop,
-	                                (struct di_variant){NULL, DI_LAST_TYPE}, NULL,
-	                                NULL, &handler_found);
+	rc = call_handler_with_fallback(o, "__delete", prop, (struct di_variant){NULL, DI_LAST_TYPE},
+	                                NULL, NULL, &handler_found);
 	if (handler_found && rc != 0) {
 		return rc;
 	}
@@ -250,9 +249,8 @@ int di_getx(di_object *o, di_string prop, di_type *type, di_value *ret) {
 	}
 
 	bool handler_found;
-	rc = call_handler_with_fallback(o, "__get", prop,
-	                                (struct di_variant){NULL, DI_LAST_TYPE}, type,
-	                                ret, &handler_found);
+	rc = call_handler_with_fallback(
+	    o, "__get", prop, (struct di_variant){NULL, DI_LAST_TYPE}, type, ret, &handler_found);
 	if (rc != 0) {
 		return rc;
 	}
@@ -264,15 +262,15 @@ int di_getx(di_object *o, di_string prop, di_type *type, di_value *ret) {
 }
 
 #define gen_tfunc(name, getter)                                                          \
-	int name(di_object *o, di_string prop, di_type rtype, di_value *ret) {           \
-		di_value ret2;                                                           \
-		di_type rt;                                                              \
-		int rc = getter(o, prop, &rt, &ret2);                                    \
-		if (rc != 0) {                                                           \
-			return rc;                                                       \
-		}                                                                        \
-		rc = di_type_conversion(rt, &ret2, rtype, ret, false);                   \
-		return rc;                                                               \
+	int name(di_object *o, di_string prop, di_type rtype, di_value *ret) {               \
+		di_value ret2;                                                                   \
+		di_type rt;                                                                      \
+		int rc = getter(o, prop, &rt, &ret2);                                            \
+		if (rc != 0) {                                                                   \
+			return rc;                                                                   \
+		}                                                                                \
+		rc = di_type_conversion(rt, &ret2, rtype, ret, false);                           \
+		return rc;                                                                       \
 	}
 
 gen_tfunc(di_getxt, di_getx);
@@ -284,8 +282,8 @@ int di_set_type(di_object *o, const char *type) {
 
 const char *di_get_type(di_object *o) {
 	const char *ret;
-	int rc = di_rawgetxt(o, di_string_borrow("__type"), DI_TYPE_STRING_LITERAL,
-	                     (di_value *)&ret);
+	int rc =
+	    di_rawgetxt(o, di_string_borrow("__type"), DI_TYPE_STRING_LITERAL, (di_value *)&ret);
 	if (rc != 0) {
 		if (rc == -ENOENT) {
 			return "deai:object";
@@ -395,8 +393,8 @@ int di_delete_member_raw(di_object *obj, di_string name) {
 int di_delete_member(di_object *obj, di_string name) {
 	bool handler_found;
 	int rc2 = call_handler_with_fallback(obj, "__delete", name,
-	                                     (struct di_variant){NULL, DI_LAST_TYPE},
-	                                     NULL, NULL, &handler_found);
+	                                     (struct di_variant){NULL, DI_LAST_TYPE}, NULL,
+	                                     NULL, &handler_found);
 	if (handler_found) {
 		return rc2;
 	}
@@ -494,8 +492,7 @@ di_object *di_ref_object(di_object *_obj) {
 	struct di_ref_tracked_object *t = NULL;
 	HASH_FIND_PTR(ref_tracked, (void **)&_obj, t);
 	if (t != NULL) {
-		di_log_va(log_module, DI_LOG_DEBUG, "%p is referenced (%ld)\n", _obj,
-		          obj->ref_count);
+		di_log_va(log_module, DI_LOG_DEBUG, "%p is referenced (%ld)\n", _obj, obj->ref_count);
 		print_stack_trace(0, 10);
 	}
 #endif
@@ -539,8 +536,7 @@ void di_unref_object(di_object *_obj) {
 	struct di_ref_tracked_object *t = NULL;
 	HASH_FIND_PTR(ref_tracked, (void **)&_obj, t);
 	if (t != NULL) {
-		di_log_va(log_module, DI_LOG_DEBUG, "%p is unreferenced (%ld)\n", _obj,
-		          obj->ref_count);
+		di_log_va(log_module, DI_LOG_DEBUG, "%p is unreferenced (%ld)\n", _obj, obj->ref_count);
 		print_stack_trace(0, 10);
 	}
 #endif
@@ -855,8 +851,7 @@ void di_copy_value(di_type t, void *dst, const void *src) {
 			assert(di_sizeof_type(arr->elem_type) != 0);
 			d = calloc(arr->length, di_sizeof_type(arr->elem_type));
 			for (int i = 0; i < arr->length; i++) {
-				di_copy_value(arr->elem_type,
-				              d + di_sizeof_type(arr->elem_type) * i,
+				di_copy_value(arr->elem_type, d + di_sizeof_type(arr->elem_type) * i,
 				              arr->arr + di_sizeof_type(arr->elem_type) * i);
 			}
 			dstval->array = (di_array){arr->length, d, arr->elem_type};
@@ -868,8 +863,7 @@ void di_copy_value(di_type t, void *dst, const void *src) {
 		dstval->tuple.length = tuple->length;
 
 		for (int i = 0; i < tuple->length; i++) {
-			di_copy_value(DI_TYPE_VARIANT, &dstval->tuple.elements[i],
-			              &tuple->elements[i]);
+			di_copy_value(DI_TYPE_VARIANT, &dstval->tuple.elements[i], &tuple->elements[i]);
 		}
 		break;
 	case DI_TYPE_VARIANT:
@@ -1038,8 +1032,8 @@ static void di_signal_dispatch(di_object *sig_, di_tuple args) {
 			}
 			di_free_value(rtype, &ret);
 		} else {
-			di_log_va(log_module, DI_LOG_ERROR,
-			          "Failed to call a signal handler: %s\n", strerror(-rc));
+			di_log_va(log_module, DI_LOG_ERROR, "Failed to call a signal handler: %s\n",
+			          strerror(-rc));
 		}
 	}
 	free(handlers);
@@ -1070,8 +1064,7 @@ di_object *di_listen_to(di_object *_obj, di_string name, di_object *h) {
 		((struct di_signal *)sig)->nhandlers = 0;
 		DI_CHECK_OK(di_member(sig, "weak_source", weak_source));
 		DI_CHECK_OK(di_member_clone(sig, "signal_name", signal_member_name_str));
-		DI_CHECK_OK(di_method(sig, "remove", di_signal_remove_handler,
-		                      struct di_weak_object *));
+		DI_CHECK_OK(di_method(sig, "remove", di_signal_remove_handler, struct di_weak_object *));
 		DI_CHECK_OK(di_method(sig, "add", di_signal_add_handler, di_object *));
 		DI_CHECK_OK(di_method(sig, "dispatch", di_signal_dispatch, di_tuple));
 		rc = di_setx(_obj, signal_member_name_str, DI_TYPE_OBJECT, &sig);
@@ -1146,13 +1139,12 @@ static void di_scan_type(di_type type, di_value *value, int (*pre)(di_object_int
 		}
 		auto step = di_sizeof_type(value->array.elem_type);
 		for (int i = 0; i < value->array.length; i++) {
-			di_scan_type(value->array.elem_type, value->array.arr + step * i,
-			             pre, state, post);
+			di_scan_type(value->array.elem_type, value->array.arr + step * i, pre, state, post);
 		}
 	} else if (type == DI_TYPE_TUPLE) {
 		for (int i = 0; i < value->tuple.length; i++) {
-			di_scan_type(value->tuple.elements[i].type,
-			             value->tuple.elements[i].value, pre, state, post);
+			di_scan_type(value->tuple.elements[i].type, value->tuple.elements[i].value,
+			             pre, state, post);
 		}
 	} else if (type == DI_TYPE_VARIANT) {
 		di_scan_type(value->variant.type, value->variant.value, pre, state, post);
@@ -1202,8 +1194,8 @@ static int di_collect_garbage_scan(di_object_internal *o, int revive) {
 			return -1;
 		}
 #ifdef TRACK_OBJECTS
-		fprintf(stderr, "\treviving %p, %lu/%lu %s\n", o, o->ref_count_scan,
-		        o->ref_count, di_get_type((void *)o));
+		fprintf(stderr, "\treviving %p, %lu/%lu %s\n", o, o->ref_count_scan, o->ref_count,
+		        di_get_type((void *)o));
 #endif
 		o->ref_count_scan = 0;
 		o->mark = 0;
@@ -1215,8 +1207,8 @@ static int di_collect_garbage_scan(di_object_internal *o, int revive) {
 	o->mark = 2;
 	// all references to `o` are internal, so this object can be collected.
 #ifdef TRACK_OBJECTS
-	fprintf(stderr, "\tcollecting %p, %lu/%lu %s\n", o, o->ref_count_scan,
-	        o->ref_count, di_get_type((void *)o));
+	fprintf(stderr, "\tcollecting %p, %lu/%lu %s\n", o, o->ref_count_scan, o->ref_count,
+	        di_get_type((void *)o));
 #endif
 	return 0;
 }
@@ -1250,8 +1242,7 @@ void di_collect_garbage(void) {
 		struct list_head isolated_roots;
 		INIT_LIST_HEAD(&isolated_roots);
 		while (!list_empty(&unreferred_objects)) {
-			i = list_first_entry(&unreferred_objects, di_object_internal,
-			                     unreferred_siblings);
+			i = list_first_entry(&unreferred_objects, di_object_internal, unreferred_siblings);
 			// fprintf(stderr, "unref root: %p %lu/%lu %d, %s\n", i, i->ref_count_scan,
 			//        i->ref_count, i->mark, di_get_type((void *)i));
 
@@ -1282,10 +1273,9 @@ void di_collect_garbage(void) {
 		while (!list_empty(&isolated_roots)) {
 			// fprintf(stderr, "unref root: %p %lu/%lu %d\n", i,
 			//         i->ref_count_scan, i->ref_count, i->mark);
-			i = list_first_entry(&isolated_roots, di_object_internal,
-			                     unreferred_siblings);
-			di_scan_type(DI_TYPE_OBJECT, (void *)&i, di_collect_garbage_collect_pre,
-			             0, di_collect_garbage_collect_post);
+			i = list_first_entry(&isolated_roots, di_object_internal, unreferred_siblings);
+			di_scan_type(DI_TYPE_OBJECT, (void *)&i, di_collect_garbage_collect_pre, 0,
+			             di_collect_garbage_collect_post);
 
 			// `i` should have been freed at this point. and the last unref should have removed it from to_finalize.
 		}
@@ -1372,8 +1362,7 @@ static void di_dump_object(di_object_internal *obj) {
 	HASH_ITER (hh, obj->members, m, tmpm) {
 		char *value_string = di_value_to_string(m->type, m->data);
 		di_log_va(log_module, DI_LOG_DEBUG, "\tmember: %.*s, type: %s (%s)",
-		          (int)m->name.length, m->name.data, di_type_to_string(m->type),
-		          value_string);
+		          (int)m->name.length, m->name.data, di_type_to_string(m->type), value_string);
 		free(value_string);
 		di_dump_type_content(m->type, m->data);
 	}
