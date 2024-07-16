@@ -98,19 +98,16 @@ struct Module {
 			}
 		}
 
-		// Add an extra #nodes iterations to max_iter, because first we need to go
-		// over all the nodes, even those without any constraints.
-		const unsigned int max_iter =
-		    (constraints_list.size() - 1) * nedges + constraints_list.size();
-
-		for (unsigned int iter = 0; iter < max_iter && !queue.empty(); iter++) {
+		for (unsigned int iter = (constraints_list.size() - 1) * nedges;
+		     iter > 0 && !queue.empty();) {
 			unsigned int i = queue.front();
 			queue.pop();
 			is_inqueue[i] = 0;
 			const auto &constraints = constraints_list[i];
-			for (unsigned int c = 0; c < constraints.size(); c += 2) {
+			for (unsigned int c = 0; iter > 0 && c < constraints.size(); c += 2) {
 				unsigned int j = constraints[c];
 				int64_t k = constraints[c + 1];
+				iter--;
 				// x_j - x_i <= k
 				if (ret[j] > ret[i] + k) {
 					ret[j] = ret[i] + k;
