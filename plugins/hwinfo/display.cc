@@ -10,14 +10,23 @@ auto Display::from_edid(std::string_view edid) -> Ref<DisplayInfo> {
 }
 auto DisplayInfo::get_model() const -> c_api::String {
 	auto *name = ::di_info_get_model(info.get());
+	if (name == nullptr) {
+		return DI_STRING_INIT;
+	}
 	return c_api::string::borrow(name);
 }
 auto DisplayInfo::get_make() const -> c_api::String {
 	auto *name = ::di_info_get_make(info.get());
+	if (name == nullptr) {
+		return DI_STRING_INIT;
+	}
 	return c_api::string::borrow(name);
 }
 auto DisplayInfo::get_serial() const -> c_api::String {
 	auto *name = ::di_info_get_serial(info.get());
+	if (name == nullptr) {
+		return DI_STRING_INIT;
+	}
 	return c_api::string::borrow(name);
 }
 }        // namespace deai::plugins::hwinfo
