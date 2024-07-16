@@ -50,7 +50,7 @@ static void di_env_unset(struct di_module *m, di_string key_) {
 	unsetenv(key);
 }
 
-static const char *di_get_hostname(struct deai *p) {
+static const char *di_get_hostname(di_object *p) {
 	struct utsname buf;
 	if (uname(&buf) != 0) {
 		return NULL;
