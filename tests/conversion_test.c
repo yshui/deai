@@ -18,9 +18,16 @@ DEAI_PLUGIN_ENTRY_POINT(di) {
 
 	di_type retty;
 	di_value val, val2;
+	const char *str_literal = "a string";
+	di_tuple args = {
+	    .length = 1,
+	    .elements =
+	        (di_variant[]){
+	            {.type = DI_TYPE_STRING_LITERAL, .value = (di_value *)&str_literal},
+	        },
+	};
 	// Test string_literal -> string_literal
-	DI_CHECK_OK(di_call_object((di_object *)test1, &retty, &val,
-	                           DI_TYPE_STRING_LITERAL, "a string", DI_LAST_TYPE));
+	DI_CHECK_OK(di_call_objectt((di_object *)test1, &retty, &val, args));
 
 	// Test owned string literal -> string
 	val.string_literal = "test";
@@ -28,8 +35,8 @@ DEAI_PLUGIN_ENTRY_POINT(di) {
 	di_free_string(val2.string);
 
 	// Test borrowed string literal -> string
-	DI_CHECK_OK(di_call_object((di_object *)test2, &retty, &val,
-	                           DI_TYPE_STRING_LITERAL, "string literal", DI_LAST_TYPE));
+	DI_CHECK_OK(di_call_objectt((di_object *)test2, &retty, &val, args));
 	DI_CHECK(retty == DI_TYPE_STRING);
+	DI_CHECK(strncmp(val.string.data, str_literal, val.string.length) == 0);
 	di_free_string(val.string);
 }

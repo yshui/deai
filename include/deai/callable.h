@@ -16,10 +16,6 @@ enum {
 
 typedef struct di_closure di_closure;
 
-PUBLIC_DEAI_API int di_call_object(di_object *nonnull o, di_type *nonnull rtype,
-                                   di_value *nonnull ret, ...);
-PUBLIC_DEAI_API int di_call_objectv(di_object *nonnull obj, di_type *nonnull rtype,
-                                    di_value *nonnull ret, va_list);
 PUBLIC_DEAI_API int di_call_objectt(di_object *nonnull, di_type *nonnull,
                                     di_value *nonnull, di_tuple);
 PUBLIC_DEAI_API

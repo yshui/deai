@@ -190,8 +190,17 @@ int di_log_va(di_object *o, int log_level, const char *fmt, ...) {
 		di_type return_type;
 		di_value return_value;
 		const char *level_string = level_tostring(log_level);
-		di_call_object(o, &return_type, &return_value, DI_TYPE_OBJECT, o, DI_TYPE_STRING_LITERAL,
-		               level_string, DI_TYPE_STRING, log, DI_LAST_TYPE);
+		di_tuple args = {
+		    .length = 3,
+		    .elements =
+		        (di_variant[]){
+		            {.type = DI_TYPE_OBJECT, .value = (di_value *)&o},
+		            {.type = DI_TYPE_STRING_LITERAL, .value = (di_value *)&level_string},
+		            {.type = DI_TYPE_STRING, .value = (di_value *)&log},
+		        },
+		};
+
+		di_call_objectt(o, &return_type, &return_value, args);
 		DI_CHECK(return_type == DI_TYPE_NINT);
 		ret = return_value.nint;
 	}

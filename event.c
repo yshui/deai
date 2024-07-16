@@ -432,13 +432,16 @@ static int di_promise_dispatch(di_promise *promise) {
 		                               (di_value *)&then_promises[i], false));
 	}
 
+	di_tuple handler_args = {
+	    .length = 1,
+	    .elements = (di_variant[]){{.type = DI_TYPE_VARIANT, .value = (di_value *)&resolved}},
+	};
 	for (uint64_t i = 0; i < nhandlers; i++) {
 		di_value return_value;
 		di_type return_type;
 		int ret = 0;
 		if (handlers[i]) {
-			ret = di_call_object(handlers[i], &return_type, &return_value,
-			                     DI_TYPE_VARIANT, resolved, DI_LAST_TYPE);
+			ret = di_call_objectt(handlers[i], &return_type, &return_value, handler_args);
 			di_unref_object(handlers[i]);
 			handlers[i] = NULL;
 		} else {

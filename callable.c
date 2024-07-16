@@ -218,42 +218,6 @@ int di_add_method(di_object *o, di_string name, void (*fn)(void), di_type rtype,
 	return di_add_member_move(o, name, (di_type[]){DI_TYPE_OBJECT}, (void **)&f);
 }
 
-// va_args version of di_call_callable
-int di_call_objectv(di_object *_obj, di_type *rtype, di_value *ret, va_list ap) {
-	auto obj = (di_object_internal *)_obj;
-	if (!obj->call) {
-		return -EINVAL;
-	}
-
-	va_list ap2;
-	di_tuple tu = DI_TUPLE_INIT;
-
-	va_copy(ap2, ap);
-	di_type t = va_arg(ap, di_type);
-	while (t < DI_LAST_TYPE) {
-		if (di_sizeof_type(t) == 0) {
-			va_end(ap2);
-			return -EINVAL;
-		}
-		tu.length++;
-		va_arg_with_di_type(ap, t, NULL);
-		t = va_arg(ap, di_type);
-	}
-
-	if (tu.length > 0) {
-		tu.elements = alloca(sizeof(struct di_variant) * tu.length);
-		for (unsigned int i = 0; i < tu.length; i++) {
-			tu.elements[i].type = va_arg(ap2, di_type);
-			assert(di_sizeof_type(tu.elements[i].type) != 0);
-			tu.elements[i].value = alloca(di_sizeof_type(tu.elements[i].type));
-			va_arg_with_di_type(ap2, tu.elements[i].type, tu.elements[i].value);
-		}
-		va_end(ap2);
-	}
-
-	return obj->call(_obj, rtype, ret, tu);
-}
-
 struct di_field_getter {
 	di_object_internal;
 	di_type type;
@@ -285,13 +249,6 @@ di_object *di_new_field_getter(di_type type, ptrdiff_t offset) {
 	ret->call = di_field_getter_call;
 	di_set_type(obj, field_getter_type);
 	return obj;
-}
-
-int di_call_object(di_object *o, di_type *rtype, di_value *ret, ...) {
-	va_list ap;
-
-	va_start(ap, ret);
-	return di_call_objectv(o, rtype, ret, ap);
 }
 
 int di_call_objectt(di_object *obj, di_type *rt, di_value *ret, di_tuple args) {
