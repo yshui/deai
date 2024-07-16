@@ -13,7 +13,7 @@ struct Context;
 }        // namespace
 namespace {
 struct Context {
-	static constexpr const char *type = "deai.plugin.udev:Context";
+	static constexpr const char type[] = "deai.plugin.udev:Context";
 	ObjectBase base;
 	udev *context;
 	Context() {
@@ -25,7 +25,7 @@ struct Context {
 };
 
 struct DeviceProperties {
-	static constexpr const char *type = "deai.plugin.udev:DeviceProperties";
+	static constexpr const char type[] = "deai.plugin.udev:DeviceProperties";
 	ObjectBase base;
 	auto property_getter(std::string_view name) -> Variant;
 
@@ -36,7 +36,7 @@ struct DeviceProperties {
 };
 
 struct Device {
-	static constexpr const char *type = "deai.plugin.udev:Device";
+	static constexpr const char type[] = "deai.plugin.udev:Device";
 	ObjectBase base;
 	udev_device *device;
 
@@ -56,7 +56,7 @@ struct Device {
 
 /// TYPE: deai.plugin.udev:Enumerator
 struct Enumerator {
-	static constexpr const char *type = "deai.plugin.udev:Enumerator";
+	static constexpr const char type[] = "deai.plugin.udev:Enumerator";
 	ObjectBase base;
 	udev_enumerate *raw;
 	Enumerator(udev *udev) : raw(udev_enumerate_new(udev)) {
@@ -64,7 +64,7 @@ struct Enumerator {
 };
 
 struct Module {
-	static constexpr const char *type = "deai.plugin.udev:Module";
+	static constexpr const char type[] = "deai.plugin.udev:Module";
 	ObjectBase base;
 	auto get_or_create_context() -> Ref<Context>;
 	/// Create a device object from a device node

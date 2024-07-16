@@ -34,11 +34,11 @@ void throw_deai_error(int errno_);
 namespace type {
 using ObjectBase = c_api::Object;
 struct Object {
-	static constexpr const char *type = "deai:object";
+	static constexpr const char type[] = "deai:object";
 	ObjectBase base;
 };
 struct ListenHandle {
-	static constexpr const char *type = "deai:ListenHandle";
+	static constexpr const char type[] = "deai:ListenHandle";
 	c_api::Object base;
 };
 }        // namespace type

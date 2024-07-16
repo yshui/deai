@@ -11,7 +11,7 @@ using namespace deai::util;
 using namespace std::literals;
 
 struct StringLogTarget {
-	static constexpr const char *type = "deai.tests:StringLogTarget";
+	static constexpr const char type[] = "deai.tests:StringLogTarget";
 	ObjectBase base;
 	std::string log;
 	auto write(std::string_view message) -> int {

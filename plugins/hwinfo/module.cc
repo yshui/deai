@@ -10,7 +10,7 @@ using namespace ::deai;
 namespace {
 using namespace ::deai::plugins::hwinfo;
 struct Module {
-	static constexpr const char *type = "deai.plugin.hwinfo:Module";
+	static constexpr const char type[] = "deai.plugin.hwinfo:Module";
 	type::ObjectBase base;
 
 	/// Information about display devices, such as monitors.

@@ -18,7 +18,7 @@ namespace {
 using namespace ::deai;
 
 struct InputId {
-	static constexpr const char *type = "deai.plugin.evdev:InputId";
+	static constexpr const char type[] = "deai.plugin.evdev:InputId";
 	ObjectBase base;
 	/// Vendor
 	///
@@ -60,7 +60,7 @@ struct InputId {
 };
 
 struct Device {
-	static constexpr const char *type = "deai.plugin.evdev:Device";
+	static constexpr const char type[] = "deai.plugin.evdev:Device";
 	ObjectBase base;
 	int fd;
 
@@ -121,7 +121,7 @@ auto Device::name() const -> Variant {
 }
 
 struct Module {
-	static constexpr const char *type = "deai.plugin.evdev:Module";
+	static constexpr const char type[] = "deai.plugin.evdev:Module";
 	ObjectBase base;
 	/// Open a device node
 	///

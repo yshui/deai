@@ -9,7 +9,7 @@ using namespace deai;
 namespace {
 
 struct Module {
-	static constexpr const char *type = "deai.plugin.utils:Module";
+	static constexpr const char type[] = "deai.plugin.utils:Module";
 	type::ObjectBase base;
 	/// Find maximum unweighted bipartite match.
 	///

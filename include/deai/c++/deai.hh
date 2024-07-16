@@ -4,7 +4,7 @@
 namespace deai {
 
 struct Core {
-	static constexpr const char *type = "deai:Core";
+	static constexpr const char type[] = "deai:Core";
 	type::ObjectBase base;
 	void load_plugin(std::string_view plugin_name);
 	void chdir(std::string_view new_dir);

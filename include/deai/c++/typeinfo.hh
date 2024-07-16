@@ -22,7 +22,7 @@ concept DerivedObject = requires(T t) {
 	// requires std::is_standard_layout_v<T>;
 	{ &t.base } -> std::same_as<c_api::Object *>;
 	requires offsetof(T, base) == 0;
-	{ T::type } -> std::same_as<const char * const&>;
+	{ T::type } -> std::same_as<const char (&)[sizeof(T::type)]>;
 };
 }        // namespace typeinfo
 

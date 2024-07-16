@@ -21,7 +21,7 @@ struct DisplayInfo;
 
 namespace plugins::hwinfo {
 struct DisplayInfo {
-	static constexpr const char *type = "deai.plugin.hwinfo.display:DisplayInfo";
+	static constexpr const char type[] = "deai.plugin.hwinfo.display:DisplayInfo";
 	type::ObjectBase base;
 	std::unique_ptr<struct di_info, void (*)(struct di_info *)> info;
 
@@ -32,7 +32,7 @@ struct DisplayInfo {
 	auto get_serial() const -> c_api::String;
 };
 struct Display {
-	static constexpr const char *type = "deai.plugin.hwinfo.display:Module";
+	static constexpr const char type[] = "deai.plugin.hwinfo.display:Module";
 	type::ObjectBase base;
 	/// Create a display info object by parsing binary EDID data.
 	///
