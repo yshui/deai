@@ -68,13 +68,6 @@ struct Device {
 	[[nodiscard]] auto name() const -> Variant;
 
 	Device(const std::string &dev_node) : fd(::open(dev_node.c_str(), O_RDONLY)) {
-		auto object_ref = Ref<Device>{*this};
-		if (fd < 0) {
-			object_ref["errmsg"] = Variant::from(std::string{"Failed to open device"});
-		} else {
-			util::add_method<&Device::id>(*this, "__get_id");
-			util::add_method<&Device::name>(*this, "__get_name");
-		}
 	}
 	~Device() {
 		close(fd);
@@ -128,7 +121,14 @@ struct Module {
 	/// EXPORT: evdev.open(path: :string): deai.plugin.evdev:Device
 	auto device_from_dev_node(const std::string &dev_node) -> Ref<Device> {
 		static_cast<void>(this);        // slient "this functino could be static" warning
-		return util::new_object<Device>(dev_node);
+		auto device = util::new_object<Device>(dev_node);
+		if (device->fd < 0) {
+			device["errmsg"] = Variant::from(std::string{"Failed to open device"});
+		} else {
+			util::add_method<&Device::id>(device, "__get_id");
+			util::add_method<&Device::name>(device, "__get_name");
+		}
+		return device;
 	}
 };
 
