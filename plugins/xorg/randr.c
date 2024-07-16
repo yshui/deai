@@ -233,7 +233,7 @@ static di_variant output_props_getter(di_object *this, di_string prop) {
 		ret.value->array = (di_array){
 		    .arr = calloc(r->num_items, sizeof(int)),
 		    .length = r->num_items,
-		    .elem_type = DI_TYPE_INT,
+		    .elem_type = DI_TYPE_NINT,
 		};
 		if (!ret.value->array.arr) {
 			return DI_VARIANT_INIT;
