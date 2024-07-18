@@ -13,6 +13,15 @@ auto test_function(int a) -> int {
 	result = a;
 	return a;
 }
+
+struct ToStringTest {
+	static constexpr const char type[] = "deai.tests::ToStringTest";
+	ObjectBase base;
+	auto to_string() const -> std::string {
+		return "ToStringTest";
+	}
+};
+
 DEAI_CPP_PLUGIN_ENTRY_POINT(di) {
 	auto log = *di["log"];
 
@@ -51,4 +60,10 @@ DEAI_CPP_PLUGIN_ENTRY_POINT(di) {
 	})();
 	object.emit("test_signal", 20);        // NOLINT
 	assert(result == 20);
+
+	// Test to_string
+	auto to_string_test = util::new_object<ToStringTest>();
+	util::add_method<&ToStringTest::to_string>(to_string_test, "__to_string");
+	auto obj_str = to_string_test->to_string();
+	assert(obj_str == "ToStringTest"s);
 }

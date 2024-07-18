@@ -39,6 +39,7 @@ constexpr auto set_dtor = ::di_set_object_dtor;
 constexpr auto call = ::di_call_object;
 constexpr auto init = ::di_init_object;
 constexpr auto set_type = ::di_set_type;
+constexpr auto to_string = ::di_object_to_string;
 }        // namespace object
 namespace string {
 constexpr auto borrow = ::di_string_borrow;

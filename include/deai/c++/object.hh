@@ -434,6 +434,13 @@ public:
 		return &inner.release()->base;
 	}
 
+	auto to_string() const noexcept -> std::string {
+		auto str = c_api::object::to_string(&inner->base);
+		std::string result{str.data, str.length};
+		::di_free_string(str);
+		return result;
+	}
+
 	[[nodiscard]] auto downgrade() const -> WeakRef<T> {
 		return WeakRef<T>{{c_api::object::weakly_ref(raw())}};
 	}

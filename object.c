@@ -1101,6 +1101,51 @@ di_object *di_listen_to(di_object *_obj, di_string name, di_object *h) {
 	return (di_object *)listen_handle;
 }
 
+static inline di_string di_object_to_string_fallback(di_object *o) {
+	return di_string_printf("[object:%p]", o);
+}
+
+di_string di_object_to_string(di_object *o) {
+	// Get the __to_string member, it can be a string or a function.
+	di_variant to_string;
+	if (di_refrawgetx(o, di_string_borrow("__to_string"), &to_string.type, &to_string.value) != 0) {
+		return di_object_to_string_fallback(o);
+	}
+
+	// First, see if we can get a string out of it directly.
+	di_string ret = DI_STRING_INIT;
+	if (di_type_conversion(DI_TYPE_VARIANT, (di_value *)&to_string, DI_TYPE_STRING,
+	                       (di_value *)&ret, true) == 0) {
+		return di_clone_string(ret);
+	}
+
+	// Otherwise, it should be a function. If it's not, we fallback to the default.
+	di_object *conv = NULL;
+	if (di_type_conversion(DI_TYPE_VARIANT, (di_value *)&to_string, DI_TYPE_OBJECT,
+	                       (di_value *)&conv, true) != 0) {
+		return di_object_to_string_fallback(o);
+	}
+
+	// Call the function. If it throws or fails, we fallback to the default.
+	scoped_di_object *err_obj = NULL;
+	di_tuple args = {.length = 1,
+	                 .elements = (di_variant[]){
+	                     {.type = DI_TYPE_OBJECT, .value = (di_value *)&o},
+	                 }};
+	to_string.value = (di_value *)tmalloc(di_string, 1);
+	if (di_call_object_catch(conv, &to_string.type, to_string.value, args, &err_obj) != 0 ||
+	    err_obj != NULL) {
+		return di_object_to_string_fallback(o);
+	}
+
+	// borrowing = false, because to_string holds the return value, and therefore is owned.
+	if (di_type_conversion(DI_TYPE_VARIANT, (di_value *)&to_string, DI_TYPE_STRING,
+	                       (di_value *)&ret, false) != 0) {
+		return di_object_to_string_fallback(o);
+	}
+	return ret;
+}
+
 int di_emitn(di_object *o, di_string name, di_tuple args) {
 	if (args.length > MAX_NARGS) {
 		return -E2BIG;

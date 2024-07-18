@@ -430,6 +430,11 @@ PUBLIC_DEAI_API void frees(malloc, 1) di_unref_object(di_object *nonnull);
 PUBLIC_DEAI_API void di_set_object_dtor(di_object *nonnull, di_dtor_fn nullable);
 PUBLIC_DEAI_API void di_set_object_call(di_object *nonnull, di_call_fn nullable);
 PUBLIC_DEAI_API bool di_is_object_callable(di_object *nonnull);
+/// Convert an object to its string representation. This function looks at the `__to_string`
+/// member of the object. If it is a string, then it will be returned directly. Otherwise,
+/// we try to call `__to_string` as a function and use its return value as the string representation.
+/// `__to_string` must return a string directly, we don't support chaining.
+PUBLIC_DEAI_API di_string di_object_to_string(di_object *nonnull o);
 PUBLIC_DEAI_API di_array di_get_all_member_names_raw(di_object *nonnull obj_);
 typedef bool (*nonnull di_member_cb)(di_string name, di_type, di_value *nonnull value,
                                      void *nullable data);
@@ -633,6 +638,12 @@ static inline void unused di_free_di_arrayp(di_array *nonnull a) {
 	a->length = 0;
 }
 
+static inline void unused di_free_di_variantp(di_variant *nonnull v) {
+	di_free_variant(*v);
+	v->value = NULL;
+	v->type = DI_TYPE_NAME(NIL);
+}
+
 static inline unused size_t di_sizeof_type(di_type t) {
 	switch (t) {
 	case DI_TYPE_NAME(NIL):
@@ -736,6 +747,7 @@ static inline void unused di_free_di_weak_objectpp(di_weak_object *nullable *non
 #define scoped_di_string scoped(di_string)
 #define scoped_di_tuple scoped(di_tuple)
 #define scoped_di_array scoped(di_array)
+#define scoped_di_variant scoped(di_variant)
 
 #define di_has_member(o, name)                                                           \
 	(di_lookup((di_object *)(o), di_string_borrow(name)) != NULL)
