@@ -1,0 +1,68 @@
+From 6c17c4ff5a19d9c2e62f4f0931447bb197c4f2a2 Mon Sep 17 00:00:00 2001
+From: Yuxuan Shui <yshuiv7@gmail.com>
+Date: Thu, 18 Jul 2024 16:07:45 +0100
+Subject: [PATCH] [clangd] [IncludeCleaner] Use correct file ID
+
+---
+ clang-tools-extra/clangd/CollectMacros.cpp  | 6 +++---
+ clang-tools-extra/clangd/CollectMacros.h    | 1 +
+ clang-tools-extra/clangd/IncludeCleaner.cpp | 4 ++--
+ 3 files changed, 6 insertions(+), 5 deletions(-)
+
+diff --git a/clang-tools-extra/clangd/CollectMacros.cpp b/clang-tools-extra/clangd/CollectMacros.cpp
+index c5ba8d903ba4..a8708fda53fe 100644
+--- a/clang-tools-extra/clangd/CollectMacros.cpp
++++ b/clang-tools-extra/clangd/CollectMacros.cpp
+@@ -34,12 +34,12 @@ void CollectMainFileMacros::add(const Token &MacroNameTok, const MacroInfo *MI,
+ 
+   auto Name = MacroNameTok.getIdentifierInfo()->getName();
+   Out.Names.insert(Name);
+-  size_t Start = SM.getFileOffset(Loc);
++  auto [FID, Start] = SM.getDecomposedLoc(Loc);
+   size_t End = SM.getFileOffset(MacroNameTok.getEndLoc());
+   if (auto SID = getSymbolID(Name, MI, SM))
+-    Out.MacroRefs[SID].push_back({Start, End, IsDefinition, InIfCondition});
++    Out.MacroRefs[SID].push_back({FID, Start, End, IsDefinition, InIfCondition});
+   else
+-    Out.UnknownMacros.push_back({Start, End, IsDefinition, InIfCondition});
++    Out.UnknownMacros.push_back({FID, Start, End, IsDefinition, InIfCondition});
+ }
+ 
+ void CollectMainFileMacros::FileChanged(SourceLocation Loc, FileChangeReason,
+diff --git a/clang-tools-extra/clangd/CollectMacros.h b/clang-tools-extra/clangd/CollectMacros.h
+index e3900c08e5df..4de49b1be340 100644
+--- a/clang-tools-extra/clangd/CollectMacros.h
++++ b/clang-tools-extra/clangd/CollectMacros.h
+@@ -24,6 +24,7 @@ namespace clangd {
+ 
+ struct MacroOccurrence {
+   // Half-open range (end offset is exclusive) inside the main file.
++  FileID FID;
+   size_t StartOffset;
+   size_t EndOffset;
+ 
+diff --git a/clang-tools-extra/clangd/IncludeCleaner.cpp b/clang-tools-extra/clangd/IncludeCleaner.cpp
+index f86a121340f7..5b425823af83 100644
+--- a/clang-tools-extra/clangd/IncludeCleaner.cpp
++++ b/clang-tools-extra/clangd/IncludeCleaner.cpp
+@@ -77,7 +77,7 @@ bool mayConsiderUnused(const Inclusion &Inc, ParsedAST &AST,
+   if (FE->getDir() == AST.getPreprocessor()
+                   .getHeaderSearchInfo()
+                   .getModuleMap()
+-                  .getBuiltinDir()) 
++                  .getBuiltinDir())
+     return false;
+   if (PI && PI->shouldKeep(*FE))
+     return false;
+@@ -300,7 +300,7 @@ collectMacroReferences(ParsedAST &AST) {
+   std::vector<include_cleaner::SymbolReference> Macros;
+   for (const auto &[_, Refs] : AST.getMacros().MacroRefs) {
+     for (const auto &Ref : Refs) {
+-      auto Loc = SM.getComposedLoc(SM.getMainFileID(), Ref.StartOffset);
++      auto Loc = SM.getComposedLoc(Ref.FID, Ref.StartOffset);
+       const auto *Tok = AST.getTokens().spelledTokenAt(Loc);
+       if (!Tok)
+         continue;
+-- 
+2.45.2
+

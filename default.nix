@@ -13,7 +13,7 @@
 , libev
 , libxkbcommon
 , libunwind
-, llvmPackages_17
+, llvmPackages
 , lua
 , luaPackages
 , systemdLibs
@@ -37,14 +37,14 @@ in
 stdenv.mkDerivation {
   src = ./.;
   name = "deai";
-  nativeBuildInputs = [ meson ninja pkgconf cargo rustc python llvmPackages_17.clang xdotool luaPackages.ldoc ];
+  nativeBuildInputs = [ meson ninja pkgconf cargo rustc python llvmPackages.clang xdotool luaPackages.ldoc ];
   buildInputs = [
     libev libffi libxcb libXau libXdmcp xcbutilkeysyms libxkbcommon dbus systemdLibs lua libdisplay-info
     libunwind elfutils zlib zstd
   ];
   env = {
-    LLVM_CONFIG_PATH = "${llvmPackages_17.libllvm.dev}/bin/llvm-config";
-    LIBCLANG_PATH = "${llvmPackages_17.libclang.lib}/lib";
+    LLVM_CONFIG_PATH = "${llvmPackages.libllvm.dev}/bin/llvm-config";
+    LIBCLANG_PATH = "${llvmPackages.libclang.lib}/lib";
   };
   outputs = [ "out" "doc" ];
   passthru.providedSessions = [ "deai" ];
