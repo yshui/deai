@@ -108,59 +108,61 @@ static int di_call_internal(di_object *self, di_object *method_, di_type *rt,
 	}
 
 gen_callx(di_callx, di_getxt);
-/// Fetch member object `name` from object `o`, then call the member object with `args`.
-///
-/// # Errors
-///
-/// * EINVAL: if the member object is not callable.
-/// * ENOENT: if the member object doesn't exist.
-///
-/// @param[out] rt The return type of the function
-/// @param[out] ret The return value, MUST BE a pointer to a full di_value
-static gen_callx(di_rawcallxn, di_rawgetxt);
 
 /// Call "<prefix>_<name>" with "<prefix>" as fallback
 ///
 /// @param[out] found whether a handler is found
-static int
-call_handler_with_fallback(di_object *nonnull o, const char *nonnull prefix,
-                           di_string name, struct di_variant arg, di_type *nullable rtype,
-                           di_value *nullable ret, bool *found) {
+static int call_handler_with_fallback(di_object *nonnull o, const char *nonnull prefix,
+                                      di_string name, struct di_variant arg,
+                                      di_type *nullable rtype, di_value *nullable ret,
+                                      di_object *nullable *nullable error, bool *found) {
 	*found = false;
 
-	char *buf;
-	asprintf(&buf, "%s_%.*s", prefix, (int)name.length, name.data);
+	scoped_di_string buf = di_string_printf("%s_%.*s", prefix, (int)name.length, name.data);
 	di_type rtype2 = DI_LAST_TYPE;
 	di_value ret2 = {0};
 
-	struct di_variant args[2] = {arg, DI_VARIANT_INIT};
+	struct di_variant args[3] = {
+	    {.type = DI_TYPE_OBJECT, .value = (di_value *)&o},
+	    {.type = arg.type, .value = arg.value},
+	};
 	di_tuple tmp = {
 	    // There is a trick here.
 	    // DI_LAST_TYPE is used to signify that the argument "doesn't exist". Unlike
 	    // DI_TYPE_NIL, which would mean there is one argument, whose type is nil.
 	    // This is not a convention. Generally speaking, DI_LAST_TYPE should never
 	    // appear in argument lists.
-	    .length = arg.type != DI_LAST_TYPE ? 1 : 0,
+	    .length = arg.type != DI_LAST_TYPE ? 2 : 1,
 	    .elements = args,
 	};
-	int rc = di_rawcallxn(o, di_string_borrow(buf), &rtype2, &ret2, tmp, found);
-	free(buf);
-
-	if (*found) {
-		goto ret;
+	di_object *handler = NULL;
+	int rc = -ENOENT;
+	if (di_rawget_borrowed2(o, buf, handler) == 0) {
+		*found = true;
+		if (error != NULL) {
+			rc = di_call_object_catch(handler, &rtype2, &ret2, tmp, error);
+		} else {
+			rc = di_call_object(handler, &rtype2, &ret2, tmp);
+		}
 	}
 
-	tmp.length++;
-	if (tmp.length > 1) {
-		args[1] = args[0];
+	if (rc != 0 && di_rawget_borrowed(o, prefix, handler) == 0) {
+		*found = true;
+		tmp.length++;
+		if (tmp.length > 2) {
+			args[2] = args[1];
+		}
+		args[1] = (struct di_variant){
+		    .type = DI_TYPE_STRING,
+		    .value = (di_value[]){{.string = name}},
+		};
+		if (error != NULL) {
+			rc = di_call_object_catch(handler, &rtype2, &ret2, tmp, error);
+		} else {
+			rc = di_call_object(handler, &rtype2, &ret2, tmp);
+		}
 	}
-	args[0] = (struct di_variant){
-	    .type = DI_TYPE_STRING,
-	    .value = &(di_value){.string = name},
-	};
 
-	rc = di_rawcallxn(o, di_string_borrow(prefix), &rtype2, &ret2, tmp, found);
-ret:
 	if (rc == 0) {
 		if (ret && rtype) {
 			*rtype = rtype2;
@@ -177,14 +179,14 @@ int di_setx(di_object *o, di_string prop, di_type type, const void *val) {
 	bool handler_found;
 	int rc = call_handler_with_fallback(o, "__set", prop,
 	                                    (struct di_variant){(di_value *)val, type}, NULL,
-	                                    NULL, &handler_found);
+	                                    NULL, NULL, &handler_found);
 	if (handler_found) {
 		return rc;
 	}
 
 	// Call the deleter if present
 	rc = call_handler_with_fallback(o, "__delete", prop, (struct di_variant){NULL, DI_LAST_TYPE},
-	                                NULL, NULL, &handler_found);
+	                                NULL, NULL, NULL, &handler_found);
 	if (handler_found && rc != 0) {
 		return rc;
 	}
@@ -258,8 +260,8 @@ int di_getx(di_object *o, di_string prop, di_type *type, di_value *ret) {
 	}
 
 	bool handler_found;
-	rc = call_handler_with_fallback(
-	    o, "__get", prop, (struct di_variant){NULL, DI_LAST_TYPE}, type, ret, &handler_found);
+	rc = call_handler_with_fallback(o, "__get", prop, (struct di_variant){NULL, DI_LAST_TYPE},
+	                                type, ret, NULL, &handler_found);
 	if (rc != 0) {
 		return rc;
 	}
@@ -403,7 +405,7 @@ int di_delete_member(di_object *obj, di_string name) {
 	bool handler_found;
 	int rc2 = call_handler_with_fallback(obj, "__delete", name,
 	                                     (struct di_variant){NULL, DI_LAST_TYPE}, NULL,
-	                                     NULL, &handler_found);
+	                                     NULL, NULL, &handler_found);
 	if (handler_found) {
 		return rc2;
 	}
