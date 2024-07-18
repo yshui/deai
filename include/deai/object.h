@@ -681,6 +681,10 @@ static inline unused size_t di_sizeof_type(di_type t) {
 	abort();
 }
 
+/// A valid but non-upgradeable weak reference
+PUBLIC_DEAI_API extern di_weak_object *const nonnull dead_weak_ref;
+
+#ifndef __cplusplus
 // Workaround for _Generic limitations, see:
 // http://www.open-std.org/jtc1/sc22/wg14/www/docs/n1930.htm
 #define di_typeid(x)                                                                     \
@@ -842,9 +846,6 @@ static inline void unused di_free_di_weak_objectpp(di_weak_object *nullable *non
 		__di_rawget__borrowd2_rc;                                                        \
 	})
 #define di_rawget_borrowed(o, prop, r) di_rawget_borrowed2(o, di_string_borrow(prop), r)
-
-/// A valid but non-upgradeable weak reference
-PUBLIC_DEAI_API extern di_weak_object *const nonnull dead_weak_ref;
-
+#endif
 #undef DI_LAST_TYPE
 #undef DI_TYPE_NAME

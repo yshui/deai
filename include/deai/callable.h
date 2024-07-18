@@ -32,6 +32,7 @@ PUBLIC_DEAI_API int di_add_method(di_object *nonnull object, di_string name,
 /// object, to retrieve a member of type `type` stored at `offset` inside the object
 PUBLIC_DEAI_API di_object *nonnull di_new_field_getter(di_type type, ptrdiff_t offset);
 
+#ifndef __cplusplus
 #define capture(...)                                                                     \
 	VA_ARGS_LENGTH(__VA_ARGS__)                                                          \
 	, (di_type[]){LIST_APPLY(di_typeof, SEP_COMMA, __VA_ARGS__)}, (const di_value *[]) { \
@@ -44,3 +45,4 @@ PUBLIC_DEAI_API di_object *nonnull di_new_field_getter(di_type type, ptrdiff_t o
 	di_create_closure((void *)fn, di_return_typeid(fn capture_types caps, ##__VA_ARGS__), \
 	                  di_make_tuple caps, VA_ARGS_LENGTH(__VA_ARGS__),                    \
 	                  (di_type[]){LIST_APPLY(di_typeid, SEP_COMMA, __VA_ARGS__)})
+#endif
