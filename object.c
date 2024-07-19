@@ -63,6 +63,7 @@ di_object *di_new_error(const char *fmt, ...) {
 	auto err = di_new_object_with_type(di_object);
 	di_set_type(err, error_type);
 
+	di_member_clone(err, "__to_string", errmsg);
 	di_member(err, "errmsg", errmsg);
 	return err;
 }
