@@ -104,14 +104,27 @@ static int di_lua_meta_index_for_weak_object(lua_State *L);
 static int di_lua_meta_newindex(lua_State *L);
 static int di_lua_meta_pairs(lua_State *L);
 
+static int di_lua_type_to_di(lua_State *L, int i, di_type type_hint, di_type *t, di_value *ret);
+static void di_lua_pushobject(lua_State *L, const char *name, di_object *obj);
+
 static int di_lua_errfunc(lua_State *L) {
 	/* Convert error to string, to prevent a follow-up error with lua_concat. */
-	auto err = luaL_tolstring(L, -1, NULL);
-	auto path = luaL_tolstring(L, lua_upvalueindex(1), NULL);
+	di_type err_type;
+	di_value err = {0};
+	di_object *err_obj = NULL;
+	di_lua_type_to_di(L, -1, DI_TYPE_ANY, &err_type, &err);
+	if (err_type != DI_TYPE_OBJECT) {
+		scopedp(char) *err_str = di_value_to_string(err_type, &err);
+		err_obj = di_new_error(err_str);
+		di_free_value(err_type, &err);
+	} else {
+		err_obj = err.object;
+	}
 
-	char *error_prompt = NULL;
-	int error_prompt_len;
-	error_prompt_len = asprintf(&error_prompt, "Failed to run lua script %s: %s", path, err);
+	if (lua_isstring(L, lua_upvalueindex(1))) {
+		auto path = di_string_borrow(lua_tolstring(L, lua_upvalueindex(1), NULL));
+		di_member_clone(err_obj, "file", path);
+	}
 
 	// Get debug.traceback
 	lua_getglobal(L, "debug");
@@ -119,25 +132,23 @@ static int di_lua_errfunc(lua_State *L) {
 	lua_gettable(L, -2);
 
 	// Push arguments
-	lua_pushlstring(L, error_prompt, error_prompt_len);
+	lua_pushnil(L);
 	lua_pushinteger(L, 3);
-	free(error_prompt);
 
 	// Call debug.traceback(error_prompt, 3), this should leave the error message we
 	// want on the top of the stack.
 	if (lua_pcall(L, 2, 1, 0) != 0) {
 		// If we failed to get a stack trace, we have to generate a generic error
 		// message
-		auto err2 = luaL_tolstring(L, -1, NULL);
-		error_prompt_len = asprintf(&error_prompt,
-		                            "Failed to run lua script %s: %s\nstack "
-		                            "traceback:\n\t(Failed to generate stack "
-		                            "trace: %s)",
-		                            path, err, err2);
-		lua_pushlstring(L, error_prompt, error_prompt_len);
-		free(error_prompt);
+		auto err2 = di_new_error(luaL_tolstring(L, -1, NULL));
+		di_add_member_move(err2, di_string_borrow_literal("source"), &err_type, &err_obj);
+		err_obj = err2;
+	} else {
+		auto traceback = di_string_borrow(lua_tolstring(L, -1, NULL));
+		di_member_clone(err_obj, "detail", traceback);
 	}
 
+	di_lua_pushobject(L, NULL, err_obj);
 	return 1;
 }
 
@@ -186,8 +197,6 @@ static void lua_ref_dtor(di_object *obj) {
 		luaL_unref(state->L, LUA_REGISTRYINDEX, t->tref);
 	}
 }
-
-static int di_lua_type_to_di(lua_State *L, int i, di_type type_hint, di_type *t, di_value *ret);
 
 static inline int di_lua_type_to_di_variant(lua_State *L, int i, struct di_variant *var) {
 	int rc = di_lua_type_to_di(L, i, DI_TYPE_ANY, &var->type, NULL);
@@ -393,11 +402,14 @@ static int di_lua_method_handler_impl(lua_State *L, const char *name, di_object 
 		return luaL_error(L, "Failed to call function \"%s\": %s", name, strerror(-rc));
 	}
 
+	if (error != NULL) {
+		di_lua_pushobject(L, "error", error);
+		return lua_error(L);
+	}
 	di_string errmsg = DI_STRING_INIT;
 	bool has_error = false;
 	int nret = 0;
-	if ((error != NULL && di_get(error, "errmsg", errmsg) == 0) ||
-	    (di_type_conversion(rtype, &ret, DI_TYPE_OBJECT, (di_value *)&ret_object, true) == 0 &&
+	if ((di_type_conversion(rtype, &ret, DI_TYPE_OBJECT, (di_value *)&ret_object, true) == 0 &&
 	     di_get(ret_object, "errmsg", errmsg) == 0)) {
 		scopedp(char) *buf = NULL;
 		int len = asprintf(&buf, "Failed to call function \"%s\": %.*s", name,
@@ -781,10 +793,13 @@ static di_tuple di_lua_load_script(di_object *obj, di_string path_) {
 		// have done. (e.g. add listeners). So there's not much
 		// we can do here except unref and return an error object
 
-		// Pop the error, and converted error string
-		auto err = luaL_tolstring(L->L, -1, NULL);
+		// The error created by di_lua_errfunc must be an object
+		di_type err_type;
+		di_value err;
+		DI_CHECK_OK(di_lua_type_to_di(L->L, -1, DI_TYPE_ANY, &err_type, &err));
+		DI_CHECK(err_type == DI_TYPE_OBJECT);
 		lua_pop(L->L, 2);
-		di_throw(di_new_error("Error while running lua script: %s", err));
+		di_throw(err.object);
 	}
 	return func_ret;
 }
@@ -919,10 +934,13 @@ static int call_lua_function(di_object *ref_, di_type *rt, di_value *ret, di_tup
 	}
 
 	if (lua_pcall(L, t.length, 1, -(int)t.length - 2) != 0) {
-		auto err = luaL_tolstring(L, -1, NULL);
-		lua_pop(L, 1);        // Pop the converted error string
+		di_type err_type;
+		di_value err;
+		DI_CHECK_OK(di_lua_type_to_di(L, -1, DI_TYPE_ANY, &err_type, &err));
+		DI_CHECK(err_type == DI_TYPE_OBJECT);
+		lua_pop(L, 2);        // Pop err and errfunc
 		*rt = DI_TYPE_NIL;
-		di_throw(di_new_error("%s", err));
+		di_throw(err.object);
 	} else {
 		di_lua_type_to_di(L, -1, DI_TYPE_ANY, rt, ret);
 	}
