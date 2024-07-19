@@ -107,5 +107,5 @@ void di_init_os(di_object *di) {
 
 	di_getter(m, hostname, di_get_hostname);
 	di_method(m, "listdir", di_listdir, di_string);
-	di_register_module(di, di_string_borrow("os"), &m);
+	di_register_module(di, di_string_borrow_literal("os"), &m);
 }

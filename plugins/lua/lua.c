@@ -345,12 +345,12 @@ static struct di_lua_ref *lua_type_to_di_object(lua_State *L, int i, void *call)
 
 	auto getter = di_new_object_with_type(di_object);
 	di_set_object_call((void *)getter, di_lua_di_getter);
-	di_add_member_move((void *)o, di_string_borrow("__get"), (di_type[]){DI_TYPE_OBJECT},
-	                   (void **)&getter);
+	di_add_member_move((void *)o, di_string_borrow_literal("__get"),
+	                   (di_type[]){DI_TYPE_OBJECT}, (void **)&getter);
 	auto setter = di_new_object_with_type(di_object);
 	di_set_object_call((void *)setter, di_lua_di_setter);
-	di_add_member_move((void *)o, di_string_borrow("__set"), (di_type[]){DI_TYPE_OBJECT},
-	                   (void **)&setter);
+	di_add_member_move((void *)o, di_string_borrow_literal("__set"),
+	                   (di_type[]){DI_TYPE_OBJECT}, (void **)&setter);
 	di_set_object_dtor((void *)o, (void *)lua_ref_dtor);
 	di_set_object_call((void *)o, call);
 
@@ -747,7 +747,7 @@ static di_tuple di_lua_load_script(di_object *obj, di_string path_) {
 
 		if (L == NULL) {
 			// __lua_state not found, or lua_state has been dropped
-			di_delete_member_raw((di_object *)m, di_string_borrow("__lua_state"));
+			di_delete_member_raw((di_object *)m, di_string_borrow_literal("__lua_state"));
 			L = lua_new_state(m);
 		}
 		DI_CHECK(L != NULL);
@@ -1300,7 +1300,7 @@ static di_variant di_lua_globals_getter(di_object *globals, di_string key) {
 	}
 	if (L == NULL) {
 		// __lua_state not found, or lua_state has been dropped
-		di_delete_member_raw((di_object *)m, di_string_borrow("__lua_state"));
+		di_delete_member_raw((di_object *)m, di_string_borrow_literal("__lua_state"));
 		return DI_VARIANT_INIT;
 	}
 

@@ -298,13 +298,13 @@ int di_rawgetxt(di_object *o, di_string prop, di_type rtype, di_value *ret) {
 };
 
 int di_set_type(di_object *o, const char *type) {
-	return di_rawsetx(o, di_string_borrow("__type"), DI_TYPE_STRING_LITERAL, &type);
+	return di_rawsetx(o, di_string_borrow_literal("__type"), DI_TYPE_STRING_LITERAL, &type);
 }
 
 const char *di_get_type(di_object *o) {
 	const char *ret;
-	int rc =
-	    di_rawgetxt(o, di_string_borrow("__type"), DI_TYPE_STRING_LITERAL, (di_value *)&ret);
+	int rc = di_rawgetxt(o, di_string_borrow_literal("__type"), DI_TYPE_STRING_LITERAL,
+	                     (di_value *)&ret);
 	if (rc != 0) {
 		if (rc == -ENOENT) {
 			return "deai:object";
@@ -1111,7 +1111,8 @@ static inline di_string di_object_to_string_fallback(di_object *o) {
 di_string di_object_to_string(di_object *o) {
 	// Get the __to_string member, it can be a string or a function.
 	di_variant to_string;
-	if (di_refrawgetx(o, di_string_borrow("__to_string"), &to_string.type, &to_string.value) != 0) {
+	if (di_refrawgetx(o, di_string_borrow_literal("__to_string"), &to_string.type,
+	                  &to_string.value) != 0) {
 		return di_object_to_string_fallback(o);
 	}
 

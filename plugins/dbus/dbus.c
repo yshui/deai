@@ -840,7 +840,7 @@ static void di_dbus_shutdown(di_object *obj) {
 		di_set_object_call((void *)shutdown, di_dbus_drop_root);
 
 		auto listen_handle =
-		    di_listen_to(eventm, di_string_borrow("prepare"), (di_object *)shutdown, NULL);
+		    di_listen_to(eventm, di_string_borrow_literal("prepare"), (di_object *)shutdown, NULL);
 
 		DI_CHECK_OK(di_call(listen_handle, "auto_stop", true));
 		DI_CHECK_OK(di_member(shutdown, "___listen_handle", listen_handle));

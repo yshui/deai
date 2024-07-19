@@ -264,7 +264,7 @@ void di_init_log(di_object *di) {
 
 	auto dtgt = stderr_target(l);
 
-	di_add_member_move((di_object *)l, di_string_borrow("log_target"),
+	di_add_member_move((di_object *)l, di_string_borrow_literal("log_target"),
 	                   (di_type[]){DI_TYPE_OBJECT}, &dtgt);
 	((di_object_internal *)l)->call = di_log;
 	di_method(l, "file_target", file_target, di_string, bool);
@@ -274,5 +274,5 @@ void di_init_log(di_object *di) {
 	di_set_object_dtor((void *)l, log_dtor);
 
 	log_module = (di_object *)lm;
-	di_register_module(di, di_string_borrow("log"), &lm);
+	di_register_module(di, di_string_borrow_literal("log"), &lm);
 }

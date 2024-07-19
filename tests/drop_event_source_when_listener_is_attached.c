@@ -7,7 +7,7 @@ DEAI_PLUGIN_ENTRY_POINT(di) {
 	auto object = di_new_object_with_type(di_object);
 	auto handler = di_new_object_with_type(di_object);
 
-	auto listen_handle = di_listen_to(object, di_string_borrow("some_event"), handler, NULL);
+	auto listen_handle = di_listen_to(object, di_string_borrow_literal("some_event"), handler, NULL);
 
 	di_unref_object(handler);
 	di_unref_object(object);

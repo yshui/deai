@@ -248,7 +248,7 @@ static void di_file_new_signal(di_object *fw_, di_string member_name, di_object 
 		DI_CHECK_OK(di_callr(event_module, "fdevent", fdevent, fw->fd));
 
 		scoped_di_closure *cl = di_make_closure(di_file_ioev, ((di_object *)fw));
-		auto listen_handle = di_listen_to(fdevent, di_string_borrow("read"), (void *)cl, NULL);
+		auto listen_handle = di_listen_to(fdevent, di_string_borrow_literal("read"), (void *)cl, NULL);
 		DI_CHECK_OK(di_call(listen_handle, "auto_stop", true));
 		di_member(fw, "__inotify_fd_event_read_listen_handle", listen_handle);
 	}
@@ -268,7 +268,7 @@ static void di_file_delete_signal(di_object *fw_, di_string member_name) {
 	if (fw->nsignals == 0) {
 		// Drop listen handle to stop it
 		di_delete_member_raw(fw_,
-		                     di_string_borrow("__inotify_fd_event_read_listen_handle"));
+		                     di_string_borrow_literal("__inotify_fd_event_read_listen_handle"));
 	}
 }
 
@@ -327,5 +327,5 @@ static struct di_module *di_new_file(di_object *di) {
 }
 DEAI_PLUGIN_ENTRY_POINT(di) {
 	auto fm = di_new_file(di);
-	di_register_module(di, di_string_borrow("file"), &fm);
+	di_register_module(di, di_string_borrow_literal("file"), &fm);
 }

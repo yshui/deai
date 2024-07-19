@@ -150,7 +150,7 @@ static void di_enable_write(di_object *obj, di_object *sig) {
 }
 
 static void di_disable_read(di_object *obj) {
-	if (di_delete_member_raw(obj, di_string_borrow("__signal_read")) != 0) {
+	if (di_delete_member_raw(obj, di_string_borrow_literal("__signal_read")) != 0) {
 		return;
 	}
 
@@ -160,7 +160,7 @@ static void di_disable_read(di_object *obj) {
 }
 
 static void di_disable_write(di_object *obj) {
-	if (di_delete_member_raw(obj, di_string_borrow("__signal_write")) != 0) {
+	if (di_delete_member_raw(obj, di_string_borrow_literal("__signal_write")) != 0) {
 		return;
 	}
 
@@ -209,7 +209,7 @@ static di_object *di_create_ioev(di_object *obj, int fd) {
 }
 
 static void di_timer_delete_signal(di_object *o) {
-	if (di_delete_member_raw(o, di_string_borrow("__signal_elapsed")) != 0) {
+	if (di_delete_member_raw(o, di_string_borrow_literal("__signal_elapsed")) != 0) {
 		return;
 	}
 
@@ -409,7 +409,7 @@ static int di_promise_dispatch(di_promise *promise) {
 	DI_CHECK_OK(di_get(promise, "___n_handlers", nhandlers));
 
 	// Reset number of handlers
-	di_setx((void *)promise, di_string_borrow("___n_handlers"), DI_TYPE_UINT,
+	di_setx((void *)promise, di_string_borrow_literal("___n_handlers"), DI_TYPE_UINT,
 	        (uint64_t[]){0}, NULL);
 	auto handlers = tmalloc(di_object *, nhandlers);
 	auto then_promises = tmalloc(di_object *, nhandlers);
@@ -468,7 +468,7 @@ static int di_promise_dispatch(di_promise *promise) {
 	free(handlers);
 	free(then_promises);
 	di_free_value(DI_TYPE_VARIANT, (void *)&resolved);
-	di_delete_member_raw((void *)promise, di_string_borrow("is_pending"));
+	di_delete_member_raw((void *)promise, di_string_borrow_literal("is_pending"));
 	return 0;
 }
 
@@ -480,7 +480,8 @@ di_object *di_new_promise(di_object *event_module) {
 	auto weak_event = di_weakly_ref_object(event_module);
 	di_set_type((void *)ret, "deai:Promise");
 	di_member(ret, "___weak_event_module", weak_event);
-	di_setx((void *)ret, di_string_borrow("___n_handlers"), DI_TYPE_UINT, (uint64_t[]){0}, NULL);
+	di_setx((void *)ret, di_string_borrow_literal("___n_handlers"), DI_TYPE_UINT,
+	        (uint64_t[]){0}, NULL);
 	di_method(ret, "then", di_promise_then, di_object *);
 	// "then" is a keyword in lua
 	di_method(ret, "then_", di_promise_then, di_object *);
@@ -489,7 +490,7 @@ di_object *di_new_promise(di_object *event_module) {
 }
 
 static void di_promise_start_dispatch(struct di_promise *promise) {
-	if (di_lookup((void *)promise, di_string_borrow("is_pending"))) {
+	if (di_lookup((void *)promise, di_string_borrow_literal("is_pending"))) {
 		// Already started dispatch
 		return;
 	}
@@ -541,9 +542,10 @@ static void di_promise_then_impl(struct di_promise *promise,
 	free(buf);
 
 	nhandlers += 1;
-	di_setx((void *)promise, di_string_borrow("___n_handlers"), DI_TYPE_UINT, &nhandlers, NULL);
+	di_setx((void *)promise, di_string_borrow_literal("___n_handlers"), DI_TYPE_UINT,
+	        &nhandlers, NULL);
 
-	if (di_lookup((void *)promise, di_string_borrow("___resolved"))) {
+	if (di_lookup((void *)promise, di_string_borrow_literal("___resolved"))) {
 		di_promise_start_dispatch(promise);
 	}
 }
@@ -750,5 +752,5 @@ void di_init_event(di_object *di) {
 
 	di_rawsetx((void *)em, di_string_borrow_literal("pending_count"), DI_TYPE_NINT, (int[]){0});
 	di_set_object_dtor((void *)em, di_event_module_dtor);
-	di_register_module(di, di_string_borrow("event"), &em);
+	di_register_module(di, di_string_borrow_literal("event"), &em);
 }

@@ -124,9 +124,9 @@ static void sigchld_handler(EV_P_ ev_child *w, int revents) {
 	di_emit(c, "exit", ec, sig);
 
 	// Proactively stop all signal listeners.
-	di_delete_member((void *)c, di_string_borrow("__signal_stdout_line"), NULL);
-	di_delete_member((void *)c, di_string_borrow("__signal_stderr_line"), NULL);
-	di_delete_member((void *)c, di_string_borrow("__signal_exit"), NULL);
+	di_delete_member((void *)c, di_string_borrow_literal("__signal_stdout_line"), NULL);
+	di_delete_member((void *)c, di_string_borrow_literal("__signal_stderr_line"), NULL);
+	di_delete_member((void *)c, di_string_borrow_literal("__signal_exit"), NULL);
 }
 
 static void child_destroy(di_object *obj) {
@@ -246,7 +246,7 @@ static void di_child_start_output_listener(di_object *p, int id) {
 	DI_CHECK_OK(di_callr(event_module, "fdevent", fdevent, c->fds[id]));
 
 	scoped_di_object *closure = (void *)di_make_closure(output_cb, (p, id));
-	auto listen_handle = di_listen_to(fdevent, di_string_borrow("read"), closure, NULL);
+	auto listen_handle = di_listen_to(fdevent, di_string_borrow_literal("read"), closure, NULL);
 
 	DI_CHECK_OK(di_call(listen_handle, "auto_stop", true));
 
@@ -280,7 +280,7 @@ static void di_child_process_new_stderr_signal(di_object *p, di_object *sig) {
 }
 
 static void di_child_process_delete_exit_signal(di_object *obj) {
-	if (di_delete_member_raw(obj, di_string_borrow("__signal_exit")) != 0) {
+	if (di_delete_member_raw(obj, di_string_borrow_literal("__signal_exit")) != 0) {
 		return;
 	}
 	auto c = (struct child *)obj;
@@ -307,13 +307,13 @@ static void di_child_process_stop_output_listener(di_object *obj, int id) {
 }
 
 static void di_child_process_delete_stdout_signal(di_object *obj) {
-	if (di_delete_member_raw(obj, di_string_borrow("__signal_stdout_line")) == 0) {
+	if (di_delete_member_raw(obj, di_string_borrow_literal("__signal_stdout_line")) == 0) {
 		di_child_process_stop_output_listener(obj, 0);
 	}
 }
 
 static void di_child_process_delete_stderr_signal(di_object *obj) {
-	if (di_delete_member_raw(obj, di_string_borrow("__signal_stderr_line")) == 0) {
+	if (di_delete_member_raw(obj, di_string_borrow_literal("__signal_stderr_line")) == 0) {
 		di_child_process_stop_output_listener(obj, 1);
 	}
 }
@@ -422,5 +422,5 @@ void di_init_spawn(di_object *di) {
 	auto m = di_new_module_with_size(di, sizeof(struct di_spawn));
 	di_method(m, "run", di_spawn_run, di_array, bool);
 
-	di_register_module(di, di_string_borrow("spawn"), &m);
+	di_register_module(di, di_string_borrow_literal("spawn"), &m);
 }

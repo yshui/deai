@@ -275,7 +275,7 @@ static void di_xorg_xinput_set_prop(struct di_xorg_xinput_device *dev, di_string
 		return;
 	}
 
-	auto float_atom = di_xorg_intern_atom(dc, di_string_borrow("FLOAT"), &e);
+	auto float_atom = di_xorg_intern_atom(dc, di_string_borrow_literal("FLOAT"), &e);
 
 	scopedp(xcb_input_xi_get_property_reply_t) *prop = xcb_input_xi_get_property_reply(
 	    dc->c,
@@ -421,7 +421,7 @@ di_xorg_xinput_get_prop(struct di_xorg_xinput_device *dev, di_string name_) {
 		return di_variant_of(di_new_error("Failed to intern atom"));
 	}
 
-	auto float_atom = di_xorg_intern_atom(dc, di_string_borrow("FLOAT"), &e);
+	auto float_atom = di_xorg_intern_atom(dc, di_string_borrow_literal("FLOAT"), &e);
 
 	scopedp(xcb_input_xi_get_property_reply_t) *prop = xcb_input_xi_get_property_reply(
 	    dc->c,
