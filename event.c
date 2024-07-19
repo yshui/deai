@@ -409,7 +409,8 @@ static int di_promise_dispatch(di_promise *promise) {
 	DI_CHECK_OK(di_get(promise, "___n_handlers", nhandlers));
 
 	// Reset number of handlers
-	di_setx((void *)promise, di_string_borrow("___n_handlers"), DI_TYPE_UINT, (uint64_t[]){0});
+	di_setx((void *)promise, di_string_borrow("___n_handlers"), DI_TYPE_UINT,
+	        (uint64_t[]){0}, NULL);
 	auto handlers = tmalloc(di_object *, nhandlers);
 	auto then_promises = tmalloc(di_object *, nhandlers);
 
@@ -479,7 +480,7 @@ di_object *di_new_promise(di_object *event_module) {
 	auto weak_event = di_weakly_ref_object(event_module);
 	di_set_type((void *)ret, "deai:Promise");
 	di_member(ret, "___weak_event_module", weak_event);
-	di_setx((void *)ret, di_string_borrow("___n_handlers"), DI_TYPE_UINT, (uint64_t[]){0});
+	di_setx((void *)ret, di_string_borrow("___n_handlers"), DI_TYPE_UINT, (uint64_t[]){0}, NULL);
 	di_method(ret, "then", di_promise_then, di_object *);
 	// "then" is a keyword in lua
 	di_method(ret, "then_", di_promise_then, di_object *);
@@ -540,7 +541,7 @@ static void di_promise_then_impl(struct di_promise *promise,
 	free(buf);
 
 	nhandlers += 1;
-	di_setx((void *)promise, di_string_borrow("___n_handlers"), DI_TYPE_UINT, &nhandlers);
+	di_setx((void *)promise, di_string_borrow("___n_handlers"), DI_TYPE_UINT, &nhandlers, NULL);
 
 	if (di_lookup((void *)promise, di_string_borrow("___resolved"))) {
 		di_promise_start_dispatch(promise);
@@ -578,6 +579,7 @@ di_object *di_promise_then(di_object *promise, di_object *handler) {
 	return ret;
 }
 
+// NOLINTNEXTLINE(bugprone-easily-swappable-parameters)
 static void di_promise_join_handler(int index, di_object *storage,
                                     di_object *then_promise, struct di_variant var) {
 	scoped_di_string key = di_string_printf("%d", index);
@@ -586,7 +588,7 @@ static void di_promise_join_handler(int index, di_object *storage,
 	int left;
 	DI_CHECK_OK(di_get(storage, "left", left));
 	left -= 1;
-	DI_CHECK_OK(di_setx(storage, di_string_borrow_literal("left"), DI_TYPE_NINT, &left));
+	DI_CHECK_OK(di_setx(storage, di_string_borrow_literal("left"), DI_TYPE_NINT, &left, NULL));
 
 	if (left == 0) {
 		int total;
@@ -634,8 +636,8 @@ di_object *di_join_promises(di_object *event_module, di_array promises) {
 			cnt += 1;
 		}
 	}
-	DI_CHECK_OK(di_setx(storage, di_string_borrow_literal("left"), DI_TYPE_NINT, &cnt));
-	DI_CHECK_OK(di_setx(storage, di_string_borrow_literal("total"), DI_TYPE_NINT, &cnt));
+	DI_CHECK_OK(di_setx(storage, di_string_borrow_literal("left"), DI_TYPE_NINT, &cnt, NULL));
+	DI_CHECK_OK(di_setx(storage, di_string_borrow_literal("total"), DI_TYPE_NINT, &cnt, NULL));
 	return ret;
 }
 

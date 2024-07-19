@@ -457,8 +457,9 @@ public:
 template <typeinfo::DerivedObject T>
 template <typeinfo::DerivedObject Other>
 auto Ref<T>::on(const std::string_view &signal, const Ref<Other> &handler) -> Ref<ListenHandle> {
-	return Ref<ListenHandle>::take(
-	           ::di_listen_to(raw(), conv::string_to_borrowed_deai_value(signal), handler.raw()))
+	return Ref<ListenHandle>::take(c_api::object::listen_to(
+	                                   &inner->base, conv::string_to_borrowed_deai_value(signal),
+	                                   handler.raw(), nullptr))
 	    .value();
 }
 

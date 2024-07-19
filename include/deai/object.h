@@ -250,7 +250,7 @@ PUBLIC_DEAI_API di_object *nonnull di_get_roots(void);
 ///
 /// @param[out] rt The return type of the function
 /// @param[out] ret The return value, MUST BE a pointer to a full di_value
-PUBLIC_DEAI_API int di_callx(di_object *nonnull o, di_string name, di_type *nonnull rt,
+PUBLIC_DEAI_API int di_callx(di_object *nonnull self, di_string name, di_type *nonnull rt,
                              di_value *nonnull ret, di_tuple args, bool *nonnull called);
 
 /// Change the value of member `prop` of object `o`.
@@ -261,8 +261,8 @@ PUBLIC_DEAI_API int di_callx(di_object *nonnull o, di_string name, di_type *nonn
 ///
 /// @param[in] type The type of the value
 /// @param[in] val The value, borrowed.
-PUBLIC_DEAI_API int
-di_setx(di_object *nonnull o, di_string prop, di_type type, const void *nullable val);
+PUBLIC_DEAI_API int di_setx(di_object *nonnull o, di_string prop, di_type type,
+                            const void *nullable val, di_object *nullable *nullable err);
 
 /// Fetch reference to a member with name `prop` from an object `o`, without calling the
 /// getter functions. The caller can change the value of the member via the reference.
@@ -314,12 +314,12 @@ di_rawgetxt(di_object *nonnull o, di_string prop, di_type type, di_value *nonnul
 /// getter cannot return DI_LAST_TYPE.
 ///
 /// The returned value holds ownership.
-PUBLIC_DEAI_API int
-di_getx(di_object *nonnull o, di_string prop, di_type *nonnull type, di_value *nonnull ret);
+PUBLIC_DEAI_API int di_getx(di_object *nonnull o, di_string prop, di_type *nonnull type,
+                            di_value *nonnull ret, di_object *nullable *nullable err);
 
 /// Like `di_rawgetxt`, but also calls getter functions if `prop` is not found.
-PUBLIC_DEAI_API int
-di_getxt(di_object *nonnull o, di_string prop, di_type type, di_value *nonnull ret);
+PUBLIC_DEAI_API int di_getxt(di_object *nonnull o, di_string prop, di_type type,
+                             di_value *nonnull ret, di_object *nullable *nullable err);
 
 /// Set the "__type" member of the object `o`. By convention, "__type" names the type of
 /// the object. Type names should be formated as "<namespace>:<type>". The "deai"
@@ -363,10 +363,13 @@ di_remove_member_raw(di_object *nonnull obj, di_string name, di_variant *nonnull
 /// Remove a member of object `o`, or call its deleter.
 /// If the specialized deleter `__delete_<name>` exists, it will be called; if not,
 /// the generic deleter, `__delete`, will be tried. At last, this function will try to
-/// find and remove a member with name `name`.
+/// find and remove a member with name `name`. If `err` is not NULL, then any exceptions
+/// thrown by the deleter will be caught and stored in `err`, this function is otherwise
+/// transparent to exceptions.
 ///
 /// `name` cannot name an internal member
-PUBLIC_DEAI_API int di_delete_member(di_object *nonnull o, di_string name);
+PUBLIC_DEAI_API int
+di_delete_member(di_object *nonnull o, di_string name, di_object *nullable *nullable err);
 
 /// Check whether a member with `name` exists in the object, without calling the
 /// getters. Returns non-NULL if the member exists, and NULL otherwise.
@@ -397,7 +400,8 @@ static inline di_object *nullable unused di_new_object_with_type_name(size_t siz
 ///
 /// Return object type: ListenerHandle
 PUBLIC_DEAI_API di_object *nullable di_listen_to(di_object *nonnull, di_string name,
-                                                 di_object *nullable h);
+                                                 di_object *nullable h,
+                                                 di_object *nullable *nullable err);
 
 /// Emit a signal with `name`, and `args`. The emitter of the signal is responsible of
 /// freeing `args`.
@@ -463,11 +467,6 @@ static inline void unused di_free_variant(di_variant v) {
 /// valid value beforehand
 PUBLIC_DEAI_API void di_copy_value(di_type t, void *nullable dst, const void *nullable src);
 
-/// Rename the signal object `old_member_name` to `new_member_name`. Both names
-/// have to start with "__signal_", getter/setter/deleters are not used. This
-/// takes care of updating the metadata fields in the signal object
-PUBLIC_DEAI_API int di_rename_signal_member_raw(di_object *nonnull obj, di_string old_member_name,
-                                                di_string new_member_name);
 /// Duplicate null terminated string `str` into a di_string
 static inline di_string unused di_string_dup(const char *nullable str) {
 	return (di_string){
@@ -811,7 +810,7 @@ static inline void unused di_free_di_weak_objectpp(di_weak_object *nullable *non
 	({                                                                                   \
 		int rc;                                                                          \
 		do {                                                                             \
-			rc = di_getxt((void *)(o), (prop), di_typeof(r), (di_value *)&(r));          \
+			rc = di_getxt((void *)(o), (prop), di_typeof(r), (di_value *)&(r), NULL);    \
 			if (rc != 0) {                                                               \
 				break;                                                                   \
 			}                                                                            \

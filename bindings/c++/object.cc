@@ -173,7 +173,8 @@ ObjectMemberProxy<raw_>::operator std::optional<Variant>() const {
 			return std::nullopt;
 		}
 	} else {
-		if (::di_getx(target, conv::string_to_borrowed_deai_value(key), &type, &ret) != 0) {
+		if (c_api::object::get(target, conv::string_to_borrowed_deai_value(key), &type,
+		                       &ret, nullptr) != 0) {
 			return std::nullopt;
 		}
 	}
@@ -187,7 +188,7 @@ void ObjectMemberProxy<raw_>::erase() const {
 	if constexpr (raw) {
 		::di_delete_member_raw(target, conv::string_to_borrowed_deai_value(key));
 	} else {
-		::di_delete_member(target, conv::string_to_borrowed_deai_value(key));
+		c_api::object::delete_member(target, conv::string_to_borrowed_deai_value(key), nullptr);
 	}
 }
 template <bool raw_>
@@ -224,8 +225,9 @@ auto ObjectMemberProxy<raw_>::operator=(const std::optional<Variant> &new_value)
 			erase();
 		} else {
 			// the setter/deleter should handle the deletion
-			exception::throw_deai_error(::di_setx(target, conv::string_to_borrowed_deai_value(key),
-			                                      new_value->type, &new_value->value));
+			exception::throw_deai_error(
+			    c_api::object::set(target, conv::string_to_borrowed_deai_value(key),
+			                       new_value->type, &new_value->value, nullptr));
 		}
 	}
 	return *this;

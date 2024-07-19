@@ -160,7 +160,7 @@ static void dbus_add_signal_handler_for(di_object *ioev, DBusWatch *w, di_dbus_c
                                         const char *signal, int event) {
 	scoped_di_object *handler =
 	    (void *)di_make_closure(ioev_callback, ((di_object *)oc, (void *)w, event));
-	auto l = di_listen_to(ioev, di_string_borrow(signal), handler);
+	auto l = di_listen_to(ioev, di_string_borrow(signal), handler, NULL);
 	DI_CHECK_OK(di_call(l, "auto_stop", true));
 
 	scopedp(char) * listen_handle_name;
@@ -840,7 +840,7 @@ static void di_dbus_shutdown(di_object *obj) {
 		di_set_object_call((void *)shutdown, di_dbus_drop_root);
 
 		auto listen_handle =
-		    di_listen_to(eventm, di_string_borrow("prepare"), (di_object *)shutdown);
+		    di_listen_to(eventm, di_string_borrow("prepare"), (di_object *)shutdown, NULL);
 
 		DI_CHECK_OK(di_call(listen_handle, "auto_stop", true));
 		DI_CHECK_OK(di_member(shutdown, "___listen_handle", listen_handle));

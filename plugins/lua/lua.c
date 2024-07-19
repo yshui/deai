@@ -330,7 +330,7 @@ static di_tuple di_lua_di_next(di_object *lua_ref, di_string name) {
 	lua_pop(L, 3);
 	return ret;
 }
-
+static const char lua_proxy_type[] = "deai.plugin.lua:LuaProxy";
 static struct di_lua_ref *lua_type_to_di_object(lua_State *L, int i, void *call) {
 	// TODO(yshui): probably a good idea to make sure that same lua object get same
 	// di object?
@@ -338,7 +338,7 @@ static struct di_lua_ref *lua_type_to_di_object(lua_State *L, int i, void *call)
 	di_lua_get_state(L, state);
 
 	auto o = di_new_object_with_type(struct di_lua_ref);
-	di_set_type((di_object *)o, "deai.plugin.lua:LuaRef");
+	di_set_type((di_object *)o, lua_proxy_type);
 	o->tref = luaL_ref(L, LUA_REGISTRYINDEX);        // this pops the table from
 	                                                 // stack, we need to put it back
 	di_member_clone(o, "___di_lua_state", (di_object *)state);
@@ -619,7 +619,7 @@ static void di_lua_pushobject(lua_State *L, const char *name, di_object *obj) {
 	lua_ref = luaL_weakref(L, LUA_REGISTRYINDEX);
 
 	// Store or update the object to lua ref map
-	DI_CHECK_OK(di_setx((void *)s, di_string_borrow(buf1), DI_TYPE_INT, &lua_ref));
+	DI_CHECK_OK(di_setx((void *)s, di_string_borrow(buf1), DI_TYPE_INT, &lua_ref, NULL));
 
 	// Update userdata -> object map
 	scopedp(char) * buf2;
@@ -1085,7 +1085,7 @@ static int di_lua_add_listener(lua_State *L) {
 		handler = (di_object *)wrapped_handler;
 	}
 
-	auto listen_handle = di_listen_to(o, signame, (void *)handler);
+	auto listen_handle = di_listen_to(o, signame, (void *)handler, NULL);
 	if (once) {
 		di_member_clone(handler, "listen_handle", listen_handle);
 	}
@@ -1380,7 +1380,7 @@ static int di_lua_meta_index(lua_State *L) {
 
 	di_type rt;
 	di_value ret;
-	int rc = di_getx(ud, di_string_borrow(key), &rt, &ret);
+	int rc = di_getx(ud, di_string_borrow(key), &rt, &ret, NULL);
 	if (rc != 0) {
 		lua_pushnil(L);
 		return 1;
@@ -1414,9 +1414,9 @@ static int di_lua_meta_newindex(lua_State *L) {
 
 	int ret;
 	if (vt == DI_TYPE_NIL) {
-		ret = di_delete_member(ud, key);
+		ret = di_delete_member(ud, key, NULL);
 	} else {
-		ret = di_setx(ud, key, vt, &val);
+		ret = di_setx(ud, key, vt, &val, NULL);
 		di_free_value(vt, &val);
 	}
 

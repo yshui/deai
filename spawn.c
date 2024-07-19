@@ -82,7 +82,7 @@ static void output_handler(struct child *c, int fd, int id, const char *ev) {
 	if (ret == 0) {
 		// Remote end closed, stop listeners
 		scoped_di_string signal_member = di_string_printf("__signal_%s", ev);
-		di_delete_member((di_object *)c, signal_member);
+		di_delete_member((di_object *)c, signal_member, NULL);
 	}
 }
 
@@ -124,9 +124,9 @@ static void sigchld_handler(EV_P_ ev_child *w, int revents) {
 	di_emit(c, "exit", ec, sig);
 
 	// Proactively stop all signal listeners.
-	di_delete_member((void *)c, di_string_borrow("__signal_stdout_line"));
-	di_delete_member((void *)c, di_string_borrow("__signal_stderr_line"));
-	di_delete_member((void *)c, di_string_borrow("__signal_exit"));
+	di_delete_member((void *)c, di_string_borrow("__signal_stdout_line"), NULL);
+	di_delete_member((void *)c, di_string_borrow("__signal_stderr_line"), NULL);
+	di_delete_member((void *)c, di_string_borrow("__signal_exit"), NULL);
 }
 
 static void child_destroy(di_object *obj) {
@@ -246,12 +246,11 @@ static void di_child_start_output_listener(di_object *p, int id) {
 	DI_CHECK_OK(di_callr(event_module, "fdevent", fdevent, c->fds[id]));
 
 	scoped_di_object *closure = (void *)di_make_closure(output_cb, (p, id));
-	auto listen_handle = di_listen_to(fdevent, di_string_borrow("read"), closure);
+	auto listen_handle = di_listen_to(fdevent, di_string_borrow("read"), closure, NULL);
 
 	DI_CHECK_OK(di_call(listen_handle, "auto_stop", true));
 
-	scoped_di_string listen_handle_key =
-	    di_string_printf("__listen_handle_for_output_%d", id);
+	scoped_di_string listen_handle_key = di_string_printf("__listen_handle_for_output_%d", id);
 	di_add_member_move(p, listen_handle_key, (di_type[]){DI_TYPE_OBJECT}, &listen_handle);
 	c->output_buf[id] = string_buf_new();
 }
@@ -298,8 +297,7 @@ static void di_child_process_delete_exit_signal(di_object *obj) {
 }
 
 static void di_child_process_stop_output_listener(di_object *obj, int id) {
-	scoped_di_string listen_handle_key =
-	    di_string_printf("__listen_handle_for_output_%d", id);
+	scoped_di_string listen_handle_key = di_string_printf("__listen_handle_for_output_%d", id);
 	DI_CHECK_OK(di_delete_member_raw(obj, listen_handle_key));
 
 	auto c = (struct child *)obj;
@@ -392,10 +390,8 @@ di_object *di_spawn_run(struct di_spawn *p, di_array argv, bool ignore_output) {
 	di_method(cp, "__get_pid", get_child_pid);
 	di_method(cp, "kill", kill_child, int);
 	di_method(cp, "__set___signal_exit", di_child_process_new_exit_signal, di_object *);
-	di_method(cp, "__set___signal_stdout_line", di_child_process_new_stdout_signal,
-	          di_object *);
-	di_method(cp, "__set___signal_stderr_line", di_child_process_new_stderr_signal,
-	          di_object *);
+	di_method(cp, "__set___signal_stdout_line", di_child_process_new_stdout_signal, di_object *);
+	di_method(cp, "__set___signal_stderr_line", di_child_process_new_stderr_signal, di_object *);
 	di_method(cp, "__delete___signal_exit", di_child_process_delete_exit_signal);
 	di_method(cp, "__delete___signal_stdout_line", di_child_process_delete_stdout_signal);
 	di_method(cp, "__delete___signal_stderr_line", di_child_process_delete_stderr_signal);

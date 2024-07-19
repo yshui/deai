@@ -129,7 +129,6 @@ core_src = [
 , 'callable.c'
 , 'event.c'
 , 'log.c'
-, 'helper.c'
 , 'os.c'
 , 'spawn.c'
 , 'exception.cc'

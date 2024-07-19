@@ -19,18 +19,6 @@
 #define CONCAT1(a, b) CONCAT2(a, b)
 #define CONCAT(a, b) CONCAT1(a, b)
 
-/// Create a setter that, when called, sets member `theirs` of `them` instead
-PUBLIC_DEAI_API di_object *nonnull di_redirected_setter(struct di_weak_object *nonnull them,
-                                                        di_string theirs);
-/// Create a getter that, when called, returns member `theirs` from `them`
-PUBLIC_DEAI_API di_object *nonnull di_redirected_getter(struct di_weak_object *nonnull them,
-                                                        di_string theirs);
-/// Redirect listeners of `ours` on `us` to `theirs` on `them`. Whenever handlers are
-/// registered for `ours` on `us`, they will be redirected to `theirs` on `them` instead,
-/// by adding a getter/setter for __signal_<ours> on `us`.
-PUBLIC_DEAI_API int di_redirect_signal(di_object *nonnull us, struct di_weak_object *nonnull them,
-                                       di_string ours, di_string theirs);
-
 #define RET_IF_ERR(expr)                                                                 \
 	do {                                                                             \
 		int ret = (expr);                                                        \

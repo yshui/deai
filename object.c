@@ -95,19 +95,16 @@ static int di_call_internal(di_object *self, di_object *method_, di_type *rt,
 	return rc;
 }
 
-#define gen_callx(fnname, getter)                                                        \
-	int fnname(di_object *self, di_string name, di_type *rt, di_value *ret,              \
-	           di_tuple args, bool *called) {                                            \
-		di_object *val;                                                                  \
-		*called = false;                                                                 \
-		int rc = getter(self, name, DI_TYPE_OBJECT, (di_value *)&val);                   \
-		if (rc != 0) {                                                                   \
-			return rc;                                                                   \
-		}                                                                                \
-		return di_call_internal(self, val, rt, ret, args, called);                       \
+int di_callx(di_object *self, di_string name, di_type *rt, di_value *ret, di_tuple args,
+             bool *called) {
+	di_object *val;
+	*called = 0;
+	int rc = di_getxt(self, name, DI_TYPE_OBJECT, (di_value *)&val, NULL);
+	if (rc != 0) {
+		return rc;
 	}
-
-gen_callx(di_callx, di_getxt);
+	return di_call_internal(self, val, rt, ret, args, called);
+};
 
 /// Call "<prefix>_<name>" with "<prefix>" as fallback
 ///
@@ -174,19 +171,20 @@ static int call_handler_with_fallback(di_object *nonnull o, const char *nonnull 
 	return rc;
 }
 
-int di_setx(di_object *o, di_string prop, di_type type, const void *val) {
+int di_setx(di_object *o, di_string prop, di_type type, const void *val,
+            di_object *nullable *nullable error) {
 	// If a setter is present, we just call that and we are done.
 	bool handler_found;
 	int rc = call_handler_with_fallback(o, "__set", prop,
 	                                    (struct di_variant){(di_value *)val, type}, NULL,
-	                                    NULL, NULL, &handler_found);
+	                                    NULL, error, &handler_found);
 	if (handler_found) {
 		return rc;
 	}
 
 	// Call the deleter if present
 	rc = call_handler_with_fallback(o, "__delete", prop, (struct di_variant){NULL, DI_LAST_TYPE},
-	                                NULL, NULL, NULL, &handler_found);
+	                                NULL, NULL, error, &handler_found);
 	if (handler_found && rc != 0) {
 		return rc;
 	}
@@ -253,7 +251,8 @@ static bool di_free_last_type(di_type type, di_value *val) {
 	return ret;
 }
 
-int di_getx(di_object *o, di_string prop, di_type *type, di_value *ret) {
+int di_getx(di_object *o, di_string prop, di_type *type, di_value *ret,
+            di_object *nullable *nullable error) {
 	int rc = di_rawgetx(o, prop, type, ret);
 	if (rc == 0) {
 		return 0;
@@ -261,9 +260,13 @@ int di_getx(di_object *o, di_string prop, di_type *type, di_value *ret) {
 
 	bool handler_found;
 	rc = call_handler_with_fallback(o, "__get", prop, (struct di_variant){NULL, DI_LAST_TYPE},
-	                                type, ret, NULL, &handler_found);
+	                                type, ret, error, &handler_found);
 	if (rc != 0) {
 		return rc;
+	}
+
+	if (error && *error) {
+		return 0;
 	}
 
 	if (di_free_last_type(*type, ret)) {
@@ -272,20 +275,27 @@ int di_getx(di_object *o, di_string prop, di_type *type, di_value *ret) {
 	return 0;
 }
 
-#define gen_tfunc(name, getter)                                                          \
-	int name(di_object *o, di_string prop, di_type rtype, di_value *ret) {               \
-		di_value ret2;                                                                   \
-		di_type rt;                                                                      \
-		int rc = getter(o, prop, &rt, &ret2);                                            \
-		if (rc != 0) {                                                                   \
-			return rc;                                                                   \
-		}                                                                                \
-		rc = di_type_conversion(rt, &ret2, rtype, ret, false);                           \
-		return rc;                                                                       \
+int di_getxt(di_object *o, di_string prop, di_type rtype, di_value *ret,
+             di_object *nullable *nullable error) {
+	di_value ret2;
+	di_type rt;
+	int rc = di_getx(o, prop, &rt, &ret2, error);
+	if (rc != 0) {
+		return rc;
 	}
-
-gen_tfunc(di_getxt, di_getx);
-gen_tfunc(di_rawgetxt, di_rawgetx);
+	rc = di_type_conversion(rt, &ret2, rtype, ret, 0);
+	return rc;
+};
+int di_rawgetxt(di_object *o, di_string prop, di_type rtype, di_value *ret) {
+	di_value ret2;
+	di_type rt;
+	int rc = di_rawgetx(o, prop, &rt, &ret2);
+	if (rc != 0) {
+		return rc;
+	}
+	rc = di_type_conversion(rt, &ret2, rtype, ret, 0);
+	return rc;
+};
 
 int di_set_type(di_object *o, const char *type) {
 	return di_rawsetx(o, di_string_borrow("__type"), DI_TYPE_STRING_LITERAL, &type);
@@ -401,11 +411,11 @@ int di_delete_member_raw(di_object *obj, di_string name) {
 	return 0;
 }
 
-int di_delete_member(di_object *obj, di_string name) {
+int di_delete_member(di_object *obj, di_string name, di_object *nullable *nullable error) {
 	bool handler_found;
 	int rc2 = call_handler_with_fallback(obj, "__delete", name,
 	                                     (struct di_variant){NULL, DI_LAST_TYPE}, NULL,
-	                                     NULL, NULL, &handler_found);
+	                                     NULL, error, &handler_found);
 	if (handler_found) {
 		return rc2;
 	}
@@ -955,34 +965,7 @@ static void di_listen_handle_dtor(di_object *obj) {
 /// EXPORT: deai:ListenHandle.auto_stop(stop: :bool): :void
 static void di_listen_handle_auto_stop(di_object *obj, int stop_) {
 	bool stop = stop_ != 0;
-	di_setx(obj, di_string_borrow_literal("stop_on_drop"), DI_TYPE_BOOL, &stop);
-}
-
-int di_rename_signal_member_raw(di_object *obj, di_string old_member_name,
-                                di_string new_member_name) {
-	if (!di_string_starts_with(old_member_name, "__signal_") ||
-	    !di_string_starts_with(new_member_name, "__signal_")) {
-		return -EINVAL;
-	}
-	if (di_lookup(obj, new_member_name) != NULL) {
-		return -EEXIST;
-	}
-	di_value val;
-	int rc = di_rawgetxt(obj, old_member_name, DI_TYPE_OBJECT, &val);
-	if (rc != 0) {
-		return rc;
-	}
-	rc = di_setx(val.object, di_string_borrow_literal("signal_name"), DI_TYPE_STRING,
-	             &new_member_name);
-	if (rc != 0) {
-		return rc;
-	}
-
-	rc = di_delete_member_raw(obj, old_member_name);
-	if (rc != 0) {
-		return rc;
-	}
-	return di_add_member_move(obj, new_member_name, (di_type[]){DI_TYPE_OBJECT}, &val);
+	di_setx(obj, di_string_borrow_literal("stop_on_drop"), DI_TYPE_BOOL, &stop, NULL);
 }
 
 static void di_signal_remove_handler(di_object *sig_, struct di_weak_object *handler) {
@@ -999,7 +982,7 @@ static void di_signal_remove_handler(di_object *sig_, struct di_weak_object *han
 			DI_CHECK_OK(di_get(sig_, "signal_name", signal_member_name));
 			scoped_di_object *source = di_upgrade_weak_ref(weak_source);
 			if (source != NULL) {
-				di_delete_member(source, signal_member_name);
+				di_delete_member(source, signal_member_name, NULL);
 			}
 		}
 	}
@@ -1051,47 +1034,64 @@ static void di_signal_dispatch(di_object *sig_, di_tuple args) {
 }
 
 static void di_signal_add_handler(di_object *sig, di_object *handler) {
-	scopedp(char) * new_signal_listener_name;
-	asprintf(&new_signal_listener_name, HANDLER_PREFIX "%p", handler);
-	di_member_clone(sig, new_signal_listener_name, handler);
+	scoped_di_string new_signal_listener_name = di_string_printf(HANDLER_PREFIX "%p", handler);
+	di_add_member_clone(sig, new_signal_listener_name, DI_TYPE_OBJECT, &handler);
 
 	((struct di_signal *)sig)->nhandlers += 1;
 }
 
-di_object *di_listen_to(di_object *_obj, di_string name, di_object *h) {
-	scopedp(char) *signal_member_name = NULL;
-	asprintf(&signal_member_name, "__signal_%.*s", (int)name.length, name.data);
-
-	auto signal_member_name_str = di_string_borrow(signal_member_name);
+di_object *di_listen_to(di_object *_obj, di_string name, di_object *h,
+                        di_object *nullable *nullable error) {
+	scoped_di_string signal_member_name =
+	    di_string_printf("__signal_%.*s", (int)name.length, name.data);
 
 	auto obj = (di_object_internal *)_obj;
 	assert(!obj->destroyed);
 
-	scoped_di_object *sig = NULL;
-	int rc = di_get(_obj, signal_member_name, sig);
+	di_object *new_error = NULL;
+	di_type sig_type = DI_TYPE_NIL;
+	di_value sigv;
+	struct di_signal *sig = NULL;
+	int rc = di_getx(_obj, signal_member_name, &sig_type, &sigv,
+	                 error != NULL ? &new_error : NULL);
+	assert(rc == 0 || new_error == NULL);
 	if (rc == -ENOENT) {
 		auto weak_source = di_weakly_ref_object(_obj);
-		sig = (void *)di_new_object_with_type(struct di_signal);
-		((struct di_signal *)sig)->nhandlers = 0;
+		sig_type = DI_TYPE_NIL;
+		sig = di_new_object_with_type(struct di_signal);
+		sig->nhandlers = 0;
 		DI_CHECK_OK(di_member(sig, "weak_source", weak_source));
-		DI_CHECK_OK(di_member_clone(sig, "signal_name", signal_member_name_str));
+		DI_CHECK_OK(di_member_clone(sig, "signal_name", signal_member_name));
 		DI_CHECK_OK(di_method(sig, "remove", di_signal_remove_handler, struct di_weak_object *));
 		DI_CHECK_OK(di_method(sig, "add", di_signal_add_handler, di_object *));
 		DI_CHECK_OK(di_method(sig, "dispatch", di_signal_dispatch, di_tuple));
-		rc = di_setx(_obj, signal_member_name_str, DI_TYPE_OBJECT, &sig);
-		if (rc != 0) {
-			return di_new_error("Failed to set signal object %s", strerror(rc));
+		rc = di_setx(_obj, signal_member_name, DI_TYPE_OBJECT, &sig,
+		             error != NULL ? &new_error : NULL);
+		if (rc != 0 && new_error == NULL) {
+			new_error = di_new_error("Failed to set signal object %s", strerror(rc));
 		}
 	} else if (rc != 0) {
-		return di_new_error("Failed to get signal object %s", strerror(rc));
+		new_error = di_new_error("Failed to get signal object %s", strerror(rc));
+	} else if (rc == 0 && new_error == NULL &&
+	           di_type_conversion(sig_type, &sigv, DI_TYPE_OBJECT, (di_value *)&sig, false) != 0) {
+		new_error = di_new_error("Failed to signal object is not an object");
 	}
 
-	di_signal_add_handler(sig, h);
+	if (new_error != NULL) {
+		assert(sig == NULL);
+		if (error != NULL) {
+			*error = new_error;
+			return NULL;
+		}
+		di_throw(new_error);
+	}
+
+	di_signal_add_handler((di_object *)sig, h);
 
 	auto listen_handle = di_new_object_with_type(struct di_listen_handle);
 	DI_CHECK_OK(di_set_type((void *)listen_handle, "deai:ListenHandle"));
 
-	auto weak_sig = di_weakly_ref_object(sig);
+	auto weak_sig = di_weakly_ref_object((di_object *)sig);
 	auto weak_handler = di_weakly_ref_object(h);
 	di_member(listen_handle, "weak_signal", weak_sig);
 	di_member(listen_handle, "weak_handler", weak_handler);
@@ -1099,6 +1099,7 @@ di_object *di_listen_to(di_object *_obj, di_string name, di_object *h) {
 	di_method(listen_handle, "auto_stop", di_listen_handle_auto_stop, int);
 
 	di_set_object_dtor((void *)listen_handle, di_listen_handle_dtor);
+	di_unref_object((di_object *)sig);
 
 	return (di_object *)listen_handle;
 }

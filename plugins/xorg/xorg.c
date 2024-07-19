@@ -510,7 +510,7 @@ void di_xorg_add_signal(di_xorg_connection *xc) {
 	scoped_di_object *xcb_fd_event = NULL;
 	DI_CHECK_OK(di_callr(eventm, "fdevent", xcb_fd_event, xcb_get_file_descriptor(xc->c)));
 	scoped_di_closure *cl = di_make_closure(di_xorg_ioev, ((di_object *)xc));
-	auto lh = di_listen_to(xcb_fd_event, di_string_borrow("read"), (void *)cl);
+	auto lh = di_listen_to(xcb_fd_event, di_string_borrow("read"), (void *)cl, NULL);
 
 	DI_CHECK_OK(di_call(lh, "auto_stop", true));
 	di_member(xc, "__xcb_fd_event_read_listen_handle", lh);

@@ -180,7 +180,7 @@ static void keybinding_new_signal(const char *signal, di_object *obj, di_object 
 	}
 	ungrab(kb);
 early_err:
-	di_delete_member(obj, di_string_borrow(signal));
+	di_delete_member(obj, di_string_borrow(signal), NULL);
 }
 static void keybinding_del_signal(const char *signal, di_object *obj) {
 	if (di_delete_member_raw(obj, di_string_borrow(signal)) != 0) {
@@ -394,7 +394,7 @@ bool key_register_listener(struct xorg_key *k) {
 
 	for (int i = 0; i < ARRAY_SIZE(OPCODES); i++) {
 		scoped_di_string signal = di_string_printf("___raw_x_event_%d", OPCODES[i]);
-		auto lh = di_listen_to(dc, signal, handler);
+		auto lh = di_listen_to(dc, signal, handler, NULL);
 		scoped_di_string autolh_key =
 		    di_string_printf("___auto_handle_for_%d", OPCODES[i]);
 		DI_CHECK_OK(di_call(lh, "auto_stop", true));

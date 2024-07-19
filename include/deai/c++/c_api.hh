@@ -36,10 +36,14 @@ constexpr auto add_member_move = ::di_add_member_move;
 constexpr auto add_member_clone = ::di_add_member_clone;
 constexpr auto set_call = ::di_set_object_call;
 constexpr auto set_dtor = ::di_set_object_dtor;
+constexpr auto set = ::di_setx;
+constexpr auto get = ::di_getx;
+constexpr auto delete_member = ::di_delete_member;
 constexpr auto call = ::di_call_object;
 constexpr auto init = ::di_init_object;
 constexpr auto set_type = ::di_set_type;
 constexpr auto to_string = ::di_object_to_string;
+constexpr auto listen_to = ::di_listen_to;
 }        // namespace object
 namespace string {
 constexpr auto borrow = ::di_string_borrow;
