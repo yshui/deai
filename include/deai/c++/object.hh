@@ -536,11 +536,16 @@ private:
 			if (args.length != nargs) {
 				return -EINVAL;
 			}
-			auto result =
-			    wrapper(type::conv::c_api::borrow_from_variant<conv::to_deai_ctype<Args>>(
-			        *args.elements[Idx].value, args.elements[Idx].type)...);
 			*ret_type = typeinfo::of<R>::value;
-			::memcpy(ret, &result, c_api::type::sizeof_(*ret_type));
+			if constexpr (std::is_same_v<R, void>) {
+				wrapper(type::conv::c_api::borrow_from_variant<conv::to_deai_ctype<Args>>(
+				    *args.elements[Idx].value, args.elements[Idx].type)...);
+			} else {
+				auto result =
+				    wrapper(type::conv::c_api::borrow_from_variant<conv::to_deai_ctype<Args>>(
+				        *args.elements[Idx].value, args.elements[Idx].type)...);
+				::memcpy(ret, &result, c_api::type::sizeof_(*ret_type));
+			}
 			return 0;
 		}
 	};
