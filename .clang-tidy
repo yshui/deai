@@ -1,0 +1,24 @@
+Checks: >
+  readability-*,
+  performance-*,
+  modernize-*,
+  google-readability-todo,
+  cert-err34-c,
+  cert-flp30-c,
+  bugprone-*,
+  misc-misplaced-const,
+  misc-redundant-expression,
+  misc-static-assert,
+  -clang-analyzer-*,
+  -readability-isolate-declaration,
+  -readability-magic-numbers,
+  -readability-identifier-length,
+#AnalyzeTemporaryDtors: false
+FormatStyle:     file
+CheckOptions:
+  - key: readability-magic-numbers.IgnoredIntegerValues
+    value: 4;8;16;24;32;1;2;3;4096
+  - key: readability-function-cognitive-complexity.IgnoreMacros
+    value: true
+  - key: modernize-avoid-c-arrays.AllowStringArrays
+    value: true
