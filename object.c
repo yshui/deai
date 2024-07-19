@@ -48,7 +48,28 @@ static_assert(alignof(di_object) == alignof(di_object_internal),
 // clang-format on
 
 static const char error_type[] = "deai:Error";
-di_object *di_new_error(const char *fmt, ...) {
+
+di_object *
+di_new_error_from_string(const char *file, int line, const char *func, di_string message) {
+	auto err = di_new_object_with_type(di_object);
+	di_set_type(err, error_type);
+
+	di_member_clone(err, "__to_string", message);
+	di_member(err, "errmsg", message);
+	if (file) {
+		di_member(err, "file", file);
+	}
+	if (line > 0) {
+		di_member(err, "line", line);
+	}
+	if (func) {
+		di_member(err, "func", func);
+	}
+	return err;
+}
+
+// NOLINTNEXTLINE(bugprone-easily-swappable-parameters)
+di_object *di_new_error2(const char *file, int line, const char *func, const char *fmt, ...) {
 	va_list ap;
 	va_start(ap, fmt);
 
@@ -59,14 +80,9 @@ di_object *di_new_error(const char *fmt, ...) {
 	} else {
 		errmsg.length = strlen(errmsg.data);
 	}
-
-	auto err = di_new_object_with_type(di_object);
-	di_set_type(err, error_type);
-
-	di_member_clone(err, "__to_string", errmsg);
-	di_member(err, "errmsg", errmsg);
-	return err;
+	return di_new_error_from_string(file, line, func, errmsg);
 }
+
 bool di_is_error(di_object *obj) {
 	return di_check_type(obj, error_type);
 }

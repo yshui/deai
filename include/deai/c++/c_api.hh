@@ -28,7 +28,8 @@ inline constexpr auto &names = ::di_type_names;
 namespace object {
 constexpr auto new_ = ::di_new_object;
 constexpr auto new_with_type_name = ::di_new_object_with_type_name;
-constexpr auto new_error = ::di_new_error;
+constexpr auto new_error = ::di_new_error2;
+constexpr auto new_error_from_string = ::di_new_error_from_string;
 constexpr auto ref = ::di_ref_object;
 constexpr auto weakly_ref = ::di_weakly_ref_object;
 constexpr auto unref = ::di_unref_object;

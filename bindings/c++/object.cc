@@ -271,6 +271,14 @@ auto WeakRefBase::release() && -> c_api::WeakObject * {
 	return inner.release();
 }
 }        // namespace type
+namespace util {
+auto new_error(std::string_view message, std::source_location location) -> c_api::Object * {
+	auto string = c_api::string::ndup(message.data(), message.size());
+	return c_api::object::new_error_from_string(location.file_name(),
+	                                            static_cast<int>(location.line()),
+	                                            location.function_name(), string);
+}
+}        // namespace util
 
 namespace compile_time_checks {
 using namespace type;

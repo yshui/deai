@@ -7,7 +7,7 @@
 #include <unistd.h>
 
 using namespace deai::type;
-using namespace deai::util;
+using namespace deai;
 using namespace std::literals;
 
 static constexpr const char *expected_error_log =
@@ -18,7 +18,7 @@ struct Thrower {
 	ObjectBase base;
 	static constexpr const char type[] = "deai.tests:Thrower";
 	void throw_error() {
-		throw di_new_error(test_error);
+		throw util::new_error(test_error);
 	}
 };
 

@@ -5,6 +5,7 @@
 // #include <iostream>
 #include <memory>
 #include <optional>
+#include <source_location>
 #include <stdexcept>
 #include <string>
 #include <string_view>
@@ -467,7 +468,7 @@ auto Ref<T>::on(const std::string_view &signal, const Ref<Other> &handler) -> Re
 
 using namespace type;
 
-namespace type::util {
+namespace util {
 
 template <typeinfo::Convertible Return, typename... Args>
 auto call_raw(c_api::Object *raw_ref, const std::string_view &method_name,
@@ -502,12 +503,6 @@ auto new_object(Args &&...args) -> Ref<T> {
 	c_api::object::set_type(&obj->base, T::type);
 
 	return Ref<T>::take(&obj->base).value();
-}
-
-template <typename... Args>
-auto new_error(std::format_string<Args...> fmt, Args &&...args) -> Ref<Object> {
-	auto err = c_api::object::new_error(std::format(fmt, std::forward<Args>(args)...).c_str());
-	return *Ref<Object>::take(err);
 }
 
 template <auto func>
@@ -611,7 +606,7 @@ auto add_method(Ref<T> &obj, std::string_view name) -> void {
 	add_method<func, T>(obj.as_ref(), name);
 }
 
-}        // namespace type::util
+}        // namespace util
 }        // namespace deai
 
 namespace std {

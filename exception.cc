@@ -12,7 +12,7 @@ auto di_try(void (*func)(void *), void *args) -> di_object * {
 	} catch (di_object *&err) {
 		return err;
 	} catch (std::exception &e) {
-		return ::di_new_error("Other C++ exceptions: %s", e.what());
+		return deai::util::new_error(std::format("Other C++ exceptions: %s", e.what()));
 	}
 	return nullptr;
 }
@@ -26,7 +26,7 @@ auto di_call_object_catch(di_object *obj, di_type *rt, di_value *ret, di_tuple a
 		*err = e;
 		*rt = deai::c_api::Type::NIL;
 	} catch (std::exception &e) {
-		*err = ::di_new_error("Other C++ exceptions: %s", e.what());
+		*err = deai::util::new_error(std::format("Other C++ exceptions: %s", e.what()));
 		*rt = deai::c_api::Type::NIL;
 	}
 	return 0;

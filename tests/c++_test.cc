@@ -7,6 +7,7 @@
 #include <climits>
 
 using namespace deai::type;
+using namespace deai;
 using namespace std::literals;
 thread_local static int result = 0;
 auto test_function(int a) -> int {

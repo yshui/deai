@@ -80,7 +80,7 @@ struct Device {
 auto Device::id() const -> Ref<Object> {
 	::input_id id;
 	if (::ioctl(fd, EVIOCGID, &id) < 0) {
-		return util::new_error("Failed to get device id information");
+		throw util::new_error("Failed to get device id information");
 	}
 	auto obj = util::new_object<InputId>(id);
 	util::add_method<&InputId::vendor>(obj, "__get_vendor");
@@ -98,7 +98,7 @@ auto Device::name() const -> Variant {
 	while (true) {
 		auto copied = ::ioctl(fd, EVIOCGNAME(buf.size()), buf.data());
 		if (copied < 0) {
-			return Variant::from(::di_new_error("Failed to get device name"));
+			throw util::new_error("Failed to get device name");
 		}
 		// Expand the buffer until the name fits
 		if (static_cast<size_t>(copied) == buf.size()) {

@@ -4,19 +4,23 @@
 #include <cstdint>
 #include <cstdlib>
 #include <cstring>
+#include <format>
 #include <optional>
+#include <source_location>
 #include <string>
 #include <typeinfo>
 
 #include "c_api.hh"        // IWYU pragma: keep
+#include "error.hh"
 #include "typeinfo.hh"
 
 namespace deai::type::conv {
 
 /// Concatenate two std::arrays
 template <typename Element, size_t length1, size_t length2>
-constexpr auto array_cat(std::array<Element, length1> a, std::array<Element, length2> b)
-    -> std::array<Element, length1 + length2> {
+constexpr auto
+array_cat(std::array<Element, length1> a,
+          std::array<Element, length2> b) -> std::array<Element, length1 + length2> {
 	std::array<Element, length1 + length2> output;
 	std::copy(a.begin(), a.end(), output.begin());
 	std::copy(b.begin(), b.end(), output.begin() + length1);
@@ -335,9 +339,9 @@ DeaiBorrowedArrayConverter::operator std::vector<T>() const {
 			std::optional<to_deai_ctype<T>> converted = c_api::DeaiVariantConverter<true>{
 			    *reinterpret_cast<::di_value *>(ptr), arg.elem_type};
 			if (!converted.has_value()) {
-				throw ::di_new_error(
-				    "Array element type mismatch, %s cannot be converted into %s",
-				    ::di_type_names[static_cast<int>(arg.elem_type)], typeid(T).name());
+				throw util::new_error(std::format(
+				    "Array element type mismatch, {} cannot be converted into {}",
+				    ::di_type_names[static_cast<int>(arg.elem_type)], typeid(T).name()));
 			}
 			ret.push_back(variant_to_borrowed_cpp_value<T>(&converted.value()));
 		} else {
@@ -346,5 +350,4 @@ DeaiBorrowedArrayConverter::operator std::vector<T>() const {
 	}
 	return ret;
 }
-
 }        // namespace deai::type::conv
