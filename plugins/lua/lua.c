@@ -339,13 +339,9 @@ static struct di_lua_ref *lua_type_to_di_object(lua_State *L, int i, void *call)
 
 	auto o = di_new_object_with_type(struct di_lua_ref);
 	di_set_type((di_object *)o, lua_proxy_type);
-	o->tref = luaL_ref(L, LUA_REGISTRYINDEX);        // this pops the table from
-	                                                 // stack, we need to put it back
+	lua_pushvalue(L, i);
+	o->tref = luaL_ref(L, LUA_REGISTRYINDEX);
 	di_member_clone(o, "___di_lua_state", (di_object *)state);
-
-	// Restore the value onto the stack
-	lua_pushinteger(L, o->tref);
-	lua_rawget(L, LUA_REGISTRYINDEX);
 
 	auto getter = di_new_object_with_type(di_object);
 	di_set_object_call((void *)getter, di_lua_di_getter);
