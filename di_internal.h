@@ -148,8 +148,7 @@ static inline ffi_type *nullable di_type_to_ffi(di_type in) {
 }
 
 static inline ffi_status unused di_ffi_prep_cif(ffi_cif *nonnull cif, unsigned int nargs,
-                                                di_type rtype,
-                                                const di_type *nonnull atypes) {
+                                                di_type rtype, const di_type *nonnull atypes) {
 	ffi_type *ffi_rtype = di_type_to_ffi(rtype);
 	ffi_type **ffi_atypes = NULL;
 	if (nargs) {
@@ -170,14 +169,25 @@ struct di_module *nullable di_new_module_with_size(di_object *nonnull di, size_t
 
 di_object *nullable di_try(void (*nonnull func)(void *nullable), void *nullable args);
 void di_collect_garbage(void);
+#if defined(TRACK_OBJECTS) || defined(ENABLE_STACK_TRACE)
+#include <elfutils/libdwfl.h>
+struct stack_annotate_context;
+unsigned int __attribute__((noinline))
+stack_trace_get(int skip, unsigned int limit, uint64_t *nonnull ips,
+                uint64_t *nonnull procs, di_string *nonnull names);
+unsigned int __attribute__((noinline)) stack_trace_frame_count(void);
+struct stack_annotate_context *nullable stack_trace_annotate_prepare();
+di_string stack_trace_annotate(struct stack_annotate_context *nonnull ctx, uint64_t ip);
+void stack_trace_annotate_end(struct stack_annotate_context *nonnull ctx);
+void __attribute__((noinline)) print_stack_trace(int skip, int limit);
+#endif
+
 #ifdef TRACK_OBJECTS
 void di_dump_objects(void);
 void di_track_object_ref(di_object *nonnull, void *nonnull);
-void __attribute__((noinline)) print_stack_trace(int skip, int limit);
 #else
 static inline void di_dump_objects(void) {
 }
-static inline void
-di_track_object_ref(di_object *unused nonnull a, void *unused nonnull b) {
+static inline void di_track_object_ref(di_object *unused nonnull a, void *unused nonnull b) {
 }
 #endif

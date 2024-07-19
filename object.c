@@ -54,6 +54,47 @@ di_new_error_from_string(const char *file, int line, const char *func, di_string
 	auto err = di_new_object_with_type(di_object);
 	di_set_type(err, error_type);
 
+#ifdef ENABLE_STACK_TRACE
+	auto frame_count = stack_trace_frame_count();
+	di_array ips = {
+	    .arr = tmalloc(uint64_t, frame_count),
+	    .elem_type = DI_TYPE_UINT,
+	};
+	di_array procs = {
+	    .arr = tmalloc(uint64_t, frame_count),
+	    .elem_type = DI_TYPE_UINT,
+	};
+	di_array names = {
+	    .arr = tmalloc(di_string, frame_count),
+	    .elem_type = DI_TYPE_STRING,
+	};
+	frame_count = stack_trace_get(0, frame_count, ips.arr, procs.arr, names.arr);
+	uint64_t *procs_arr = procs.arr;
+	for (unsigned int i = 0; i < frame_count; i++) {
+		if (procs_arr[i] != (uintptr_t)di_new_error_from_string &&
+		    procs_arr[i] != (uintptr_t)di_new_error2) {
+			if (i > 0) {
+				for (unsigned int j = 0; j < i; j++) {
+					di_free_string(((di_string *)names.arr)[j]);
+				}
+				memmove(ips.arr, ips.arr + i * sizeof(uint64_t),
+				        (frame_count - i) * sizeof(uint64_t));
+				memmove(procs.arr, procs.arr + i * sizeof(uint64_t),
+				        (frame_count - i) * sizeof(uint64_t));
+				memmove(names.arr, names.arr + i * sizeof(di_string),
+				        (frame_count - i) * sizeof(di_string));
+			}
+			ips.length = frame_count - i;
+			procs.length = frame_count - i;
+			names.length = frame_count - i;
+			break;
+		}
+	}
+	di_member(err, "stack_ips", ips);
+	di_member(err, "stack_procs", procs);
+	di_member(err, "stack_proc_names", names);
+#endif
+
 	di_member_clone(err, "__to_string", message);
 	di_member(err, "errmsg", message);
 	if (file) {

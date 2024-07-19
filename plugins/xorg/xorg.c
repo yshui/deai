@@ -492,7 +492,6 @@ out:
 	xkb_keymap_unref(map);
 }
 
-void print_stack_trace(int, int);
 void di_xorg_add_signal(di_xorg_connection *xc) {
 	xc->nsignals += 1;
 	if (xc->nsignals != 1) {

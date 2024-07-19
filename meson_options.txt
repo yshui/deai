@@ -2,3 +2,4 @@ option('preferred_lua', type: 'string', description: 'The preferred lua package 
 option('track_objects', type: 'boolean', value: false, description: 'Whether to enable the object tracking debug feature')
 option('unittests', type: 'boolean', value: false, description: 'Whether to build unittests')
 option('plugins', type: 'array', choices: ['file', 'xorg', 'dbus', 'udev', 'evdev', 'lua', 'hwinfo', 'misc'], description: 'List of plugins to build')
+option('stack_trace', type: 'boolean', value: true, description: 'Print stack trace when error occurs')

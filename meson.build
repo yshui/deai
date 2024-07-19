@@ -87,6 +87,7 @@ incs = [deai_inc, include_directories('.')]
 conf = configuration_data()
 conf.set('HAVE_SETPROCTITLE', have_setproctitle)
 conf.set('TRACK_OBJECTS', get_option('track_objects'))
+conf.set('ENABLE_STACK_TRACE', get_option('stack_trace'))
 conf.set('plugin_install_dir', get_option('prefix') / plugin_install_dir)
 conf.set('resources_dir', get_option('prefix') / resources_install_dir)
 configure_file(input: 'config.h.in', output: 'config.h', configuration: conf)
@@ -134,14 +135,18 @@ core_src = [
 , 'exception.cc'
 ]
 core_deps = [libev, libffi, dl]
-if get_option('track_objects')
-  core_src += [ 'stacktrace.c' ]
+if get_option('track_objects') or get_option('stack_trace')
   core_deps += [
     dependency('libunwind', required: true)
   , dependency('libunwind-generic', required: true)
   , dependency('libdw', required: true)
   ]
 endif
+
+if get_option('track_objects') or get_option('stack_trace')
+  core_src += [ 'stacktrace.c' ]
+endif
+
 deai_exe = executable('deai', core_src, c_args: base_c_args
 , cpp_args: base_cpp_args
 , dependencies: core_deps
