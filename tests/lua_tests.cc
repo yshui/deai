@@ -54,6 +54,7 @@ DEAI_CPP_PLUGIN_ENTRY_POINT(di) {
 		auto err = *Ref<Object>::take(e);
 		auto errmsg = err["errmsg"]->to<std::string>().value();
 		std::cout << "Caught error: " << err["errmsg"]->to<std::string>().value() << '\n';
+		std::cout << err.to_string() << "\n";
 		assert(errmsg == test_error);
 		caught = true;
 	}

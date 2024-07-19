@@ -12,6 +12,7 @@
 #include <deai/type.h>
 #include <assert.h>
 #include <ev.h>
+#include <inttypes.h>
 #include <stdalign.h>
 #include <stdarg.h>
 #include <stdio.h>
@@ -48,6 +49,98 @@ static_assert(alignof(di_object) == alignof(di_object_internal),
 // clang-format on
 
 static const char error_type[] = "deai:Error";
+
+di_string di_error_to_string(di_object *err) {
+	const char *func = NULL, *file = NULL;
+	int line = 0;
+	di_rawget_borrowed(err, "func", func);
+	di_rawget_borrowed(err, "file", file);
+	di_rawget_borrowed(err, "line", line);
+	scoped_di_array parts_arr = {
+	    .arr = tmalloc(di_string, 5),
+	    .elem_type = DI_TYPE_STRING,
+	};
+	di_string *parts = parts_arr.arr;
+	di_object *source = NULL;
+	di_rawget_borrowed(err, "source", source);
+	unsigned pos = 0;
+	if (source != NULL) {
+		parts[pos++] = di_error_to_string(source);
+		parts[pos++] = di_string_dup(
+		    "\nWhile handling the above error, the following error occurred:\n");
+	}
+	if (func || file || line > 0) {
+		if (func == NULL) {
+			func = "<unknown>";
+		}
+		if (file == NULL) {
+			file = "??";
+		}
+		parts[pos++] = di_string_printf("error caught in \"%s\" (%s:%d): ", func, file, line);
+	} else {
+		parts[pos++] = di_string_dup("error caught: ");
+	}
+
+	if (di_rawgetxt(err, di_string_borrow_literal("errmsg"), DI_TYPE_STRING,
+	                (di_value *)&parts[pos]) != 0) {
+		parts[pos] = di_string_dup("<unknown error>");
+	}
+	pos++;
+
+	if (di_rawgetxt(err, di_string_borrow_literal("detail"), DI_TYPE_STRING,
+	                (di_value *)&parts[pos]) != 0) {
+		parts[pos] = di_string_dup("(no detail)");
+	}
+	pos++;
+
+#ifdef ENABLE_STACK_TRACE
+	di_array ips = {0}, procs = {0}, names = {0};
+	if (di_rawget_borrowed(err, "stack_ips", ips) == 0 &&
+	    di_rawget_borrowed(err, "stack_procs", procs) == 0 &&
+	    di_rawget_borrowed(err, "stack_proc_names", names) == 0) {
+		auto ctx = stack_trace_annotate_prepare();
+		uint64_t *ips_arr = ips.arr, *procs_arr = procs.arr;
+		di_string *names_arr = names.arr;
+		parts = realloc(parts_arr.arr, sizeof(di_string) * (pos + ips.length + 1));
+		if (!parts) {
+			goto stack_trace_out;
+		}
+		parts_arr.arr = parts;
+		parts[pos++] = di_string_dup("\nstack traceback:");
+		for (size_t i = 0; i < ips.length; i++) {
+			if (ctx) {
+				scoped_di_string annotated = stack_trace_annotate(ctx, ips_arr[i]);
+				parts[i + pos] = di_string_printf("%10zu: %#16" PRIx64 " %.*s", i, ips_arr[i],
+				                                  (int)annotated.length, annotated.data);
+			} else {
+				auto offsets = procs_arr[i] != 0 ? ips_arr[i] - procs_arr[i] : 0;
+				auto proc_name = names_arr[i];
+				if (proc_name.length == 0) {
+					proc_name = di_string_borrow_literal("<unknown>");
+				}
+				if (offsets) {
+					parts[i + pos] =
+					    di_string_printf("%10zu: %#16" PRIx64 "(%.*s+%#lx)", i, ips_arr[i],
+					                     (int)proc_name.length, proc_name.data, offsets);
+				} else {
+					parts[i + pos] =
+					    di_string_printf("%10zu%#16" PRIx64 "(%.*s)", i, ips_arr[i],
+					                     (int)proc_name.length, proc_name.data);
+				}
+			}
+		}
+		pos += ips.length;
+		if (ctx) {
+			stack_trace_annotate_end(ctx);
+		}
+	}
+stack_trace_out:
+#endif
+	parts_arr.length = pos;
+
+	di_string ret = di_string_join(parts_arr, di_string_borrow_literal("\n"));
+	return ret;
+}
 
 di_object *
 di_new_error_from_string(const char *file, int line, const char *func, di_string message) {
@@ -95,7 +188,7 @@ di_new_error_from_string(const char *file, int line, const char *func, di_string
 	di_member(err, "stack_proc_names", names);
 #endif
 
-	di_member_clone(err, "__to_string", message);
+	di_method(err, "__to_string", di_error_to_string);
 	di_member(err, "errmsg", message);
 	if (file) {
 		di_member(err, "file", file);

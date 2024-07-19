@@ -60,7 +60,7 @@ di_string stack_trace_annotate(struct stack_annotate_context *ctx, uint64_t ip) 
 		const char *filename = dwfl_lineinfo(line, &addr, &nline, NULL, NULL, NULL);
 		buf = di_string_printf("%s (%s:%d)", function_name, filename, nline);
 	} else {
-		buf = di_string_printf("%s (%#16" PRIx64 ")", function_name, ip);
+		buf = di_string_printf("%s (%#" PRIx64 ")", function_name, ip);
 	}
 	return buf;
 }

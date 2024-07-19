@@ -568,6 +568,33 @@ static inline unused di_string di_string_concat(di_string a, di_string b) {
 	return ret;
 }
 
+static inline unused di_string di_string_join(di_array strs, di_string sep) {
+	if (strs.length == 0) {
+		return DI_STRING_INIT;
+	}
+	if (strs.elem_type != DI_TYPE_NAME(STRING)) {
+		assert(false);
+		return DI_STRING_INIT;
+	}
+	size_t total_len = 0;
+	for (size_t i = 0; i < strs.length; i++) {
+		total_len += ((di_string *)strs.arr)[i].length;
+	}
+	total_len += sep.length * (strs.length - 1);
+	char *ret = (char *)malloc(total_len);
+	size_t pos = 0;
+	for (size_t i = 0; i < strs.length; i++) {
+		di_string str = ((di_string *)strs.arr)[i];
+		memcpy(ret + pos, str.data, str.length);
+		pos += str.length;
+		if (i != strs.length - 1 && sep.length > 0) {
+			memcpy(ret + pos, sep.data, sep.length);
+			pos += sep.length;
+		}
+	}
+	return (di_string){.data = ret, .length = total_len};
+}
+
 static inline di_string unused di_string_vprintf(const char *nonnull fmt, va_list args) {
 	di_string ret;
 	ret.length = vasprintf((char **)&ret.data, fmt, args);        // minus the null byte
