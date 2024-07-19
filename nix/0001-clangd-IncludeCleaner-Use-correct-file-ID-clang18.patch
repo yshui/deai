@@ -13,6 +13,17 @@ diff --git a/clang-tools-extra/clangd/CollectMacros.cpp b/clang-tools-extra/clan
 index c5ba8d903ba4..a8708fda53fe 100644
 --- a/clang-tools-extra/clangd/CollectMacros.cpp
 +++ b/clang-tools-extra/clangd/CollectMacros.cpp
+@@ -19,9 +19,8 @@ namespace clang {
+ namespace clangd {
+ 
+ Range MacroOccurrence::toRange(const SourceManager &SM) const {
+-  auto MainFile = SM.getMainFileID();
+   return halfOpenToRange(
+-      SM, syntax::FileRange(MainFile, StartOffset, EndOffset).toCharRange(SM));
++      SM, syntax::FileRange(FID, StartOffset, EndOffset).toCharRange(SM));
+ }
+ 
+ void CollectMainFileMacros::add(const Token &MacroNameTok, const MacroInfo *MI,
 @@ -34,12 +34,12 @@ void CollectMainFileMacros::add(const Token &MacroNameTok, const MacroInfo *MI,
  
    auto Name = MacroNameTok.getIdentifierInfo()->getName();
