@@ -40,6 +40,8 @@ DEAI_CPP_PLUGIN_ENTRY_POINT(di) {
 
 	assert(obj["a"]->to<int64_t>() == 1);
 	assert(obj["b"]->to<std::string>() == "asdf");
+	std::cout << obj.to_string() << '\n';
+	assert(obj.to_string() == "this is a tostring test");
 
 	bool caught = false;
 	try {

@@ -352,6 +352,29 @@ static di_tuple di_lua_di_next(di_object *lua_ref, di_string name) {
 	lua_pop(L, 3);
 	return ret;
 }
+static di_string di_lua_table_to_string(di_object *lua_ref) {
+	struct di_lua_ref *t = (struct di_lua_ref *)lua_ref;
+	scoped_di_object *state_obj = NULL;
+	DI_CHECK_OK(di_get(t, "___di_lua_state", state_obj));
+
+	auto state = (struct di_lua_state *)state_obj;
+	lua_State *L = state->L;
+
+	lua_rawgeti(L, LUA_REGISTRYINDEX, t->tref);
+	if (lua_isnil(L, -1)) {
+		lua_pop(L, 1);
+		return di_string_printf("<dead lua object %p>", t);
+	}
+
+	di_string ret = DI_STRING_INIT;
+	ret.data = luaL_tolstring(L, -1, &ret.length);
+	if (ret.data == NULL) {
+		di_throw(di_new_error("Lua __tostring metamethod didn't return a string"));
+	}
+	ret = di_clone_string(ret);
+	lua_pop(L, 2);        // Pop the table and the string
+	return ret;
+}
 static const char lua_proxy_type[] = "deai.plugin.lua:LuaProxy";
 static struct di_lua_ref *lua_type_to_di_object(lua_State *L, int i, void *call) {
 	// TODO(yshui): probably a good idea to make sure that same lua object get same
@@ -377,6 +400,7 @@ static struct di_lua_ref *lua_type_to_di_object(lua_State *L, int i, void *call)
 	di_set_object_call((void *)o, call);
 
 	di_method(o, "__next", di_lua_di_next, di_string);
+	di_method(o, "__to_string", di_lua_table_to_string);
 
 	// Need to return
 	return o;
@@ -533,6 +557,19 @@ static int di_lua_gc(lua_State *L) {
 	return 0;
 }
 
+static int di_lua_meta_to_string(lua_State *L) {
+	void **optr = di_lua_checkproxy(L, 1);
+	di_object *o = *optr;
+	di_object *error = NULL;
+	scoped_di_string str = di_object_to_string(o, &error);
+	if (error != NULL) {
+		di_lua_pushobject(L, NULL, error);
+		return lua_error(L);
+	}
+	lua_pushlstring(L, str.data, str.length);
+	return 1;
+}
+
 static int di_lua_gc_for_weak_object(lua_State *L) {
 	struct di_weak_object *weak = *di_lua_checkproxy(L, 1);
 	di_drop_weak_ref(&weak);
@@ -540,11 +577,9 @@ static int di_lua_gc_for_weak_object(lua_State *L) {
 }
 
 static const luaL_Reg di_lua_object_methods[] = {
-    {"__index", di_lua_meta_index},
-    {"__newindex", di_lua_meta_newindex},
-    {"__pairs", di_lua_meta_pairs},
-    {"__gc", di_lua_gc},
-    {0, 0},
+    {"__index", di_lua_meta_index},        {"__newindex", di_lua_meta_newindex},
+    {"__pairs", di_lua_meta_pairs},        {"__gc", di_lua_gc},
+    {"__tostring", di_lua_meta_to_string}, {0, 0},
 };
 
 static const luaL_Reg di_lua_weak_object_methods[] = {
