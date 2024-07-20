@@ -4,15 +4,6 @@
 
 namespace deai {
 namespace exception {
-auto OtherError::what() const noexcept -> const char * {
-	return message.c_str();
-}
-
-OtherError::OtherError(int err) : errno_{err} {
-	std::stringstream ss;
-	ss << "deai error " << errno_;
-	message = ss.str();
-}
 
 void throw_deai_error(int errno_) {
 	if (errno_ == 0) {
@@ -24,7 +15,7 @@ void throw_deai_error(int errno_) {
 	if (errno_ == -ENOENT) {
 		throw std::out_of_range("");
 	}
-	throw OtherError(errno_);
+	throw util::new_error(std::format("Unhandled deai error: {}", errno_));
 }
 }        // namespace exception
 namespace type {

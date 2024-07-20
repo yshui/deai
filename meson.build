@@ -98,7 +98,6 @@ libutils = static_library('libutils', ['string_buf.c'], include_directories: inc
 
 # link deai against a cpp library, so clang++ is used to link the final binary. this is
 # in order to fix undefined symbol problem with UBSan
-cpp_dummy = static_library('cpp_dummy', ['dummy.cc'])
 all_plugins = []
 builtin_scripts = []
 subdir('plugins')

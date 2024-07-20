@@ -18,15 +18,6 @@
 namespace deai {
 
 namespace exception {
-struct OtherError : std::exception {
-private:
-	int errno_;
-	std::string message;
-
-public:
-	[[nodiscard]] auto what() const noexcept -> const char * override;
-	OtherError(int errno_);
-};
 
 void throw_deai_error(int errno_);
 
