@@ -427,7 +427,7 @@ public:
 	}
 
 	auto to_string() const noexcept -> std::string {
-		auto str = c_api::object::to_string(&inner->base);
+		auto str = c_api::object::to_string(&inner->base, nullptr);
 		std::string result{str.data, str.length};
 		::di_free_string(str);
 		return result;

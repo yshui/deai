@@ -438,7 +438,8 @@ PUBLIC_DEAI_API bool di_is_object_callable(di_object *nonnull);
 /// member of the object. If it is a string, then it will be returned directly. Otherwise,
 /// we try to call `__to_string` as a function and use its return value as the string representation.
 /// `__to_string` must return a string directly, we don't support chaining.
-PUBLIC_DEAI_API di_string di_object_to_string(di_object *nonnull o);
+PUBLIC_DEAI_API di_string di_object_to_string(di_object *nonnull o,
+                                              di_object *nullable *nullable err);
 PUBLIC_DEAI_API di_array di_get_all_member_names_raw(di_object *nonnull obj_);
 typedef bool (*nonnull di_member_cb)(di_string name, di_type, di_value *nonnull value,
                                      void *nullable data);

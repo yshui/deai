@@ -1260,7 +1260,7 @@ static inline di_string di_object_to_string_fallback(di_object *o) {
 	return di_string_printf("[object:%p]", o);
 }
 
-di_string di_object_to_string(di_object *o) {
+di_string di_object_to_string(di_object *o, di_object *nullable *nullable error) {
 	// Get the __to_string member, it can be a string or a function.
 	di_variant to_string;
 	if (di_refrawgetx(o, di_string_borrow_literal("__to_string"), &to_string.type,
@@ -1288,14 +1288,28 @@ di_string di_object_to_string(di_object *o) {
 	                     {.type = DI_TYPE_OBJECT, .value = (di_value *)&o},
 	                 }};
 	to_string.value = (di_value *)tmalloc(di_string, 1);
-	if (di_call_object(conv, &to_string.type, to_string.value, args) != 0) {
-		return di_object_to_string_fallback(o);
+	if (error != NULL) {
+		if (di_call_object_catch(conv, &to_string.type, to_string.value, args, error) != 0) {
+			return di_object_to_string_fallback(o);
+		}
+		if (*error) {
+			return DI_STRING_INIT;
+		}
+	} else {
+		if (di_call_object(conv, &to_string.type, to_string.value, args) != 0) {
+			return di_object_to_string_fallback(o);
+		}
 	}
 
 	// borrowing = false, because to_string holds the return value, and therefore is owned.
 	if (di_type_conversion(DI_TYPE_VARIANT, (di_value *)&to_string, DI_TYPE_STRING,
 	                       (di_value *)&ret, false) != 0) {
-		di_throw(di_new_error("__to_string did not return a string"));
+		auto err = di_new_error("__to_string did not return a string");
+		if (error != NULL) {
+			*error = err;
+		} else {
+			di_throw(err);
+		}
 	}
 	return ret;
 }
