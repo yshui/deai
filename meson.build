@@ -23,6 +23,7 @@ test_common_args = [
     '-Werror=nonnull',
     '-Werror=implicit-fallthrough',
     '-Wno-c2x-extensions',
+    '-Wno-c23-extensions',
     '-Wall'
 ]
 

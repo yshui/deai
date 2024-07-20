@@ -17,6 +17,7 @@ test_cases = [
   'proctitle.lua',
   'unittests.lua',
   'promise.lua',
+  'promise_catch.lua',
   'async.lua',
   'cycle.lua',
   'twoway.lua',

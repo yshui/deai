@@ -934,9 +934,8 @@ static DBusHandlerResult dbus_filter(DBusConnection *conn, DBusMessage *msg, voi
 		if (di_rawget_borrowed2(ud, promise_name, promise) == 0) {
 			if (is_error) {
 				auto msg = t.elements[0].value->string;
-				auto err = di_new_error("%.*s", (int)msg.length, msg.data);
-				di_promise_resolve((void *)promise, di_make_variant(err));
-				di_unref_object(err);
+				scoped_di_object *err = di_new_error("%.*s", (int)msg.length, msg.data);
+				di_promise_reject((void *)promise, err);
 			} else {
 				di_variant args;
 				if (t.length == 1) {

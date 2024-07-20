@@ -400,12 +400,20 @@ struct di_promise {
 };
 
 /// Call an array of handlers with a value. Consumes the handlers array.
-static void di_handlers_dispatch(di_array handlers, di_variant value) {
-	DI_CHECK(handlers.elem_type == DI_TYPE_OBJECT);
+static void di_handlers_dispatch(di_array handlers, int type, di_variant value) {
+	DI_CHECK(handlers.length == 0 || handlers.elem_type == DI_TYPE_OBJECT);
 
 	di_tuple arg = {
-	    .elements = &value,
-	    .length = 1,
+	    .elements =
+	        (di_variant[]){
+	            {.type = DI_TYPE_NINT,
+	             .value =
+	                 (di_value[]){
+	                     {.int_ = type},
+	                 }},
+	            value,
+	        },
+	    .length = 2,
 	};
 	auto arr = (di_object **)handlers.arr;
 	for (int i = 0; i < handlers.length; i++) {
@@ -429,30 +437,23 @@ static void di_handlers_dispatch(di_array handlers, di_variant value) {
 static int di_promise_dispatch(di_promise *promise) {
 	scoped_di_variant resolved = DI_VARIANT_INIT;
 	di_object *rejected = NULL;
+	di_variant handlers_v;
+	di_array handlers = DI_ARRAY_INIT;
+	if (di_remove_member_raw((di_object *)promise,
+	                         di_string_borrow_literal("___handlers"), &handlers_v) == 0) {
+		handlers = handlers_v.value->array;
+		free(handlers_v.value);
+	}
 	if (di_get(promise, "___resolved", resolved) == 0) {
-		di_variant handlers_v;
-		if (di_remove_member_raw((di_object *)promise,
-		                         di_string_borrow_literal("___resolve_handlers"),
-		                         &handlers_v) == 0) {
-			di_array handlers = handlers_v.value->array;
-			free(handlers_v.value);
-			di_handlers_dispatch(handlers, resolved);
-		}
-	} else if (di_get(promise, "___rejected", rejected) == 0) {
-		di_variant handlers_v;
-		if (di_remove_member_raw((di_object *)promise,
-		                         di_string_borrow_literal("___reject_handlers"),
-		                         &handlers_v) == 0) {
-			di_array handlers = handlers_v.value->array;
-			di_variant var = {
-			    .type = DI_TYPE_OBJECT,
-			    .value = (di_value *)&rejected,
-			};
-			free(handlers_v.value);
-			di_handlers_dispatch(handlers, var);
-			di_unref_object(rejected);
-			rejected = NULL;
-		}
+		di_handlers_dispatch(handlers, 0, resolved);
+	} else if (di_get(promise, "___rejected", rejected) == 0 && handlers.length > 0) {
+		di_variant var = {
+		    .type = DI_TYPE_OBJECT,
+		    .value = (di_value *)&rejected,
+		};
+		di_handlers_dispatch(handlers, 1, var);
+		di_unref_object(rejected);
+		rejected = NULL;
 	}
 	di_delete_member_raw((void *)promise, di_string_borrow_literal("is_pending"));
 	if (rejected) {
@@ -473,6 +474,7 @@ di_object *di_new_promise(di_object *event_module) {
 	di_set_type((void *)ret, promise_type);
 	di_member(ret, "___weak_event_module", weak_event);
 	di_method(ret, "then", di_promise_then, di_object *);
+	di_method(ret, "catch", di_promise_catch, di_object *);
 	// "then" is a keyword in lua
 	di_method(ret, "then_", di_promise_then, di_object *);
 	di_method(ret, "resolve", di_promise_resolve, struct di_variant);
@@ -518,62 +520,78 @@ static void di_promise_start_dispatch(struct di_promise *promise) {
 	di_member_clone(promise, "is_pending", true);
 }
 
-static int di_promise_then_closure(di_object *closure, di_type * /*type*/,
-                                   di_value * /*ret*/, di_tuple args);
+static int di_promise_handler_closure(di_object *closure, di_type * /*type*/,
+                                      di_value * /*ret*/, di_tuple args);
 
 /// Add a listener to a promise, if the promise is already resolved, call the listener
 /// during the next main loop iteration.
-static void di_promise_then_inner(di_object *promise, di_object *closure) {
-	struct di_member *handlers_member =
-	    di_lookup(promise, di_string_borrow_literal("___resolve_handlers"));
+static void di_promise_add_handler(di_object *promise, di_object *handler) {
+	auto const key = di_string_borrow_literal("___handlers");
+	struct di_member *handlers_member = di_lookup(promise, key);
 
 	if (handlers_member == NULL) {
-		handlers_member =
-		    di_add_member_move2(promise, di_string_borrow_literal("___resolve_handlers"),
-		                        (di_type[]){DI_TYPE_ARRAY},
-		                        (di_array[]){{
-		                            .arr = NULL,
-		                            .length = 0,
-		                            .elem_type = DI_TYPE_OBJECT,
-		                        }});
+		handlers_member = di_add_member_move2(promise, key, (di_type[]){DI_TYPE_ARRAY},
+		                                      (di_array[]){{
+		                                          .arr = NULL,
+		                                          .length = 0,
+		                                          .elem_type = DI_TYPE_OBJECT,
+		                                      }});
 	}
 	di_array *handlers = &handlers_member->data->array;
 	di_object **arr = handlers->arr;
 	handlers->arr = arr = trealloc(arr, handlers->length + 1);
-	arr[handlers->length++] = di_ref_object(closure);
+	arr[handlers->length++] = di_ref_object(handler);
 
 	if (di_has_member(promise, "___resolved") || di_has_member(promise, "___rejected")) {
 		di_promise_start_dispatch((struct di_promise *)promise);
 	}
 }
 
-static int di_promise_then_closure(di_object *closure, di_type * /*type*/,
-                                   di_value * /*ret*/, di_tuple args) {
-	DI_CHECK(args.length == 1);
+static int di_promise_handler_closure(di_object *closure, di_type * /*type*/,
+                                      di_value * /*ret*/, di_tuple args) {
+	DI_CHECK(args.length == 2);
+
 	di_object *promise = NULL;
+	int type;
 	DI_CHECK_OK(di_rawget_borrowed(closure, "promise", promise));
+	DI_CHECK_OK(di_type_conversion(args.elements[0].type, args.elements[0].value,
+	                               DI_TYPE_NINT, (di_value *)&type, true));
+	DI_CHECK(type == 0 || type == 1);
+
+	args.length = 1;
+	args.elements += 1;
 
 	di_object *handler = NULL;
-	di_variant handlerv = DI_VARIANT_INIT;
-	// If there is no handler, this is a "verbatim" then closure, the resolved value is
-	// directly passed to the subsequent promise. This behavior is also used below if the
-	// handler returns a promise.
-	if (di_remove_member_raw(closure, di_string_borrow_literal("handler"), &handlerv) != 0) {
-		di_promise_resolve(promise, (struct di_variant){.type = args.elements[0].type,
-		                                                .value = args.elements[0].value});
+	scoped_di_variant resolvev = DI_VARIANT_INIT;
+	scoped_di_variant rejectv = DI_VARIANT_INIT;
+	if (di_remove_member_raw(closure, di_string_borrow_literal("resolve"), &resolvev) == 0) {
+		DI_CHECK(resolvev.type == DI_TYPE_OBJECT);
+	}
+	if (di_remove_member_raw(closure, di_string_borrow_literal("reject"), &rejectv) == 0) {
+		DI_CHECK(rejectv.type == DI_TYPE_OBJECT);
+	}
+	// If there is no handler, the resolved value is directly passed to the
+	// subsequent promise, and any rejection will cause the subsequent promise
+	// to be rejected as well. This behavior is also used below if the handler
+	// returns a promise.
+	if (type == 0 && resolvev.type == DI_TYPE_NIL) {
+		di_promise_resolve(promise, args.elements[0]);
+		di_delete_member_raw(closure, di_string_borrow_literal("promise"));
+		return 0;
+	}
+	if (type == 1 && rejectv.type == DI_TYPE_NIL) {
+		DI_CHECK(args.elements[0].type == DI_TYPE_OBJECT);
+		di_promise_reject(promise, args.elements[0].value->object);
 		di_delete_member_raw(closure, di_string_borrow_literal("promise"));
 		return 0;
 	}
 
-	DI_CHECK(handlerv.type == DI_TYPE_OBJECT);
-	handler = handlerv.value->object;
-	free(handlerv.value);
+	handler = type == 0 ? resolvev.value->object : rejectv.value->object;
 
 	di_type rtype;
 	di_value ret;
 	di_object *error = NULL;
 	int rc = di_call_object_catch(handler, &rtype, &ret, args, &error);
-	di_unref_object(handler);
 	if (rc != 0) {
 		log_error("Error calling handler: %d", rc);
 		return 0;
@@ -589,7 +607,7 @@ static int di_promise_then_closure(di_object *closure, di_type * /*type*/,
 		// The handler returned a promise, the subsequent promise should resolve when
 		// the returned promise resolves. We have already removed the handler from the
 		// closure, turning it into a "verbatim" closure, so we just add it to the listeners.
-		di_promise_then_inner(ret.object, closure);
+		di_promise_add_handler(ret.object, closure);
 		pending = true;
 	}
 	di_free_value(rtype, &ret);
@@ -615,7 +633,8 @@ static int di_promise_then_closure(di_object *closure, di_type * /*type*/,
 /// promise returned by this function is freed or not.
 ///
 /// (this function is called "then\_" in lua, since "then" is a keyword)
-di_object *di_promise_then(di_object *promise, di_object *handler) {
+static di_object *
+di_promise_then_inner(di_object *promise, di_object *resolve, di_object *reject) {
 	scoped_di_weak_object *weak_event = NULL;
 	if (di_get(promise, "___weak_event_module", weak_event) != 0) {
 		di_throw(di_new_error("Event module member not found"));
@@ -629,14 +648,29 @@ di_object *di_promise_then(di_object *promise, di_object *handler) {
 
 	di_object *closure = di_new_object_with_type_name(
 	    sizeof(di_object), alignof(di_object), "deai.event:PromiseThenClosure");
-	di_set_object_call(closure, di_promise_then_closure);
+	di_set_object_call(closure, di_promise_handler_closure);
 	di_member_clone(closure, "promise", ret);
-	if (handler != NULL) {
-		di_member_clone(closure, "handler", handler);
+	if (resolve != NULL) {
+		di_member_clone(closure, "resolve", resolve);
 	}
-	di_promise_then_inner(promise, closure);
+	if (reject != NULL) {
+		di_member_clone(closure, "reject", reject);
+	}
+	di_promise_add_handler(promise, closure);
 	di_unref_object(closure);
 	return ret;
+}
+
+di_object *di_promise_then(di_object *promise, di_object *handler) {
+	return di_promise_then_inner(promise, handler, NULL);
+}
+
+di_object *di_promise_catch(di_object *promise, di_object *handler) {
+	return di_promise_then_inner(promise, NULL, handler);
+}
+
+di_object *di_promise_finally(di_object *promise, di_object *handler) {
+	return di_promise_then_inner(promise, handler, handler);
 }
 
 // NOLINTNEXTLINE(bugprone-easily-swappable-parameters)

@@ -799,6 +799,7 @@ static inline void unused di_free_di_weak_objectpp(di_weak_object *nullable *non
 	            (struct di_variant[]){LIST_APPLY(di_make_variant, SEP_COMMA, __VA_ARGS__)}})
 // call but ignore return
 #define di_call(o, name, ...)                                                            \
+	/* NOLINTBEGIN(bugprone-assignment-in-if-condition) */                               \
 	({                                                                                   \
 		int __rc = 0;                                                                    \
 		do {                                                                             \
@@ -813,9 +814,10 @@ static inline void unused di_free_di_weak_objectpp(di_weak_object *nullable *non
 			di_free_value(__rtype, &__ret);                                              \
 		} while (0);                                                                     \
 		__rc;                                                                            \
-	})
+	}) /* NOLINTEND(bugprone-assignment-in-if-condition) */
 
 #define di_callr(o, name, r, ...)                                                        \
+	/* NOLINTBEGIN(bugprone-assignment-in-if-condition) */                               \
 	({                                                                                   \
 		int __deai_callr_rc = 0;                                                         \
 		do {                                                                             \
@@ -836,9 +838,10 @@ static inline void unused di_free_di_weak_objectpp(di_weak_object *nullable *non
 			(r) = *(typeof(r) *)&__deai_callr_ret;                                       \
 		} while (0);                                                                     \
 		__deai_callr_rc;                                                                 \
-	})
+	}) /* NOLINTEND(bugprone-assignment-in-if-condition) */
 
 #define di_get2(o, prop, r)                                                              \
+	/* NOLINTBEGIN(bugprone-assignment-in-if-condition) */                               \
 	({                                                                                   \
 		int rc;                                                                          \
 		do {                                                                             \
@@ -848,7 +851,7 @@ static inline void unused di_free_di_weak_objectpp(di_weak_object *nullable *non
 			}                                                                            \
 		} while (0);                                                                     \
 		rc;                                                                              \
-	})
+	}) /* NOLINTEND(bugprone-assignment-in-if-condition) */
 
 #define di_get(o, prop, r) di_get2(o, di_string_borrow(prop), r)
 

@@ -25,6 +25,11 @@ errlh = dbusl:on("stderr_line", function(l)
     errlh:stop()
     di.os.env.DBUS_SESSION_BUS_PID = l
 end)
+
+local function identity(v)
+    return v
+end
+
 local resolved_1 = false
 local resolved_2 = false
 local resolved_3 = false
@@ -40,23 +45,23 @@ dbusl:once("exit", function()
         o:Introspect(),
         o:ListNames(),
         o:GetAllMatchRules(),
-        o2:Dummy({1,2,3}),
-        o2:Dummy({"asdf","qwer"}),
-        o2:Dummy(1),
-        o2:Dummy("asdf"),
-        o2.Dummy:call_with_signature(o2, "iii", 1,2,3),
-        o2.Dummy:call_with_signature(o2, "av", {1,2,3}),
+        o2:Dummy({1,2,3}):catch(identity),
+        o2:Dummy({"asdf","qwer"}):catch(identity),
+        o2:Dummy(1):catch(identity),
+        o2:Dummy("asdf"):catch(identity),
+        o2.Dummy:call_with_signature(o2, "iii", 1,2,3):catch(identity),
+        o2.Dummy:call_with_signature(o2, "av", {1,2,3}):catch(identity),
     }):then_(function(results)
         for i, v in pairs(results) do
             print(i, v)
         end
         resolved_1 = true
     end)
-    o2:get("DummyProp"):then_(function(e)
-        if e.error == nil then
-            di:exit(1)
-        end
-        print("Get DummyProp", e.error)
+    o2:get("DummyProp"):then_(function(v)
+        di:exit(1)
+        print("Get DummyProp succeeded unexpectedly")
+    end):catch(function(e)
+        print("DummyProp failed: ", e)
         resolved_2 = true
     end)
     o3:get("Features"):then_(function(e)
