@@ -1112,7 +1112,13 @@ static int di_lua_add_listener(lua_State *L) {
 		handler = (di_object *)wrapped_handler;
 	}
 
-	auto listen_handle = di_listen_to(o, signame, (void *)handler, NULL);
+	di_object *error = NULL;
+	auto listen_handle = di_listen_to(o, signame, (void *)handler, &error);
+	if (error != NULL) {
+		di_lua_pushobject(L, "error", error);
+		return lua_error(L);
+	}
+
 	if (once) {
 		di_member_clone(handler, "listen_handle", listen_handle);
 	}
@@ -1407,10 +1413,15 @@ static int di_lua_meta_index(lua_State *L) {
 
 	di_type rt;
 	di_value ret;
-	int rc = di_getx(ud, di_string_borrow(key), &rt, &ret, NULL);
+	di_object *error = NULL;
+	int rc = di_getx(ud, di_string_borrow(key), &rt, &ret, &error);
 	if (rc != 0) {
 		lua_pushnil(L);
 		return 1;
+	}
+	if (error != NULL) {
+		di_lua_pushobject(L, "error", error);
+		return lua_error(L);
 	}
 	rc = di_lua_pushvariant(L, key, (struct di_variant){&ret, rt});
 	di_free_value(rt, &ret);
@@ -1440,11 +1451,17 @@ static int di_lua_meta_newindex(lua_State *L) {
 	}
 
 	int ret;
+	di_object *error = NULL;
 	if (vt == DI_TYPE_NIL) {
-		ret = di_delete_member(ud, key, NULL);
+		ret = di_delete_member(ud, key, &error);
 	} else {
-		ret = di_setx(ud, key, vt, &val, NULL);
+		ret = di_setx(ud, key, vt, &val, &error);
 		di_free_value(vt, &val);
+	}
+
+	if (error != NULL) {
+		di_lua_pushobject(L, "error", error);
+		return lua_error(L);
 	}
 
 	if (ret != 0) {
