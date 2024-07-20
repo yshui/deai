@@ -20,8 +20,8 @@ struct Module {
 	///
 	/// Returns a list of integers, the indices of the nodes on the right that each
 	/// node on the left is matched to. Or -1 if it is not matched
-	auto bipartite_match(const std::vector<std::vector<int64_t>> &graph) const
-	    -> std::vector<int64_t> {
+	auto
+	bipartite_match(const std::vector<std::vector<int64_t>> &graph) const -> std::vector<int64_t> {
 		std::vector<int64_t> ret(graph.size(), -1);
 		std::vector<int64_t> right;
 		std::vector<uint8_t> visited(graph.size(), 0);
@@ -30,7 +30,7 @@ struct Module {
 				if (j < 0) {
 					throw std::invalid_argument("Invalid graph, index out of bounds");
 				}
-				if (j >= right.size()) {
+				if (uint64_t(j) >= right.size()) {
 					right.resize(j + 1, -1);
 				}
 			}
@@ -84,8 +84,8 @@ struct Module {
 				    "Invalid constraints, must be pairs of integers");
 			}
 			nedges += constraints_list[i].size() / 2;
-			for (int j = 0; j < constraints_list[i].size(); j += 2) {
-				if (constraints_list[i][j] >= constraints_list.size() ||
+			for (size_t j = 0; j < constraints_list[i].size(); j += 2) {
+				if (constraints_list[i][j] >= int64_t(constraints_list.size()) ||
 				    constraints_list[i][j] < 0) {
 					throw std::invalid_argument(
 					    "Invalid constraints, index out of bounds");

@@ -163,9 +163,10 @@ static void dbus_add_signal_handler_for(di_object *ioev, DBusWatch *w, di_dbus_c
 	auto l = di_listen_to(ioev, di_string_borrow(signal), handler, NULL);
 	DI_CHECK_OK(di_call(l, "auto_stop", true));
 
-	scopedp(char) * listen_handle_name;
-	asprintf(&listen_handle_name, "__dbus_ioev_%s_listen_handle_for_watch_%p", signal, w);
-	DI_CHECK_OK(di_member(oc, listen_handle_name, l));
+	scoped_di_string listen_handle_name =
+	    di_string_printf("__dbus_ioev_%s_listen_handle_for_watch_%p", signal, w);
+	DI_CHECK_OK(di_add_member_move((di_object *)oc, listen_handle_name,
+	                               (di_type[]){DI_TYPE_OBJECT}, &l));
 }
 
 static bool dbus_toggle_watch_impl(DBusWatch *w, void *ud, bool enabled) {
@@ -394,17 +395,18 @@ static struct di_variant di_dbus_object_getter(di_dbus_object *dobj, di_string m
 
 static char *to_dbus_match_rule(di_string path, di_string interface, di_string signal) {
 	char *match;
+	int rc;
 	if (interface.length != 0) {
-		asprintf(&match,
-		         "type='signal',path='%.*s',interface='%.*s'"
-		         ",member='%.*s'",
-		         (int)path.length, path.data, (int)interface.length, interface.data,
-		         (int)signal.length, signal.data);
+		rc = asprintf(&match,
+		              "type='signal',path='%.*s',interface='%.*s'"
+		              ",member='%.*s'",
+		              (int)path.length, path.data, (int)interface.length, interface.data,
+		              (int)signal.length, signal.data);
 	} else {
-		asprintf(&match, "type='signal',path='%.*s',member='%.*s'", (int)path.length,
-		         path.data, (int)signal.length, signal.data);
+		rc = asprintf(&match, "type='signal',path='%.*s',member='%.*s'", (int)path.length,
+		              path.data, (int)signal.length, signal.data);
 	}
-	return match;
+	return rc >= 0 ? match : NULL;
 }
 
 static void

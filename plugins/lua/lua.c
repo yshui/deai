@@ -360,9 +360,7 @@ static di_tuple di_lua_di_next(di_object *lua_ref, di_string name) {
 	di_tuple ret;
 	ret.length = 2;
 	ret.elements = tmalloc(struct di_variant, 2);
-	ret.elements[0].type = DI_TYPE_STRING;
-	ret.elements[0].value = malloc(sizeof(di_string));
-	ret.elements[0].value->string = di_clone_string(key);
+	ret.elements[0] = di_alloc_variant(di_clone_string(key));
 	di_lua_type_to_di_variant(L, -1, &ret.elements[1]);
 	lua_pop(L, 3);
 	assert(lua_gettop(L) == 0);
@@ -548,19 +546,16 @@ static int di_lua_gc(lua_State *L) {
 	DI_CHECK(s != NULL);
 
 	// Forget about this object
-	char *buf = NULL;
-	asprintf(&buf, "___lua_userdata_to_object_%p", optr);
-	DI_CHECK_OK(di_delete_member_raw((void *)s, di_string_borrow(buf)));
-	free(buf);
+	scoped_di_string userdata_key = di_string_printf("___lua_userdata_to_object_%p", optr);
+	DI_CHECK_OK(di_delete_member_raw((di_object *)s, userdata_key));
 
 	// Check if ___di_object_<object> is still pointing to this proxy. If that's the
 	// case, remove this entry. Otherwise it means the weak ref has died before gc and
 	// di_lua_pushobject created a new one (see :ref:`lua quirk`).
 	int64_t lua_ref;
-	asprintf(&buf, "___di_object_to_ref_%p", o);
-	if (di_rawget_borrowed(s, buf, lua_ref) != 0) {
+	scoped_di_string ref_key = di_string_printf("___di_object_to_ref_%p", o);
+	if (di_rawget_borrowed2(s, ref_key, lua_ref) != 0) {
 		// This means the newer proxy got GC'd before us, the older one.
-		free(buf);
 		return 0;
 	}
 
@@ -568,13 +563,12 @@ static int di_lua_gc(lua_State *L) {
 	// weakref_get returning false), we know it's ourself; otherwise load the one in
 	// the registry.
 	void **current_optr = optr;
-	if (luaL_weakref_get(L, LUA_REGISTRYINDEX, lua_ref)) {
+	if (luaL_weakref_get(L, LUA_REGISTRYINDEX, (int)lua_ref)) {
 		current_optr = di_lua_checkproxy(L, -1);
 	}
 	if (current_optr == optr) {
-		DI_CHECK_OK(di_delete_member_raw((void *)s, di_string_borrow(buf)));
+		DI_CHECK_OK(di_delete_member_raw((void *)s, ref_key));
 	}
-	free(buf);
 	return 0;
 }
 
@@ -678,11 +672,10 @@ static void di_lua_pushobject(lua_State *L, di_string name, di_object *obj) {
 	struct di_lua_state *s;
 	di_lua_get_state(L, s);
 
-	scopedp(char) * buf1;
 	int64_t lua_ref;
 
-	asprintf(&buf1, "___di_object_to_ref_%p", obj);
-	int rc = di_get(s, buf1, lua_ref);
+	scoped_di_string ref_key = di_string_printf("___di_object_to_ref_%p", obj);
+	int rc = di_get2(s, ref_key, lua_ref);
 
 	if (rc == 0) {
 		if (luaL_weakref_get(L, LUA_REGISTRYINDEX, lua_ref)) {
@@ -702,13 +695,11 @@ static void di_lua_pushobject(lua_State *L, di_string name, di_object *obj) {
 	lua_ref = luaL_weakref(L, LUA_REGISTRYINDEX);
 
 	// Store or update the object to lua ref map
-	DI_CHECK_OK(di_setx((void *)s, di_string_borrow(buf1), DI_TYPE_INT, &lua_ref, NULL));
+	DI_CHECK_OK(di_setx((void *)s, ref_key, DI_TYPE_INT, &lua_ref, NULL));
 
 	// Update userdata -> object map
-	scopedp(char) * buf2;
-	asprintf(&buf2, "___lua_userdata_to_object_%p", userdata);
-	DI_CHECK_OK(di_add_member_move((void *)s, di_string_borrow(buf2),
-	                               (di_type[]){DI_TYPE_OBJECT}, &obj));
+	scoped_di_string userdata_key = di_string_printf("___lua_userdata_to_object_%p", userdata);
+	DI_CHECK_OK(di_add_member_move((void *)s, userdata_key, (di_type[]){DI_TYPE_OBJECT}, &obj));
 }
 
 const char *allowed_os[] = {"time", "difftime", "clock", "tmpname", "date", NULL};

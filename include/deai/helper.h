@@ -20,21 +20,21 @@
 #define CONCAT(a, b) CONCAT1(a, b)
 
 #define RET_IF_ERR(expr)                                                                 \
-	do {                                                                             \
-		int ret = (expr);                                                        \
-		if (ret != 0)                                                            \
-			return ret;                                                      \
+	do {                                                                                 \
+		int ret = (expr);                                                                \
+		if (ret != 0)                                                                    \
+			return ret;                                                                  \
 	} while (0)
 
 #define ABRT_IF_ERR(expr)                                                                \
-	do {                                                                             \
-		int ret = (expr);                                                        \
-		if (ret != 0)                                                            \
-			abort();                                                         \
+	do {                                                                                 \
+		int ret = (expr);                                                                \
+		if (ret != 0)                                                                    \
+			abort();                                                                     \
 	} while (0)
 
 #define di_gets(o, prop, r)                                                              \
-	if (di_get(o, prop, r))                                                          \
+	if (di_get(o, prop, r))                                                              \
 		return;
 
 // Pardon this mess, this is what you get for doing meta programming using C macros.
@@ -94,27 +94,27 @@
 #define object_cleanup __attribute__((cleanup(di_free_di_objectp)))
 
 #define di_getm(di_expr, modn, on_err)                                                   \
-	scoped_di_object *modn##m = NULL;                                                \
-	do {                                                                             \
-		int rc = 0;                                                              \
-		scoped_di_object *__deai_tmp_di = (di_object *)(di_expr);                \
-		if (__deai_tmp_di == NULL) {                                             \
-			on_err;                                                          \
-		}                                                                        \
-		di_object *__o;                                                          \
-		rc = di_get(__deai_tmp_di, #modn, __o);                                  \
-		if (rc != 0) {                                                           \
-			on_err;                                                          \
-		}                                                                        \
-		modn##m = __o;                                                           \
+	scoped_di_object *modn##m = NULL;                                                    \
+	do {                                                                                 \
+		int rc = 0;                                                                      \
+		scoped_di_object *__deai_tmp_di = (di_object *)(di_expr);                        \
+		if (__deai_tmp_di == NULL) {                                                     \
+			on_err;                                                                      \
+		}                                                                                \
+		di_object *__o;                                                                  \
+		rc = di_get(__deai_tmp_di, #modn, __o);                                          \
+		if (rc != 0) {                                                                   \
+			on_err;                                                                      \
+		}                                                                                \
+		modn##m = __o;                                                                   \
 	} while (0)
 
 #define di_borrowm(di, modn, on_err)                                                     \
-	di_object *modn##m = NULL;                                                       \
-	do {                                                                             \
-		if (di_rawget_borrowed((di), #modn, modn##m) != 0) {                     \
-			on_err;                                                          \
-		}                                                                        \
+	di_object *modn##m = NULL;                                                           \
+	do {                                                                                 \
+		if (di_rawget_borrowed((di), #modn, modn##m) != 0) {                             \
+			on_err;                                                                      \
+		}                                                                                \
 	} while (0)
 
 #define di_mgetm(mod, modn, on_err)                                                      \
@@ -124,15 +124,15 @@
 
 /// Register a field of struct `o` as a read only member of the di_object, by using a
 /// field getter
-#define di_field(o, name)                                                                    \
+#define di_field(o, name)                                                                \
 	({                                                                                   \
-		__auto_type __deai_tmp_field_getter =                                        \
-		    di_new_field_getter(di_typeof((o)->name), offsetof(typeof(*(o)), name)); \
-		di_member((di_object *)(o), "__get_" #name, __deai_tmp_field_getter);        \
+		__auto_type __deai_tmp_field_getter =                                            \
+		    di_new_field_getter(di_typeof((o)->name), offsetof(typeof(*(o)), name));     \
+		di_member((di_object *)(o), "__get_" #name, __deai_tmp_field_getter);            \
 	})
 
 #define di_member(o, name, v)                                                            \
-	di_add_member_move((di_object *)(o), di_string_borrow(name),                     \
+	di_add_member_move((di_object *)(o), di_string_borrow(name),                         \
 	                   (di_type[]){di_typeof(v)}, &(v))
 
 #define di_member_clone(o, name, v)                                                      \
@@ -141,53 +141,53 @@
 #define di_getter(o, name, g) di_method(o, STRINGIFY(__get_##name), g)
 #define di_setter(o, name, s, type) di_method(o, STRINGIFY(__set_##name), s, type);
 #define di_signal_setter_deleter(o, sig, setter, deleter)                                \
-	do {                                                                             \
-		di_method(o, di_signal_setter_of(sig), setter, di_object *);             \
-		di_method(o, di_signal_deleter_of(sig), deleter);                        \
+	do {                                                                                 \
+		di_method(o, di_signal_setter_of(sig), setter, di_object *);                     \
+		di_method(o, di_signal_deleter_of(sig), deleter);                                \
 	} while (0)
 
 #define di_signal_setter_deleter_with_signal_name(o, sig, setter, deleter)               \
-	do {                                                                             \
-		const char *signal_name = di_signal_member_of(sig);                      \
-		di_object *setter_closure = (void *)di_make_closure(                     \
-		    setter, (signal_name), di_object *, di_object *);                    \
-		di_member(o, di_signal_setter_of(sig), setter_closure);                  \
-		di_object *deleter_closure =                                             \
-		    (void *)di_make_closure(deleter, (signal_name), di_object *);        \
-		di_member(o, di_signal_deleter_of(sig), deleter_closure);                \
+	do {                                                                                 \
+		const char *signal_name = di_signal_member_of(sig);                              \
+		di_object *setter_closure =                                                      \
+		    (void *)di_make_closure(setter, (signal_name), di_object *, di_object *);    \
+		di_member(o, di_signal_setter_of(sig), setter_closure);                          \
+		di_object *deleter_closure =                                                     \
+		    (void *)di_make_closure(deleter, (signal_name), di_object *);                \
+		di_member(o, di_signal_deleter_of(sig), deleter_closure);                        \
 	} while (0)
 
 #define di_getter_setter(o, name, g, s)                                                  \
-	({                                                                               \
-		int rc = 0;                                                              \
-		do {                                                                     \
-			rc = di_getter(o, name, g);                                      \
-			if (rc != 0) {                                                   \
-				break;                                                   \
-			}                                                                \
-			rc = di_setter(o, name, s, di_return_typeof(g, di_object *));    \
-		} while (0);                                                             \
-		rc;                                                                      \
+	({                                                                                   \
+		int rc = 0;                                                                      \
+		do {                                                                             \
+			rc = di_getter(o, name, g);                                                  \
+			if (rc != 0) {                                                               \
+				break;                                                                   \
+			}                                                                            \
+			rc = di_setter(o, name, s, di_return_typeof(g, di_object *));                \
+		} while (0);                                                                     \
+		rc;                                                                              \
 	})
 
 // Note: this is just used to create a value of `type`, but this value is not guaranteed
 // to be a valid value for `type` at runtime. This is only meant to be used for compile
 // time metaprogramming
 #define TYPE_INIT(type)                                                                  \
-	_Generic((type *)0,                                                              \
-	    di_array *: DI_ARRAY_INIT,                                                   \
-	    di_tuple *: DI_TUPLE_INIT,                                                   \
-	    di_variant *: DI_VARIANT_INIT,                                               \
-	    int *: 0,                                                                    \
-	    unsigned int *: 0,                                                           \
-	    int64_t *: 0,                                                                \
-	    uint64_t *: 0,                                                               \
-	    di_string *: DI_STRING_INIT,                                                 \
-	    const char **: NULL,                                                         \
-	    di_object **: NULL,                                                          \
-	    di_weak_object **: NULL,                                                     \
-	    void **: NULL,                                                               \
-	    double *: 0.0,                                                               \
+	_Generic((type *)0,                                                                  \
+	    di_array *: DI_ARRAY_INIT,                                                       \
+	    di_tuple *: DI_TUPLE_INIT,                                                       \
+	    di_variant *: DI_VARIANT_INIT,                                                   \
+	    int *: 0,                                                                        \
+	    unsigned int *: 0,                                                               \
+	    int64_t *: 0,                                                                    \
+	    uint64_t *: 0,                                                                   \
+	    di_string *: DI_STRING_INIT,                                                     \
+	    const char **: NULL,                                                             \
+	    di_object **: NULL,                                                              \
+	    di_weak_object **: NULL,                                                         \
+	    void **: NULL,                                                                   \
+	    double *: 0.0,                                                                   \
 	    bool *: false)
 
 #define gen_args(...) LIST_APPLY(TYPE_INIT, SEP_COMMA, ##__VA_ARGS__)
@@ -196,7 +196,7 @@
 #define di_return_typeid(fn, ...) di_typeid(di_return_typeof(fn, ##__VA_ARGS__))
 
 #define di_register_typed_method(o, name, fn, rtype, ...)                                \
-	di_add_method((di_object *)(o), di_string_borrow(name), (void *)(fn), (rtype),   \
+	di_add_method((di_object *)(o), di_string_borrow(name), (void *)(fn), (rtype),       \
 	              VA_ARGS_LENGTH(__VA_ARGS__), ##__VA_ARGS__)
 
 #define INDIRECT(fn, ...) fn(__VA_ARGS__)
@@ -204,8 +204,8 @@
 // Need to use INDIRECT because macro(A B) is consider to have only one argument,
 // even if B expands to something starts with a comma
 #define di_method(obj, name, fn, ...)                                                    \
-	INDIRECT(di_register_typed_method, obj, name, fn,                                \
-	         di_return_typeid(fn, di_object *, ##__VA_ARGS__)                        \
+	INDIRECT(di_register_typed_method, obj, name, fn,                                    \
+	         di_return_typeid(fn, di_object *, ##__VA_ARGS__)                            \
 	             LIST_APPLY_pre(di_typeid, SEP_COMMA, ##__VA_ARGS__))
 
 define_object_cleanup(di_closure);
@@ -216,13 +216,13 @@ define_object_cleanup(di_promise);
 
 static inline unused const char *nonnull di_type_to_string(di_type type) {
 #define TYPE_CASE(name)                                                                  \
-	case DI_TYPE_##name:                                                             \
+	case DI_TYPE_##name:                                                                 \
 		return #name
 	switch (type) {
-		LIST_APPLY(TYPE_CASE, SEP_COLON, NIL, ANY, BOOL, INT, UINT, NINT, NUINT,
-		           FLOAT, STRING, STRING_LITERAL);
-		LIST_APPLY(TYPE_CASE, SEP_COLON, TUPLE, ARRAY, VARIANT, OBJECT,
-		           WEAK_OBJECT, POINTER, EMPTY_OBJECT);
+		LIST_APPLY(TYPE_CASE, SEP_COLON, NIL, ANY, BOOL, INT, UINT, NINT, NUINT, FLOAT,
+		           STRING, STRING_LITERAL);
+		LIST_APPLY(TYPE_CASE, SEP_COLON, TUPLE, ARRAY, VARIANT, OBJECT, WEAK_OBJECT,
+		           POINTER, EMPTY_OBJECT);
 	case DI_LAST_TYPE:
 		return "LAST_TYPE";
 	}
@@ -231,25 +231,26 @@ static inline unused const char *nonnull di_type_to_string(di_type type) {
 
 static inline unused char *nonnull di_value_to_string(di_type type, di_value *nonnull value) {
 	char *buf = NULL;
+	int rc = 0;
 	switch (type) {
 	case DI_TYPE_OBJECT:
 	case DI_TYPE_EMPTY_OBJECT:
-		asprintf(&buf, "%s: %p", di_get_type(value->object), value->object);
+		rc = asprintf(&buf, "%s: %p", di_get_type(value->object), value->object);
 		break;
 	case DI_TYPE_INT:
-		asprintf(&buf, "%ld", value->int_);
+		rc = asprintf(&buf, "%ld", value->int_);
 		break;
 	case DI_TYPE_UINT:
-		asprintf(&buf, "%lu", value->uint);
+		rc = asprintf(&buf, "%lu", value->uint);
 		break;
 	case DI_TYPE_NINT:
-		asprintf(&buf, "%d", value->nint);
+		rc = asprintf(&buf, "%d", value->nint);
 		break;
 	case DI_TYPE_NUINT:
-		asprintf(&buf, "%u", value->nuint);
+		rc = asprintf(&buf, "%u", value->nuint);
 		break;
 	case DI_TYPE_FLOAT:
-		asprintf(&buf, "%lf", value->float_);
+		rc = asprintf(&buf, "%lf", value->float_);
 		break;
 	case DI_TYPE_BOOL:
 		if (value->bool_) {
@@ -265,18 +266,18 @@ static inline unused char *nonnull di_value_to_string(di_type type, di_value *no
 		buf = strdup(value->string_literal);
 		break;
 	case DI_TYPE_POINTER:
-		asprintf(&buf, "%p", value->pointer);
+		rc = asprintf(&buf, "%p", value->pointer);
 		break;
 	case DI_TYPE_WEAK_OBJECT:
-		asprintf(&buf, "%p", value->weak_object);
+		rc = asprintf(&buf, "%p", value->weak_object);
 		break;
 	case DI_TYPE_ARRAY:
-		asprintf(&buf, "[%s; %ld]", di_type_to_string(value->array.elem_type),
-		         value->array.length);
+		rc = asprintf(&buf, "[%s; %ld]", di_type_to_string(value->array.elem_type),
+		              value->array.length);
 		break;
 	case DI_TYPE_VARIANT:;
 		char *inner = di_value_to_string(value->variant.type, value->variant.value);
-		asprintf(&buf, "variant(%s)", inner);
+		rc = asprintf(&buf, "variant(%s)", inner);
 		free(inner);
 		break;
 	case DI_TYPE_TUPLE:
@@ -284,6 +285,9 @@ static inline unused char *nonnull di_value_to_string(di_type type, di_value *no
 	case DI_TYPE_NIL:
 	case DI_LAST_TYPE:
 	default:
+		buf = strdup("");
+	}
+	if (rc < 0) {
 		buf = strdup("");
 	}
 	return buf;
@@ -355,16 +359,15 @@ static inline di_value as_di_value(di_type type, void *nonnull value) {
 /// Get the array element at a given index, as a variant. This variant doesn't have
 /// ownership, and can't escape
 #define di_array_index(arr, index)                                                       \
-	((struct di_variant){                                                            \
-	    .type = (arr).elem_type,                                                     \
-	    .value = (di_value[]){as_di_value(                                           \
+	((struct di_variant){                                                                \
+	    .type = (arr).elem_type,                                                         \
+	    .value = (di_value[]){as_di_value(                                               \
 	        (arr).elem_type, (arr).arr + di_sizeof_type((arr).elem_type) * (index))}})
 
-#define di_variant_of(v)                                                                 \
-	({                                                                               \
-		auto __deai_variant_tmp = (v);                                           \
-		di_variant_of_impl(di_typeof(__deai_variant_tmp),                        \
-		                   (di_value *)&__deai_variant_tmp);                     \
+#define di_variant_of(v)                                                                    \
+	({                                                                                      \
+		auto __deai_variant_tmp = (v);                                                      \
+		di_variant_of_impl(di_typeof(__deai_variant_tmp), (di_value *)&__deai_variant_tmp); \
 	})
 
 /// Variant of the bottom type. Meaning this variant "doesn't exist", used to indicate

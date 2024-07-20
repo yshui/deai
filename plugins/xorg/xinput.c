@@ -111,7 +111,7 @@ static void di_xorg_free_xinput(di_object *x) {
 	}
 
 	struct di_xorg_xinput *xi = (void *)x;
-	memset(xi->mask, 0, xi->ec.mask_len * 4);
+	memset(xi->mask, 0, xi->ec.mask_len * 4UL);
 	auto scrn = screen_of_display(dc->c, dc->dflt_scrn);
 	xcb_input_xi_select_events_checked(dc->c, scrn->root, 1, &xi->ec);
 
@@ -296,9 +296,9 @@ static void di_xorg_xinput_set_prop(struct di_xorg_xinput_device *dev, di_string
 
 	scopedp(xcb_input_xi_change_property_items_t) *item =
 	    tmalloc(xcb_input_xi_change_property_items_t, arr.length);
-	int step = prop->format / 8;
+	size_t step = prop->format / 8;
 	scopedp(char) *data = malloc(step * (arr.length));
-	for (int i = 0; i < arr.length; i++) {
+	for (size_t i = 0; i < arr.length; i++) {
 		int64_t i64 = INT64_MIN;
 		float f = nanf("");
 		void *dst = data + step * i;

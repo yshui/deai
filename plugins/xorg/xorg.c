@@ -7,8 +7,8 @@
 #include <deai/builtins/event.h>
 #include <deai/builtins/log.h>
 #include <deai/deai.h>
-#include <deai/helper.h>
 #include <deai/error.h>
+#include <deai/helper.h>
 
 #include <assert.h>
 #include <stdio.h>
@@ -59,7 +59,7 @@ static void xorg_disconnect(di_object *obj) {
 	}
 }
 
-struct _xext {
+struct {
 	const char *name;
 	struct di_xorg_ext *(*new)(di_xorg_connection *xc);
 } xext_reg[] = {
@@ -277,7 +277,7 @@ static di_object *get_screen(struct di_xorg_connection *dc) {
 static struct {
 	int keycode_per_modifiers;
 	xcb_keycode_t *keycodes;
-} find_modifiers(struct xkb_keymap *map, int min, int max) {
+} find_modifiers(struct xkb_keymap *map, xkb_keycode_t min, xkb_keycode_t max) {
 	static const char *modifier_names[8] = {
 	    XKB_MOD_NAME_SHIFT, XKB_MOD_NAME_CAPS,
 	    XKB_MOD_NAME_CTRL,  XKB_MOD_NAME_ALT,
@@ -292,7 +292,7 @@ static struct {
 	const int MAX_KEYCODE = 256;
 	int modifier_keycode_count[8] = {0};
 	int next_keycode_indices[MAX_KEYCODE];
-	int keycodes[MAX_KEYCODE];
+	xkb_keycode_t keycodes[MAX_KEYCODE];
 	int total_keycodes = 0;
 	int modifier_keycode_head[8] = {
 	    [0 ... 7] = -1,
@@ -306,7 +306,7 @@ static struct {
 
 	auto state = xkb_state_new(map);
 	// Find a non-modifier key
-	for (int i = min; i <= max; i++) {
+	for (auto i = min; i <= max; i++) {
 		// Basically we press the key and see what modifier state changes
 		auto updates = xkb_state_update_key(state, i, XKB_KEY_DOWN);
 		updates &= (XKB_STATE_MODS_DEPRESSED | XKB_STATE_MODS_LATCHED | XKB_STATE_MODS_LOCKED);
@@ -347,7 +347,7 @@ static struct {
 
 	typeof(find_modifiers(map, min, max)) ret = {0};
 	ret.keycode_per_modifiers = keycodes_per_modifiers;
-	ret.keycodes = tmalloc(xcb_keycode_t, 8 * keycodes_per_modifiers);
+	ret.keycodes = tmalloc(xcb_keycode_t, 8UL * keycodes_per_modifiers);
 
 	for (int i = 0; i < 8; i++) {
 		int cnt = 0;
@@ -585,7 +585,8 @@ void di_xorg_ext_signal_deleter(const char *signal, di_object *obj) {
 	}
 }
 
-static di_object *di_xorg_new_clipboard(struct di_xorg *x) {
+static di_object *di_xorg_new_clipboard(di_object *x) {
+	__builtin_trap();
 }
 
 static void di_xorg_load_builtin_lua(di_object *x) {

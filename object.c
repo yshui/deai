@@ -575,7 +575,7 @@ int di_delete_member(di_object *obj, di_string name, di_object *nullable *nullab
 	return di_delete_member_raw(obj, name);
 }
 
-static void _di_finalize_object(di_object_internal *obj) {
+static void di_finalize_object_inner(di_object_internal *obj) {
 #ifdef TRACK_OBJECTS
 	di_log_va(log_module, DI_LOG_DEBUG, "Finalizing object %p", obj);
 #endif
@@ -603,7 +603,7 @@ static void _di_finalize_object(di_object_internal *obj) {
 }
 
 void di_finalize_object(di_object *_obj) {
-	_di_finalize_object((di_object_internal *)_obj);
+	di_finalize_object_inner((di_object_internal *)_obj);
 }
 
 static inline void di_decrement_weak_ref_count(di_object_internal *obj) {
@@ -627,7 +627,7 @@ static void di_destroy_object(di_object *_obj) {
 		di_log_va(log_module, DI_LOG_WARN, "warning: destroy object multiple times\n");
 	}
 	obj->destroyed = 1;
-	_di_finalize_object(obj);
+	di_finalize_object_inner(obj);
 	di_decrement_weak_ref_count(obj);
 }
 
@@ -895,9 +895,7 @@ di_tuple di_object_next_member(di_object *obj, di_string name) {
 	}
 	ret.length = 2;
 	ret.elements = tmalloc(struct di_variant, 2);
-	ret.elements[0].type = DI_TYPE_STRING;
-	ret.elements[0].value = (di_value *)tmalloc(di_string, 1);
-	ret.elements[0].value->string = di_clone_string(m->name);
+	ret.elements[0] = di_alloc_variant(di_clone_string(m->name));
 	ret.elements[1].type = m->type;
 	ret.elements[1].value = malloc(di_sizeof_type(m->type));
 	di_copy_value(m->type, ret.elements[1].value, m->data);
@@ -1332,10 +1330,10 @@ int di_emitn(di_object *o, di_string name, di_tuple args) {
 
 	assert(args.length == 0 || (args.elements != NULL));
 
-	scopedp(char) *signal_member_name = NULL;
-	asprintf(&signal_member_name, "__signal_%.*s", (int)name.length, name.data);
+	scoped_di_string signal_member_name =
+	    di_string_printf("__signal_%.*s", (int)name.length, name.data);
 	scoped_di_object *sig = NULL;
-	if (di_get(o, signal_member_name, sig) == 0) {
+	if (di_get2(o, signal_member_name, sig) == 0) {
 		di_signal_dispatch(sig, args);
 	}
 	return 0;
@@ -1458,7 +1456,7 @@ static int di_collect_garbage_collect_pre(di_object_internal *o, int _ unused) {
 static void di_collect_garbage_collect_post(di_object_internal *o) {
 	assert(o->mark == 3);
 	// fprintf(stderr, "\tpost-finalizing %p, %lu\n", o, o->ref_count);
-	_di_finalize_object(o);
+	di_finalize_object_inner(o);
 	di_unref_object((void *)o);
 }
 /// Collect garbage in cyclic references

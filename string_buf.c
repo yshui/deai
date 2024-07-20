@@ -6,9 +6,9 @@
 
 #include <string.h>
 #include <stdlib.h>
+#include "common.h"
 
 #include <deai/helper.h>
-#include "list.h"
 #include "string_buf.h"
 
 struct string_buf {

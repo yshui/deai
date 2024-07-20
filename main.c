@@ -75,7 +75,9 @@ static void load_plugin(struct deai *p, di_string sopath) {
 static int load_plugin_from_dir_impl(struct deai *di, const char *path) {
 
 	char rpath[PATH_MAX];
-	realpath(path, rpath);
+	if (realpath(path, rpath) == NULL) {
+		return -1;
+	}
 
 	int dirfd = open(path, O_DIRECTORY | O_RDONLY);
 	if (dirfd < 0) {
@@ -109,9 +111,10 @@ static int load_plugin_from_dir_impl(struct deai *di, const char *path) {
 		size_t nlen = strlen(dent->d_name);
 		if (nlen >= 3 && strcmp(dent->d_name + nlen - 3, ".so") == 0) {
 			char *sopath;
-			asprintf(&sopath, "%s/%s", rpath, dent->d_name);
-			load_plugin_impl(di, sopath);
-			free(sopath);
+			if (asprintf(&sopath, "%s/%s", rpath, dent->d_name) >= 0) {
+				load_plugin_impl(di, sopath);
+				free(sopath);
+			}
 		}
 	}
 	closedir(dir);
@@ -457,20 +460,14 @@ void di_terminate(struct deai *p) {
 
 /// Add an named object as a root to keep it alive
 static bool di_add_root(di_object *di, di_string key, di_object *obj) {
-	char *buf;
-	asprintf(&buf, "___root_%.*s", (int)key.length, key.data);
-	int rc = di_add_member_clonev(di, di_string_borrow(buf), DI_TYPE_OBJECT, obj);
-	free(buf);
-	return rc == 0;
+	scoped_di_string root_key = di_string_printf("___root_%.*s", (int)key.length, key.data);
+	return di_add_member_clonev(di, root_key, DI_TYPE_OBJECT, obj) == 0;
 }
 
 /// Remove an named root from roots
 static bool di_remove_root(di_object *di, di_string key) {
-	char *buf;
-	asprintf(&buf, "___root_%.*s", (int)key.length, key.data);
-	int rc = di_delete_member_raw(di, di_string_borrow(buf));
-	free(buf);
-	return rc == 0;
+	scoped_di_string root_key = di_string_printf("___root_%.*s", (int)key.length, key.data);
+	return di_delete_member_raw(di, root_key) == 0;
 }
 
 /// Remove all named roots
@@ -671,6 +668,7 @@ int main(int argc, char *argv[]) {
 		args.elements[0].type = DI_TYPE_OBJECT;
 		args.length = argc - 1;
 		int nargs = 1;        // The first argument is the module object
+		char *endptr = NULL;
 		for (int i = 2; i < argc; i++) {
 			if (strcmp(argv[i], "--") == 0) {
 				break;
@@ -681,20 +679,24 @@ int main(int argc, char *argv[]) {
 				return 1;
 			}
 			switch (argv[i][0]) {
-			case 'i':        // Integer
-				args.elements[nargs].value = malloc(sizeof(int64_t));
-				args.elements[nargs].type = DI_TYPE_INT;
-				args.elements[nargs].value->int_ = atoll(argv[i] + 2);
+			case 'i':;        // Integer
+				int64_t val = strtoll(argv[i] + 2, &endptr, 10);
+				if (*endptr != '\0') {
+					fprintf(stderr, "Invalid integer: %s\n", argv[i] + 2);
+					exit(EXIT_FAILURE);
+				}
+				args.elements[nargs] = di_alloc_variant(val);
 				break;
 			case 's':        // String
-				args.elements[nargs].value = malloc(sizeof(di_string));
-				args.elements[nargs].type = DI_TYPE_STRING;
-				args.elements[nargs].value->string = di_string_dup(argv[i] + 2);
+				args.elements[nargs] = di_alloc_variant(di_string_dup(argv[i] + 2));
 				break;
-			case 'f':        // Float
-				args.elements[nargs].value = malloc(sizeof(double));
-				args.elements[nargs].type = DI_TYPE_FLOAT;
-				args.elements[nargs].value->float_ = atof(argv[i] + 2);
+			case 'f':;        // Float
+				double fval = strtod(argv[i] + 2, &endptr);
+				if (*endptr != '\0') {
+					fprintf(stderr, "Invalid float: %s\n", argv[i] + 2);
+					exit(EXIT_FAILURE);
+				}
+				args.elements[nargs] = di_alloc_variant(fval);
 				break;
 			default:
 				fprintf(stderr, "Invalid argument type: %s\n", argv[i]);
@@ -753,8 +755,7 @@ int main(int argc, char *argv[]) {
 		di_object *method_obj = NULL;
 		scoped_di_object *error_obj = NULL;
 		int rc;
-		args.elements[0].value = (di_value *)tmalloc(di_object *, 1);
-		args.elements[0].value->object = di_ref_object(mod);
+		args.elements[0] = di_alloc_variant(di_ref_object(mod));
 		if (di_rawget_borrowed(mod, method, method_obj) != 0) {
 			if (modname != NULL) {
 				fprintf(stderr, "Method \"%s\" not found in module \"%s\"\n", method, modname);

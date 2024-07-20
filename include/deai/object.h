@@ -794,6 +794,18 @@ static inline void unused di_free_di_weak_objectpp(di_weak_object *nullable *non
 	    (di_value *)addressof(x),                                                        \
 	    di_typeof(x),                                                                    \
 	})
+#define di_alloc_variant(x)                                                              \
+	/* NOLINTBEGIN(bugprone-sizeof-expression) */                                        \
+	({                                                                                   \
+		auto __di_alloc_variant_src = (x);                                               \
+		struct di_variant __di_alloc_variant_tmp = {                                     \
+		    .value = (di_value *)malloc(sizeof(__di_alloc_variant_src)),                 \
+		    .type = di_typeof(__di_alloc_variant_src),                                   \
+		};                                                                               \
+		memcpy(__di_alloc_variant_tmp.value, &(__di_alloc_variant_src),                  \
+		       sizeof(__di_alloc_variant_src));                                          \
+		__di_alloc_variant_tmp;                                                          \
+	}) /* NOLINTEND(bugprone-sizeof-expression) */
 #define di_make_tuple(...)                                                               \
 	((di_tuple){VA_ARGS_LENGTH(__VA_ARGS__),                                             \
 	            (struct di_variant[]){LIST_APPLY(di_make_variant, SEP_COMMA, __VA_ARGS__)}})
@@ -859,6 +871,7 @@ static inline void unused di_free_di_weak_objectpp(di_weak_object *nullable *non
 /// This is only possible with raw members, because getter returns are temporary values.
 /// And the type of `r` has to match exactly the type of the member, no conversion is performed.
 #define di_rawget_borrowed2(o, prop, r)                                                  \
+	/* NOLINTBEGIN(bugprone-assignment-in-if-condition) */                               \
 	({                                                                                   \
 		int __di_rawget__borrowd2_rc;                                                    \
 		di_type __di_rawget__borrowd2_rtype;                                             \
@@ -878,8 +891,16 @@ static inline void unused di_free_di_weak_objectpp(di_weak_object *nullable *non
 			       di_sizeof_type(__di_rawget__borrowd2_rtype));                         \
 		} while (0);                                                                     \
 		__di_rawget__borrowd2_rc;                                                        \
-	})
+	}) /* NOLINTEND(bugprone-assignment-in-if-condition) */
 #define di_rawget_borrowed(o, prop, r) di_rawget_borrowed2(o, di_string_borrow(prop), r)
+#define di_value_set(v, field, src)                                                      \
+	do {                                                                                 \
+		auto __di_value_set_src = (src);                                                 \
+		static_assert(sizeof((v).field) == sizeof(__di_value_set_src), "Size mismatch"); \
+		static_assert(di_typeof((v).field) == di_typeof(__di_value_set_src),             \
+		              "Type mismatch");                                                  \
+		memcpy(&((v).field), &(__di_value_set_src), sizeof(__di_value_set_src));         \
+	} while (0)
 #endif
 #undef DI_LAST_TYPE
 #undef DI_TYPE_NAME

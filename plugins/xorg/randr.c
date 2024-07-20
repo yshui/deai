@@ -220,8 +220,9 @@ static di_variant output_props_getter(di_object *this, di_string prop) {
 		    .type = DI_TYPE_STRING,
 		};
 
-		ret.value->string = di_string_ndup((char *)xcb_randr_get_output_property_data(r),
-		                                   xcb_randr_get_output_property_data_length(r));
+		di_value_set(*ret.value, string,
+		             di_string_ndup((char *)xcb_randr_get_output_property_data(r),
+		                            xcb_randr_get_output_property_data_length(r)));
 		return ret;
 	}
 	if (r->type == XCB_ATOM_INTEGER) {
