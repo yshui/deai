@@ -1283,14 +1283,12 @@ di_string di_object_to_string(di_object *o) {
 	}
 
 	// Call the function. If it throws or fails, we fallback to the default.
-	scoped_di_object *err_obj = NULL;
 	di_tuple args = {.length = 1,
 	                 .elements = (di_variant[]){
 	                     {.type = DI_TYPE_OBJECT, .value = (di_value *)&o},
 	                 }};
 	to_string.value = (di_value *)tmalloc(di_string, 1);
-	if (di_call_object_catch(conv, &to_string.type, to_string.value, args, &err_obj) != 0 ||
-	    err_obj != NULL) {
+	if (di_call_object(conv, &to_string.type, to_string.value, args) != 0) {
 		return di_object_to_string_fallback(o);
 	}
 
