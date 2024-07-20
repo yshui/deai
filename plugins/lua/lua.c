@@ -606,10 +606,16 @@ static int di_lua_gc(lua_State *L) {
 }
 
 static int di_lua_meta_to_string(lua_State *L) {
-	void **optr = di_lua_checkproxy(L, 1);
-	di_object *o = *optr;
+	if (!di_lua_isproxy(L, 1)) {
+		return luaL_argerror(L, 1, "not a di_object");
+	}
 	di_object *error = NULL;
+	di_object *o = di_ref_object(*(di_object **)lua_touserdata(L, 1));
+	lua_pop(L, 1);
+
 	scoped_di_string str = di_object_to_string(o, &error);
+	di_unref_object(o);
+
 	if (error != NULL) {
 		di_lua_pushobject(L, DI_STRING_INIT, error);
 		return lua_error(L);
