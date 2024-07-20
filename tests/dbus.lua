@@ -25,6 +25,9 @@ errlh = dbusl:on("stderr_line", function(l)
     errlh:stop()
     di.os.env.DBUS_SESSION_BUS_PID = l
 end)
+local resolved_1 = false
+local resolved_2 = false
+local resolved_3 = false
 local b
 dbusl:once("exit", function()
     b = di.dbus.session_bus
@@ -47,17 +50,27 @@ dbusl:once("exit", function()
         for i, v in pairs(results) do
             print(i, v)
         end
+        resolved_1 = true
     end)
     o2:get("DummyProp"):then_(function(e)
         if e.error == nil then
             di:exit(1)
         end
         print("Get DummyProp", e.error)
+        resolved_2 = true
     end)
     o3:get("Features"):then_(function(e)
         if type(e) ~= "table" then
             di:exit(1)
         end
         print(unpack(e))
+        resolved_3 = true
     end)
+end)
+
+di.event:timer(0.6):once("elapsed", function()
+    print(resolved_1, resolved_2, resolved_3)
+    if not resolved_1 or not resolved_2 or not resolved_3 then
+        di:exit(1)
+    end
 end)

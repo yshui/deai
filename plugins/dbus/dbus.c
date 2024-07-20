@@ -538,9 +538,9 @@ static int64_t di_dbus_send_message(di_object *o, di_string type, di_string bus_
 
 static void di_dbus_name_changed(di_object *conn, di_string well_known,
                                  di_string old_owner, di_string new_owner) {
-	fprintf(stderr, "DBus name changed for %.*s: %.*s -> %.*s\n", (int)well_known.length,
-	        well_known.data, (int)old_owner.length, old_owner.data, (int)new_owner.length,
-	        new_owner.data);
+	log_info("DBus name changed for %.*s: %.*s -> %.*s\n", (int)well_known.length,
+	         well_known.data, (int)old_owner.length, old_owner.data,
+	         (int)new_owner.length, new_owner.data);
 	if (di_string_starts_with(well_known, ":")) {
 		// Not a well-known name
 		return;
@@ -614,24 +614,7 @@ static void di_dbus_name_changed(di_object *conn, di_string well_known,
 	}
 }
 
-static void di_dbus_object_set_owner(di_object *o, di_tuple data) {
-	DI_CHECK(data.length == 2 && data.elements[0].type == DI_TYPE_BOOL &&
-	         data.elements[1].type == DI_TYPE_TUPLE);
-	auto payload = data.elements[1].value->tuple;
-	if (data.elements[0].value->bool_) {
-		// Is error
-		if (payload.length >= 1 && payload.elements[0].type == DI_TYPE_STRING) {
-			auto msg = payload.elements[0].value->string;
-			di_log_va(log_module, DI_LOG_ERROR, "GetNameOwner failed %.*s",
-			          (int)msg.length, msg.data);
-		}
-		return;
-	}
-	if (payload.length != 1 || payload.elements[0].type != DI_TYPE_STRING) {
-		di_log_va(log_module, DI_LOG_ERROR, "GetNameOwner returned wrong type");
-		return;
-	}
-
+static void di_dbus_object_set_owner(di_object *o, di_string owner) {
 	scoped_di_object *conn = NULL;
 	DI_CHECK_OK(di_get(o, "___deai_dbus_connection", conn));
 
@@ -641,9 +624,9 @@ static void di_dbus_object_set_owner(di_object *o, di_tuple data) {
 	scoped_di_string bus_name = DI_STRING_INIT;
 	DI_CHECK_OK(di_get(object_cache, "___bus_name", bus_name));
 
-	scoped_di_string owner = DI_STRING_INIT;
-	di_get(object_cache, "___owner_name", owner);
-	di_dbus_name_changed(conn, bus_name, owner, payload.elements[0].value->string);
+	scoped_di_string old_owner = DI_STRING_INIT;
+	di_get(object_cache, "___owner_name", old_owner);
+	di_dbus_name_changed(conn, bus_name, old_owner, owner);
 }
 
 static di_object *di_dbus_get_property(di_object *dobj, di_string property) {
@@ -775,7 +758,7 @@ di_dbus_get_object(di_object *o, di_string bus, di_string obj, di_string interfa
 
 		{
 			scoped_di_closure *set_owner =
-			    di_make_closure(di_dbus_object_set_owner, ((di_object *)ret), di_tuple);
+			    di_make_closure(di_dbus_object_set_owner, ((di_object *)ret), di_string);
 			scoped_di_object *promise = di_dbus_add_promise_for(o, eventm, serial);
 			// We don't care about the promise returned by `then`
 			di_unref_object(di_promise_then(promise, (void *)set_owner));
