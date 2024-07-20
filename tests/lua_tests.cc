@@ -13,12 +13,22 @@ using namespace std::literals;
 static constexpr const char *expected_error_log =
     "../tests/invalid.lua:1: attempt to call global 'non_existent' (a nil value)";
 
+static constexpr const char *chained_error = "This is a chained error";
 static constexpr const char test_error[] = "This is a test error";
 struct Thrower {
 	ObjectBase base;
 	static constexpr const char type[] = "deai.tests:Thrower";
 	void throw_error() {
-		throw util::new_error(test_error);
+		auto err1 = util::new_error(chained_error);
+		auto err2 = util::new_error(test_error);
+
+		deai::c_api::String prop = {
+			.data = "source",
+			.length = 6,
+		};
+		auto type = c_api::Type::OBJECT;
+		deai::c_api::object::add_member_move(err2, prop, &type, &err1);
+		throw err2;
 	}
 };
 
