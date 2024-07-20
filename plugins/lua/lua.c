@@ -98,14 +98,14 @@ struct di_lua_ref {
 	int tref;
 };
 
-static int di_lua_pushvariant(lua_State *L, const char *name, struct di_variant var);
+static int di_lua_pushvariant(lua_State *L, di_string name, struct di_variant var);
 static int di_lua_meta_index(lua_State *L);
 static int di_lua_meta_index_for_weak_object(lua_State *L);
 static int di_lua_meta_newindex(lua_State *L);
 static int di_lua_meta_pairs(lua_State *L);
 
 static int di_lua_type_to_di(lua_State *L, int i, di_type type_hint, di_type *t, di_value *ret);
-static void di_lua_pushobject(lua_State *L, const char *name, di_object *obj);
+static void di_lua_pushobject(lua_State *L, di_string name, di_object *obj);
 
 static int di_lua_errfunc(lua_State *L) {
 	/* Convert error to string, to prevent a follow-up error with lua_concat. */
@@ -161,7 +161,7 @@ static int di_lua_errfunc(lua_State *L) {
 		}
 	}
 
-	di_lua_pushobject(L, NULL, err_obj);
+	di_lua_pushobject(L, DI_STRING_INIT, err_obj);
 	return 1;
 }
 
@@ -244,7 +244,8 @@ static int di_lua_di_getter(di_object *m, di_type *rt, di_value *ret, di_tuple t
 	auto state = (struct di_lua_state *)state_obj;
 	lua_State *L = state->L;
 
-	lua_rawgeti(L, LUA_REGISTRYINDEX, t->tref);
+	assert(lua_gettop(L) == 0);
+	lua_rawgeti(L, LUA_REGISTRYINDEX, t->tref);        // Stack: [ table ]
 
 	if (vars[1].type == DI_TYPE_STRING) {
 		lua_pushlstring(L, vars[1].value->string.data, vars[1].value->string.length);
@@ -252,7 +253,8 @@ static int di_lua_di_getter(di_object *m, di_type *rt, di_value *ret, di_tuple t
 		const char *key = vars[1].value->string_literal;
 		lua_pushstring(L, key);
 	}
-	lua_gettable(L, -2);
+	// Stack: [ table key ]
+	lua_gettable(L, -2);        // Stack: [ table value ]
 
 	DI_OK_OR_RET(di_lua_type_to_di(L, -1, DI_TYPE_ANY, rt, ret));
 
@@ -260,6 +262,8 @@ static int di_lua_di_getter(di_object *m, di_type *rt, di_value *ret, di_tuple t
 		// nil in Lua means non-existent.
 		*rt = DI_LAST_TYPE;
 	}
+	lua_pop(L, 2);        // Pop the value and the table
+	assert(lua_gettop(L) == 0);
 	return 0;
 }
 
@@ -285,6 +289,7 @@ static int di_lua_di_setter(di_object *m, di_type *rt, di_value *ret, di_tuple t
 	auto state = (struct di_lua_state *)state_obj;
 	lua_State *L = state->L;
 
+	assert(lua_gettop(L) == 0);
 	lua_rawgeti(L, LUA_REGISTRYINDEX, t->tref);
 
 	if (vars[1].type == DI_TYPE_STRING) {
@@ -294,14 +299,16 @@ static int di_lua_di_setter(di_object *m, di_type *rt, di_value *ret, di_tuple t
 		lua_pushstring(L, key);
 	}
 
-	if (di_lua_pushvariant(L, NULL, vars[2]) != 1) {
+	if (di_lua_pushvariant(L, DI_STRING_INIT, vars[2]) != 1) {
 		lua_pop(L, 2);        // key and table
+		assert(lua_gettop(L) == 0);
 		return -EINVAL;
 	}
 	lua_settable(L, -3);
 	lua_pop(L, 1);        // table
 
 	*rt = DI_TYPE_NIL;
+	assert(lua_gettop(L) == 0);
 	return 0;
 }
 
@@ -312,10 +319,12 @@ static di_tuple di_lua_di_next(di_object *lua_ref, di_string name) {
 
 	auto state = (struct di_lua_state *)state_obj;
 	lua_State *L = state->L;
+	assert(lua_gettop(L) == 0);
 
 	lua_rawgeti(L, LUA_REGISTRYINDEX, t->tref);
 	if (lua_isnil(L, -1)) {
 		lua_pop(L, 1);
+		assert(lua_gettop(L) == 0);
 		return DI_TUPLE_INIT;
 	}
 
@@ -329,6 +338,7 @@ static di_tuple di_lua_di_next(di_object *lua_ref, di_string name) {
 	while (true) {
 		if (lua_next(L, -2) == 0) {
 			lua_pop(L, 1);
+			assert(lua_gettop(L) == 0);
 			return DI_TUPLE_INIT;
 		}
 		// Ignore non-string keys
@@ -350,6 +360,7 @@ static di_tuple di_lua_di_next(di_object *lua_ref, di_string name) {
 	ret.elements[0].value->string = di_clone_string(key);
 	di_lua_type_to_di_variant(L, -1, &ret.elements[1]);
 	lua_pop(L, 3);
+	assert(lua_gettop(L) == 0);
 	return ret;
 }
 static di_string di_lua_table_to_string(di_object *lua_ref) {
@@ -359,10 +370,12 @@ static di_string di_lua_table_to_string(di_object *lua_ref) {
 
 	auto state = (struct di_lua_state *)state_obj;
 	lua_State *L = state->L;
+	assert(lua_gettop(L) == 0);
 
 	lua_rawgeti(L, LUA_REGISTRYINDEX, t->tref);
 	if (lua_isnil(L, -1)) {
 		lua_pop(L, 1);
+		assert(lua_gettop(L) == 0);
 		return di_string_printf("<dead lua object %p>", t);
 	}
 
@@ -373,6 +386,7 @@ static di_string di_lua_table_to_string(di_object *lua_ref) {
 	}
 	ret = di_clone_string(ret);
 	lua_pop(L, 2);        // Pop the table and the string
+	assert(lua_gettop(L) == 0);
 	return ret;
 }
 static const char lua_proxy_type[] = "deai.plugin.lua:LuaProxy";
@@ -440,7 +454,7 @@ static int di_lua_method_handler_impl(lua_State *L, const char *name, di_object 
 	}
 
 	if (error != NULL) {
-		di_lua_pushobject(L, "error", error);
+		di_lua_pushobject(L, di_string_borrow_literal("error"), error);
 		return lua_error(L);
 	}
 	di_string errmsg = DI_STRING_INIT;
@@ -459,7 +473,7 @@ static int di_lua_method_handler_impl(lua_State *L, const char *name, di_object 
 		di_free_string(errmsg);
 		has_error = true;
 	} else {
-		nret = di_lua_pushvariant(L, NULL, (struct di_variant){&ret, rtype});
+		nret = di_lua_pushvariant(L, DI_STRING_INIT, (struct di_variant){&ret, rtype});
 	}
 
 	di_free_value(rtype, &ret);
@@ -563,7 +577,7 @@ static int di_lua_meta_to_string(lua_State *L) {
 	di_object *error = NULL;
 	scoped_di_string str = di_object_to_string(o, &error);
 	if (error != NULL) {
-		di_lua_pushobject(L, NULL, error);
+		di_lua_pushobject(L, DI_STRING_INIT, error);
 		return lua_error(L);
 	}
 	lua_pushlstring(L, str.data, str.length);
@@ -624,7 +638,7 @@ di_lua_create_metatable_for_object(lua_State *L, const luaL_Reg *reg, bool calla
 
 // Push a proxy for `o` to lua stack. `o` can be a pointer to anything
 static void **
-di_lua_pushproxy(lua_State *L, const char *name, void *o, const luaL_Reg *reg, bool callable) {
+di_lua_pushproxy(lua_State *L, di_string name, void *o, const luaL_Reg *reg, bool callable) {
 	// struct di_lua_script *s;
 	void **ptr;
 	ptr = lua_newuserdata(L, sizeof(void *));
@@ -632,8 +646,8 @@ di_lua_pushproxy(lua_State *L, const char *name, void *o, const luaL_Reg *reg, b
 
 	if (callable) {
 		lua_pushlightuserdata(L, o);
-		if (name) {
-			lua_pushstring(L, name);
+		if (name.length) {
+			lua_pushlstring(L, name.data, name.length);
 		} else {
 			lua_pushstring(L, "(anonymous)");
 		}
@@ -646,7 +660,7 @@ di_lua_pushproxy(lua_State *L, const char *name, void *o, const luaL_Reg *reg, b
 /// deduplication of objects, and keeping track of object references.
 ///
 /// This function consume the reference to `obj`
-static void di_lua_pushobject(lua_State *L, const char *name, di_object *obj) {
+static void di_lua_pushobject(lua_State *L, di_string name, di_object *obj) {
 	// TODO: if the object comes from a lua object, push the original lua object.
 	struct di_lua_state *s;
 	di_lua_get_state(L, s);
@@ -707,7 +721,7 @@ static di_lua_state *lua_new_state(struct di_module *m) {
 	luaL_openlibs(L->L);
 
 	di_object *di = (void *)di_module_get_deai(m);
-	di_lua_pushproxy(L->L, "di", di, di_lua_di_methods, false);
+	di_lua_pushproxy(L->L, di_string_borrow_literal("di"), di, di_lua_di_methods, false);
 	lua_setglobal(L->L, "di");
 
 	// The reference from di_lua_state to di is actually kept by the lua_State,
@@ -741,7 +755,7 @@ static di_lua_state *lua_new_state(struct di_module *m) {
 define_object_cleanup(di_lua_state);
 
 /// Convert N values from the lua stack to a di_tuple, starting from index `index`, ending
-/// at the top of the stack.
+/// at the top of the stack. Values are _NOT_ popped from the stack.
 static di_tuple di_lua_values_to_di_tuple(lua_State *L, int index) {
 	di_tuple t;
 	auto count = lua_gettop(L) - index + 1;
@@ -820,6 +834,7 @@ static di_tuple di_lua_load_script(di_object *obj, di_string path_) {
 		const char *err = lua_tostring(L->L, -1);
 		log_error("Failed to load lua script %s: %s\n", path, err);
 		lua_pop(L->L, 2);
+		assert(lua_gettop(L->L) == 0);
 		return DI_TUPLE_INIT;
 	}
 
@@ -831,6 +846,7 @@ static di_tuple di_lua_load_script(di_object *obj, di_string path_) {
 	di_tuple func_ret = DI_TUPLE_INIT;
 	if (ret == 0) {
 		func_ret = di_lua_values_to_di_tuple(L->L, 1);
+		lua_pop(L->L, lua_gettop(L->L));
 	}
 
 	DI_CHECK_OK(luaL_loadstring(L->L, "collectgarbage()"));
@@ -846,9 +862,11 @@ static di_tuple di_lua_load_script(di_object *obj, di_string path_) {
 		di_value err;
 		DI_CHECK_OK(di_lua_type_to_di(L->L, -1, DI_TYPE_ANY, &err_type, &err));
 		DI_CHECK(err_type == DI_TYPE_OBJECT);
-		lua_pop(L->L, 2);
+		lua_pop(L->L, 1);
+		assert(lua_gettop(L->L) == 0);
 		di_throw(err.object);
 	}
+	assert(lua_gettop(L->L) == 0);
 	return func_ret;
 }
 
@@ -971,6 +989,7 @@ static int call_lua_function(di_object *ref_, di_type *rt, di_value *ret, di_tup
 
 	auto state = (struct di_lua_state *)state_obj;
 	lua_State *L = state->L;
+	assert(lua_gettop(L) == 0);
 
 	lua_pushcfunction(L, di_lua_errfunc);
 
@@ -978,7 +997,7 @@ static int call_lua_function(di_object *ref_, di_type *rt, di_value *ret, di_tup
 	lua_rawgeti(L, LUA_REGISTRYINDEX, ref->tref);
 	// Push arguments
 	for (unsigned int i = 0; i < t.length; i++) {
-		di_lua_pushvariant(L, NULL, vars[i]);
+		di_lua_pushvariant(L, DI_STRING_INIT, vars[i]);
 	}
 
 	if (lua_pcall(L, t.length, 1, -(int)t.length - 2) != 0) {
@@ -988,6 +1007,7 @@ static int call_lua_function(di_object *ref_, di_type *rt, di_value *ret, di_tup
 		DI_CHECK(err_type == DI_TYPE_OBJECT);
 		lua_pop(L, 2);        // Pop err and errfunc
 		*rt = DI_TYPE_NIL;
+		assert(lua_gettop(L) == 0);
 		di_throw(err.object);
 	} else {
 		di_lua_type_to_di(L, -1, DI_TYPE_ANY, rt, ret);
@@ -997,12 +1017,14 @@ static int call_lua_function(di_object *ref_, di_type *rt, di_value *ret, di_tup
 
 	DI_CHECK_OK(luaL_loadstring(L, "collectgarbage(\"step\", 20)"));
 	DI_CHECK_OK(lua_pcall(L, 0, 0, 0));
+	assert(lua_gettop(L) == 0);
 	return 0;
 }
 
 /// Convert lua value at index `i` to a deai value.
 /// The value is not popped. If `ret` is NULL, the value is not returned, but the type
-/// will always be returned
+/// will always be returned. The returned di value will have ownership of whatever
+/// resources the lua value has.
 static int di_lua_type_to_di(lua_State *L, int i, di_type type_hint, di_type *t, di_value *ret) {
 #define ret_arg(i, field, gfn)                                                           \
 	do {                                                                                 \
@@ -1125,46 +1147,59 @@ static int call_lua_signal_handler_once(di_object *obj, di_type *rt, di_value *r
 static int di_lua_add_listener(lua_State *L) {
 	// Stack: [ object, string, lua closure ]
 	bool once = lua_toboolean(L, lua_upvalueindex(1));
-	di_object *o = *di_lua_checkproxy(L, 1);
-
 	if (lua_gettop(L) != 3) {
 		return luaL_error(L, "'on' takes 3 arguments");
 	}
-
-	di_string signame;
-	signame.data = luaL_checklstring(L, 2, &signame.length);
-	if (lua_type(L, -1) != LUA_TFUNCTION) {
+	if (lua_type(L, 3) != LUA_TFUNCTION) {
 		return luaL_argerror(L, 3, "not a function");
 	}
-
-	auto handler = (di_object *)lua_type_to_di_object(L, -1, call_lua_function);
-
-	if (once) {
-		auto wrapped_handler = di_new_object_with_type2(
-		    struct di_signal_handler_wrapper, "deai.plugin.lua:OnceSignalHandler");
-		di_set_object_call((di_object *)wrapped_handler, call_lua_signal_handler_once);
-		di_member(wrapped_handler, "wrapped", handler);
-		handler = (di_object *)wrapped_handler;
+	if (lua_type(L, 2) != LUA_TSTRING) {
+		return luaL_argerror(L, 2, "not a string");
+	}
+	if (!di_lua_isproxy(L, 1)) {
+		return luaL_argerror(L, 1, "not a di object");
 	}
 
-	di_object *error = NULL;
-	auto listen_handle = di_listen_to(o, signame, (void *)handler, &error);
+	di_object *listen_handle = NULL, *error = NULL;
+
+	// Create a scope so things are properly freed before we touch dangerous lua_error.
+	{
+		scoped_di_object *o = di_ref_object(*(di_object **)lua_touserdata(L, 1));
+		scoped_di_string signame;
+		signame.data = lua_tolstring(L, 2, &signame.length);
+		signame = di_clone_string(signame);
+
+		scoped_di_object *handler =
+		    (di_object *)lua_type_to_di_object(L, -1, call_lua_function);
+
+		if (once) {
+			auto wrapped_handler = di_new_object_with_type2(
+			    struct di_signal_handler_wrapper, "deai.plugin.lua:OnceSignalHandler");
+			di_set_object_call((di_object *)wrapped_handler, call_lua_signal_handler_once);
+			di_member(wrapped_handler, "wrapped", handler);
+			handler = (di_object *)wrapped_handler;
+		}
+
+		lua_pop(L, 3);        // Pop arguments
+		listen_handle = di_listen_to(o, signame, (void *)handler, &error);
+		assert((error == NULL) != (listen_handle == NULL));
+		if (once && listen_handle) {
+			di_member_clone(handler, "listen_handle", listen_handle);
+		}
+	}
+
 	if (error != NULL) {
-		di_lua_pushobject(L, "error", error);
+		di_lua_pushobject(L, di_string_borrow_literal("error"), error);
 		return lua_error(L);
 	}
-
-	if (once) {
-		di_member_clone(handler, "listen_handle", listen_handle);
-	}
-	di_unref_object((di_object *)handler);
 
 	if (di_is_error(listen_handle)) {
 		scoped_di_string errmsg;
 		DI_CHECK_OK(di_get(listen_handle, "errmsg", errmsg));
+		di_unref_object(listen_handle);
 		return luaL_error(L, "failed to add listener %.*s", errmsg.length, errmsg.data);
 	}
-	di_lua_pushobject(L, NULL, listen_handle);
+	di_lua_pushobject(L, DI_STRING_INIT, listen_handle);
 	return 1;
 }
 
@@ -1172,7 +1207,7 @@ static int di_lua_add_listener(lua_State *L) {
 /// this variant is "unpacked" into the actual value, instead of pushed as a proxy object.
 /// var.value is not freed by this function, it is cloned when needed, so it's safe to
 /// free it after this call.
-static int di_lua_pushvariant(lua_State *L, const char *name, struct di_variant var) {
+static int di_lua_pushvariant(lua_State *L, di_string name, struct di_variant var) {
 	// Check for nil
 	if (var.type == DI_TYPE_OBJECT || var.type == DI_TYPE_STRING || var.type == DI_TYPE_POINTER) {
 		// TODO(yshui) objects and strings cannot be NULL
@@ -1237,7 +1272,8 @@ static int di_lua_pushvariant(lua_State *L, const char *name, struct di_variant 
 		step = di_sizeof_type(arr->elem_type);
 		lua_createtable(L, arr->length, 0);
 		for (int i = 0; i < arr->length; i++) {
-			di_lua_pushvariant(L, NULL, (struct di_variant){arr->arr + step * i, arr->elem_type});
+			di_lua_pushvariant(L, DI_STRING_INIT,
+			                   (struct di_variant){arr->arr + step * i, arr->elem_type});
 			lua_rawseti(L, -2, i + 1);
 		}
 		return 1;
@@ -1245,12 +1281,12 @@ static int di_lua_pushvariant(lua_State *L, const char *name, struct di_variant 
 		tuple = &var.value->tuple;
 		lua_createtable(L, tuple->length, 0);
 		for (int i = 0; i < tuple->length; i++) {
-			di_lua_pushvariant(L, NULL, tuple->elements[i]);
+			di_lua_pushvariant(L, DI_STRING_INIT, tuple->elements[i]);
 			lua_rawseti(L, -2, i + 1);
 		}
 		return 1;
 	case DI_TYPE_VARIANT:
-		return di_lua_pushvariant(L, NULL, var.value->variant);
+		return di_lua_pushvariant(L, DI_STRING_INIT, var.value->variant);
 	case DI_TYPE_BOOL:
 		b = var.value->bool_;
 		lua_pushboolean(L, b);
@@ -1275,31 +1311,49 @@ pushnumber:
 
 // Stack: [ object, string (signal name), arguments... ]
 int di_lua_emit_signal(lua_State *L) {
-	di_object *o = *di_lua_checkproxy(L, 1);
-	const char *signame = luaL_checkstring(L, 2);
-	int top = lua_gettop(L);
+	if (lua_gettop(L) < 2) {
+		return luaL_error(L, "emit_signal requires at least 2 arguments");
+	}
+	if (!di_lua_isproxy(L, 1)) {
+		return luaL_argerror(L, 1, "not a di object");
+	}
+	if (!lua_isstring(L, 2)) {
+		return luaL_argerror(L, 2, "not a string");
+	}
+
 	int rc = 0;
+	// Create a scope so things are freed before we call lua_error
+	{
+		scoped_di_string signame = DI_STRING_INIT;
+		signame.data = lua_tolstring(L, 2, &signame.length);
+		signame = di_clone_string(signame);
 
-	di_tuple t;
-	t.elements = tmalloc(struct di_variant, top - 2);
-	t.length = top - 2;
+		scoped_di_object *o = di_ref_object(*(di_object **)lua_touserdata(L, 1));
+		int top = lua_gettop(L);
 
-	for (int i = 3; i <= top; i++) {
-		rc = di_lua_type_to_di_variant(L, i, &t.elements[i - 3]);
+		scoped_di_tuple t = {
+		    .elements = tmalloc(struct di_variant, top - 2),
+		};
+
+		for (int i = 3; i <= top; i++) {
+			rc = di_lua_type_to_di_variant(L, i, &t.elements[i - 3]);
+			if (rc != 0) {
+				break;
+			}
+			t.length = i - 2;
+		}
+
+		lua_pop(L, top);
+		if (rc == 0) {
+			rc = di_emitn(o, signame, t);
+		}
 		if (rc != 0) {
-			goto err;
+			lua_pushfstring(L, "Failed to emit signal %.*s", (int)signame.length, signame.data);
 		}
 	}
 
-	di_ref_object(o);
-	rc = di_emitn(o, di_string_borrow(signame), t);
-	di_unref_object(o);
-
-err:
-	di_free_tuple(t);
-
 	if (rc != 0) {
-		return luaL_error(L, "Failed to emit signal %s", signame);
+		return lua_error(L);
 	}
 	return 0;
 }
@@ -1311,7 +1365,7 @@ static int di_lua_upgrade_weak_ref(lua_State *L) {
 		return 0;
 	}
 
-	di_lua_pushobject(L, NULL, strong);
+	di_lua_pushobject(L, DI_STRING_INIT, strong);
 	return 1;
 }
 
@@ -1320,7 +1374,7 @@ static int di_lua_weak_ref(lua_State *L) {
 	di_object *strong = *di_lua_checkproxy(L, 1);
 	di_value weak = {.weak_object = di_weakly_ref_object(strong)};
 	int nret = di_lua_pushvariant(
-	    L, NULL, (struct di_variant){.type = DI_TYPE_WEAK_OBJECT, .value = &weak});
+	    L, DI_STRING_INIT, (struct di_variant){.type = DI_TYPE_WEAK_OBJECT, .value = &weak});
 	di_drop_weak_ref(&weak.weak_object);
 	return nret;
 }
@@ -1411,74 +1465,78 @@ struct di_lua_proxy_object {
 };
 
 static int di_lua_meta_index(lua_State *L) {
-
-	/* This is __index for lua di_object proxies. This function
-	 * will first try to lookup method with the requested name.
-	 * If such methods are not found, this function will then
-	 * try to call the __get_<name> method of the target di_object
-	 * and return the result
-	 */
-
 	if (lua_gettop(L) != 2) {
 		return luaL_error(L, "wrong number of arguments to __index");
 	}
-
-	const char *key = luaL_checklstring(L, 2, NULL);
-	di_object *ud = *di_lua_checkproxy(L, 1);
-
-	// Handle the special methods
-	if (strcmp(key, "on") == 0) {
-		lua_pushboolean(L, false);
-		lua_pushcclosure(L, di_lua_add_listener, 1);
-		return 1;
+	if (!di_lua_isproxy(L, 1)) {
+		return luaL_argerror(L, 1, "not a di object");
 	}
-	if (strcmp(key, "once") == 0) {
-		lua_pushboolean(L, true);
-		lua_pushcclosure(L, di_lua_add_listener, 1);
-		return 1;
+	if (!lua_isstring(L, 2)) {
+		return luaL_argerror(L, 2, "not a string");
 	}
-	if (strcmp(key, "emit") == 0) {
-		lua_pushcclosure(L, di_lua_emit_signal, 0);
-		return 1;
-	}
-	if (strcmp(key, "weakref") == 0) {
-		lua_pushcclosure(L, di_lua_weak_ref, 0);
-		return 1;
-	}
-
-	di_type rt;
-	di_value ret;
 	di_object *error = NULL;
-	int rc = di_getx(ud, di_string_borrow(key), &rt, &ret, &error);
-	if (rc != 0) {
-		lua_pushnil(L);
-		return 1;
+	int rc = 0;
+	{
+		scoped_di_string key = DI_STRING_INIT;
+		key.data = lua_tolstring(L, 2, &key.length);
+		key = di_clone_string(key);
+
+		scoped_di_object *ud = di_ref_object(*(di_object **)lua_touserdata(L, 1));
+		lua_pop(L, 2);        // Pop 2 arguments
+
+		// Handle the special methods
+		if (di_string_eq(key, di_string_borrow_literal("on"))) {
+			lua_pushboolean(L, false);
+			lua_pushcclosure(L, di_lua_add_listener, 1);
+			return 1;
+		}
+		if (di_string_eq(key, di_string_borrow_literal("once"))) {
+			lua_pushboolean(L, true);
+			lua_pushcclosure(L, di_lua_add_listener, 1);
+			return 1;
+		}
+		if (di_string_eq(key, di_string_borrow_literal("emit"))) {
+			lua_pushcclosure(L, di_lua_emit_signal, 0);
+			return 1;
+		}
+		if (di_string_eq(key, di_string_borrow_literal("weakref"))) {
+			lua_pushcclosure(L, di_lua_weak_ref, 0);
+			return 1;
+		}
+
+		di_type rt;
+		di_value ret;
+		rc = di_getx(ud, key, &rt, &ret, &error);
+		if (rc != 0) {
+			lua_pushnil(L);
+			return 1;
+		}
+		if (error == NULL) {
+			rc = di_lua_pushvariant(L, key, (struct di_variant){&ret, rt});
+			di_free_value(rt, &ret);
+		}
 	}
+
 	if (error != NULL) {
-		di_lua_pushobject(L, "error", error);
+		di_lua_pushobject(L, di_string_borrow_literal("error"), error);
+		// lua_error use longjmp, which doesn't work with cleanup attribute.
 		return lua_error(L);
 	}
-	rc = di_lua_pushvariant(L, key, (struct di_variant){&ret, rt});
-	di_free_value(rt, &ret);
 	return rc;
 }
 
 static int di_lua_meta_newindex(lua_State *L) {
-
-	/* This is the __newindex function for lua di_object proxies,
-	 * this translate calls to corresponding __set_<name>
-	 * functions in the target di_object
-	 */
-
 	if (lua_gettop(L) != 3) {
 		return luaL_error(L, "wrong number of arguments to __newindex");
 	}
+	if (!di_lua_isproxy(L, 1)) {
+		return luaL_argerror(L, 1, "not a di object");
+	}
+	if (!lua_isstring(L, 2)) {
+		return luaL_argerror(L, 2, "not a string");
+	}
 
-	di_object *ud = *di_lua_checkproxy(L, 1);
-	di_string key;
-	key.data = luaL_checklstring(L, 2, &key.length);
 	di_type vt;
-
 	di_value val;
 	int rc = di_lua_type_to_di(L, 3, DI_TYPE_ANY, &vt, &val);
 	if (rc != 0) {
@@ -1487,46 +1545,64 @@ static int di_lua_meta_newindex(lua_State *L) {
 
 	int ret;
 	di_object *error = NULL;
-	if (vt == DI_TYPE_NIL) {
-		ret = di_delete_member(ud, key, &error);
-	} else {
-		ret = di_setx(ud, key, vt, &val, &error);
-		di_free_value(vt, &val);
-	}
+	{
+		scoped_di_object *ud = di_ref_object(*(di_object **)lua_touserdata(L, 1));
+		scoped_di_string key = DI_STRING_INIT;
+		key.data = lua_tolstring(L, 2, &key.length);
+		key = di_clone_string(key);
 
-	if (error != NULL) {
-		di_lua_pushobject(L, "error", error);
-		return lua_error(L);
+		lua_pop(L, 3);        // Pop 3 arguments
+
+		if (vt == DI_TYPE_NIL) {
+			ret = di_delete_member(ud, key, &error);
+		} else {
+			ret = di_setx(ud, key, vt, &val, &error);
+			di_free_value(vt, &val);
+		}
+		// error been thrown means the call must have succeeded
+		assert(error == NULL || ret == 0);
+		if (error != NULL) {
+			di_lua_pushobject(L, di_string_borrow_literal("error"), error);
+			ret = -1;
+		} else if (ret == -EINVAL) {
+			lua_pushfstring(L, "property %s type mismatch", key);
+		} else if (ret == -ENOENT) {
+			lua_pushfstring(L, "property %s doesn't exist", key);
+		} else if (ret != 0) {
+			lua_pushfstring(L, "failed to set property %s: %d", key, ret);
+		}
 	}
 
 	if (ret != 0) {
-		if (ret == -EINVAL) {
-			return luaL_error(L, "property %s type mismatch", key);
-		}
-		if (ret == -ENOENT) {
-			return luaL_error(L, "property %s doesn't exist", key);
-		}
+		return lua_error(L);
 	}
 	return 0;
 }
 
 static int di_lua_meta_next(lua_State *L) {
 	// stack: [ object key ]
-	di_object *ud = *di_lua_checkproxy(L, 1);
-	di_string key = DI_STRING_INIT;
-	if (lua_gettop(L) == 2 && !lua_isnil(L, 2)) {
-		key.data = luaL_checklstring(L, 2, &key.length);
-		if (key.data == NULL) {
-			return luaL_argerror(L, 2, "key must be a string");
-		}
+	if (lua_gettop(L) != 2 && lua_gettop(L) != 1) {
+		return luaL_error(L, "wrong number of arguments to __next");
 	}
-
+	if (!di_lua_isproxy(L, 1)) {
+		return luaL_argerror(L, 1, "not a di object");
+	}
+	if (lua_gettop(L) == 2 && !lua_isnil(L, 2) && !lua_isstring(L, 2)) {
+		return luaL_argerror(L, 2, "not a string or nil");
+	}
+	scoped_di_object *ud = di_ref_object(*(di_object **)lua_touserdata(L, 1));
+	scoped_di_string key = DI_STRING_INIT;
+	if (lua_gettop(L) == 2 && !lua_isnil(L, 2)) {
+		key.data = lua_tolstring(L, 2, &key.length);
+		key = di_clone_string(key);
+	}
+	lua_pop(L, lua_gettop(L));        // Pop all arguments
 	scoped_di_tuple next = di_object_next_member(ud, key);
 	if (next.length < 2) {
 		return 0;
 	}
-	di_lua_pushvariant(L, NULL, next.elements[0]);
-	di_lua_pushvariant(L, NULL, next.elements[1]);
+	di_lua_pushvariant(L, DI_STRING_INIT, next.elements[0]);
+	di_lua_pushvariant(L, DI_STRING_INIT, next.elements[1]);
 	return 2;
 }
 
