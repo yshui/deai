@@ -1282,7 +1282,7 @@ di_string di_object_to_string(di_object *o) {
 		return di_object_to_string_fallback(o);
 	}
 
-	// Call the function. If it throws or fails, we fallback to the default.
+	// Call the function. If it fails, we fallback to the default.
 	di_tuple args = {.length = 1,
 	                 .elements = (di_variant[]){
 	                     {.type = DI_TYPE_OBJECT, .value = (di_value *)&o},
@@ -1295,7 +1295,7 @@ di_string di_object_to_string(di_object *o) {
 	// borrowing = false, because to_string holds the return value, and therefore is owned.
 	if (di_type_conversion(DI_TYPE_VARIANT, (di_value *)&to_string, DI_TYPE_STRING,
 	                       (di_value *)&ret, false) != 0) {
-		return di_object_to_string_fallback(o);
+		di_throw(di_new_error("__to_string did not return a string"));
 	}
 	return ret;
 }
