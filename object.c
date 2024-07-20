@@ -575,10 +575,6 @@ int di_delete_member(di_object *obj, di_string name, di_object *nullable *nullab
 	return di_delete_member_raw(obj, name);
 }
 
-#ifdef TRACK_OBJECTS
-static void di_dump_object(di_object_internal *obj);
-#endif
-
 static void _di_finalize_object(di_object_internal *obj) {
 #ifdef TRACK_OBJECTS
 	di_log_va(log_module, DI_LOG_DEBUG, "Finalizing object %p", obj);
@@ -758,9 +754,10 @@ static int di_insert_member(di_object_internal *obj, struct di_member *m) {
 	return 0;
 }
 
-static int di_add_member(di_object_internal *o, di_string name, di_type t, void *v) {
+static struct di_member *
+di_add_member(di_object_internal *o, di_string name, di_type t, void *v) {
 	if (!name.data) {
-		return -EINVAL;
+		return ERR_PTR(-EINVAL);
 	}
 
 	auto m = tmalloc(struct di_member, 1);
@@ -775,19 +772,29 @@ static int di_add_member(di_object_internal *o, di_string name, di_type t, void 
 
 		di_free_string(m->name);
 		free(m);
+		return ERR_PTR(ret);
 	}
-	return ret;
+	return m;
 }
 
-int di_add_member_clone(di_object *o, di_string name, di_type t, const void *value) {
+static struct di_member *
+di_add_member_clone2(di_object *o, di_string name, di_type t, const void *value) {
 	if (di_sizeof_type(t) == 0) {
-		return -EINVAL;
+		return ERR_PTR(-EINVAL);
 	}
 
 	void *copy = calloc(1, di_sizeof_type(t));
 	di_copy_value(t, copy, value);
 
 	return di_add_member((di_object_internal *)o, name, t, copy);
+}
+
+int di_add_member_clone(di_object *o, di_string name, di_type t, const void *value) {
+	auto ret = di_add_member_clone2(o, name, t, value);
+	if (IS_ERR(ret)) {
+		return (int)PTR_ERR(ret);
+	}
+	return 0;
 }
 
 int di_add_member_clonev(di_object *o, di_string name, di_type t, ...) {
@@ -805,10 +812,10 @@ int di_add_member_clonev(di_object *o, di_string name, di_type t, ...) {
 	return di_add_member_clone(o, name, t, &nv);
 }
 
-int di_add_member_move(di_object *o, di_string name, di_type *t, void *addr) {
+struct di_member *di_add_member_move2(di_object *o, di_string name, di_type *t, void *addr) {
 	auto sz = di_sizeof_type(*t);
 	if (sz == 0) {
-		return -EINVAL;
+		return ERR_PTR(-EINVAL);
 	}
 
 	di_type tt = *t;
@@ -819,6 +826,14 @@ int di_add_member_move(di_object *o, di_string name, di_type *t, void *addr) {
 	memset(addr, 0, sz);
 
 	return di_add_member((di_object_internal *)o, name, tt, taddr);
+}
+
+int di_add_member_move(di_object *o, di_string name, di_type *t, void *addr) {
+	auto ret = di_add_member_move2(o, name, t, addr);
+	if (IS_ERR(ret)) {
+		return (int)PTR_ERR(ret);
+	}
+	return 0;
 }
 
 struct di_member *di_lookup(di_object *_obj, di_string name) {
@@ -1572,7 +1587,8 @@ static void di_dump_type_content(di_type type, di_value *value) {
 		di_dump_type_content(value->variant.type, value->variant.value);
 	}
 }
-static void di_dump_object(di_object_internal *obj) {
+void di_dump_object(di_object *obj_) {
+	auto obj = (di_object_internal *)obj_;
 	di_log_va(log_module, DI_LOG_DEBUG,
 	          "%p, ref count: %lu strong %lu weak (live: %d), type: %s\n", obj,
 	          obj->ref_count, obj->weak_ref_count, obj->mark, di_get_type((void *)obj));
@@ -1592,7 +1608,7 @@ void di_dump_objects(void) {
 	}
 
 	list_for_each_entry (i, &all_objects, siblings) {
-		di_dump_object(i);
+		di_dump_object((di_object *)i);
 	}
 
 	// Account for references from the roots

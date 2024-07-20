@@ -11,6 +11,13 @@
 #include <stdlib.h>
 
 #define tmalloc(type, nmem) (type *)calloc(nmem, sizeof(type))
+#define trealloc(ptr, nmem)                                                              \
+	({                                                                                   \
+		/* NOLINTNEXTLINE(bugprone-sizeof-expression) */                                 \
+		void *__trealloc_tmp = realloc(ptr, sizeof(*(ptr)) * (nmem));                    \
+		DI_CHECK(__trealloc_tmp, "Out of memory");                                       \
+		(typeof(ptr))__trealloc_tmp;                                                     \
+	})
 #ifndef __cplusplus
 #define auto __auto_type
 #else
@@ -25,49 +32,49 @@
  *
  */
 #define container_of(ptr, type, member)                                                  \
-	__extension__({                                                                  \
-		const typeof(((type *)0)->member) *__mptr = (ptr);                       \
-		(type *)((char *)__mptr - offsetof(type, member));                       \
+	__extension__({                                                                      \
+		const typeof(((type *)0)->member) *__mptr = (ptr);                               \
+		(type *)((char *)__mptr - offsetof(type, member));                               \
 	})
 
-#define _define_trivial_cleanup(type, name)                                               \
-	static inline unused void name(type **ptr) {                                     \
-		free(*ptr);                                                              \
-		*ptr = NULL;                                                             \
+#define _define_trivial_cleanup(type, name)                                              \
+	static inline unused void name(type **ptr) {                                         \
+		free(*ptr);                                                                      \
+		*ptr = NULL;                                                                     \
 	}
 #define define_trivial_cleanup(type) _define_trivial_cleanup(type, di_free_##type##pp)
 
 define_trivial_cleanup(char);
 
 /// Check if `expr` is true, panic with `msg` if not.
-#define DI_CHECK(expr, ...)                                                                          \
-	do {                                                                                         \
-		__auto_type __di_check_tmp = (expr);                                                 \
-		if (!__di_check_tmp) {                                                               \
+#define DI_CHECK(expr, ...)                                                              \
+	do {                                                                                 \
+		__auto_type __di_check_tmp = (expr);                                             \
+		if (!__di_check_tmp) {                                                           \
 			fprintf(stderr, "Check \"" #expr "\" failed in %s at " __FILE__ ":%d. %s\n", \
 			        __func__, __LINE__, #__VA_ARGS__);                                   \
 			abort();                                                                     \
 			unreachable();                                                               \
-		}                                                                                    \
+		}                                                                                \
 	} while (0)
 
 /// Check if function returns success (i.e. 0)
-#define DI_CHECK_OK(expr, ...)                                                                           \
-	do {                                                                                             \
-		__auto_type __di_check_tmp = (expr);                                                     \
-		if (__di_check_tmp != 0) {                                                               \
+#define DI_CHECK_OK(expr, ...)                                                               \
+	do {                                                                                     \
+		__auto_type __di_check_tmp = (expr);                                                 \
+		if (__di_check_tmp != 0) {                                                           \
 			fprintf(stderr, "\"" #expr "\" failed in %s at " __FILE__ ":%d (%d != 0). %s\n", \
 			        __func__, __LINE__, __di_check_tmp, #__VA_ARGS__);                       \
 			abort();                                                                         \
 			unreachable();                                                                   \
-		}                                                                                        \
+		}                                                                                    \
 	} while (0)
 
 /// Panic the program with `msg`
 #define DI_PANIC(...)                                                                    \
-	do {                                                                             \
-		DI_CHECK(false, ##__VA_ARGS__);                                          \
-		unreachable();                                                           \
+	do {                                                                                 \
+		DI_CHECK(false, ##__VA_ARGS__);                                                  \
+		unreachable();                                                                   \
 	} while (0)
 
 #ifdef NDEBUG
@@ -78,19 +85,19 @@ define_trivial_cleanup(char);
 #endif
 
 #define DI_OK_OR_RET(expr)                                                               \
-	do {                                                                             \
-		__auto_type __di_ok_or_ret_tmp = (expr);                                 \
-		if (__di_ok_or_ret_tmp != 0) {                                           \
-			return __di_ok_or_ret_tmp;                                       \
-		}                                                                        \
+	do {                                                                                 \
+		__auto_type __di_ok_or_ret_tmp = (expr);                                         \
+		if (__di_ok_or_ret_tmp != 0) {                                                   \
+			return __di_ok_or_ret_tmp;                                                   \
+		}                                                                                \
 	} while (0)
 
 #define DI_OK_OR_RET_PTR(expr)                                                           \
-	do {                                                                             \
-		__auto_type __di_ok_or_ret_tmp = (expr);                                 \
-		if (__di_ok_or_ret_tmp != 0) {                                           \
-			return ERR_PTR(__di_ok_or_ret_tmp);                              \
-		}                                                                        \
+	do {                                                                                 \
+		__auto_type __di_ok_or_ret_tmp = (expr);                                         \
+		if (__di_ok_or_ret_tmp != 0) {                                                   \
+			return ERR_PTR(__di_ok_or_ret_tmp);                                          \
+		}                                                                                \
 	} while (0)
 
 #if defined(__LP64__) && __LP64__

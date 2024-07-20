@@ -952,7 +952,7 @@ static DBusHandlerResult dbus_filter(DBusConnection *conn, DBusMessage *msg, voi
 			if (is_error) {
 				auto msg = t.elements[0].value->string;
 				auto err = di_new_error("%.*s", (int)msg.length, msg.data);
-				di_resolve_promise((void *)promise, di_make_variant(err));
+				di_promise_resolve((void *)promise, di_make_variant(err));
 				di_unref_object(err);
 			} else {
 				di_variant args;
@@ -961,7 +961,7 @@ static DBusHandlerResult dbus_filter(DBusConnection *conn, DBusMessage *msg, voi
 				} else {
 					args = di_make_variant(t);
 				}
-				di_resolve_promise((void *)promise, args);
+				di_promise_resolve((void *)promise, args);
 			}
 			di_delete_member_raw(obj, promise_name);
 			di_dbus_nsignal_dec((void *)obj);

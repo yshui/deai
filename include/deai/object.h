@@ -339,11 +339,15 @@ PUBLIC_DEAI_API bool di_check_type(di_object *nonnull o, const char *nonnull typ
 /// Add value (*address) with type `*type` as a member named `name` of object `o`. This
 /// function takes the ownership of *address. After this call, `*type` and `*address` will
 /// be set to invalid values.
+///
 PUBLIC_DEAI_API int nonnull_all di_add_member_move(di_object *nonnull o, di_string name,
                                                    di_type *nonnull type, void *nonnull address);
 
-/// Add a value with type `type` as a member named `name` of object `o`. This function
-/// will cloned the value before adding it as a member.
+/// Like `di_add_member_move`, but also returns a pointer to the new `struct di_member`
+/// object, or an error that can be check with `IS_ERR`.
+struct di_member *nonnull di_add_member_move2(di_object *nonnull o, di_string name,
+                                              di_type *nonnull t, void *nonnull addr);
+
 PUBLIC_DEAI_API int nonnull_all di_add_member_clone(di_object *nonnull o, di_string name,
                                                     di_type, const void *nonnull value);
 

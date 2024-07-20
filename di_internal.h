@@ -184,6 +184,7 @@ void __attribute__((noinline)) print_stack_trace(int skip, int limit);
 
 #ifdef TRACK_OBJECTS
 void di_dump_objects(void);
+void di_dump_object(di_object *nonnull obj);
 void di_track_object_ref(di_object *nonnull, void *nonnull);
 #else
 static inline void di_dump_objects(void) {
