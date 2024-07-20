@@ -60,22 +60,16 @@ static bool load_plugin_impl(struct deai *p, char *sopath) {
 /// Load a single plugin
 ///
 /// EXPORT: load_plugin(file: :string): :void
-static struct di_variant load_plugin(struct deai *p, di_string sopath) {
+static void load_plugin(struct deai *p, di_string sopath) {
 	if (!sopath.data) {
-		return DI_VARIANT_INIT;
+		return;
 	}
 
 	scopedp(char) *sopath_str = di_string_to_chars_alloc(sopath);
 	bool success = load_plugin_impl(p, sopath_str);
 	if (!success) {
-		struct di_variant ret = {
-		    .type = DI_TYPE_OBJECT,
-		    .value = tmalloc(di_value, 1),
-		};
-		ret.value->object = di_new_error("Failed to load plugin");
-		return ret;
+		di_throw(di_new_error("Failed to load plugin"));
 	}
-	return DI_VARIANT_INIT;
 }
 
 static int load_plugin_from_dir_impl(struct deai *di, const char *path) {
@@ -774,16 +768,12 @@ int main(int argc, char *argv[]) {
 			exit_code = EXIT_FAILURE;
 			quit = true;
 		} else {
-			scoped_di_object *retobj = NULL;
-			scoped_di_string errmsg = DI_STRING_INIT;
+			di_free_value(rt, &retd);
 
-			// Try converting the return value to an object. This will also free whatever
-			// the return value is if it fails to convert.
-			di_type_conversion(rt, &retd, DI_TYPE_OBJECT, (void *)&retobj, false);
-			if ((error_obj != NULL && di_get(error_obj, "errmsg", errmsg) == 0) ||
-			    (retobj != NULL && di_get(retobj, "errmsg", errmsg) == 0)) {
+			if (error_obj != NULL) {
+				scoped_di_string error_message = di_object_to_string(error_obj, NULL);
 				fprintf(stderr, "The function you called returned an error message:\n%.*s\n",
-				        (int)errmsg.length, errmsg.data);
+				        (int)error_message.length, error_message.data);
 				exit_code = EXIT_FAILURE;
 				quit = true;
 			}

@@ -7,11 +7,6 @@ table.insert(listen_handles, di.event:timer(0.2):on("elapsed", function()
     -- wait a while for Xvfb to start
     o = di.xorg:connect()
     assert(o.asdf == nil)
-    if o.errmsg then
-        print(o.errmsg)
-        di:exit(1)
-        return
-    end
     print(o.xrdb)
     o.xrdb = "Xft.dpi:\t192"
     print(o.xrdb)
@@ -84,12 +79,7 @@ table.insert(listen_handles, di.event:timer(0.2):on("elapsed", function()
 
         o:disconnect()
         o = di.xorg:connect_to(":102")
-        if o.errmsg then
-            print(o.errmsg)
-            di:exit(1)
-        else
-            o:disconnect()
-        end
+        o:disconnect()
         if not key_pressed then
             print("key pressed not received")
             di:exit(1)

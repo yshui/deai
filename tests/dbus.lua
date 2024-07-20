@@ -28,11 +28,6 @@ end)
 local b
 dbusl:once("exit", function()
     b = di.dbus.session_bus
-    if b.errmsg then
-        di:exit(1)
-    end
-    b = nil
-    b = di.dbus.session_bus
     local o = b:get("org.freedesktop.DBus", "/org/freedesktop/DBus", "")
     local o3 = b:get("org.freedesktop.DBus", "/org/freedesktop/DBus", "org.freedesktop.DBus")
     local o2 = b:get("org.freedesktop.DBus", "/org/freedesktop/DBus", "org.dummy")
@@ -54,10 +49,10 @@ dbusl:once("exit", function()
         end
     end)
     o2:get("DummyProp"):then_(function(e)
-        if e.errmsg == nil then
+        if e.error == nil then
             di:exit(1)
         end
-        print("Get DummyProp", e.errmsg)
+        print("Get DummyProp", e.error)
     end)
     o3:get("Features"):then_(function(e)
         if type(e) ~= "table" then

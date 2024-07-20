@@ -959,14 +959,14 @@ static void rr_set_screen_size(di_object *rr, di_object *size) {
 static di_object *rr_screen_resources(di_object *rr) {
 	scopedp(di_xorg_connection) *dc = NULL;
 	if (get_xorg_connection((struct di_xorg_ext *)rr, &dc) != 0) {
-		return di_new_error("no X connection");
+		di_throw(di_new_error("no X connection"));
 	}
 
 	auto scrn = screen_of_display(dc->c, dc->dflt_scrn);
 	scopedp(xcb_randr_get_screen_resources_reply_t) *sr = xcb_randr_get_screen_resources_reply(
 	    dc->c, xcb_randr_get_screen_resources(dc->c, scrn->root), NULL);
 	if (!sr) {
-		return di_new_error("failed to get screen resources");
+		di_throw(di_new_error("failed to get screen resources"));
 	}
 
 	auto ret = di_new_object_with_type(di_object);

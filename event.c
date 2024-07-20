@@ -193,7 +193,7 @@ static di_object *di_create_ioev(di_object *obj, int fd) {
 
 	auto di_obj = di_module_get_deai(em);
 	if (di_obj == NULL) {
-		return di_new_error("deai is shutting down...");
+		di_throw(di_new_error("deai is shutting down..."));
 	}
 
 	ev_io_init(&ret->evh, di_ioev_callback, fd, 0);
@@ -291,7 +291,7 @@ static di_object *di_create_timer(di_object *obj, double timeout) {
 	di_set_type((void *)ret, "deai.builtin.event:Timer");
 	auto di_obj = di_module_get_deai(em);
 	if (di_obj == NULL) {
-		return di_new_error("deai is shutting down...");
+		di_throw(di_new_error("deai is shutting down..."));
 	}
 
 	auto di = (struct deai *)di_obj;
@@ -451,6 +451,7 @@ static int di_promise_dispatch(di_promise *promise) {
 			return_type = resolved.type;
 		}
 		if (ret != 0) {
+			// TODO(yshui): add promise:reject
 			return_value.object = di_new_error("Failed to call function in "
 			                                   "promise then");
 			return_type = DI_TYPE_OBJECT;
@@ -569,11 +570,11 @@ static void di_promise_then_impl(struct di_promise *promise,
 di_object *di_promise_then(di_object *promise, di_object *handler) {
 	scoped_di_weak_object *weak_event = NULL;
 	if (di_get(promise, "___weak_event_module", weak_event) != 0) {
-		return di_new_error("Event module member not found");
+		di_throw(di_new_error("Event module member not found"));
 	}
 	scoped_di_object *event_module = di_upgrade_weak_ref(weak_event);
 	if (event_module == NULL) {
-		return di_new_error("deai shutting down?");
+		di_throw(di_new_error("deai shutting down?"));
 	}
 
 	di_object *ret = di_new_promise(event_module);
@@ -615,12 +616,12 @@ static const char promise_type[] = "deai:Promise";
 /// EXPORT: event.join_promises(promises: [deai:Promise]): deai:Promise
 di_object *di_join_promises(di_object *event_module, di_array promises) {
 	if (promises.length > 0 && promises.elem_type != DI_TYPE_OBJECT) {
-		return di_new_error("promises must all be objects");
+		di_throw(di_new_error("promises must all be objects"));
 	}
 	di_object **arr = promises.arr;
 	for (int i = 0; i < promises.length; i++) {
 		if (!di_check_type(arr[i], promise_type)) {
-			return di_new_error("not all objects are promise");
+			di_throw(di_new_error("not all objects are promise"));
 		}
 	}
 	auto ret = di_new_promise(event_module);
@@ -652,12 +653,12 @@ static void di_any_promise_handler(di_object *then, struct di_variant var) {
 /// EXPORT: event.any_promise(promises: [deai:Promise]): deai:Promise
 di_object *di_any_promise(di_object *event_module, di_array promises) {
 	if (promises.elem_type != DI_TYPE_OBJECT) {
-		return di_new_error("promises must all be objects");
+		di_throw(di_new_error("promises must all be objects"));
 	}
 	di_object **arr = promises.arr;
 	for (int i = 0; i < promises.length; i++) {
 		if (!di_check_type(arr[i], promise_type)) {
-			return di_new_error("not all objects are promise");
+			di_throw(di_new_error("not all objects are promise"));
 		}
 	}
 	auto ret = di_new_promise(event_module);

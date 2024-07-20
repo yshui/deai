@@ -23,8 +23,8 @@ struct Thrower {
 		auto err2 = util::new_error(test_error);
 
 		deai::c_api::String prop = {
-			.data = "source",
-			.length = 6,
+		    .data = "source",
+		    .length = 6,
 		};
 		auto type = c_api::Type::OBJECT;
 		deai::c_api::object::add_member_move(err2, prop, &type, &err1);
@@ -48,9 +48,9 @@ DEAI_CPP_PLUGIN_ENTRY_POINT(di) {
 		luam.method_call<void>("load_script", "../tests/invalid.lua"sv);
 	} catch (deai::c_api::Object *&e) {
 		auto err = *Ref<Object>::take(e);
-		auto errmsg = err["errmsg"]->to<std::string>().value();
-		std::cout << "Caught error: " << err["errmsg"]->to<std::string>().value() << '\n';
-		assert(errmsg == expected_error_log);
+		auto error = err["error"]->to<std::string>().value();
+		std::cout << "Caught error: " << err["error"]->to<std::string>().value() << '\n';
+		assert(error == expected_error_log);
 		caught = true;
 	}
 	assert(caught);
@@ -64,10 +64,10 @@ DEAI_CPP_PLUGIN_ENTRY_POINT(di) {
 		luam.method_call<void>("load_script", "../tests/c++_throw.lua"sv);
 	} catch (deai::c_api::Object *&e) {
 		auto err = *Ref<Object>::take(e);
-		auto errmsg = err["errmsg"]->to<std::string>().value();
-		std::cout << "Caught error: " << err["errmsg"]->to<std::string>().value() << '\n';
+		auto error = err["error"]->to<std::string>().value();
+		std::cout << "Caught error: " << err["error"]->to<std::string>().value() << '\n';
 		std::cout << err.to_string() << "\n";
-		assert(errmsg == test_error);
+		assert(error == test_error);
 		caught = true;
 	}
 	assert(caught);

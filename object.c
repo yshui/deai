@@ -82,7 +82,7 @@ di_string di_error_to_string(di_object *err) {
 		parts[pos++] = di_string_dup("error caught: ");
 	}
 
-	if (di_rawgetxt(err, di_string_borrow_literal("errmsg"), DI_TYPE_STRING,
+	if (di_rawgetxt(err, di_string_borrow_literal("error"), DI_TYPE_STRING,
 	                (di_value *)&parts[pos]) != 0) {
 		parts[pos] = di_string_dup("<unknown error>");
 	}
@@ -190,7 +190,7 @@ di_new_error_from_string(const char *file, int line, const char *func, di_string
 #endif
 
 	di_method(err, "__to_string", di_error_to_string);
-	di_member(err, "errmsg", message);
+	di_member(err, "error", message);
 	if (file) {
 		di_member_clone(err, "file", di_string_borrow(file));
 	}
@@ -208,14 +208,14 @@ di_object *di_new_error2(const char *file, int line, const char *func, const cha
 	va_list ap;
 	va_start(ap, fmt);
 
-	di_string errmsg;
-	int ret = vasprintf((char **)&errmsg.data, fmt, ap);
+	di_string msg;
+	int ret = vasprintf((char **)&msg.data, fmt, ap);
 	if (ret < 0) {
-		errmsg = di_string_dup(fmt);
+		msg = di_string_dup(fmt);
 	} else {
-		errmsg.length = strlen(errmsg.data);
+		msg.length = strlen(msg.data);
 	}
-	return di_new_error_from_string(file, line, func, errmsg);
+	return di_new_error_from_string(file, line, func, msg);
 }
 
 bool di_is_error(di_object *obj) {
@@ -1171,15 +1171,11 @@ static void di_signal_dispatch(di_object *sig_, di_tuple args) {
 			continue;
 		}
 
-		// Type conversion also frees the return value if conversion fails.
-		scoped_di_object *ret_obj = NULL;
-		di_type_conversion(rtype, &ret, DI_TYPE_OBJECT, (di_value *)&ret_obj, false);
-
-		scoped_di_string errmsg = DI_STRING_INIT;
-		if ((err_obj != NULL && di_get(err_obj, "errmsg", errmsg) == 0) ||
-		    (ret_obj != NULL && di_get(ret_obj, "errmsg", errmsg) == 0)) {
+		di_free_value(rtype, &ret);
+		if (err_obj != NULL) {
+			scoped_di_string error_message = di_object_to_string(err_obj, NULL);
 			di_log_va(log_module, DI_LOG_ERROR, "Error arose when calling signal handler: %.*s\n",
-			          (int)errmsg.length, errmsg.data);
+			          (int)error_message.length, error_message.data);
 		}
 	}
 	free(handlers);

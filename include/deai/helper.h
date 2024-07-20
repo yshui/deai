@@ -118,7 +118,7 @@
 	} while (0)
 
 #define di_mgetm(mod, modn, on_err)                                                      \
-	di_getm(di_module_get_deai((struct di_module *)(mod)), modn, return (on_err))
+	di_getm(di_module_get_deai((struct di_module *)(mod)), modn, (on_err))
 #define di_mgetmi(mod, modn)                                                             \
 	di_getm(di_module_get_deai((struct di_module *)(mod)), modn, break)
 

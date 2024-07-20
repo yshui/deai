@@ -11,6 +11,6 @@ print(err)
 for i, ip in pairs(err.stack_ips) do
 	print(string.format("%x", ip), err.stack_proc_names[i])
 end
-if not starts_with(err.errmsg, "Array element type mismatch, string cannot be converted into ") then
+if not starts_with(err.error, "Array element type mismatch, string cannot be converted into ") then
 	di:exit(1)
 end

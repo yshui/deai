@@ -14,6 +14,3 @@ local output_configs = {
 }
 
 ret = xc.randr:configure_outputs(output_configs)
-if ret ~= nil and ret.errmsg ~= nil then
-	print(ret.errmsg)
-end

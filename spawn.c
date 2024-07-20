@@ -162,53 +162,53 @@ static void kill_child(struct child *c, int sig) {
 	kill(c->pid, sig);
 }
 
-static di_object *di_setup_fds(bool ignore_output, int *opfds, int *epfds, int *ifd) {
+static void di_setup_fds(bool ignore_output, int *opfds, int *epfds, int *ifd) {
 	opfds[0] = opfds[1] = -1;
 	epfds[0] = epfds[1] = -1;
 	*ifd = -1;
 
-	di_object *ret = NULL;
+	di_object *error = NULL;
 	do {
 		if (!ignore_output) {
 			if (pipe(opfds) < 0 || pipe(epfds) < 0) {
-				ret = di_new_error("Failed to open pipe");
+				error = di_new_error("Failed to open pipe");
 				break;
 			}
 
 			if (fcntl(opfds[0], F_SETFD, FD_CLOEXEC) < 0 ||
 			    fcntl(epfds[0], F_SETFD, FD_CLOEXEC) < 0) {
-				ret = di_new_error("Can't set cloexec");
+				error = di_new_error("Can't set cloexec");
 				break;
 			}
 
 			if (fcntl(opfds[0], F_SETFL, O_NONBLOCK) < 0 ||
 			    fcntl(epfds[0], F_SETFL, O_NONBLOCK) < 0) {
-				ret = di_new_error("Can't set non block");
+				error = di_new_error("Can't set non block");
 				break;
 			}
 		} else {
 			opfds[1] = open("/dev/null", O_WRONLY);
 			epfds[1] = open("/dev/null", O_WRONLY);
 			if (opfds[1] < 0 || epfds[1] < 0) {
-				ret = di_new_error("Can't open /dev/null");
+				error = di_new_error("Can't open /dev/null");
 				break;
 			}
 		}
 		*ifd = open("/dev/null", O_RDONLY);
 		if (*ifd < 0) {
-			ret = di_new_error("Can't open /dev/null");
+			error = di_new_error("Can't open /dev/null");
 			break;
 		}
 	} while (0);
 
-	if (ret != NULL) {
+	if (error != NULL) {
 		close(opfds[0]);
 		close(opfds[1]);
 		close(epfds[0]);
 		close(epfds[1]);
 		close(*ifd);
+		di_throw(error);
 	}
-	return ret;
 }
 
 static void di_child_process_new_exit_signal(di_object *p, di_object *sig) {
@@ -332,18 +332,15 @@ static void di_child_process_delete_stderr_signal(di_object *obj) {
 /// Returns an object representing the child process.
 di_object *di_spawn_run(struct di_spawn *p, di_array argv, bool ignore_output) {
 	if (argv.elem_type != DI_TYPE_STRING) {
-		return di_new_error("Invalid argv type");
+		di_throw(di_new_error("Invalid argv type"));
 	}
 	di_object *obj = di_module_get_deai((struct di_module *)p);
 	if (obj == NULL) {
-		return di_new_error("deai is shutting down...");
+		di_throw(di_new_error("deai is shutting down..."));
 	}
 
 	int opfds[2], epfds[2], ifd;
-	auto ret = di_setup_fds(ignore_output, opfds, epfds, &ifd);
-	if (ret != NULL) {
-		return ret;
-	}
+	di_setup_fds(ignore_output, opfds, epfds, &ifd);
 
 	char **nargv = tmalloc(char *, argv.length + 1);
 	di_string *strings = argv.arr;
@@ -381,7 +378,7 @@ di_object *di_spawn_run(struct di_spawn *p, di_array argv, bool ignore_output) {
 	if (pid < 0) {
 		close(opfds[0]);
 		close(epfds[0]);
-		return di_new_error("Failed to fork");
+		di_throw(di_new_error("Failed to fork"));
 	}
 
 	auto cp = di_new_object_with_type(struct child);

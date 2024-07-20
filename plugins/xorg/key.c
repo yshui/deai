@@ -225,17 +225,17 @@ static void keybinding_del_signal(const char *signal, di_object *obj) {
 di_object *new_binding(struct xorg_key *k, di_array modifiers, di_string key, bool intercept) {
 	scoped_di_object *dc_obj = NULL;
 	if (di_get(k, XORG_CONNECTION_MEMBER, dc_obj) != 0) {
-		return di_new_error("Connection died");
+		di_throw(di_new_error("Connection died"));
 	}
 
 	scopedp(char) *key_str = di_string_to_chars_alloc(key);
 	xkb_keysym_t ks = xkb_keysym_from_name(key_str, XKB_KEYSYM_CASE_INSENSITIVE);
 	if (ks == XKB_KEY_NoSymbol) {
-		return di_new_error("Invalid key name");
+		di_throw(di_new_error("Invalid key name"));
 	}
 
 	if (modifiers.length > 0 && modifiers.elem_type != DI_TYPE_STRING) {
-		return di_new_error("Invalid modifiers");
+		di_throw(di_new_error("Invalid modifiers"));
 	}
 
 	int mod = 0;
@@ -243,7 +243,7 @@ di_object *new_binding(struct xorg_key *k, di_array modifiers, di_string key, bo
 	for (int i = 0; i < modifiers.length; i++) {
 		int tmp = name_to_mod(arr[i]);
 		if (tmp == XCB_NO_SYMBOL) {
-			return di_new_error("Invalid modifiers");
+			di_throw(di_new_error("Invalid modifiers"));
 		}
 		mod |= tmp;
 	}
@@ -269,7 +269,7 @@ di_object *new_binding(struct xorg_key *k, di_array modifiers, di_string key, bo
 	int ret = refresh_binding(kb);
 	if (ret != 0) {
 		di_unref_object((void *)kb);
-		return di_new_error("Failed to setup key grab");
+		di_throw(di_new_error("Failed to setup key grab"));
 	}
 
 	return (void *)kb;

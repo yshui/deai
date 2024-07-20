@@ -645,10 +645,10 @@ static di_object *di_xorg_connect_to(di_object *x, di_string displayname_) {
 	auto c = xcb_connect(displayname, &scrn);
 	if (xcb_connection_has_error(c)) {
 		xcb_disconnect(c);
-		return di_new_error("Cannot connect to the display");
+		di_throw(di_new_error("Cannot connect to the display"));
 	}
 
-	di_mgetm(x, event, di_new_error("Can't get event module"));
+	di_mgetm(x, event, di_throw(di_new_error("Can't get event module")));
 
 	auto dc = di_new_object_with_type2(di_xorg_connection, "deai.plugin.xorg:Connection");
 	dc->c = c;

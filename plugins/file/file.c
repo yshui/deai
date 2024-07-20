@@ -285,12 +285,12 @@ static void di_file_delete_signal(di_object *fw_, di_string member_name) {
 static di_object *di_file_new_watch(struct di_module *f, di_array paths) {
 	if (paths.length > 0 && paths.elem_type != DI_TYPE_STRING &&
 	    paths.elem_type != DI_TYPE_STRING_LITERAL) {
-		return di_new_error("Argument needs to be an array of strings");
+		di_throw(di_new_error("Argument needs to be an array of strings"));
 	}
 
 	auto ifd = inotify_init1(IN_NONBLOCK | IN_CLOEXEC);
 	if (ifd < 0) {
-		return di_new_error("Failed to create new inotify file descriptor");
+		di_throw(di_new_error("Failed to create new inotify file descriptor"));
 	}
 
 	auto fw = di_new_object_with_type(struct di_file_watch);
@@ -303,14 +303,14 @@ static di_object *di_file_new_watch(struct di_module *f, di_array paths) {
 	di_method(fw, "remove", di_file_rm_watch, di_string);
 	di_method(fw, "__set", di_file_new_signal, di_string, di_object *);
 	di_method(fw, "__delete", di_file_delete_signal, di_string);
-	di_mgetm(f, event, di_new_error("Can't find event module"));
+	di_mgetm(f, event, di_throw(di_new_error("Can't find event module")));
 
 	auto weak_eventm = di_weakly_ref_object(eventm);
 	di_member(fw, "__weak_event_module", weak_eventm);
 
 	if (di_file_add_many_watch(fw, paths) != 0) {
 		di_unref_object((di_object *)fw);
-		return di_new_error("Failed to add watches");
+		di_throw(di_new_error("Failed to add watches"));
 	}
 	return (void *)fw;
 }

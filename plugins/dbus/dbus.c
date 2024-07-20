@@ -274,10 +274,10 @@ static di_object *dbus_call_method(di_dbus_object *dobj, di_string iface,
 
 	di_object *conn = NULL;
 	if (di_rawget_borrowed(dobj, "___deai_dbus_connection", conn) != 0) {
-		return di_new_error("DBus connection gone");
+		di_throw(di_new_error("DBus connection gone"));
 	}
 
-	di_borrowm(di_object_borrow_deai(conn), event, di_new_error(""));
+	di_borrowm(di_object_borrow_deai(conn), event, di_throw(di_new_error("")));
 
 	int64_t serial = -1;
 	scoped_di_string bus = DI_STRING_INIT, path = DI_STRING_INIT;
@@ -286,7 +286,7 @@ static di_object *dbus_call_method(di_dbus_object *dobj, di_string iface,
 	serial = di_dbus_send_message(conn, di_string_borrow_literal("method"), bus, path,
 	                              iface, method, signature, t);
 	if (serial < 0) {
-		return di_new_error("Failed to send %d", serial);
+		di_throw(di_new_error("Failed to send %d", serial));
 	}
 
 	return di_dbus_add_promise_for(conn, eventm, serial);
@@ -646,18 +646,12 @@ static void di_dbus_object_set_owner(di_object *o, di_tuple data) {
 	di_dbus_name_changed(conn, bus_name, owner, payload.elements[0].value->string);
 }
 
-static di_variant di_dbus_get_property(di_object *dobj, di_string property) {
+static di_object *di_dbus_get_property(di_object *dobj, di_string property) {
 	di_object *conn = NULL;
-	di_variant ret = {
-	    .type = DI_TYPE_OBJECT,
-	    .value = tmalloc(di_value, 1),
-	};
 	if (di_rawget_borrowed(dobj, "___deai_dbus_connection", conn) != 0) {
-		ret.value->object = di_new_error("DBus connection gone");
-		return ret;
+		di_throw(di_new_error("DBus connection gone"));
 	}
-	di_borrowm(di_object_borrow_deai(conn), event, ret.value->object = di_new_error("");
-	           return ret);
+	di_borrowm(di_object_borrow_deai(conn), event, di_throw(di_new_error("")));
 	scoped_di_string obj = DI_STRING_INIT, bus = DI_STRING_INIT, interface = DI_STRING_INIT;
 	DI_CHECK_OK(di_get(dobj, "___object_path", obj));
 	DI_CHECK_OK(di_get(dobj, "___bus_name", bus));
@@ -667,19 +661,17 @@ static di_variant di_dbus_get_property(di_object *dobj, di_string property) {
 	    di_string_borrow_literal(DBUS_INTERFACE_PROPERTIES), di_string_borrow_literal("Get"),
 	    di_string_borrow_literal(""), di_make_tuple(interface, property));
 	if (serial < 0) {
-		ret.value->object = di_new_error("DBus error");
-		return ret;
+		di_throw(di_new_error("DBus error"));
 	}
-	ret.value->object = di_dbus_add_promise_for(conn, eventm, serial);
-	return ret;
+	return di_dbus_add_promise_for(conn, eventm, serial);
 }
 
 static di_object *di_dbus_set_property(di_object *dobj, di_string property, di_variant value) {
 	di_object *conn = NULL;
 	if (di_rawget_borrowed(dobj, "___deai_dbus_connection", conn) != 0) {
-		return di_new_error("DBus connection gone");
+		di_throw(di_new_error("DBus connection gone"));
 	}
-	di_borrowm(di_object_borrow_deai(conn), event, return di_new_error(""));
+	di_borrowm(di_object_borrow_deai(conn), event, di_throw(di_new_error("")));
 	scoped_di_string obj = DI_STRING_INIT, bus = DI_STRING_INIT, interface = DI_STRING_INIT;
 	DI_CHECK_OK(di_get(dobj, "___object_path", obj));
 	DI_CHECK_OK(di_get(dobj, "___bus_name", bus));
@@ -689,7 +681,7 @@ static di_object *di_dbus_set_property(di_object *dobj, di_string property, di_v
 	    di_string_borrow_literal(DBUS_INTERFACE_PROPERTIES), di_string_borrow_literal("Set"),
 	    di_string_borrow_literal("ssv"), di_make_tuple(interface, property, value));
 	if (serial < 0) {
-		return di_new_error("DBus error");
+		di_throw(di_new_error("DBus error"));
 	}
 	return di_dbus_add_promise_for(conn, eventm, serial);
 }
@@ -712,7 +704,7 @@ static di_object *di_dbus_set_property(di_object *dobj, di_string property, di_v
 /// For how DBus types map to deai type, see :lua:mod:`dbus` for more details.
 static di_object *
 di_dbus_get_object(di_object *o, di_string bus, di_string obj, di_string interface) {
-	di_borrowm(di_object_borrow_deai(o), event, di_new_error(""));
+	di_borrowm(di_object_borrow_deai(o), event, di_throw(di_new_error("")));
 
 	scoped_di_string object_cache_name =
 	    di_string_printf("object_cache_%.*s", (int)bus.length, bus.data);
@@ -778,7 +770,7 @@ di_dbus_get_object(di_object *o, di_string bus, di_string obj, di_string interfa
 
 		if (serial < 0) {
 			di_unref_object((void *)ret);
-			return di_new_error("Failed to send GetNameOwner request");
+			di_throw(di_new_error("Failed to send GetNameOwner request"));
 		}
 
 		{
@@ -839,8 +831,8 @@ static void di_dbus_shutdown(di_object *obj) {
 		di_set_object_dtor((void *)shutdown, di_dbus_shutdown_part2);
 		di_set_object_call((void *)shutdown, di_dbus_drop_root);
 
-		auto listen_handle =
-		    di_listen_to(eventm, di_string_borrow_literal("prepare"), (di_object *)shutdown, NULL);
+		auto listen_handle = di_listen_to(eventm, di_string_borrow_literal("prepare"),
+		                                  (di_object *)shutdown, NULL);
 
 		DI_CHECK_OK(di_call(listen_handle, "auto_stop", true));
 		DI_CHECK_OK(di_member(shutdown, "___listen_handle", listen_handle));
@@ -988,7 +980,7 @@ static DBusHandlerResult dbus_filter(DBusConnection *conn, DBusMessage *msg, voi
 static di_object *di_dbus_connection_to_di(struct di_module *m, DBusConnection *conn) {
 	auto di = di_module_get_deai(m);
 	if (di == NULL) {
-		return di_new_error("deai is shutting down...");
+		di_throw(di_new_error("deai is shutting down..."));
 	}
 
 	dbus_connection_set_exit_on_disconnect(conn, 0);
@@ -1016,7 +1008,7 @@ static di_object *di_dbus_get_session_bus(di_object *o) {
 	if (conn == NULL) {
 		auto ret = di_new_error(e.message);
 		dbus_error_free(&e);
-		return ret;
+		di_throw(ret);
 	}
 
 	const char *match =
@@ -1041,7 +1033,7 @@ static di_object *di_dbus_handle_hello_reply(di_object *conn, di_string name) {
 
 static di_object *di_dbus_connect(di_object *o, di_string address) {
 	DBusError e;
-	di_mgetm(o, event, di_new_error("deai is shutting down..."));
+	di_mgetm(o, event, di_throw(di_new_error("deai is shutting down...")));
 	dbus_error_init(&e);
 
 	scopedp(char) *c_address = di_string_to_chars_alloc(address);
@@ -1049,7 +1041,7 @@ static di_object *di_dbus_connect(di_object *o, di_string address) {
 	if (conn == NULL) {
 		auto ret = di_new_error(e.message);
 		dbus_error_free(&e);
-		return ret;
+		di_throw(ret);
 	}
 	scoped_di_object *ret = di_dbus_connection_to_di((void *)o, conn);
 	auto serial = di_dbus_send_message(

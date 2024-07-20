@@ -480,44 +480,17 @@ static int di_lua_method_handler_impl(lua_State *L, const char *name, di_object 
 	di_value ret;
 	di_type rtype;
 	di_object *error = NULL;
-	di_object *ret_object = NULL;
 	int rc = di_call_object_catch(m, &rtype, &ret, t, &error);
 	di_free_tuple(t);
 	if (rc != 0) {
 		return luaL_error(L, "Failed to call function \"%s\": %s", name, strerror(-rc));
 	}
-
 	if (error != NULL) {
 		di_lua_pushobject(L, di_string_borrow_literal("error"), error);
 		return lua_error(L);
 	}
-	di_string errmsg = DI_STRING_INIT;
-	bool has_error = false;
-	int nret = 0;
-	if ((di_type_conversion(rtype, &ret, DI_TYPE_OBJECT, (di_value *)&ret_object, true) == 0 &&
-	     di_get(ret_object, "errmsg", errmsg) == 0)) {
-		scopedp(char) *buf = NULL;
-		int len = asprintf(&buf, "Failed to call function \"%s\": %.*s", name,
-		                   (int)errmsg.length, errmsg.data);
-		if (len < 0) {
-			lua_pushlstring(L, errmsg.data, errmsg.length);
-		} else {
-			lua_pushlstring(L, buf, len);
-		}
-		di_free_string(errmsg);
-		has_error = true;
-	} else {
-		nret = di_lua_pushvariant(L, DI_STRING_INIT, (struct di_variant){&ret, rtype});
-	}
-
+	int nret = di_lua_pushvariant(L, DI_STRING_INIT, (struct di_variant){&ret, rtype});
 	di_free_value(rtype, &ret);
-	if (error != NULL) {
-		di_unref_object(error);
-	}
-
-	if (has_error) {
-		return lua_error(L);
-	}
 	return nret;
 }
 
@@ -1244,12 +1217,6 @@ static int di_lua_add_listener(lua_State *L) {
 		return lua_error(L);
 	}
 
-	if (di_is_error(listen_handle)) {
-		scoped_di_string errmsg;
-		DI_CHECK_OK(di_get(listen_handle, "errmsg", errmsg));
-		di_unref_object(listen_handle);
-		return luaL_error(L, "failed to add listener %.*s", errmsg.length, errmsg.data);
-	}
 	di_lua_pushobject(L, DI_STRING_INIT, listen_handle);
 	return 1;
 }

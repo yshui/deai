@@ -123,11 +123,10 @@ struct Module {
 		static_cast<void>(this);        // slient "this functino could be static" warning
 		auto device = util::new_object<Device>(dev_node);
 		if (device->fd < 0) {
-			device["errmsg"] = Variant::from(std::string{"Failed to open device"});
-		} else {
-			util::add_method<&Device::id>(device, "__get_id");
-			util::add_method<&Device::name>(device, "__get_name");
+			throw std::runtime_error{"Failed to open device"};
 		}
+		util::add_method<&Device::id>(device, "__get_id");
+		util::add_method<&Device::name>(device, "__get_name");
 		return device;
 	}
 };

@@ -410,7 +410,7 @@ static struct di_variant
 di_xorg_xinput_get_prop(struct di_xorg_xinput_device *dev, di_string name_) {
 	scopedp(di_xorg_connection) *dc = NULL;
 	if (get_xorg_connection((void *)dev->xi, &dc) != 0) {
-		return di_variant_of(di_new_error("Lost X connection"));
+		di_throw(di_new_error("Lost X connection"));
 	}
 
 	xcb_generic_error_t *e;
@@ -418,7 +418,7 @@ di_xorg_xinput_get_prop(struct di_xorg_xinput_device *dev, di_string name_) {
 	auto prop_atom = di_xorg_intern_atom(dc, name_, &e);
 
 	if (e) {
-		return di_variant_of(di_new_error("Failed to intern atom"));
+		di_throw(di_new_error("Failed to intern atom"));
 	}
 
 	auto float_atom = di_xorg_intern_atom(dc, di_string_borrow_literal("FLOAT"), &e);
@@ -451,17 +451,17 @@ di_xorg_xinput_get_prop(struct di_xorg_xinput_device *dev, di_string name_) {
 		ret.elem_type = DI_TYPE_FLOAT;
 	} else {
 		di_log_va(log_module, DI_LOG_WARN, "Unknown property type %d\n", prop->type);
-		return di_variant_of(di_new_error("Property has unknown type: %d", prop->type));
+		di_throw(di_new_error("Property has unknown type: %d", prop->type));
 	}
 
 	if (prop->format != 8 && prop->format != 16 && prop->format != 32) {
 		di_log_va(log_module, DI_LOG_WARN, "Xorg returns invalid format %d\n", prop->format);
-		return di_variant_of(di_new_error("Property has invalid format", prop->format));
+		di_throw(di_new_error("Property has invalid format", prop->format));
 	}
 	if ((prop->type == float_atom || prop->type == XCB_ATOM_ATOM) && prop->format != 32) {
 		di_log_va(log_module, DI_LOG_WARN,
 		          "Xorg return invalid format for float/atom %d\n", prop->format);
-		return di_variant_of(di_new_error("X server is misbehaving"));
+		di_throw(di_new_error("X server is misbehaving"));
 	}
 
 	void *buf = xcb_input_xi_get_property_items(prop);
