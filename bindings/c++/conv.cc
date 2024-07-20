@@ -1,6 +1,10 @@
 #include <deai/c++/conv.hh>
 #include <limits>
 
+extern "C" {
+#include <deai/type.h>
+}
+
 namespace {
 
 struct DeaiCheckedIntConverter {

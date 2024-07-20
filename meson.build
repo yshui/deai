@@ -68,7 +68,7 @@ foreach arg: test_common_args
   endif
 endforeach
 
-base_c_args = base_c_args + [ '-fvisibility=hidden', '-D_GNU_SOURCE' ]
+base_c_args = base_c_args + [ '-D_GNU_SOURCE' ]
 if get_option('unittests')
   base_c_args = base_c_args + [ '-DUNITTESTS' ]
 endif
@@ -94,7 +94,7 @@ configure_file(input: 'config.h.in', output: 'config.h', configuration: conf)
 subdir('scripts')
 subdir('bindings')
 
-libutils = static_library('libutils', ['string_buf.c'], include_directories: incs, c_args: base_c_args)
+libutils = static_library('libutils', ['string_buf.c'], include_directories: incs, c_args: base_c_args, gnu_symbol_visibility: 'hidden')
 
 # link deai against a cpp library, so clang++ is used to link the final binary. this is
 # in order to fix undefined symbol problem with UBSan
@@ -153,6 +153,7 @@ deai_exe = executable('deai', core_src, c_args: base_c_args
 , link_with: [ cpp_binding, libutils ]
 , include_directories: incs
 , export_dynamic: true
+, gnu_symbol_visibility: 'hidden'
 , install: true)
 all_plugins_files = []
 foreach plugin: all_plugins

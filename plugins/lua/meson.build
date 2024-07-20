@@ -45,10 +45,11 @@ else
           'abiver: '+lua.get_pkgconfig_variable('abiver', default: ''))
 endif
 
-di_lua_lib = shared_module('di_lua', src,
-  dependencies: lua, include_directories: incs,
-  c_args: base_c_args + extra_c_args, name_prefix: '',
-  install: true, install_dir: plugin_install_dir)
+di_lua_lib = shared_module('di_lua', src
+, dependencies: lua, include_directories: incs
+, c_args: base_c_args + extra_c_args, name_prefix: ''
+, install: true, install_dir: plugin_install_dir
+, gnu_symbol_visibility: 'hidden')
 
 install_data('builtins.lua', install_dir:  resources_install_dir / 'lua', install_tag: 'runtime')
 

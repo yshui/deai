@@ -22,6 +22,7 @@
 //                       cause memory leakage. If `from` is borrowed, `to` must also be
 //                       borrowed downstream as well. If `borrowing` is false and conversion
 //                       is failed, `from` will be freed.
-int di_type_conversion(di_type from_type, di_value *from, di_type to_type, di_value *to,
-                       bool borrowing);
-int di_int_conversion(di_type from_type, di_value *from, int to_bits, bool to_unsigned, void *to);
+PUBLIC_DEAI_API int di_type_conversion(di_type from_type, di_value *from, di_type to_type,
+                                       di_value *to, bool borrowing);
+PUBLIC_DEAI_API int
+di_int_conversion(di_type from_type, di_value *from, int to_bits, bool to_unsigned, void *to);

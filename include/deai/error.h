@@ -6,10 +6,13 @@
 /// Create a new error object with the given message, file name, line number, and function
 /// name. `file` and `func` may be NULL. `line` may be a non-positive number if the line
 /// number is not known.
-PUBLIC_DEAI_API di_object *
-di_new_error_from_string(const char *file, int line, const char *func, di_string message);
+PUBLIC_DEAI_API di_object *ret_nonnull di_new_error_from_string(const char *nullable file,
+                                                                int line,
+                                                                const char *nullable func,
+                                                                di_string message);
 /// Like `di_new_error_from_string`, but creates the message from a format string and arguments.
-PUBLIC_DEAI_API di_object *ret_nonnull di_new_error2(const char *file, int line, const char *func,
+PUBLIC_DEAI_API di_object *ret_nonnull di_new_error2(const char *nullable file, int line,
+                                                     const char *nullable func,
                                                      const char *nonnull fmt, ...);
 PUBLIC_DEAI_API bool di_is_error(di_object *nonnull obj);
 PUBLIC_DEAI_API void noret di_throw(di_object *nonnull err);

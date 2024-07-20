@@ -9,10 +9,11 @@ deps = [
 ]
 src = ['xorg.c', 'xinput.c', 'randr.c', 'key.c']
 local_inc = include_directories('.')
-di_xorg_lib = shared_module('di_xorg', src,
-  include_directories: incs+[local_inc],
-  dependencies: deps, c_args: base_c_args, name_prefix: '',
-  link_with: [ libutils ], install: true, install_dir: plugin_install_dir)
+di_xorg_lib = shared_module('di_xorg', src
+, include_directories: incs+[local_inc]
+, dependencies: deps, c_args: base_c_args, name_prefix: ''
+, link_with: [ libutils ], install: true, install_dir: plugin_install_dir
+, gnu_symbol_visibility: 'hidden')
 
 install_data('builtins.lua', install_dir: resources_install_dir / 'xorg', install_tag: 'runtime')
 
