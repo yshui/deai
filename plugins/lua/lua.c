@@ -115,15 +115,20 @@ static int di_lua_errfunc(lua_State *L) {
 	di_lua_type_to_di(L, -1, DI_TYPE_ANY, &err_type, &err);
 	if (err_type != DI_TYPE_OBJECT) {
 		scopedp(char) *err_str = di_value_to_string(err_type, &err);
-		err_obj = di_new_error(err_str);
+		lua_Debug ar;
+		lua_getstack(L, 1, &ar);
+		const char *path = NULL;
+		if (lua_isstring(L, lua_upvalueindex(1))) {
+			path = lua_tolstring(L, lua_upvalueindex(1), NULL);
+		} else if (ar.source != NULL && ar.source[0] == '@') {
+			path = ar.source + 1;
+		} else if (*ar.short_src) {
+			path = ar.short_src;
+		}
+		err_obj = di_new_error2(path, ar.currentline, ar.name, err_str);
 		di_free_value(err_type, &err);
 	} else {
 		err_obj = err.object;
-	}
-
-	if (lua_isstring(L, lua_upvalueindex(1))) {
-		auto path = di_string_borrow(lua_tolstring(L, lua_upvalueindex(1), NULL));
-		di_member_clone(err_obj, "file", path);
 	}
 
 	// Get debug.traceback
@@ -508,7 +513,7 @@ static int di_lua_gc(lua_State *L) {
 	// di_lua_pushobject created a new one (see :ref:`lua quirk`).
 	int64_t lua_ref;
 	asprintf(&buf, "___di_object_to_ref_%p", o);
-	if (di_get(s, buf, lua_ref) != 0) {
+	if (di_rawget_borrowed(s, buf, lua_ref) != 0) {
 		// This means the newer proxy got GC'd before us, the older one.
 		free(buf);
 		return 0;

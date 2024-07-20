@@ -51,8 +51,8 @@ static_assert(alignof(di_object) == alignof(di_object_internal),
 static const char error_type[] = "deai:Error";
 
 di_string di_error_to_string(di_object *err) {
-	const char *func = NULL, *file = NULL;
-	int line = 0;
+	di_string func = DI_STRING_INIT, file = DI_STRING_INIT;
+	int line = -1;
 	di_rawget_borrowed(err, "func", func);
 	di_rawget_borrowed(err, "file", file);
 	di_rawget_borrowed(err, "line", line);
@@ -69,14 +69,15 @@ di_string di_error_to_string(di_object *err) {
 		parts[pos++] = di_string_dup(
 		    "\nWhile handling the above error, the following error occurred:\n");
 	}
-	if (func || file || line > 0) {
-		if (func == NULL) {
-			func = "<unknown>";
+	if (func.length || file.length || line > 0) {
+		if (func.length == 0) {
+			func = di_string_borrow_literal("<unknown>");
 		}
-		if (file == NULL) {
-			file = "??";
+		if (file.length == 0) {
+			file = di_string_borrow_literal("??");
 		}
-		parts[pos++] = di_string_printf("error caught in \"%s\" (%s:%d): ", func, file, line);
+		parts[pos++] = di_string_printf("error caught in \"%.*s\" (%.*s:%d): ", (int)func.length,
+		                                func.data, (int)file.length, file.data, line);
 	} else {
 		parts[pos++] = di_string_dup("error caught: ");
 	}
@@ -191,13 +192,13 @@ di_new_error_from_string(const char *file, int line, const char *func, di_string
 	di_method(err, "__to_string", di_error_to_string);
 	di_member(err, "errmsg", message);
 	if (file) {
-		di_member(err, "file", file);
+		di_member_clone(err, "file", di_string_borrow(file));
 	}
-	if (line > 0) {
+	if (line >= 0) {
 		di_member(err, "line", line);
 	}
 	if (func) {
-		di_member(err, "func", func);
+		di_member_clone(err, "func", di_string_borrow(func));
 	}
 	return err;
 }
