@@ -52,6 +52,7 @@
 #define auto __auto_type
 
 #define DI_LUA_REGISTRY_STATE_OBJECT_KEY "__deai.di_lua.state_object"
+#define DEAI_LUA_REGISTRY_OBJECT_CACHE_KEY "__deai.di_lua.object_cache"
 
 #define di_lua_get_state(L, s)                                                           \
 	do {                                                                                 \
@@ -106,6 +107,10 @@ static int di_lua_meta_pairs(lua_State *L);
 
 static int di_lua_type_to_di(lua_State *L, int i, di_type type_hint, di_type *t, di_value *ret);
 static void di_lua_pushobject(lua_State *L, di_string name, di_object *obj);
+static void **
+di_lua_pushproxy(lua_State *L, di_string name, void *o, const luaL_Reg *reg, bool callable);
+
+static const luaL_Reg di_lua_weak_object_methods[];
 
 static int di_lua_errfunc(lua_State *L) {
 	/* Convert error to string, to prevent a follow-up error with lua_concat. */
@@ -393,8 +398,32 @@ static const char lua_proxy_type[] = "deai.plugin.lua:LuaProxy";
 static struct di_lua_ref *lua_type_to_di_object(lua_State *L, int i, void *call) {
 	// TODO(yshui): probably a good idea to make sure that same lua object get same
 	// di object?
+	if (i < 0) {
+		i = lua_gettop(L) + i + 1;
+	}
+
+	DI_CHECK(lua_istable(L, i) || lua_isfunction(L, i));
+
 	di_object *state;
 	di_lua_get_state(L, state);
+
+	// Check the cache first
+	lua_pushliteral(L, DEAI_LUA_REGISTRY_OBJECT_CACHE_KEY);
+	lua_rawget(L, LUA_REGISTRYINDEX);        // Stack: [... object_cache]
+	lua_pushvalue(L, i);                     // Stack: [... object_cache input]
+	lua_rawget(L, -2);        // Get object_cache[table] | Stack [ ... object_cache cached_proxy ]
+	if (!lua_isnil(L, -1)) {
+		assert(di_lua_isproxy(L, -1));
+		auto weak = *(di_weak_object **)lua_touserdata(L, -1);
+		lua_pop(L, 1);        // Stack: [... object_cache]
+		auto obj = di_upgrade_weak_ref(weak);
+		if (obj != NULL) {
+			lua_pop(L, 1);        // Stack: [...]
+			return (struct di_lua_ref *)obj;
+		}
+	} else {
+		lua_pop(L, 1);        // Stack: [... object_cache]
+	}
 
 	auto o = di_new_object_with_type(struct di_lua_ref);
 	di_set_type((di_object *)o, lua_proxy_type);
@@ -416,7 +445,12 @@ static struct di_lua_ref *lua_type_to_di_object(lua_State *L, int i, void *call)
 	di_method(o, "__next", di_lua_di_next, di_string);
 	di_method(o, "__to_string", di_lua_table_to_string);
 
-	// Need to return
+	auto weak = di_weakly_ref_object((di_object *)o);
+	lua_pushvalue(L, i);
+	di_lua_pushproxy(L, DI_STRING_INIT, weak, di_lua_weak_object_methods, false);
+	lua_rawset(L, -3);        // object_cache[input] = weak_proxy
+	lua_pop(L, 1);            // Stack: [...]
+
 	return o;
 }
 
@@ -748,6 +782,17 @@ static di_lua_state *lua_new_state(struct di_module *m) {
 	lua_pushliteral(L->L, DI_LUA_REGISTRY_STATE_OBJECT_KEY);
 	lua_pushlightuserdata(L->L, L);
 	lua_rawset(L->L, LUA_REGISTRYINDEX);
+
+	// Create the object cache table
+	lua_pushliteral(L->L, DEAI_LUA_REGISTRY_OBJECT_CACHE_KEY);
+	lua_newtable(L->L);
+	lua_newtable(L->L);        // Stack: [ regkey object_cache, metatable ]
+	lua_pushliteral(L->L, "__mode");
+	lua_pushliteral(L->L, "k");
+	lua_rawset(L->L, -3);              // metatable.__mode = "k"
+	lua_setmetatable(L->L, -2);        // setmetatable(object_cache, metatable)
+	lua_rawset(L->L, LUA_REGISTRYINDEX);        // registry[DEAI_LUA_REGISTRY_OBJECT_CACHE_KEY] = object_cache
+	assert(lua_gettop(L->L) == 0);
 
 	return L;
 }
