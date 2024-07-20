@@ -617,22 +617,6 @@ static int di_promise_handler_closure(di_object *closure, di_type * /*type*/,
 	return 0;
 }
 
-/// Chain computation to a promise
-///
-/// EXPORT: deai:Promise.then(handler: :object): deai:Promise
-///
-/// Register a handler to be called after `promise` resolves, the handler will be called
-/// with the resolved value as argument.
-///
-/// Returns a promise that will be resolved after handler returns. If handler returns
-/// another promise, then the promise returned by this function will resolve after the
-/// promise returned by the handler resolves, otherwise the returned promise will resolve
-/// to the value returned by the handler.
-///
-/// Note the handler will always be called after being registered, whether the
-/// promise returned by this function is freed or not.
-///
-/// (this function is called "then\_" in lua, since "then" is a keyword)
 static di_object *
 di_promise_then_inner(di_object *promise, di_object *resolve, di_object *reject) {
 	scoped_di_weak_object *weak_event = NULL;
@@ -661,10 +645,33 @@ di_promise_then_inner(di_object *promise, di_object *resolve, di_object *reject)
 	return ret;
 }
 
+/// Chain computation to a promise
+///
+/// EXPORT: deai:Promise.then(handler: :object): deai:Promise
+///
+/// Register a handler to be called after `promise` resolves, the handler will be called
+/// with the resolved value as argument.
+///
+/// Returns a promise that will be resolved after handler returns. If handler returns
+/// another promise, then the promise returned by this function will resolve after the
+/// promise returned by the handler resolves, otherwise the returned promise will resolve
+/// to the value returned by the handler.
+///
+/// Note the handler will always be called after being registered, whether the
+/// promise returned by this function is freed or not.
+///
+/// (this function is also available as "then\_", since "then" is a keyword in lua)
 di_object *di_promise_then(di_object *promise, di_object *handler) {
 	return di_promise_then_inner(promise, handler, NULL);
 }
 
+/// Catch promise rejections
+///
+/// EXPORT: deai:Promise.catch(handler: :object): deai:Promise
+///
+/// Create a new promise that resolves when the given promise rejects. The handler will
+/// be called with the rejection value, and its return value will be what the returned
+/// promise resolves to.
 di_object *di_promise_catch(di_object *promise, di_object *handler) {
 	return di_promise_then_inner(promise, NULL, handler);
 }
