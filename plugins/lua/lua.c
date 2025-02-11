@@ -145,7 +145,7 @@ static int di_lua_errfunc(lua_State *L) {
 	lua_gettable(L, -2);
 
 	// Push arguments
-	lua_pushnil(L);
+	lua_pushstring(L, "");
 	lua_pushinteger(L, 3);
 
 	// Call debug.traceback(error_prompt, 3), this should leave the error message we
