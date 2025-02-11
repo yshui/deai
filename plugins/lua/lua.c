@@ -121,7 +121,10 @@ static int di_lua_errfunc(lua_State *L) {
 	if (err_type != DI_TYPE_OBJECT) {
 		scopedp(char) *err_str = di_value_to_string(err_type, &err);
 		lua_Debug ar;
-		lua_getstack(L, 1, &ar);
+		if (lua_getstack(L, 1, &ar) == 0 || lua_getinfo(L, "nSltu", &ar) == 0) {
+			// Make sure this lua_Debug is initialized if the above calls failed.
+			ar = (lua_Debug){};
+		}
 		const char *path = NULL;
 		if (lua_isstring(L, lua_upvalueindex(1))) {
 			path = lua_tolstring(L, lua_upvalueindex(1), NULL);
