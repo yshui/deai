@@ -158,14 +158,16 @@ static int di_lua_errfunc(lua_State *L) {
 		err_obj = err2;
 	} else {
 		auto traceback = lua_tolstring(L, -1, NULL);
-		di_string original_detail = DI_STRING_INIT;
-		if (di_rawget_borrowed(err_obj, "detail", original_detail) == 0) {
-			di_string new_detail = di_string_printf(
-			    "%.*s\n%s", (int)original_detail.length, original_detail.data, traceback);
-			di_delete_member_raw(err_obj, di_string_borrow_literal("detail"));
-			di_member(err_obj, "detail", new_detail);
-		} else {
-			di_member_clone(err_obj, "detail", di_string_borrow(traceback));
+		if (traceback != NULL) {
+			di_string original_detail = DI_STRING_INIT;
+			if (di_rawget_borrowed(err_obj, "detail", original_detail) == 0) {
+				di_string new_detail = di_string_printf(
+				    "%.*s\n%s", (int)original_detail.length, original_detail.data, traceback);
+				di_delete_member_raw(err_obj, di_string_borrow_literal("detail"));
+				di_member(err_obj, "detail", new_detail);
+			} else {
+				di_member_clone(err_obj, "detail", di_string_borrow(traceback));
+			}
 		}
 	}
 
