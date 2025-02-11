@@ -117,13 +117,21 @@ static int di_lua_errfunc(lua_State *L) {
 	di_type err_type;
 	di_value err = {0};
 	di_object *err_obj = NULL;
+	int level = 0;
 	di_lua_type_to_di(L, -1, DI_TYPE_ANY, &err_type, &err);
 	if (err_type != DI_TYPE_OBJECT) {
 		scopedp(char) *err_str = di_value_to_string(err_type, &err);
 		lua_Debug ar;
-		if (lua_getstack(L, 1, &ar) == 0 || lua_getinfo(L, "nSltu", &ar) == 0) {
-			// Make sure this lua_Debug is initialized if the above calls failed.
-			ar = (lua_Debug){};
+		for (;; level++) {
+			// Go up the stack until we find something that's not a C function
+			if (lua_getstack(L, level, &ar) == 0 || lua_getinfo(L, "nSltu", &ar) == 0) {
+				// Make sure this lua_Debug is fully initialized if the above calls failed.
+				ar = (lua_Debug){};
+				break;
+			}
+			if (strcmp(ar.what, "C") != 0) {
+				break;
+			}
 		}
 		const char *path = NULL;
 		if (lua_isstring(L, lua_upvalueindex(1))) {
@@ -146,7 +154,7 @@ static int di_lua_errfunc(lua_State *L) {
 
 	// Push arguments
 	lua_pushstring(L, "");
-	lua_pushinteger(L, 3);
+	lua_pushinteger(L, level + 1);
 
 	// Call debug.traceback(error_prompt, 3), this should leave the error message we
 	// want on the top of the stack.
