@@ -14,7 +14,6 @@
 #include <deai/object.h>
 #include "common.h"
 
-
 /// Fetch a value based on di_type from va_arg, and put it into `buf` if `buf` is
 /// not NULL. This function only borrows the value, without cloning it.
 static inline void unused va_arg_with_di_type(va_list ap, di_type t, void *buf) {
@@ -71,3 +70,19 @@ static inline void unused va_arg_with_di_type(va_list ap, di_type t, void *buf) 
 		memcpy(buf, &v, di_sizeof_type(t));
 	}
 }
+
+#define min(x, y) ((x) < (y) ? (x) : (y))
+#define max(x, y) ((x) > (y) ? (x) : (y))
+
+#define toint_saturating(x)                                                              \
+	_Generic((x),                                                                        \
+	    int: (x),                                                                        \
+	    unsigned int: (int)min(x, INT_MAX),                                              \
+	    short: (int)(x),                                                                 \
+	    unsigned short: (int)(x),                                                        \
+	    char: (int)(x),                                                                  \
+	    unsigned char: (int)(x),                                                         \
+	    long: (int)min(x, INT_MAX),                                                      \
+	    unsigned long: (int)min(x, INT_MAX),                                             \
+	    long long: (int)min(x, INT_MAX),                                                 \
+	    unsigned long long: (int)min(x, INT_MAX))

@@ -141,7 +141,7 @@ static int di_lua_errfunc(lua_State *L) {
 		} else if (*ar.short_src) {
 			path = ar.short_src;
 		}
-		err_obj = di_new_error2(path, ar.currentline, ar.name, err_str);
+		err_obj = di_new_error2(path, ar.currentline, ar.name, "%s", err_str);
 		di_free_value(err_type, &err);
 	} else {
 		err_obj = err.object;
@@ -161,7 +161,7 @@ static int di_lua_errfunc(lua_State *L) {
 	if (lua_pcall(L, 2, 1, 0) != 0) {
 		// If we failed to get a stack trace, we have to generate a generic error
 		// message
-		auto err2 = di_new_error(luaL_tolstring(L, -1, NULL));
+		auto err2 = di_new_error("%s", luaL_tolstring(L, -1, NULL));
 		di_add_member_move(err2, di_string_borrow_literal("source"), &err_type, (void *)&err_obj);
 		err_obj = err2;
 	} else {

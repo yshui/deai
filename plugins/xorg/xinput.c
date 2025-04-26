@@ -456,7 +456,7 @@ di_xorg_xinput_get_prop(struct di_xorg_xinput_device *dev, di_string name_) {
 
 	if (prop->format != 8 && prop->format != 16 && prop->format != 32) {
 		di_log_va(log_module, DI_LOG_WARN, "Xorg returns invalid format %d\n", prop->format);
-		di_throw(di_new_error("Property has invalid format", prop->format));
+		di_throw(di_new_error("Property has invalid format %02x", prop->format));
 	}
 	if ((prop->type == float_atom || prop->type == XCB_ATOM_ATOM) && prop->format != 32) {
 		di_log_va(log_module, DI_LOG_WARN,

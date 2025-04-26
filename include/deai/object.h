@@ -871,27 +871,26 @@ static inline void unused di_free_di_weak_objectpp(di_weak_object *nullable *non
 /// Get a raw member of an object, returning the value without cloning it.
 /// This is only possible with raw members, because getter returns are temporary values.
 /// And the type of `r` has to match exactly the type of the member, no conversion is performed.
-#define di_rawget_borrowed2(o, prop, r)                                                  \
-	/* NOLINTBEGIN(bugprone-assignment-in-if-condition) */                               \
-	({                                                                                   \
-		int __di_rawget__borrowd2_rc;                                                    \
-		di_type __di_rawget__borrowd2_rtype;                                             \
-		di_value *__di_rawget__borrowd2_ret;                                             \
-		do {                                                                             \
-			__di_rawget__borrowd2_rc =                                                   \
-			    di_refrawgetx((void *)(o), (prop), &__di_rawget__borrowd2_rtype,         \
-			                  &(__di_rawget__borrowd2_ret));                             \
-			if (__di_rawget__borrowd2_rc != 0) {                                         \
-				break;                                                                   \
-			}                                                                            \
-			if (__di_rawget__borrowd2_rtype != di_typeof(r)) {                           \
-				__di_rawget__borrowd2_rc = -ERANGE;                                      \
-				break;                                                                   \
-			}                                                                            \
-			memcpy(&(r), __di_rawget__borrowd2_ret,                                      \
-			       di_sizeof_type(__di_rawget__borrowd2_rtype));                         \
-		} while (0);                                                                     \
-		__di_rawget__borrowd2_rc;                                                        \
+#define di_rawget_borrowed2(o, prop, r)                                                       \
+	/* NOLINTBEGIN(bugprone-assignment-in-if-condition) */                                    \
+	({                                                                                        \
+		int di_rawget___borrowd2_rc;                                                          \
+		di_type di_rawget___borrowd2_rtype;                                                   \
+		di_value *di_rawget___borrowd2_ret;                                                   \
+		do {                                                                                  \
+			di_rawget___borrowd2_rc = di_refrawgetx(                                          \
+			    (void *)(o), (prop), &di_rawget___borrowd2_rtype, &di_rawget___borrowd2_ret); \
+			if (di_rawget___borrowd2_rc != 0) {                                               \
+				break;                                                                        \
+			}                                                                                 \
+			if (di_rawget___borrowd2_rtype != di_typeof(r)) {                                 \
+				di_rawget___borrowd2_rc = -ERANGE;                                            \
+				break;                                                                        \
+			}                                                                                 \
+			memcpy((void *)&(r), di_rawget___borrowd2_ret,                                    \
+			       di_sizeof_type(di_rawget___borrowd2_rtype));                               \
+		} while (0);                                                                          \
+		di_rawget___borrowd2_rc;                                                              \
 	}) /* NOLINTEND(bugprone-assignment-in-if-condition) */
 #define di_rawget_borrowed(o, prop, r) di_rawget_borrowed2(o, di_string_borrow(prop), r)
 #define di_value_set(v, field, src)                                                      \

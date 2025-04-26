@@ -1,3 +1,4 @@
+#include <inttypes.h>
 #include <stdio.h>
 
 #include <deai/builtins/event.h>
@@ -166,7 +167,7 @@ static void dbus_add_signal_handler_for(di_object *ioev, DBusWatch *w, di_dbus_c
 	scoped_di_string listen_handle_name =
 	    di_string_printf("__dbus_ioev_%s_listen_handle_for_watch_%p", signal, w);
 	DI_CHECK_OK(di_add_member_move((di_object *)oc, listen_handle_name,
-	                               (di_type[]){DI_TYPE_OBJECT}, &l));
+	                               (di_type[]){DI_TYPE_OBJECT}, (void *)&l));
 }
 
 static bool dbus_toggle_watch_impl(DBusWatch *w, void *ud, bool enabled) {
@@ -278,7 +279,7 @@ static di_object *dbus_call_method(di_dbus_object *dobj, di_string iface,
 		di_throw(di_new_error("DBus connection gone"));
 	}
 
-	di_borrowm(di_object_borrow_deai(conn), event, di_throw(di_new_error("")));
+	di_borrowm(di_object_borrow_deai(conn), event, di_throw(di_new_error("no event module")));
 
 	int64_t serial = -1;
 	scoped_di_string bus = DI_STRING_INIT, path = DI_STRING_INIT;
@@ -287,7 +288,7 @@ static di_object *dbus_call_method(di_dbus_object *dobj, di_string iface,
 	serial = di_dbus_send_message(conn, di_string_borrow_literal("method"), bus, path,
 	                              iface, method, signature, t);
 	if (serial < 0) {
-		di_throw(di_new_error("Failed to send %d", serial));
+		di_throw(di_new_error("Failed to send %" PRId64, serial));
 	}
 
 	return di_dbus_add_promise_for(conn, eventm, serial);
@@ -636,7 +637,7 @@ static di_object *di_dbus_get_property(di_object *dobj, di_string property) {
 	if (di_rawget_borrowed(dobj, "___deai_dbus_connection", conn) != 0) {
 		di_throw(di_new_error("DBus connection gone"));
 	}
-	di_borrowm(di_object_borrow_deai(conn), event, di_throw(di_new_error("")));
+	di_borrowm(di_object_borrow_deai(conn), event, di_throw(di_new_error("no event module")));
 	scoped_di_string obj = DI_STRING_INIT, bus = DI_STRING_INIT, interface = DI_STRING_INIT;
 	DI_CHECK_OK(di_get(dobj, "___object_path", obj));
 	DI_CHECK_OK(di_get(dobj, "___bus_name", bus));
@@ -656,7 +657,7 @@ static di_object *di_dbus_set_property(di_object *dobj, di_string property, di_v
 	if (di_rawget_borrowed(dobj, "___deai_dbus_connection", conn) != 0) {
 		di_throw(di_new_error("DBus connection gone"));
 	}
-	di_borrowm(di_object_borrow_deai(conn), event, di_throw(di_new_error("")));
+	di_borrowm(di_object_borrow_deai(conn), event, di_throw(di_new_error("no event module")));
 	scoped_di_string obj = DI_STRING_INIT, bus = DI_STRING_INIT, interface = DI_STRING_INIT;
 	DI_CHECK_OK(di_get(dobj, "___object_path", obj));
 	DI_CHECK_OK(di_get(dobj, "___bus_name", bus));
@@ -689,7 +690,7 @@ static di_object *di_dbus_set_property(di_object *dobj, di_string property, di_v
 /// For how DBus types map to deai type, see :lua:mod:`dbus` for more details.
 static di_object *
 di_dbus_get_object(di_object *o, di_string bus, di_string obj, di_string interface) {
-	di_borrowm(di_object_borrow_deai(o), event, di_throw(di_new_error("")));
+	di_borrowm(di_object_borrow_deai(o), event, di_throw(di_new_error("no event module")));
 
 	scoped_di_string object_cache_name =
 	    di_string_printf("object_cache_%.*s", (int)bus.length, bus.data);
@@ -704,7 +705,7 @@ di_dbus_get_object(di_object *o, di_string bus, di_string obj, di_string interfa
 
 		struct di_weak_object *weak_object_cache = di_weakly_ref_object(object_cache);
 		di_add_member_move(o, object_cache_name, (di_type[]){DI_TYPE_WEAK_OBJECT},
-		                   &weak_object_cache);
+		                   (void *)&weak_object_cache);
 	}
 
 	di_object *ret = di_get_object_via_weak(object_cache, obj_and_interface);
@@ -734,7 +735,7 @@ di_dbus_get_object(di_object *o, di_string bus, di_string obj, di_string interfa
 
 	struct di_weak_object *weak_object = di_weakly_ref_object(ret);
 	di_add_member_move(object_cache, obj_and_interface, (di_type[]){DI_TYPE_WEAK_OBJECT},
-	                   &weak_object);
+	                   (void *)&weak_object);
 
 	// Do way know the owner of the well-known name yet?
 	scoped_di_string owner = DI_STRING_INIT;
@@ -862,6 +863,7 @@ static bool di_peer_foreach_cb(di_string name, di_type type, di_value *value, vo
 	return false;
 }
 
+// NOLINTNEXTLINE(readability-function-cognitive-complexity)
 static DBusHandlerResult dbus_filter(DBusConnection *conn, DBusMessage *msg, void *ud) {
 	auto type = dbus_message_get_type(msg);
 	if (type != DBUS_MESSAGE_TYPE_SIGNAL && type != DBUS_MESSAGE_TYPE_METHOD_RETURN &&
@@ -990,7 +992,7 @@ static di_object *di_dbus_get_session_bus(di_object *o) {
 
 	DBusConnection *conn = dbus_bus_get_private(DBUS_BUS_SESSION, &e);
 	if (conn == NULL) {
-		auto ret = di_new_error(e.message);
+		auto ret = di_new_error("%s", e.message);
 		dbus_error_free(&e);
 		di_throw(ret);
 	}
@@ -1023,7 +1025,7 @@ static di_object *di_dbus_connect(di_object *o, di_string address) {
 	scopedp(char) *c_address = di_string_to_chars_alloc(address);
 	DBusConnection *conn = dbus_connection_open_private(c_address, &e);
 	if (conn == NULL) {
-		auto ret = di_new_error(e.message);
+		auto ret = di_new_error("%s", e.message);
 		dbus_error_free(&e);
 		di_throw(ret);
 	}

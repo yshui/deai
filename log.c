@@ -17,6 +17,7 @@
 
 #include "di_internal.h"
 #include "log.h"
+#include "utils.h"
 
 struct di_log {
 	struct di_module;
@@ -132,7 +133,8 @@ static di_object *file_target(struct di_log *l, di_string filename, bool overwri
 
 	FILE *f = fopen(filename_str, overwrite ? "w" : "a");
 	if (!f) {
-		return di_new_error("Can't open %s for writing", filename);
+		return di_new_error("Can't open %.*s for writing",
+		                    toint_saturating(filename.length), filename.data);
 	}
 
 	int fd = fileno(f);

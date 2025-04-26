@@ -13,7 +13,8 @@ PUBLIC_DEAI_API di_object *ret_nonnull di_new_error_from_string(const char *null
 /// Like `di_new_error_from_string`, but creates the message from a format string and arguments.
 PUBLIC_DEAI_API di_object *ret_nonnull di_new_error2(const char *nullable file, int line,
                                                      const char *nullable func,
-                                                     const char *nonnull fmt, ...);
+                                                     const char *nonnull fmt, ...)
+    __attribute__((format(printf, 4, 5)));
 PUBLIC_DEAI_API bool di_is_error(di_object *nonnull obj);
 PUBLIC_DEAI_API void noret di_throw(di_object *nonnull err);
 
