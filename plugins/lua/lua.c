@@ -115,7 +115,7 @@ static const luaL_Reg di_lua_weak_object_methods[];
 static int di_lua_errfunc(lua_State *L) {
 	/* Convert error to string, to prevent a follow-up error with lua_concat. */
 	di_type err_type;
-	di_value err = {0};
+	di_value err;
 	di_object *err_obj = NULL;
 	int level = 0;
 	di_lua_type_to_di(L, -1, DI_TYPE_ANY, &err_type, &err);
@@ -162,7 +162,7 @@ static int di_lua_errfunc(lua_State *L) {
 		// If we failed to get a stack trace, we have to generate a generic error
 		// message
 		auto err2 = di_new_error(luaL_tolstring(L, -1, NULL));
-		di_add_member_move(err2, di_string_borrow_literal("source"), &err_type, &err_obj);
+		di_add_member_move(err2, di_string_borrow_literal("source"), &err_type, (void *)&err_obj);
 		err_obj = err2;
 	} else {
 		auto traceback = lua_tolstring(L, -1, NULL);
@@ -208,7 +208,7 @@ static bool di_lua_isproxy(lua_State *L, int index) {
 
 static void **di_lua_checkproxy(lua_State *L, int index) {
 	if (di_lua_isproxy(L, index)) {
-		return lua_touserdata(L, index);
+		return (void **)lua_touserdata(L, index);
 	}
 	luaL_argerror(L, index, "not a di_object");
 	unreachable();
@@ -445,11 +445,11 @@ static struct di_lua_ref *lua_type_to_di_object(lua_State *L, int i, void *call)
 	auto getter = di_new_object_with_type(di_object);
 	di_set_object_call((void *)getter, di_lua_di_getter);
 	di_add_member_move((void *)o, di_string_borrow_literal("__get"),
-	                   (di_type[]){DI_TYPE_OBJECT}, (void **)&getter);
+	                   (di_type[]){DI_TYPE_OBJECT}, (void *)&getter);
 	auto setter = di_new_object_with_type(di_object);
 	di_set_object_call((void *)setter, di_lua_di_setter);
 	di_add_member_move((void *)o, di_string_borrow_literal("__set"),
-	                   (di_type[]){DI_TYPE_OBJECT}, (void **)&setter);
+	                   (di_type[]){DI_TYPE_OBJECT}, (void *)&setter);
 	di_set_object_dtor((void *)o, (void *)lua_ref_dtor);
 	di_set_object_call((void *)o, call);
 
@@ -661,7 +661,7 @@ static void **
 di_lua_pushproxy(lua_State *L, di_string name, void *o, const luaL_Reg *reg, bool callable) {
 	// struct di_lua_script *s;
 	void **ptr;
-	ptr = lua_newuserdata(L, sizeof(void *));
+	ptr = (void **)lua_newuserdata(L, sizeof(void *));
 	*ptr = o;
 
 	if (callable) {
@@ -691,7 +691,7 @@ static void di_lua_pushobject(lua_State *L, di_string name, di_object *obj) {
 	int rc = di_get2(s, ref_key, lua_ref);
 
 	if (rc == 0) {
-		if (luaL_weakref_get(L, LUA_REGISTRYINDEX, lua_ref)) {
+		if (luaL_weakref_get(L, LUA_REGISTRYINDEX, (int)lua_ref)) {
 			// We have already pushed this object before, return the same proxy
 			di_unref_object(obj);
 			return;
@@ -712,7 +712,8 @@ static void di_lua_pushobject(lua_State *L, di_string name, di_object *obj) {
 
 	// Update userdata -> object map
 	scoped_di_string userdata_key = di_string_printf("___lua_userdata_to_object_%p", userdata);
-	DI_CHECK_OK(di_add_member_move((void *)s, userdata_key, (di_type[]){DI_TYPE_OBJECT}, &obj));
+	DI_CHECK_OK(di_add_member_move((void *)s, userdata_key, (di_type[]){DI_TYPE_OBJECT},
+	                               (void *)&obj));
 }
 
 const char *allowed_os[] = {"time", "difftime", "clock", "tmpname", "date", NULL};
@@ -922,7 +923,7 @@ di_lua_table_to_array(lua_State *L, int index, int nelem, di_type elemt, di_arra
 		if (t != elemt) {
 			// Auto convert int to double
 			assert(t == DI_TYPE_INT && elemt == DI_TYPE_FLOAT);
-			((double *)ret->arr)[i - 1] = retd.int_;
+			((double *)ret->arr)[i - 1] = (double)retd.int_;
 		} else {
 			memcpy(ret->arr + sz * (i - 1), &retd, sz);
 		}
@@ -1049,6 +1050,8 @@ static int call_lua_function(di_object *ref_, di_type *rt, di_value *ret, di_tup
 	return 0;
 }
 
+// NOLINTBEGIN(readability-function-cognitive-complexity)
+
 /// Convert lua value at index `i` to a deai value.
 /// The value is not popped. If `ret` is NULL, the value is not returned, but the type
 /// will always be returned. The returned di value will have ownership of whatever
@@ -1140,6 +1143,8 @@ static int di_lua_type_to_di(lua_State *L, int i, di_type type_hint, di_type *t,
 #undef tostringdup
 #undef todiobj
 }
+
+// NOLINTEND(readability-function-cognitive-complexity)
 
 struct di_lua_listen_handle_proxy {
 	/// The source of the event
@@ -1280,7 +1285,7 @@ static int di_lua_pushvariant(lua_State *L, di_string name, struct di_variant va
 		di_lua_pushobject(L, name, var.value->object);
 		return 1;
 	case DI_TYPE_WEAK_OBJECT:
-		di_copy_value(DI_TYPE_WEAK_OBJECT, &weak, &var.value->weak_object);
+		di_copy_value(DI_TYPE_WEAK_OBJECT, (void *)&weak, (void *)&var.value->weak_object);
 		di_lua_pushproxy(L, name, weak, di_lua_weak_object_methods, false);
 		return 1;
 	case DI_TYPE_STRING:
@@ -1291,7 +1296,7 @@ static int di_lua_pushvariant(lua_State *L, di_string name, struct di_variant va
 		return 1;
 	case DI_TYPE_ARRAY:
 		arr = &var.value->array;
-		step = di_sizeof_type(arr->elem_type);
+		step = (int)di_sizeof_type(arr->elem_type);
 		lua_createtable(L, arr->length, 0);
 		for (int i = 0; i < arr->length; i++) {
 			di_lua_pushvariant(L, DI_STRING_INIT,
@@ -1448,7 +1453,7 @@ static di_variant di_lua_globals_getter(di_object *globals, di_string key) {
 	}
 	if (L == NULL) {
 		// __lua_state not found, or lua_state has been dropped
-		di_delete_member_raw((di_object *)m, di_string_borrow_literal("__lua_state"));
+		di_delete_member_raw(m, di_string_borrow_literal("__lua_state"));
 		return DI_VARIANT_INIT;
 	}
 
@@ -1470,10 +1475,10 @@ static di_variant di_lua_globals_getter(di_object *globals, di_string key) {
 /// global variable is accessible as a property with the same name of this object.
 static di_object *di_lua_get_globals(di_object *lua) {
 	auto g = di_new_object_with_type(di_object);
-	di_set_type((di_object *)g, "deai.plugin.lua:Globals");
+	di_set_type(g, "deai.plugin.lua:Globals");
 	di_member_clone(g, "___di_lua_module", lua);
 	di_method(g, "__get", di_lua_globals_getter, di_string);
-	return (di_object *)g;
+	return g;
 }
 
 /// Lua proxy of a deai object

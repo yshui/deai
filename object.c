@@ -269,7 +269,7 @@ static int call_handler_with_fallback(di_object *nonnull o, const char *nonnull 
 
 	scoped_di_string buf = di_string_printf("%s_%.*s", prefix, (int)name.length, name.data);
 	di_type rtype2 = DI_LAST_TYPE;
-	di_value ret2 = {0};
+	di_value ret2;
 
 	struct di_variant args[3] = {
 	    {.type = DI_TYPE_OBJECT, .value = (di_value *)&o},

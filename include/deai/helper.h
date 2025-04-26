@@ -133,7 +133,7 @@
 
 #define di_member(o, name, v)                                                            \
 	di_add_member_move((di_object *)(o), di_string_borrow(name),                         \
-	                   (di_type[]){di_typeof(v)}, &(v))
+	                   (di_type[]){di_typeof(v)}, (void *)&(v))
 
 #define di_member_clone(o, name, v)                                                      \
 	di_add_member_clonev((di_object *)(o), di_string_borrow(name), di_typeof(v), (v))

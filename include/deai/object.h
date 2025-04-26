@@ -813,19 +813,20 @@ static inline void unused di_free_di_weak_objectpp(di_weak_object *nullable *non
 #define di_call(o, name, ...)                                                            \
 	/* NOLINTBEGIN(bugprone-assignment-in-if-condition) */                               \
 	({                                                                                   \
-		int __rc = 0;                                                                    \
+		int di_call___rc = 0;                                                            \
 		do {                                                                             \
-			di_type __rtype;                                                             \
-			di_value __ret;                                                              \
-			bool __called;                                                               \
-			__rc = di_callx((di_object *)(o), di_string_borrow(name), &__rtype, &__ret,  \
-			                di_make_tuple(__VA_ARGS__), &__called);                      \
-			if (__rc != 0) {                                                             \
+			di_type di_call___rtype;                                                     \
+			di_value di_call___ret;                                                      \
+			bool di_call___called;                                                       \
+			di_call___rc =                                                               \
+			    di_callx((di_object *)(o), di_string_borrow(name), &di_call___rtype,     \
+			             &di_call___ret, di_make_tuple(__VA_ARGS__), &di_call___called); \
+			if (di_call___rc != 0) {                                                     \
 				break;                                                                   \
 			}                                                                            \
-			di_free_value(__rtype, &__ret);                                              \
+			di_free_value(di_call___rtype, &di_call___ret);                              \
 		} while (0);                                                                     \
-		__rc;                                                                            \
+		di_call___rc;                                                                    \
 	}) /* NOLINTEND(bugprone-assignment-in-if-condition) */
 
 #define di_callr(o, name, r, ...)                                                        \
