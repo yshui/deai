@@ -33,6 +33,7 @@
 // In lua scripts, the listen handles are automatically add as roots and kept alive.
 // They have to be explicitly stopped.
 #include <assert.h>
+#include <inttypes.h>
 #include <lauxlib.h>
 #include <lua.h>
 #include <lualib.h>
@@ -98,6 +99,15 @@ struct di_lua_ref {
 	di_object;
 	int tref;
 };
+
+#define LUA_CHECK(expr, ...)                                                             \
+	do {                                                                                 \
+		if (!(expr)) {                                                                   \
+			di_object *err = di_new_error("LUA_CHECK: " #expr "failed: " __VA_ARGS__);   \
+			di_lua_pushobject(L, di_string_borrow_literal("error"), err);                \
+			return lua_error(L);                                                         \
+		}                                                                                \
+	} while (0)
 
 static int di_lua_pushvariant(lua_State *L, di_string name, struct di_variant var);
 static int di_lua_meta_index(lua_State *L);
@@ -1258,13 +1268,15 @@ static int di_lua_pushvariant(lua_State *L, di_string name, struct di_variant va
 	di_array *arr;
 	di_tuple *tuple;
 	struct di_weak_object *weak;
-	int step;
+	size_t step;
 	switch (var.type) {
 	case DI_TYPE_NUINT:
 		i = var.value->nuint;
 		goto pushint;
 	case DI_TYPE_UINT:
-		i = var.value->uint;
+		LUA_CHECK(var.value->uint < PTRDIFF_MAX, "Value %" PRIu64 " is too large for lua",
+		          var.value->uint);
+		i = (lua_Integer)var.value->uint;
 		goto pushint;
 	case DI_TYPE_NINT:
 		i = var.value->nint;
@@ -1296,17 +1308,22 @@ static int di_lua_pushvariant(lua_State *L, di_string name, struct di_variant va
 		return 1;
 	case DI_TYPE_ARRAY:
 		arr = &var.value->array;
+		LUA_CHECK(arr->length < INT_MAX, "Array length %" PRIu64 " is too large for lua",
+		          arr->length);
 		step = (int)di_sizeof_type(arr->elem_type);
-		lua_createtable(L, arr->length, 0);
+		lua_createtable(L, (int)arr->length, 0);
 		for (int i = 0; i < arr->length; i++) {
-			di_lua_pushvariant(L, DI_STRING_INIT,
-			                   (struct di_variant){arr->arr + step * i, arr->elem_type});
+			di_lua_pushvariant(
+			    L, DI_STRING_INIT,
+			    (struct di_variant){arr->arr + (step * (size_t)i), arr->elem_type});
 			lua_rawseti(L, -2, i + 1);
 		}
 		return 1;
 	case DI_TYPE_TUPLE:
 		tuple = &var.value->tuple;
-		lua_createtable(L, tuple->length, 0);
+		LUA_CHECK(tuple->length < INT_MAX,
+		          "Tuple length %" PRIu64 " is too large for lua", tuple->length);
+		lua_createtable(L, (int)tuple->length, 0);
 		for (int i = 0; i < tuple->length; i++) {
 			di_lua_pushvariant(L, DI_STRING_INIT, tuple->elements[i]);
 			lua_rawseti(L, -2, i + 1);
