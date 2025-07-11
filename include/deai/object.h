@@ -712,6 +712,20 @@ static inline unused size_t di_sizeof_type(di_type t) {
 	abort();
 }
 
+static inline unused int di_call_void_impl(di_object *nonnull o, di_string name, di_tuple args) {
+	di_type rtype;
+	di_value ret;
+	bool called;
+	int rc = di_callx(o, name, &rtype, &ret, args, &called);
+	if (rc != 0) {
+		return rc;
+	}
+	if (called) {
+		di_free_value(rtype, &ret);
+	}
+	return 0;
+}
+
 /// A valid but non-upgradeable weak reference
 PUBLIC_DEAI_API extern di_weak_object *const nonnull dead_weak_ref;
 
@@ -811,23 +825,7 @@ static inline void unused di_free_di_weak_objectpp(di_weak_object *nullable *non
 	            (struct di_variant[]){LIST_APPLY(di_make_variant, SEP_COMMA, __VA_ARGS__)}})
 // call but ignore return
 #define di_call(o, name, ...)                                                            \
-	/* NOLINTBEGIN(bugprone-assignment-in-if-condition) */                               \
-	({                                                                                   \
-		int di_call___rc = 0;                                                            \
-		do {                                                                             \
-			di_type di_call___rtype;                                                     \
-			di_value di_call___ret;                                                      \
-			bool di_call___called;                                                       \
-			di_call___rc =                                                               \
-			    di_callx((di_object *)(o), di_string_borrow(name), &di_call___rtype,     \
-			             &di_call___ret, di_make_tuple(__VA_ARGS__), &di_call___called); \
-			if (di_call___rc != 0) {                                                     \
-				break;                                                                   \
-			}                                                                            \
-			di_free_value(di_call___rtype, &di_call___ret);                              \
-		} while (0);                                                                     \
-		di_call___rc;                                                                    \
-	}) /* NOLINTEND(bugprone-assignment-in-if-condition) */
+	di_call_void_impl((di_object *)(o), di_string_borrow(name), di_make_tuple(__VA_ARGS__))
 
 #define di_callr(o, name, r, ...)                                                        \
 	/* NOLINTBEGIN(bugprone-assignment-in-if-condition) */                               \
