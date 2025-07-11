@@ -4,6 +4,10 @@
 
 /* Copyright (c) 2017, Yuxuan Shui <yshuiv7@gmail.com> */
 
+// This is a shared C/C++ header, so these lints doesn't make sense:
+//NOLINTBEGIN(modernize-use-using, modernize-deprecated-headers, modernize-avoid-c-arrays)
+//NOLINTBEGIN(modernize-redundant-void-arg, modernize-use-trailing-return-type)
+//NOLINTBEGIN(readability-qualified-auto)
 #pragma once
 
 #include "common.h"
@@ -11,7 +15,6 @@
 
 #include <assert.h>
 #include <ctype.h>
-#include <errno.h>
 #include <stdalign.h>
 #include <stdarg.h>
 #include <stdbool.h>
@@ -22,10 +25,15 @@
 #include <string.h>
 
 #ifndef __cplusplus
-#define DI_TYPE_NAME(x) DI_TYPE_##x
+# define DI_TYPE_NAME(x) DI_TYPE_##x
+# if __STDC_VERSION__ < 202311L
+#  pragma push_macro("auto")
+#  pragma push_macro("nullptr")
+#  define nullptr NULL
+#  define auto __auto_type
+# endif
 #else
-#define DI_TYPE_NAME(x) x
-#define __auto_type auto
+# define DI_TYPE_NAME(x) x
 #endif
 
 /// deai type ids. Use negative numbers for invalid types.
@@ -81,7 +89,7 @@
 /// getter, and return a variant whose type is DI_LAST_TYPE to indicate the property
 /// doesn't exist.
 #ifdef __cplusplus
-enum class di_type : int {
+enum class di_type : int { //NOLINT(performance-enum-size)
 #else
 typedef enum di_type {
 #endif
@@ -205,13 +213,13 @@ typedef struct di_string {
 } di_string;
 
 /// A constant to create an empty array
-static const di_array unused DI_ARRAY_INIT = {0, NULL, DI_TYPE_NAME(ANY)};
+static const di_array unused DI_ARRAY_INIT = {0, nullptr, DI_TYPE_NAME(ANY)};
 /// A constant to create an empty tuple
-static const di_tuple unused DI_TUPLE_INIT = {0, NULL};
+static const di_tuple unused DI_TUPLE_INIT = {0, nullptr};
 /// A constant to create an nil variant
-static const di_variant unused DI_VARIANT_INIT = {NULL, DI_TYPE_NAME(NIL)};
+static const di_variant unused DI_VARIANT_INIT = {nullptr, DI_TYPE_NAME(NIL)};
 
-static const di_string unused DI_STRING_INIT = {NULL, 0};
+static const di_string unused DI_STRING_INIT = {nullptr, 0};
 
 /// All builtin deai types
 union di_value {
@@ -388,8 +396,8 @@ PUBLIC_DEAI_API void di_init_object(di_object *nonnull obj_);
 
 static inline di_object *nullable unused di_new_object_with_type_name(size_t size, size_t alignment,
                                                                       const char *nonnull type) {
-	__auto_type ret = di_new_object(size, alignment);
-	if (ret == NULL) {
+	auto ret = di_new_object(size, alignment);
+	if (ret == nullptr) {
 		abort();
 	}
 	di_set_type(ret, type);
@@ -475,14 +483,14 @@ PUBLIC_DEAI_API void di_copy_value(di_type t, void *nullable dst, const void *nu
 /// Duplicate null terminated string `str` into a di_string
 static inline di_string unused di_string_dup(const char *nullable str) {
 	return (di_string){
-	    .data = str != NULL ? strdup(str) : NULL,
-	    .length = str != NULL ? strlen(str) : 0,
+	    .data = str != nullptr ? strdup(str) : nullptr,
+	    .length = str != nullptr ? strlen(str) : 0,
 	};
 }
 
 /// Duplicate exactly `length` bytes from `str` into a di_string
 static inline di_string unused di_string_ndup(const char *nonnull str, size_t length) {
-	__auto_type dup = (char *)malloc(length);
+	auto dup = (char *)malloc(length);
 	memcpy(dup, str, length);
 	return (di_string){
 	    .data = dup,
@@ -503,7 +511,7 @@ static inline di_string unused di_string_borrow(const char *nonnull str) {
 }
 
 #define di_string_borrow_literal(str)                                                    \
-	((di_string){.data = str, .length = sizeof(str) - 1})
+	((di_string){.data = (str), .length = sizeof(str) - 1})
 
 static inline bool unused di_string_to_chars(di_string str, char *nonnull output, size_t capacity) {
 	if (capacity < str.length + 1) {
@@ -519,7 +527,7 @@ static inline bool unused di_string_to_chars(di_string str, char *nonnull output
 static inline bool unused di_string_split_once(di_string str, char sep, di_string *nonnull head,
                                                di_string *nonnull rest) {
 	const char *pos = (const char *)memchr(str.data, sep, str.length);
-	if (pos == NULL) {
+	if (pos == nullptr) {
 		return false;
 	}
 	*head = (di_string){
@@ -535,15 +543,15 @@ static inline bool unused di_string_split_once(di_string str, char sep, di_strin
 
 static inline char *nullable unused di_string_to_chars_alloc(di_string str) {
 	if (str.length == 0) {
-		return NULL;
+		return nullptr;
 	}
-	__auto_type ret = (char *)malloc(str.length + 1);
+	auto ret = (char *)malloc(str.length + 1);
 	di_string_to_chars(str, ret, str.length + 1);
 	return ret;
 }
 
 static inline di_string unused di_string_tolower(di_string str) {
-	__auto_type ret = (char *)malloc(str.length);
+	auto ret = (char *)malloc(str.length);
 	for (size_t i = 0; i < str.length; i++) {
 		ret[i] = (char)tolower(str.data[i]);
 	}
@@ -552,10 +560,7 @@ static inline di_string unused di_string_tolower(di_string str) {
 
 static inline unused bool di_string_starts_with(di_string str, const char *nonnull pat) {
 	size_t len = strlen(pat);
-	if (str.length < len || strncmp(str.data, pat, len) != 0) {
-		return false;
-	}
-	return true;
+	return str.length >= len && strncmp(str.data, pat, len) == 0;
 }
 
 static inline unused bool di_string_starts_with_string(di_string str, di_string pat) {
@@ -566,7 +571,7 @@ static inline unused bool di_string_starts_with_string(di_string str, di_string 
 }
 
 static inline unused di_string di_string_concat(di_string a, di_string b) {
-	di_string ret = {.data = NULL, .length = a.length + b.length};
+	di_string ret = {.data = nullptr, .length = a.length + b.length};
 	ret.data = (const char *)malloc(ret.length);
 	memcpy((void *)ret.data, a.data, a.length);
 	memcpy((void *)(ret.data + a.length), b.data, b.length);
@@ -653,25 +658,25 @@ static inline void unused di_free_string(di_string str) {
 
 static inline void unused di_free_di_stringp(di_string *nonnull str) {
 	free((char *)str->data);
-	str->data = NULL;
+	str->data = nullptr;
 	str->length = 0;
 }
 
 static inline void unused di_free_di_tuplep(di_tuple *nonnull t) {
 	di_free_tuple(*t);
-	t->elements = NULL;
+	t->elements = nullptr;
 	t->length = 0;
 }
 
 static inline void unused di_free_di_arrayp(di_array *nonnull a) {
 	di_free_array(*a);
-	a->arr = NULL;
+	a->arr = nullptr;
 	a->length = 0;
 }
 
 static inline void unused di_free_di_variantp(di_variant *nonnull v) {
 	di_free_variant(*v);
-	v->value = NULL;
+	v->value = nullptr;
 	v->type = DI_TYPE_NAME(NIL);
 }
 
@@ -730,6 +735,7 @@ static inline unused int di_call_void_impl(di_object *nonnull o, di_string name,
 PUBLIC_DEAI_API extern di_weak_object *const nonnull dead_weak_ref;
 
 #ifndef __cplusplus
+#include <errno.h>
 // Workaround for _Generic limitations, see:
 // http://www.open-std.org/jtc1/sc22/wg14/www/docs/n1930.htm
 #define di_typeid(x)                                                                     \
@@ -902,3 +908,12 @@ static inline void unused di_free_di_weak_objectpp(di_weak_object *nullable *non
 #endif
 #undef DI_LAST_TYPE
 #undef DI_TYPE_NAME
+
+#if !defined(__cplusplus) && __STDC_VERSION__ < 202311L
+# pragma pop_macro("auto")
+# pragma pop_macro("nullptr")
+#endif
+
+//NOLINTEND(readability-qualified-auto)
+//NOLINTEND(modernize-redundant-void-arg, modernize-use-trailing-return-type)
+//NOLINTEND(modernize-use-using, modernize-deprecated-headers, modernize-avoid-c-arrays)
