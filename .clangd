@@ -1,0 +1,2 @@
+CompileFlags:
+  Add: [-Wno-microsoft-anon-tag, -Wno-c2x-extensions, -Wno-c2x-extensions ]

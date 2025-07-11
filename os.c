@@ -28,7 +28,7 @@ static struct di_variant di_env_get(struct di_module *m, di_string name_) {
 	if (str) {
 		ret.type = DI_TYPE_STRING_LITERAL;
 		ret.value = malloc(sizeof(void *));
-		di_copy_value(ret.type, ret.value, &str);
+		di_copy_value(ret.type, ret.value, (const void *)&str);
 	}
 	return ret;
 }
@@ -73,7 +73,7 @@ static di_array di_listdir(di_object *o unused, di_string path) {
 		}
 		if (capacity == ret.length) {
 			capacity = capacity * 2 + 1;
-			ret.arr = realloc(ret.arr, capacity * sizeof(di_string));
+			ret.arr = trealloc(ret.arr, capacity * sizeof(di_string));
 		}
 		((di_string *)ret.arr)[ret.length] = di_string_dup(ent->d_name);
 		ret.length++;

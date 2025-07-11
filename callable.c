@@ -10,9 +10,9 @@
 #include <deai/callable.h>
 #include <deai/object.h>
 #include <deai/type.h>
+#include <deai/helper.h>
 
 #include "di_internal.h"
-#include "utils.h"
 
 struct di_raw_closure {
 	di_object_internal obj;
@@ -41,7 +41,7 @@ static int di_typed_trampoline(ffi_cif *cif, void (*fn)(void), di_type *ret_type
 	assert(args.length <= MAX_NARGS);
 
 	struct di_variant *vars = args.elements;
-	di_value **xargs = alloca(args.length * sizeof(void *));
+	auto xargs = (di_value **)alloca(args.length * sizeof(void *));
 
 	int rc = 0;
 	for (int i = 0; i < args.length; i++) {
@@ -95,7 +95,7 @@ static void free_closure(di_object *o) {
 	assert(di_check_type(o, closure_type));
 
 	struct di_closure *cl = (void *)o;
-	free(cl->cif.arg_types);
+	free((void *)cl->cif.arg_types);
 }
 
 /// Create a di_object that when called, calls the given function with the given captures
@@ -142,7 +142,7 @@ struct di_closure *di_create_closure(void (*fn)(void), di_type rtype, di_tuple c
 
 	struct di_closure *cl = (void *)di_create_raw_closure(
 	    closure_trampoline, captures,
-	    sizeof(struct di_closure) + sizeof(di_type) * (captures.length + nargs),
+	    offsetof(struct di_closure, atypes[captures.length + nargs]),
 	    alignof(struct di_closure));
 
 	cl->rtype = rtype;
@@ -187,7 +187,7 @@ int di_add_method(di_object *o, di_string name, void (*fn)(void), di_type rtype,
 
 	ats[0] = DI_TYPE_OBJECT;
 	auto f = di_create_closure(fn, rtype, DI_TUPLE_INIT, nargs + 1, ats);
-	return di_add_member_move(o, name, (di_type[]){DI_TYPE_OBJECT}, (void **)&f);
+	return di_add_member_move(o, name, (di_type[]){DI_TYPE_OBJECT}, (void *)&f);
 }
 
 struct di_field_getter {
