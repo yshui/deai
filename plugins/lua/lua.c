@@ -55,6 +55,24 @@
 #define DI_LUA_REGISTRY_STATE_OBJECT_KEY "__deai.di_lua.state_object"
 #define DEAI_LUA_REGISTRY_OBJECT_CACHE_KEY "__deai.di_lua.object_cache"
 
+/// Make sure for some functions we return a lua stack the same as the one
+/// we got.
+struct lua_stack_check {
+	int old_top;
+	lua_State *L;
+};
+
+static void lua_stack_check_check(struct lua_stack_check *c) {
+	assert(lua_gettop(c->L) == c->old_top);
+}
+
+#define CHECK_LUA_STACK(to_check)                                                        \
+	struct lua_stack_check                                                               \
+	    __attribute__((cleanup(lua_stack_check_check))) __lua_stack_check_var = {        \
+	        .old_top = lua_gettop(to_check),                                             \
+	        .L = (to_check),                                                             \
+	}
+
 #define di_lua_get_state(L, s)                                                           \
 	do {                                                                                 \
 		lua_pushliteral((L), DI_LUA_REGISTRY_STATE_OBJECT_KEY);                          \
@@ -271,8 +289,8 @@ static int di_lua_di_getter(di_object *m, di_type *rt, di_value *ret, di_tuple t
 
 	auto state = (struct di_lua_state *)state_obj;
 	lua_State *L = state->L;
+	CHECK_LUA_STACK(L);
 
-	assert(lua_gettop(L) == 0);
 	lua_rawgeti(L, LUA_REGISTRYINDEX, t->tref);        // Stack: [ table ]
 
 	if (vars[1].type == DI_TYPE_STRING) {
@@ -291,7 +309,6 @@ static int di_lua_di_getter(di_object *m, di_type *rt, di_value *ret, di_tuple t
 		*rt = DI_LAST_TYPE;
 	}
 	lua_pop(L, 2);        // Pop the value and the table
-	assert(lua_gettop(L) == 0);
 	return 0;
 }
 
@@ -316,8 +333,8 @@ static int di_lua_di_setter(di_object *m, di_type *rt, di_value *ret, di_tuple t
 
 	auto state = (struct di_lua_state *)state_obj;
 	lua_State *L = state->L;
+	CHECK_LUA_STACK(L);
 
-	assert(lua_gettop(L) == 0);
 	lua_rawgeti(L, LUA_REGISTRYINDEX, t->tref);
 
 	if (vars[1].type == DI_TYPE_STRING) {
@@ -329,14 +346,12 @@ static int di_lua_di_setter(di_object *m, di_type *rt, di_value *ret, di_tuple t
 
 	if (di_lua_pushvariant(L, DI_STRING_INIT, vars[2]) != 1) {
 		lua_pop(L, 2);        // key and table
-		assert(lua_gettop(L) == 0);
 		return -EINVAL;
 	}
 	lua_settable(L, -3);
 	lua_pop(L, 1);        // table
 
 	*rt = DI_TYPE_NIL;
-	assert(lua_gettop(L) == 0);
 	return 0;
 }
 
@@ -347,12 +362,11 @@ static di_tuple di_lua_di_next(di_object *lua_ref, di_string name) {
 
 	auto state = (struct di_lua_state *)state_obj;
 	lua_State *L = state->L;
-	assert(lua_gettop(L) == 0);
+	CHECK_LUA_STACK(L);
 
 	lua_rawgeti(L, LUA_REGISTRYINDEX, t->tref);
 	if (lua_isnil(L, -1)) {
 		lua_pop(L, 1);
-		assert(lua_gettop(L) == 0);
 		return DI_TUPLE_INIT;
 	}
 
@@ -366,7 +380,6 @@ static di_tuple di_lua_di_next(di_object *lua_ref, di_string name) {
 	while (true) {
 		if (lua_next(L, -2) == 0) {
 			lua_pop(L, 1);
-			assert(lua_gettop(L) == 0);
 			return DI_TUPLE_INIT;
 		}
 		// Ignore non-string keys
@@ -386,7 +399,6 @@ static di_tuple di_lua_di_next(di_object *lua_ref, di_string name) {
 	ret.elements[0] = di_alloc_variant(di_clone_string(key));
 	di_lua_type_to_di_variant(L, -1, &ret.elements[1]);
 	lua_pop(L, 3);
-	assert(lua_gettop(L) == 0);
 	return ret;
 }
 static di_string di_lua_table_to_string(di_object *lua_ref) {
@@ -396,12 +408,11 @@ static di_string di_lua_table_to_string(di_object *lua_ref) {
 
 	auto state = (struct di_lua_state *)state_obj;
 	lua_State *L = state->L;
-	assert(lua_gettop(L) == 0);
+	CHECK_LUA_STACK(L);
 
 	lua_rawgeti(L, LUA_REGISTRYINDEX, t->tref);
 	if (lua_isnil(L, -1)) {
 		lua_pop(L, 1);
-		assert(lua_gettop(L) == 0);
 		return di_string_printf("<dead lua object %p>", t);
 	}
 
@@ -412,7 +423,6 @@ static di_string di_lua_table_to_string(di_object *lua_ref) {
 	}
 	ret = di_clone_string(ret);
 	lua_pop(L, 2);        // Pop the table and the string
-	assert(lua_gettop(L) == 0);
 	return ret;
 }
 static const char lua_proxy_type[] = "deai.plugin.lua:LuaProxy";
@@ -866,6 +876,9 @@ static di_tuple di_lua_load_script(di_object *obj, di_string path_) {
 		DI_CHECK(L != NULL);
 	}
 
+	CHECK_LUA_STACK(L->L);
+	int old_top = lua_gettop(L->L);
+
 	lua_pushstring(L->L, path);
 	lua_pushcclosure(L->L, di_lua_errfunc, 1);
 
@@ -873,7 +886,6 @@ static di_tuple di_lua_load_script(di_object *obj, di_string path_) {
 		const char *err = lua_tostring(L->L, -1);
 		log_error("Failed to load lua script %s: %s\n", path, err);
 		lua_pop(L->L, 2);
-		assert(lua_gettop(L->L) == 0);
 		return DI_TUPLE_INIT;
 	}
 
@@ -884,8 +896,8 @@ static di_tuple di_lua_load_script(di_object *obj, di_string path_) {
 	lua_remove(L->L, 1);
 	di_tuple func_ret = DI_TUPLE_INIT;
 	if (ret == 0) {
-		func_ret = di_lua_values_to_di_tuple(L->L, 1);
-		lua_pop(L->L, lua_gettop(L->L));
+		func_ret = di_lua_values_to_di_tuple(L->L, old_top + 1);
+		lua_pop(L->L, lua_gettop(L->L) - old_top);
 	}
 
 	DI_CHECK_OK(luaL_loadstring(L->L, "collectgarbage()"));
@@ -902,10 +914,8 @@ static di_tuple di_lua_load_script(di_object *obj, di_string path_) {
 		DI_CHECK_OK(di_lua_type_to_di(L->L, -1, DI_TYPE_ANY, &err_type, &err));
 		DI_CHECK(err_type == DI_TYPE_OBJECT);
 		lua_pop(L->L, 1);
-		assert(lua_gettop(L->L) == 0);
 		di_throw(err.object);
 	}
-	assert(lua_gettop(L->L) == 0);
 	return func_ret;
 }
 
@@ -1028,7 +1038,7 @@ static int call_lua_function(di_object *ref_, di_type *rt, di_value *ret, di_tup
 
 	auto state = (struct di_lua_state *)state_obj;
 	lua_State *L = state->L;
-	assert(lua_gettop(L) == 0);
+	CHECK_LUA_STACK(L);
 
 	lua_pushcfunction(L, di_lua_errfunc);
 
@@ -1046,7 +1056,6 @@ static int call_lua_function(di_object *ref_, di_type *rt, di_value *ret, di_tup
 		DI_CHECK(err_type == DI_TYPE_OBJECT);
 		lua_pop(L, 2);        // Pop err and errfunc
 		*rt = DI_TYPE_NIL;
-		assert(lua_gettop(L) == 0);
 		di_throw(err.object);
 	} else {
 		di_lua_type_to_di(L, -1, DI_TYPE_ANY, rt, ret);
@@ -1056,7 +1065,6 @@ static int call_lua_function(di_object *ref_, di_type *rt, di_value *ret, di_tup
 
 	DI_CHECK_OK(luaL_loadstring(L, "collectgarbage(\"step\", 20)"));
 	DI_CHECK_OK(lua_pcall(L, 0, 0, 0));
-	assert(lua_gettop(L) == 0);
 	return 0;
 }
 
