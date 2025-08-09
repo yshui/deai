@@ -592,6 +592,11 @@ static di_object *di_xorg_new_clipboard(di_object *x) {
 static void di_xorg_load_builtin_lua(di_object *x) {
 	di_object *di = di_object_borrow_deai(x);
 	di_object *lua_module;
+	di_object *builtins = NULL;
+	if (di_rawget_borrowed(x, builtin_member_name, builtins) == 0) {
+		// already loaded
+		return;
+	}
 	if (di_rawget_borrowed(di, "lua", lua_module) != 0) {
 		// lua not enabled or deai is shutting down
 		return;
@@ -602,7 +607,6 @@ static void di_xorg_load_builtin_lua(di_object *x) {
 	scoped_di_string builtin_path = di_string_printf(
 	    "%.*s/xorg/builtins.lua", (int)resources_dir.length, resources_dir.data);
 	di_tuple ret_values;
-	di_object *builtins = NULL;
 	if (di_callr(lua_module, "load_script", ret_values, builtin_path) != 0 ||
 	    ret_values.length == 0) {
 		log_warn("Failed to load builtins.lua for xorg plugin");
