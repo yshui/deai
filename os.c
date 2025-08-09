@@ -7,6 +7,7 @@
 #include <dirent.h>
 #include <string.h>
 #include <sys/utsname.h>
+#include <unistd.h>
 
 #include <deai/deai.h>
 #include <deai/helper.h>
@@ -58,6 +59,10 @@ static const char *di_get_hostname(di_object *p) {
 	return strdup(buf.nodename);
 }
 
+static int di_os_getpid(di_object * /*m*/) {
+	return getpid();
+}
+
 static di_array di_listdir(di_object *o unused, di_string path) {
 	int capacity = 0;
 	di_array ret = {.arr = NULL, .length = 0, .elem_type = DI_TYPE_STRING};
@@ -106,6 +111,7 @@ void di_init_os(di_object *di) {
 	di_member(m, "env", o);
 
 	di_getter(m, hostname, di_get_hostname);
+	di_getter(m, pid, di_os_getpid);
 	di_method(m, "listdir", di_listdir, di_string);
 	di_register_module(di, di_string_borrow_literal("os"), &m);
 }
