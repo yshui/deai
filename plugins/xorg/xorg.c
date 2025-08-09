@@ -635,7 +635,7 @@ static void di_xorg_load_builtin_lua(di_object *x) {
 static di_object *di_xorg_connect_to(di_object *x, di_string displayname_) {
 	di_xorg_load_builtin_lua(x);
 
-	di_object *builtins = NULL;
+	scoped_di_object *builtins = NULL;
 	DI_CHECK_OK(di_get(x, builtin_member_name, builtins));
 
 	int scrn;
