@@ -182,6 +182,7 @@ builtin_module_headers = [
 cfg_data = configuration_data()
 cfg_data.set('prefix', get_option('prefix'))
 configure_file(configuration: cfg_data, input: 'desktop/deai.desktop.in', install: true, install_dir: 'share/xsessions', output: 'deai.desktop')
+configure_file(configuration: cfg_data, input: 'desktop/deai.desktop.in', install: true, install_dir: 'share/wayland-sessions', output: 'deai.desktop')
 #install_data('desktop/deai.desktop', install_dir:'share/xsessions', install_mode: 'rw-r--r--')
 install_headers(base_headers, subdir: 'deai')
 install_headers(builtin_module_headers, subdir: 'deai/builtins')
