@@ -1,11 +1,41 @@
-{ stdenv, elfutils, meson, ninja, pkgconf, dbus, rustPlatform, libdisplay-info
-, libffi, libxcb, libXau, libXdmcp, libev, libxkbcommon, libunwind, llvmPackages
-, lua, luaPackages, systemdLibs, libcap, cargo, sphinx, rustc, python3, xcbutilkeysyms
-, xdotool, zlib, zstd }:
+{
+  stdenv,
+  elfutils,
+  meson,
+  ninja,
+  pkgconf,
+  dbus,
+  rustPlatform,
+  libdisplay-info,
+  libffi,
+  libxcb,
+  libXau,
+  libXdmcp,
+  libev,
+  libxkbcommon,
+  libunwind,
+  llvmPackages,
+  lua,
+  luaPackages,
+  systemdLibs,
+  libcap,
+  cargo,
+  sphinx,
+  rustc,
+  python3,
+  xcbutilkeysyms,
+  xdotool,
+  zlib,
+  zstd,
+}:
 let
-  python = python3.withPackages (p: [ p.sphinx p.sphinx_rtd_theme ]);
+  python = python3.withPackages (p: [
+    p.sphinx
+    p.sphinx_rtd_theme
+  ]);
   cargoVendor = rustPlatform.importCargoLock { lockFile = ./nix/scanner.lock; };
-in stdenv.mkDerivation {
+in
+stdenv.mkDerivation {
   src = ./.;
   name = "deai";
   nativeBuildInputs = [
@@ -41,7 +71,10 @@ in stdenv.mkDerivation {
     LLVM_CONFIG_PATH = "${llvmPackages.libllvm.dev}/bin/llvm-config";
     LIBCLANG_PATH = "${llvmPackages.libclang.lib}/lib";
   };
-  outputs = [ "out" "doc" ];
+  outputs = [
+    "out"
+    "doc"
+  ];
   passthru.providedSessions = [ "deai" ];
   prePatch = ''
         mkdir docs/scanner/.cargo
