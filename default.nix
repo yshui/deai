@@ -1,6 +1,6 @@
 { stdenv, elfutils, meson, ninja, pkgconf, dbus, rustPlatform, libdisplay-info
 , libffi, libxcb, libXau, libXdmcp, libev, libxkbcommon, libunwind, llvmPackages
-, lua, luaPackages, systemdLibs, cargo, sphinx, rustc, python3, xcbutilkeysyms
+, lua, luaPackages, systemdLibs, libcap, cargo, sphinx, rustc, python3, xcbutilkeysyms
 , xdotool, zlib, zstd }:
 let
   python = python3.withPackages (p: [ p.sphinx p.sphinx_rtd_theme ]);
@@ -29,6 +29,7 @@ in stdenv.mkDerivation {
     libxkbcommon
     dbus
     systemdLibs
+    libcap
     lua
     libdisplay-info
     libunwind
