@@ -31,7 +31,7 @@
 let
   python = python3.withPackages (p: [
     p.sphinx
-    p.sphinx_rtd_theme
+    p.sphinx-rtd-theme
   ]);
   cargoVendor = rustPlatform.importCargoLock { lockFile = ./nix/scanner.lock; };
 in
