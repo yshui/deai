@@ -4,6 +4,8 @@ UseTab: ForIndentation
 BreakBeforeBraces: Attach
 #BreakStringLiterals: true
 IndentWidth: 4
+IndentPPDirectives: AfterHash
+PPIndentWidth: 1
 AlignAfterOpenBracket: Align
 ColumnLimit: 90
 #ExperimentalAutoDetectBinPacking: true
