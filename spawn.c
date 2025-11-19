@@ -6,7 +6,6 @@
 
 #include <ev.h>
 #include <fcntl.h>
-#include <pty.h>
 #include <sys/wait.h>
 #include <unistd.h>
 
@@ -344,11 +343,6 @@ di_object *di_spawn_run(struct di_spawn *p, di_array argv, bool ignore_output) {
 		di_throw(di_new_error("deai is shutting down..."));
 	}
 
-	int master_pty, slave_pty;
-	if (openpty(&master_pty, &slave_pty, NULL, NULL, NULL) < 0) {
-		di_error("cannot openpty: %s", strerror(errno));
-	}
-
 	int opfds[2], epfds[2], ifd;
 	di_setup_fds(ignore_output, opfds, epfds, &ifd);
 
@@ -373,16 +367,10 @@ di_object *di_spawn_run(struct di_spawn *p, di_array argv, bool ignore_output) {
 		close(ifd);
 
 		setsid();
-		if (ioctl(slave_pty, TIOCSCTTY, NULL)) {
-			_exit(1);
-		}
-		close(slave_pty);
 
 		execvp(nargv[0], nargv);
 		_exit(1);
 	}
-
-	close(slave_pty);
 
 	for (int i = 0; i < argv.length; i++) {
 		free(nargv[i]);
@@ -415,7 +403,6 @@ di_object *di_spawn_run(struct di_spawn *p, di_array argv, bool ignore_output) {
 	cp->fds[0] = opfds[0];
 	cp->fds[1] = epfds[0];
 
-	di_member(cp, "pty", master_pty);
 	// Keep a reference from the ChildProcess object to deai, to keep it alive
 	di_member(cp, DEAI_MEMBER_NAME_RAW, obj);
 	return (void *)cp;
