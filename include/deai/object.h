@@ -858,17 +858,7 @@ static inline void unused di_free_di_weak_objectpp(di_weak_object *nullable *non
 	}) /* NOLINTEND(bugprone-assignment-in-if-condition) */
 
 #define di_get2(o, prop, r)                                                              \
-	/* NOLINTBEGIN(bugprone-assignment-in-if-condition) */                               \
-	({                                                                                   \
-		int rc;                                                                          \
-		do {                                                                             \
-			rc = di_getxt((void *)(o), (prop), di_typeof(r), (di_value *)&(r), NULL);    \
-			if (rc != 0) {                                                               \
-				break;                                                                   \
-			}                                                                            \
-		} while (0);                                                                     \
-		rc;                                                                              \
-	}) /* NOLINTEND(bugprone-assignment-in-if-condition) */
+	di_getxt((void *)(o), (prop), di_typeof(r), (di_value *)&(r), NULL)
 
 #define di_get(o, prop, r) di_get2(o, di_string_borrow(prop), r)
 
