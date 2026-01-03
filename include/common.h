@@ -19,9 +19,9 @@
 		(typeof(ptr))__trealloc_tmp;                                                     \
 	})
 #ifndef __cplusplus
-#define auto __auto_type
+# define auto __auto_type
 #else
-#define __auto_type auto
+# define __auto_type auto
 #endif
 
 /**
@@ -54,7 +54,7 @@ define_trivial_cleanup(char);
 			fprintf(stderr, "Check \"" #expr "\" failed in %s at " __FILE__ ":%d. %s\n", \
 			        __func__, __LINE__, #__VA_ARGS__);                                   \
 			abort();                                                                     \
-			unreachable();                                                               \
+			assert_unreachable();                                                        \
 		}                                                                                \
 	} while (0)
 
@@ -66,7 +66,7 @@ define_trivial_cleanup(char);
 			fprintf(stderr, "\"" #expr "\" failed in %s at " __FILE__ ":%d (%d != 0). %s\n", \
 			        __func__, __LINE__, __di_check_tmp, #__VA_ARGS__);                       \
 			abort();                                                                         \
-			unreachable();                                                                   \
+			assert_unreachable();                                                            \
 		}                                                                                    \
 	} while (0)
 
@@ -74,14 +74,14 @@ define_trivial_cleanup(char);
 #define DI_PANIC(...)                                                                    \
 	do {                                                                                 \
 		DI_CHECK(false, ##__VA_ARGS__);                                                  \
-		unreachable();                                                                   \
+		assert_unreachable();                                                            \
 	} while (0)
 
 #ifdef NDEBUG
-#define DI_ASSERT(expr, msg)
+# define DI_ASSERT(expr, msg)
 #else
 /// Like DI_CHECK, but only enabled in debug builds
-#define DI_ASSERT(expr, ...) DI_CHECK(expr, ##__VA_ARGS__)
+# define DI_ASSERT(expr, ...) DI_CHECK(expr, ##__VA_ARGS__)
 #endif
 
 #define DI_OK_OR_RET(expr)                                                               \
@@ -101,9 +101,9 @@ define_trivial_cleanup(char);
 	} while (0)
 
 #if defined(__LP64__) && __LP64__
-#define PTR_POISON ((void *)0xffffffc01dcaffee)
+# define PTR_POISON ((void *)0xffffffc01dcaffee)
 #else
-#define PTR_POISON ((void *)0xc01dcafe)
+# define PTR_POISON ((void *)0xc01dcafe)
 #endif
 
 #define VA_ARG_HEAD(x, ...) x

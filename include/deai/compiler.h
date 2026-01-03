@@ -15,9 +15,9 @@
 #define unused __attribute__((unused))
 #define ret_nonnull nonnull __attribute__((returns_nonnull))
 #ifdef NDEBUG
-#define unreachable() __builtin_unreachable()
+#define assert_unreachable() __builtin_unreachable()
 #else
-#define unreachable() __builtin_trap()
+#define assert_unreachable() __builtin_trap()
 #endif
 
 #ifndef __has_feature

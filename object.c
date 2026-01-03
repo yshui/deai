@@ -1015,7 +1015,7 @@ void di_free_value(di_type t, di_value *value_ptr) {
 		break;
 	case DI_TYPE_NIL:
 		// Already checked
-		unreachable();
+		assert_unreachable();
 	}
 }
 

@@ -67,7 +67,7 @@ auto to_borrowed_deai_value(const T &input) {
 	} else if constexpr (type == c_api::Type::STRING) {
 		return string_to_borrowed_deai_value(input);
 	}
-	unreachable();
+	assert_unreachable();
 }
 
 /// Borrow a C++ value into a deai variant
@@ -106,7 +106,7 @@ auto to_owned_deai_value(T &&input) {
 	} else if constexpr (type == c_api::Type::ARRAY) {
 		return array_to_owned_deai_value(input);
 	}
-	unreachable();
+	assert_unreachable();
 }
 template <typeinfo::Convertible T>
 inline auto array_to_owned_deai_value(std::vector<T> arr) -> c_api::Array {

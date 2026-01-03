@@ -239,7 +239,7 @@ static void **di_lua_checkproxy(lua_State *L, int index) {
 		return (void **)lua_touserdata(L, index);
 	}
 	luaL_argerror(L, index, "not a di_object");
-	unreachable();
+	assert_unreachable();
 }
 
 static void lua_ref_dtor(di_object *obj) {

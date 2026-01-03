@@ -226,7 +226,7 @@ static inline unused const char *nonnull di_type_to_string(di_type type) {
 	case DI_LAST_TYPE:
 		return "LAST_TYPE";
 	}
-	unreachable();
+	assert_unreachable();
 }
 
 static inline unused char *nonnull di_value_to_string(di_type type, di_value *nonnull value) {

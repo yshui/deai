@@ -490,7 +490,7 @@ di_xorg_xinput_get_prop(struct di_xorg_xinput_device *dev, di_string name_) {
 				*tmp = read(32);
 				break;
 			default:
-				unreachable();
+				assert_unreachable();
 			}
 		} else if (ret.elem_type == DI_TYPE_STRING) {
 			di_string *tmp = curr;
