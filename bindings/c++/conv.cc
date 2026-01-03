@@ -209,6 +209,8 @@ DeaiVariantConverter<borrow>::operator std::optional<T>() {
 	switch (type) {
 	case di_type::INT:
 		return DeaiCheckedIntConverter{value().int_};
+	case di_type::BOOL:
+		return DeaiCheckedIntConverter(value().bool_);
 	case di_type::UINT:
 		return DeaiCheckedIntConverter{value().uint};
 	case di_type::NINT:
