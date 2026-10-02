@@ -5,8 +5,8 @@
 #include <cstdlib>
 #include <cstring>
 #include <format>
+#include <functional>
 #include <optional>
-#include <source_location>
 #include <string>
 #include <typeinfo>
 
@@ -18,9 +18,8 @@ namespace deai::type::conv {
 
 /// Concatenate two std::arrays
 template <typename Element, size_t length1, size_t length2>
-constexpr auto
-array_cat(std::array<Element, length1> a,
-          std::array<Element, length2> b) -> std::array<Element, length1 + length2> {
+constexpr auto array_cat(std::array<Element, length1> a, std::array<Element, length2> b)
+    -> std::array<Element, length1 + length2> {
 	std::array<Element, length1 + length2> output;
 	std::copy(a.begin(), a.end(), output.begin());
 	std::copy(b.begin(), b.end(), output.begin() + length1);
@@ -28,7 +27,7 @@ array_cat(std::array<Element, length1> a,
 }
 
 inline auto string_to_borrowed_deai_value(const std::string &str) {
-	return ::deai::c_api::String{str.c_str(), str.size()};
+	return ::deai::c_api::String{.data = str.c_str(), .length = str.size()};
 }
 
 inline auto string_to_borrowed_deai_value(const ::deai::c_api::String &str) {
@@ -36,11 +35,11 @@ inline auto string_to_borrowed_deai_value(const ::deai::c_api::String &str) {
 }
 
 inline auto string_to_borrowed_deai_value(const std::string_view &str) {
-	return ::deai::c_api::String{str.data(), str.size()};
+	return ::deai::c_api::String{.data = str.data(), .length = str.size()};
 }
 
 template <typename T, size_t length>
-    requires(typeinfo::is_basic_deai_type(typeinfo::of<T>::value))
+    requires (typeinfo::is_basic_deai_type(typeinfo::of<T>::value))
 auto array_to_borrowed_deai_value(const std::array<T, length> &arr) -> ::deai::c_api::Array {
 	return ::deai::c_api::Array{length, arr.data(), typeinfo::of<T>::value};
 }
@@ -112,7 +111,7 @@ template <typeinfo::Convertible T>
 inline auto array_to_owned_deai_value(std::vector<T> arr) -> c_api::Array {
 	static constexpr auto type = typeinfo::of<T>::value;
 	if (arr.empty()) {
-		return ::deai::c_api::Array{0, nullptr, ::di_type::NIL};
+		return ::deai::c_api::Array{.length = 0, .arr = nullptr, .elem_type = ::di_type::NIL};
 	}
 	auto elem_size = c_api::type::sizeof_(type);
 	auto data = ::malloc(arr.size() * elem_size);
@@ -120,7 +119,7 @@ inline auto array_to_owned_deai_value(std::vector<T> arr) -> c_api::Array {
 		throw std::bad_alloc();
 	}
 	for (size_t i = 0; i < arr.size(); i++) {
-		auto *ptr = static_cast<std::byte *>(data) + i * elem_size;
+		auto *ptr = static_cast<std::byte *>(data) + (i * elem_size);
 		auto value = to_owned_deai_value(std::move(arr[i]));
 		::memcpy(ptr, &value, elem_size);
 	}
@@ -141,11 +140,10 @@ struct to_owned_deai_type_helper<void> {
 };
 
 template <typename T>
-using to_deai_ctype =
-    typename typeinfo::deai_ctype_t<typeinfo::of<std::remove_cvref_t<T>>::value>;
+using to_deai_ctype = typeinfo::deai_ctype_t<typeinfo::of<std::remove_cvref_t<T>>::value>;
 
 template <typename T>
-using to_owned_deai_type = typename to_owned_deai_type_helper<T>::type;
+using to_owned_deai_type = to_owned_deai_type_helper<T>::type;
 
 template <typename T>
 auto to_borrowed_deai_value_union(const T &input) -> ::di_value {
@@ -334,7 +332,7 @@ DeaiBorrowedArrayConverter::operator std::vector<T>() const {
 
 	auto elem_size = ::di_sizeof_type(arg.elem_type);
 	for (size_t i = 0; i < arg.length; i++) {
-		auto *ptr = reinterpret_cast<std::byte *>(arg.arr) + i * elem_size;
+		auto *ptr = reinterpret_cast<std::byte *>(arg.arr) + (i * elem_size);
 		if (arg.elem_type != Type) {
 			std::optional<to_deai_ctype<T>> converted = c_api::DeaiVariantConverter<true>{
 			    *reinterpret_cast<::di_value *>(ptr), arg.elem_type};
