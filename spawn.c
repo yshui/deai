@@ -55,7 +55,7 @@ static void output_handler(struct child *c, int fd, int id, const char *ev) {
 		const char *pos = buf;
 		while (1) {
 			size_t len = buf + ret - pos;
-			char *eol = memchr(pos, '\n', len);
+			char *eol = (char *)memchr(pos, '\n', len);
 			if (eol) {
 				*eol = '\0';
 				if (!string_buf_is_empty(c->output_buf[id])) {

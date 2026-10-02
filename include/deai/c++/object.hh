@@ -448,7 +448,8 @@ public:
 };        // namespace type
 template <typeinfo::DerivedObject T>
 template <typeinfo::DerivedObject Other>
-auto Ref<T>::on(const std::string_view &signal, const Ref<Other> &handler) -> Ref<ListenHandle> {
+auto Ref<T>::on(const std::string_view &signal, const Ref<Other> &handler)
+    -> Ref<ListenHandle> {
 	return Ref<ListenHandle>::take(c_api::object::listen_to(
 	                                   &inner->base, conv::string_to_borrowed_deai_value(signal),
 	                                   handler.raw(), nullptr))
@@ -462,8 +463,8 @@ using namespace type;
 namespace util {
 
 template <typeinfo::Convertible Return, typename... Args>
-auto call_raw(c_api::Object *raw_ref, const std::string_view &method_name,
-              const Args &...args) -> Return {
+auto call_raw(c_api::Object *raw_ref, const std::string_view &method_name, const Args &...args)
+    -> Return {
 	auto ref = Ref<Object>{raw_ref};
 	return ref.method_call<Return>(method_name, args...);
 }

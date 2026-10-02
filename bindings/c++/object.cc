@@ -1,6 +1,5 @@
 #include <deai/c++/object.hh>
 // #include <iostream>
-#include <sstream>
 
 namespace deai {
 namespace exception {
@@ -40,7 +39,7 @@ auto Variant::object_ref() && -> std::optional<Ref<Object>> {
 	if (type == c_api::Type::OBJECT) {
 		// NOLINTNEXTLINE(performance-move-const-arg)
 		type = c_api::Type::NIL;
-		return {*Ref<Object>::take(value.object)};
+		return {Ref<Object>::take(value.object)};
 	}
 	return std::nullopt;
 }
@@ -129,10 +128,13 @@ auto Variant::bottom() -> Variant {
 
 Variant::operator di_variant() && {
 	if (type == c_api::Type::NIL || type == c_api::Type::DI_LAST_TYPE) {
-		return {nullptr, type};
+		return {.value = nullptr, .type = type};
 	}
 
-	::di_variant ret{static_cast<::di_value *>(std::malloc(::di_sizeof_type(type))), type};
+	::di_variant ret{
+	    .value = static_cast<::di_value *>(std::malloc(::di_sizeof_type(type))),
+	    .type = type,
+	};
 	std::memcpy(ret.value, &value, ::di_sizeof_type(type));
 	type = c_api::Type::NIL;
 	return ret;
@@ -208,7 +210,7 @@ auto ObjectMemberProxy<raw_>::operator=(const std::optional<Variant> &new_value)
 		if (new_value.has_value()) {
 			int unused rc =
 			    ::di_add_member_clone(target, conv::string_to_borrowed_deai_value(key),
-			                          new_value->type, &new_value->value);
+				                      new_value->type, &new_value->value);
 			assert(rc == 0);
 		}
 	} else {
@@ -218,13 +220,14 @@ auto ObjectMemberProxy<raw_>::operator=(const std::optional<Variant> &new_value)
 			// the setter/deleter should handle the deletion
 			exception::throw_deai_error(
 			    c_api::object::set(target, conv::string_to_borrowed_deai_value(key),
-			                       new_value->type, &new_value->value, nullptr));
+				                   new_value->type, &new_value->value, nullptr));
 		}
 	}
 	return *this;
 }
 template <bool raw_>
-auto ObjectMemberProxy<raw_>::operator=(std::optional<Variant> &&new_value) const -> const ObjectMemberProxy & {
+auto ObjectMemberProxy<raw_>::operator=(std::optional<Variant> &&new_value) const
+    -> const ObjectMemberProxy & {
 	erase();
 
 	auto moved = std::move(new_value);
@@ -254,7 +257,11 @@ WeakRefBase::WeakRefBase(const WeakRefBase &other) : inner{nullptr} {
 }
 auto WeakRefBase::operator=(const WeakRefBase &other) -> WeakRefBase & {
 	c_api::WeakObject *weak, *weak_other = other.inner.get();
-	::di_copy_value(c_api::Type::WEAK_OBJECT, &weak, &weak_other);
+	if (&other == this || inner.get() == weak_other) {
+		return *this;
+	}
+	::di_copy_value(c_api::Type::WEAK_OBJECT, static_cast<void *>(&weak),
+	                static_cast<void *>(&weak_other));
 	inner.reset(weak);
 	return *this;
 }
