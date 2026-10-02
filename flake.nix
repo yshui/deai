@@ -5,7 +5,7 @@
   outputs =
     { self, nixpkgs, ... }:
     let
-      llvmVersion = "20";
+      llvmVersion = "23";
       system = "x86_64-linux";
       profilePkgs = import nixpkgs {
         inherit system;
@@ -42,12 +42,12 @@
         });
       pkgs' = nixpkgs.legacyPackages.${system};
     in
-    rec {
-      packages.${system} = rec {
+    {
+      packages.${system} = {
         deai = mkPkg pkgs' (_: { });
-        default = deai;
+        default = self.packages.${system}.deai;
       };
-      devShells.${system} = rec {
+      devShells.${system} = {
         default = mkDevShell pkgs' (_: { });
         clangEnv = mkDevShell pkgs' (pkgs: {
           stdenv = pkgs."llvmPackages_${llvmVersion}".stdenv;
