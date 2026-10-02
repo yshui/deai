@@ -68,9 +68,9 @@ struct Variant {
 	Variant(c_api::Variant &&var);
 	Variant(const c_api::Variant &var);
 
-	auto operator=(const Variant &other);
+	auto operator=(const Variant &other) -> Variant &;
 
-	auto operator=(Variant &&other) noexcept;
+	auto operator=(Variant &&other) noexcept -> Variant &;
 
 	Variant(const Variant &other);
 

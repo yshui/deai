@@ -89,12 +89,13 @@ Variant::Variant(const ::di_variant &var) : type{var.type} {
 	//           << "\n";
 	::di_copy_value(type, &value, var.value);
 }
-auto Variant::operator=(const Variant &other) {
+auto Variant::operator=(const Variant &other) -> Variant & {
 	// std::cerr << "Copying variant, inner type "
 	//           << deai::c_api::Type_names[static_cast<int>(other.type)]
 	//           << " this: " << this << " other: " << &other << "\n";
 	type = other.type;
 	::di_copy_value(type, &value, &other.value);
+	return *this;
 }
 Variant::Variant(const Variant &other) {
 	// std::cerr << "Creating variant, copy ctor, inner type "
@@ -102,7 +103,7 @@ Variant::Variant(const Variant &other) {
 	//           << " this: " << this << " other: " << &other << "\n";
 	*this = other;
 }
-auto Variant::operator=(Variant &&other) noexcept {
+auto Variant::operator=(Variant &&other) noexcept -> Variant & {
 	// std::cerr << "Moving variant, inner type "
 	//           << deai::c_api::Type_names[static_cast<int>(other.type)]
 	//           << " this: " << this << " other: " << &other << "\n";
@@ -111,6 +112,7 @@ auto Variant::operator=(Variant &&other) noexcept {
 
 	other.type = c_api::Type::NIL;
 	other.value = {};
+	return *this;
 }
 Variant::Variant(Variant &&other) noexcept {
 	// std::cerr << "Creating variant, move ctor, inner type "
