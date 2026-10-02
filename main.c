@@ -3,7 +3,7 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 /* Copyright (c) 2017, Yuxuan Shui <yshuiv7@gmail.com> */
-
+void dump_trace(void);
 #include <ctype.h>
 #include <dirent.h>
 #include <dlfcn.h>
@@ -769,6 +769,9 @@ int main(int argc, char *argv[]) {
 			exit_code = EXIT_FAILURE;
 			quit = true;
 		} else {
+#ifdef TRACE_PC
+			dump_trace();
+#endif
 			di_free_value(rt, &retd);
 
 			if (error_obj != NULL) {

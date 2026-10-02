@@ -1,4 +1,4 @@
-src = [ 'lua.c', 'compat.c' ]
+src = [ 'lua.c', 'compat.c' ] + san_src
 
 lua_candidates = [ 'luajit', 'lua51', 'lua5.1', 'lua-5.1',
                    'lua52', 'lua5.2', 'lua-5.2',

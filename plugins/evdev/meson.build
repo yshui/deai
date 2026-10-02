@@ -1,4 +1,4 @@
-udev = shared_library('di_evdev', [ 'evdev.cc' ]
+udev = shared_library('di_evdev', [ 'evdev.cc' ] + san_src
 , include_directories: incs
 , c_args: base_c_args, cpp_args: base_cpp_args, name_prefix: ''
 , gnu_symbol_visibility: 'hidden'

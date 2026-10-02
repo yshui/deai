@@ -7,7 +7,7 @@ deps = [
   dependency('xkbcommon', required: true),
   cc.find_library('m', required: true),
 ]
-src = ['xorg.c', 'xinput.c', 'randr.c', 'key.c']
+src = ['xorg.c', 'xinput.c', 'randr.c', 'key.c'] + san_src
 local_inc = include_directories('.')
 di_xorg_lib = shared_module('di_xorg', src
 , include_directories: incs+[local_inc]

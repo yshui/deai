@@ -69,6 +69,20 @@ foreach arg: test_common_args
   endif
 endforeach
 
+san_src = []
+if get_option('trace_pc')
+  covsan = '-fsanitize-coverage=trace-pc'
+  if get_option('b_sanitize') == 'none'
+    error('coverage sanitizer requires another sanitizer to be enabled')
+  endif
+  if not cc.has_argument(covsan)
+    error('coverage sanitizer not supported')
+  endif
+  base_c_args = base_c_args + [ covsan, '-DTRACE_PC' ]
+  base_cpp_args = base_c_args + [ covsan ]
+  san_src = [ files('llvm-trace.c') ]
+endif
+
 base_c_args = base_c_args + [ '-D_GNU_SOURCE' ]
 if get_option('unittests')
   base_c_args = base_c_args + [ '-DUNITTESTS' ]
@@ -133,7 +147,7 @@ core_src = [
 , 'os.c'
 , 'spawn.c'
 , 'exception.cc'
-]
+] + san_src
 core_deps = [libev, libffi, dl]
 if get_option('track_objects') or get_option('stack_trace')
   core_deps += [

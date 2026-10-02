@@ -1,4 +1,4 @@
-src = ['dbus.c', 'sedes.c', 'signature.c' ]
+src = ['dbus.c', 'sedes.c', 'signature.c' ] + san_src
 dbus = dependency('dbus-1', required: true)
 di_dbus_lib = shared_module('di_dbus', src
 , include_directories: incs

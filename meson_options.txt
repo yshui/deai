@@ -3,3 +3,4 @@ option('track_objects', type: 'boolean', value: false, description: 'Whether to 
 option('unittests', type: 'boolean', value: false, description: 'Whether to build unittests')
 option('plugins', type: 'array', choices: ['file', 'xorg', 'dbus', 'udev', 'evdev', 'lua', 'hwinfo', 'misc'], description: 'List of plugins to build')
 option('stack_trace', type: 'boolean', value: true, description: 'Print stack trace when error occurs')
+option('trace_pc', type: 'boolean', value: false, description: 'Use LLVM coverage sanitizer to trace PC')

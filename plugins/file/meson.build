@@ -1,4 +1,4 @@
-src = 'file.c'
+src = [ 'file.c' ] + san_src
 file_dependency = []
 if host_machine.system() == 'freebsd'
   file_dependency = [ dependency('libinotify', required: true) ]
