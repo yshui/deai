@@ -1,4 +1,4 @@
-project('deai', ['c', 'cpp'], default_options: ['b_lundef=false', 'cpp_std=c++20'])
+project('deai', ['c', 'cpp'], default_options: ['b_lundef=false', 'cpp_std=c++20'], meson_version: '>=1.3.0')
 cc = meson.get_compiler('c')
 cpp = meson.get_compiler('cpp')
 if not cc.has_argument('-fvisibility=hidden') or not cc.has_argument('-fms-extensions')
@@ -129,7 +129,8 @@ if ldoc.found()
       , input: [script, files('build-support/ldoc2c.lua')]
       , command: [ldoc, '--filter', 'ldoc2c.dump', '@INPUT0@']
       , capture: true
-      , build_always: true
+      , build_always_stale: true
+      , build_by_default: true
       , env: ['LUA_PATH='+meson.current_source_dir()+'/build-support/?.lua;;'])
   endforeach
   # This is a dummy target to inject generated doc sources into the compile_commands.json
@@ -196,7 +197,7 @@ builtin_module_headers = [
 cfg_data = configuration_data()
 cfg_data.set('prefix', get_option('prefix'))
 configure_file(configuration: cfg_data, input: 'desktop/deai.desktop.in', install: true, install_dir: 'share/xsessions', output: 'deai.desktop')
-configure_file(configuration: cfg_data, input: 'desktop/deai.desktop.in', install: true, install_dir: 'share/wayland-sessions', output: 'deai.desktop')
+configure_file(configuration: cfg_data, input: 'desktop/deai.desktop.in', install: true, install_dir: 'share/wayland-sessions', output: 'deai-wayland.desktop')
 #install_data('desktop/deai.desktop', install_dir:'share/xsessions', install_mode: 'rw-r--r--')
 install_headers(base_headers, subdir: 'deai')
 install_headers(builtin_module_headers, subdir: 'deai/builtins')

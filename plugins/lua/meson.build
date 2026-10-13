@@ -18,7 +18,7 @@ foreach lua_candidate : lua_candidates
 
   version = lua.version()
   # compat with luajit
-  abiver = lua.get_pkgconfig_variable('abiver', default: '')
+  abiver = lua.get_variable('', pkgconfig: 'abiver')
   if abiver != ''
     version = abiver
   endif
@@ -42,7 +42,7 @@ if not lua.found()
   error('No sutiable lua candidate found')
 else
   message('Using lua package \''+lua.name()+'\', version: '+lua.version()+', '+
-          'abiver: '+lua.get_pkgconfig_variable('abiver', default: ''))
+          'abiver: '+lua.get_variable('', pkgconfig: 'abiver'))
 endif
 
 di_lua_lib = shared_module('di_lua', src
