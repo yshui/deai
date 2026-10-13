@@ -807,11 +807,16 @@ static inline void unused di_free_di_weak_objectpp(di_weak_object *nullable *non
 #define di_has_member(o, name)                                                           \
 	(di_lookup((di_object *)(o), di_string_borrow(name)) != NULL)
 #define di_emit(o, name, ...)                                                            \
-	di_emitn((di_object *)o, di_string_borrow(name), di_make_tuple(__VA_ARGS__))
+	di_emitn((di_object *)o, di_string_borrow(name), di_make_tuple_tmp(__VA_ARGS__))
 
 #define di_make_variant(x)                                                               \
 	((struct di_variant){                                                                \
 	    (di_value *)addressof(x),                                                        \
+	    di_typeof(x),                                                                    \
+	})
+#define di_make_variant_tmp(x)                                                               \
+	((struct di_variant){                                                                \
+	    (di_value *)addressof_tmp(x),                                                        \
 	    di_typeof(x),                                                                    \
 	})
 #define di_alloc_variant(x)                                                              \
@@ -826,12 +831,12 @@ static inline void unused di_free_di_weak_objectpp(di_weak_object *nullable *non
 		       sizeof(__di_alloc_variant_src));                                          \
 		__di_alloc_variant_tmp;                                                          \
 	}) /* NOLINTEND(bugprone-sizeof-expression) */
-#define di_make_tuple(...)                                                               \
+#define di_make_tuple_tmp(...)                                                           \
 	((di_tuple){VA_ARGS_LENGTH(__VA_ARGS__),                                             \
-	            (struct di_variant[]){LIST_APPLY(di_make_variant, SEP_COMMA, __VA_ARGS__)}})
+	            (struct di_variant[]){LIST_APPLY(di_make_variant_tmp, SEP_COMMA, __VA_ARGS__)}})
 // call but ignore return
 #define di_call(o, name, ...)                                                            \
-	di_call_void_impl((di_object *)(o), di_string_borrow(name), di_make_tuple(__VA_ARGS__))
+	di_call_void_impl((di_object *)(o), di_string_borrow(name), di_make_tuple_tmp(__VA_ARGS__))
 
 #define di_callr(o, name, r, ...)                                                        \
 	/* NOLINTBEGIN(bugprone-assignment-in-if-condition) */                               \
@@ -843,7 +848,7 @@ static inline void unused di_free_di_weak_objectpp(di_weak_object *nullable *non
 			bool called;                                                                 \
 			__deai_callr_rc =                                                            \
 			    di_callx((di_object *)(o), di_string_borrow(name), &__deai_callr_rtype,  \
-			             &__deai_callr_ret, di_make_tuple(__VA_ARGS__), &called);        \
+			             &__deai_callr_ret, di_make_tuple_tmp(__VA_ARGS__), &called);    \
 			if (__deai_callr_rc != 0) {                                                  \
 				break;                                                                   \
 			}                                                                            \

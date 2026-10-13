@@ -645,7 +645,7 @@ static di_object *di_dbus_get_property(di_object *dobj, di_string property) {
 	auto serial = di_dbus_send_message(
 	    conn, di_string_borrow_literal("method"), bus, obj,
 	    di_string_borrow_literal(DBUS_INTERFACE_PROPERTIES), di_string_borrow_literal("Get"),
-	    di_string_borrow_literal(""), di_make_tuple(interface, property));
+	    di_string_borrow_literal(""), di_make_tuple_tmp(interface, property));
 	if (serial < 0) {
 		di_throw(di_new_error("DBus error"));
 	}
@@ -665,7 +665,7 @@ static di_object *di_dbus_set_property(di_object *dobj, di_string property, di_v
 	auto serial = di_dbus_send_message(
 	    conn, di_string_borrow_literal("method"), bus, obj,
 	    di_string_borrow_literal(DBUS_INTERFACE_PROPERTIES), di_string_borrow_literal("Set"),
-	    di_string_borrow_literal("ssv"), di_make_tuple(interface, property, value));
+	    di_string_borrow_literal("ssv"), di_make_tuple_tmp(interface, property, value));
 	if (serial < 0) {
 		di_throw(di_new_error("DBus error"));
 	}

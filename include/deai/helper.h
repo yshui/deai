@@ -86,7 +86,8 @@
 
 #define STRINGIFY(x) #x
 
-#define addressof(x) (&((typeof(x)[]){x})[0])
+#define addressof_tmp(x) (&((typeof(x)[]){x})[0])
+#define addressof(x) (&(x))
 #define addressof_di_value(x) ((di_value *)addressof(x))
 
 #define di_type_pair(v) di_typeof(v), v,

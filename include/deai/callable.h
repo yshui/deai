@@ -43,6 +43,6 @@ PUBLIC_DEAI_API di_object *nonnull di_new_field_getter(di_type type, ptrdiff_t o
 
 #define di_make_closure(fn, caps, ...)                                                    \
 	di_create_closure((void *)fn, di_return_typeid(fn capture_types caps, ##__VA_ARGS__), \
-	                  di_make_tuple caps, VA_ARGS_LENGTH(__VA_ARGS__),                    \
+	                  di_make_tuple_tmp caps, VA_ARGS_LENGTH(__VA_ARGS__),                \
 	                  (di_type[]){LIST_APPLY(di_typeid, SEP_COMMA, __VA_ARGS__)})
 #endif
