@@ -49,6 +49,19 @@
       };
       devShells.${system} = {
         default = mkDevShell pkgs' (_: { });
+        luajit = mkDevShell pkgs' (
+          p:
+          let
+            luajit = p.luajit.override {
+              enable52Compat = true;
+              self = luajit;
+            };
+          in
+          {
+            lua = luajit;
+            luaPackages = luajit.pkgs;
+          }
+        );
         clangEnv = mkDevShell pkgs' (pkgs: {
           stdenv = pkgs."llvmPackages_${llvmVersion}".stdenv;
         });
